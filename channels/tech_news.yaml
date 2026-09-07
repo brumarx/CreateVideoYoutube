@@ -15,6 +15,16 @@ topics:
   - "a diferença real entre inteligência artificial e automação simples"
   - "um fato real sobre como a bateria de lítio funciona"
   - "como as redes neurais artificiais foram inspiradas no cérebro"
+long_form_scenes: 28
+long_form_topics:
+  - "como a Holanda construiu um país abaixo do nível do mar que não deveria existir"
+  - "como o Japão constrói prédios que sobrevivem a terremotos gigantes"
+  - "como funciona a maior usina hidrelétrica do mundo, Itaipu"
+  - "como o Canal do Panamá mudou o comércio mundial pra sempre"
+  - "como a China construiu a maior rede de trens-bala do mundo"
+  - "como o Burj Khalifa foi construído no meio do deserto"
+  - "como funciona a Estação Espacial Internacional por dentro"
+  - "como a Noruega escondeu um cofre de sementes dentro de uma montanha"
 prompt_base: >
   Escreva um roteiro explicativo/curiosidades sobre tecnologia e IA no
   estilo de canais educativos do YouTube. IMPORTANTE: só fatos bem

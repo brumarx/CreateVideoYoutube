@@ -19,11 +19,24 @@ SYSTEM_PROMPT = (
     "letras/palavras e não deve imitar logos de marcas (YouTube, etc.) — "
     "por isso NUNCA peça texto, palavras, letras, números escritos, botões, "
     "ícones de interface, logos ou telas de 'inscreva-se'/'curta' na "
-    "imagem. Descreva só cenário, objetos, pessoas e atmosfera visual."
+    "imagem. Descreva só cenário, objetos, pessoas e atmosfera visual. "
+    "REGRA CRÍTICA sobre lugares reais: se a cena menciona um país, cidade, "
+    "monumento ou acidente geográfico REAL específico (ex.: Portugal, "
+    "Amazônia, Holanda), o 'image_prompt' tem que descrever as "
+    "características visuais REAIS e reconhecíveis daquele lugar exato "
+    "(arquitetura, paisagem, clima, cor típica) — nunca um lugar genérico "
+    "nem de outro país. Errar isso (ex.: pedir imagem de Nova York numa "
+    "cena sobre o Rio de Janeiro) é o pior erro possível neste roteiro."
 )
 
 
-def _prompt_for(channel: ChannelConfig, topic: str, facts: dict | None = None) -> str:
+def _prompt_for(
+    channel: ChannelConfig,
+    topic: str,
+    facts: dict | None = None,
+    scenes: int | None = None,
+    duration_hint: str = "3 a 6 minutos",
+) -> str:
     facts_block = ""
     if facts:
         facts_block = f"""
@@ -34,11 +47,13 @@ Câmara"):
 {json.dumps(facts, ensure_ascii=False, indent=2)}
 """
 
+    n_scenes = scenes or channel.scenes_per_video
+
     return f"""{channel.prompt_base}
 
 Tópico do vídeo: {topic}
 Idioma: {channel.language}
-Número de cenas: {channel.scenes_per_video}
+Número de cenas: {n_scenes}
 {facts_block}
 Gere um JSON com exatamente este formato:
 {{
@@ -50,8 +65,11 @@ Gere um JSON com exatamente este formato:
   ]
 }}
 
-O array "scenes" deve ter exatamente {channel.scenes_per_video} itens. A soma das
-narrações deve formar um vídeo coeso de 3 a 6 minutos quando narrado."""
+O array "scenes" deve ter exatamente {n_scenes} itens. A soma das
+narrações deve formar um vídeo coeso de {duration_hint} quando narrado. Cada
+narração de cena deve ter conteúdo real e específico (fatos concretos,
+números, nomes) — nunca encher linguiça repetindo a mesma ideia com
+palavras diferentes só pra bater a contagem de cenas."""
 
 
 def _extract_json(raw: str) -> dict:
@@ -63,16 +81,24 @@ def _extract_json(raw: str) -> dict:
     return json.loads(match.group(0))
 
 
-def generate_script(channel: ChannelConfig, topic: str, facts: dict | None = None) -> dict:
+def generate_script(
+    channel: ChannelConfig,
+    topic: str,
+    facts: dict | None = None,
+    scenes: int | None = None,
+    duration_hint: str = "3 a 6 minutos",
+) -> dict:
     """Gera o roteiro completo do vídeo. Se `facts` for passado (ex.: saída
     de politica_data.random_fact_set()), o roteiro é obrigado a usar só
-    esses dados reais em vez de a IA inventar números/nomes.
+    esses dados reais em vez de a IA inventar números/nomes. `scenes` e
+    `duration_hint` permitem gerar roteiros bem mais longos (formato
+    documentário) sem mudar a config padrão do canal.
 
     Levanta ValueError se o LLM não devolver um JSON parseável (raro, mas
     acontece)."""
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": _prompt_for(channel, topic, facts)},
+        {"role": "user", "content": _prompt_for(channel, topic, facts, scenes, duration_hint)},
     ]
 
     required = {"title", "description", "tags", "scenes"}

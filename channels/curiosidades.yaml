@@ -15,6 +15,16 @@ topics:
   - "uma cidade real abandonada com uma história intrigante"
   - "uma lei real e estranha que ainda existe em algum país"
   - "um animal real com uma habilidade quase inacreditável"
+long_form_scenes: 30
+long_form_topics:
+  - "30 fatos geográficos insanos sobre Portugal"
+  - "30 fatos geográficos insanos sobre o Brasil"
+  - "por que a Islândia é geologicamente única no mundo"
+  - "como o Japão convive com terremotos constantes"
+  - "30 fatos sobre a Amazônia que poucos conhecem"
+  - "por que o deserto do Saara já foi verde"
+  - "como a Groenlândia é o maior segredo geográfico do planeta"
+  - "30 fatos insanos sobre o Egito antigo"
 prompt_base: >
   Escreva um roteiro envolvente no estilo de canais de curiosidades/histórias
   do YouTube (tipo Reddit stories / fatos incríveis). Comece com um gancho

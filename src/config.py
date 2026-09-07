@@ -48,6 +48,10 @@ class ChannelConfig:
     scenes_per_video: int
     upload_privacy: str
     token_file: Path
+    # Formato longo (documentário, 16:9) — lugares/fenômenos reais
+    # específicos pra evitar tema genérico demais pra 15-20min.
+    long_form_scenes: int
+    long_form_topics: list[str]
 
     @staticmethod
     def load(name: str) -> "ChannelConfig":
@@ -64,4 +68,6 @@ class ChannelConfig:
             scenes_per_video=data.get("scenes_per_video", 8),
             upload_privacy=data.get("upload_privacy", "private"),
             token_file=ROOT / "credentials" / f"token_{name}.json",
+            long_form_scenes=data.get("long_form_scenes", 30),
+            long_form_topics=data.get("long_form_topics", []),
         )
