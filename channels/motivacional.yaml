@@ -1,0 +1,21 @@
+niche: "motivacional e desenvolvimento pessoal"
+language: "pt-BR"
+tts_voice: "pt-BR-FranciscaNeural"
+scenes_per_video: 6
+upload_privacy: "public"
+uploads_per_day: 1
+topics:
+  - "como lidar com o medo de começar algo novo"
+  - "por que consistência importa mais que motivação"
+  - "como transformar fracasso em aprendizado real"
+  - "o poder de pequenos hábitos diários"
+  - "como sair da zona de conforto sem se machucar"
+  - "por que comparação com os outros trava seu progresso"
+  - "como lidar com críticas sem perder o foco"
+  - "o valor de terminar o que você começa"
+  - "como construir disciplina quando não tem vontade"
+  - "por que descanso faz parte do sucesso, não é preguiça"
+prompt_base: >
+  Escreva um roteiro motivacional/inspiracional no estilo de canais de
+  desenvolvimento pessoal do YouTube. Tom inspirador e direto, storytelling
+  com uma virada emocional, termine com uma mensagem clara de ação.

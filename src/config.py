@@ -1,0 +1,67 @@
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import yaml
+from dotenv import load_dotenv
+
+ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT / ".env")
+
+
+def _keys(env_var: str) -> list[str]:
+    """Lê uma lista de chaves separadas por vírgula ou quebra de linha.
+
+    Suporta múltiplas chaves por provedor (rotação/failover), igual ao
+    ariaBot — mais chaves = mais cota grátis somada.
+    """
+    raw = os.getenv(env_var, "")
+    parts = [p.strip() for chunk in raw.splitlines() for p in chunk.split(",")]
+    return [p for p in parts if p]
+
+
+@dataclass
+class LLMKeys:
+    xai: list[str] = field(default_factory=lambda: _keys("XAI_API_KEYS"))
+    groq: list[str] = field(default_factory=lambda: _keys("GROQ_API_KEYS"))
+    cerebras: list[str] = field(default_factory=lambda: _keys("CEREBRAS_API_KEYS"))
+    openrouter: list[str] = field(default_factory=lambda: _keys("OPENROUTER_API_KEYS"))
+    mistral: list[str] = field(default_factory=lambda: _keys("MISTRAL_API_KEYS"))
+    gemini: list[str] = field(default_factory=lambda: _keys("GEMINI_API_KEYS"))
+
+
+POLLINATIONS_API_KEYS = _keys("POLLINATIONS_API_KEYS")
+YOUTUBE_CLIENT_SECRET_FILE = ROOT / os.getenv(
+    "YOUTUBE_CLIENT_SECRET_FILE", "credentials/client_secret.json"
+)
+
+
+@dataclass
+class ChannelConfig:
+    name: str
+    niche: str
+    language: str
+    tts_voice: str
+    prompt_base: str
+    scenes_per_video: int
+    upload_privacy: str
+    token_file: Path
+
+    @staticmethod
+    def load(name: str) -> "ChannelConfig":
+        path = ROOT / "channels" / f"{name}.yaml"
+        if not path.exists():
+            raise FileNotFoundError(f"Config de canal não encontrada: {path}")
+        data = yaml.safe_load(path.read_text())
+        return ChannelConfig(
+            name=name,
+            niche=data["niche"],
+            language=data.get("language", "pt-BR"),
+            tts_voice=data.get("tts_voice", "pt-BR-FranciscaNeural"),
+            prompt_base=data["prompt_base"],
+            scenes_per_video=data.get("scenes_per_video", 8),
+            upload_privacy=data.get("upload_privacy", "private"),
+            token_file=ROOT / "credentials" / f"token_{name}.json",
+        )

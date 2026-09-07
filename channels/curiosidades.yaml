@@ -1,0 +1,22 @@
+niche: "curiosidades e histórias intrigantes (fatos pouco conhecidos, mistérios, eventos históricos)"
+language: "pt-BR"
+tts_voice: "pt-BR-FranciscaNeural"
+scenes_per_video: 8
+upload_privacy: "public"
+uploads_per_day: 1
+topics:
+  - "um recorde mundial real e bizarro pouco conhecido"
+  - "um fato real e pouco conhecido sobre o oceano profundo"
+  - "uma coincidência histórica real que parece ficção"
+  - "um mistério real ainda não resolvido"
+  - "um fenômeno da natureza real e estranho"
+  - "um erro histórico real que mudou o mundo"
+  - "um objeto perdido na história que nunca foi encontrado"
+  - "uma cidade real abandonada com uma história intrigante"
+  - "uma lei real e estranha que ainda existe em algum país"
+  - "um animal real com uma habilidade quase inacreditável"
+prompt_base: >
+  Escreva um roteiro envolvente no estilo de canais de curiosidades/histórias
+  do YouTube (tipo Reddit stories / fatos incríveis). Comece com um gancho
+  forte nos primeiros 5 segundos. Tom curioso, ritmo ágil, frases curtas
+  fáceis de narrar em voz alta.
