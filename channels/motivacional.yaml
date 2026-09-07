@@ -15,6 +15,14 @@ topics:
   - "o valor de terminar o que você começa"
   - "como construir disciplina quando não tem vontade"
   - "por que descanso faz parte do sucesso, não é preguiça"
+long_form_scenes: 26
+long_form_topics:
+  - "a vida completa de Thomas Edison e os milhares de fracassos antes do sucesso"
+  - "como Nelson Mandela saiu de 27 anos de prisão pra transformar um país"
+  - "a história real de como a Nike quase faliu antes de virar gigante"
+  - "como Viktor Frankl sobreviveu a campos de concentração e mudou a psicologia"
+  - "a virada real de Steve Jobs depois de ser demitido da própria empresa"
+  - "como a maratonista Kathrine Switzer correu a Boston Marathon proibida por ser mulher"
 prompt_base: >
   Escreva um roteiro motivacional/inspiracional no estilo de canais de
   desenvolvimento pessoal do YouTube. Tom inspirador e direto, storytelling

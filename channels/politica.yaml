@@ -4,6 +4,17 @@ tts_voice: "pt-BR-AntonioNeural"
 scenes_per_video: 7
 upload_privacy: "public"
 uploads_per_day: 1
+# Formato longo: só temas de FUNCIONAMENTO do sistema (não fatos sobre
+# pessoas específicas) — sem o grounding de dados reais do short, um
+# roteiro de 15-20min sem essa base seria arriscado demais sobre gente real.
+long_form_scenes: 24
+long_form_topics:
+  - "como funciona a cota parlamentar (CEAP) explicada do zero"
+  - "como funciona o financiamento de campanhas eleitorais no Brasil"
+  - "como funciona o processo eleitoral brasileiro, do voto à posse"
+  - "como funciona o sistema de emendas parlamentares no Brasil"
+  - "como funciona a fiscalização de gastos públicos no Brasil"
+  - "como funciona a Lei da Ficha Limpa e o que ela realmente proíbe"
 prompt_base: >
   Escreva um roteiro de curiosidades sobre política brasileira usando SOMENTE
   os dados fornecidos abaixo (não invente nomes, valores ou fatos que não
