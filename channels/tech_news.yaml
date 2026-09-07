@@ -1,0 +1,25 @@
+niche: "curiosidades e explicações atemporais sobre tecnologia e inteligência artificial"
+language: "pt-BR"
+tts_voice: "pt-BR-AntonioNeural"
+scenes_per_video: 6
+upload_privacy: "public"
+uploads_per_day: 1
+topics:
+  - "como a inteligência artificial realmente aprende, explicado de forma simples"
+  - "um fato real e pouco conhecido sobre a história da internet"
+  - "como funciona por dentro um chip de computador"
+  - "uma invenção real de tecnologia que fracassou de forma inesperada"
+  - "como funciona a criptografia que protege suas senhas"
+  - "um fato real sobre os primeiros computadores da história"
+  - "como funciona o GPS e por que ele é tão preciso"
+  - "a diferença real entre inteligência artificial e automação simples"
+  - "um fato real sobre como a bateria de lítio funciona"
+  - "como as redes neurais artificiais foram inspiradas no cérebro"
+prompt_base: >
+  Escreva um roteiro explicativo/curiosidades sobre tecnologia e IA no
+  estilo de canais educativos do YouTube. IMPORTANTE: só fatos bem
+  estabelecidos e atemporais (como tecnologias funcionam, história da
+  tecnologia) — nunca afirme algo como "notícia recente" ou evento
+  específico de data incerta, já que você não tem acesso a notícias em
+  tempo real. Tom informativo mas acessível, explique termos técnicos de
+  forma simples, destaque por que aquilo importa pro espectador.
