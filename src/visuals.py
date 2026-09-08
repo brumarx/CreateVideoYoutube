@@ -69,16 +69,21 @@ def _try_keyed(prompt: str, width: int, height: int, seed: int) -> bytes | None:
     return None
 
 
-def _try_anonymous(prompt: str, width: int, height: int, seed: int) -> bytes:
+def _try_anonymous(prompt: str, width: int, height: int, seed: int) -> bytes | None:
     encoded = urllib.parse.quote(prompt)
     url = (
         f"https://image.pollinations.ai/prompt/{encoded}"
         f"?width={width}&height={height}&nologo=true&seed={seed}"
     )
-    resp = httpx.get(url, timeout=90)
-    resp.raise_for_status()
+    try:
+        resp = httpx.get(url, timeout=90)
+        resp.raise_for_status()
+    except Exception as exc:
+        log.warning("pollinations anônimo falhou: %s", exc)
+        return None
     if not _looks_like_image(resp.content):
-        raise RuntimeError("Pollinations (anônimo) devolveu resposta inválida")
+        log.warning("pollinations anônimo devolveu resposta inválida")
+        return None
     return resp.content
 
 
@@ -133,7 +138,7 @@ def _is_blank(data: bytes) -> bool:
     return False
 
 
-def _fetch_once(prompt: str, width: int, height: int, seed: int) -> bytes:
+def _fetch_once(prompt: str, width: int, height: int, seed: int) -> bytes | None:
     data = _try_keyed(prompt, width, height, seed)
     if data:
         return data
@@ -159,11 +164,15 @@ def generate_image(prompt: str, width: int = 1024, height: int = 1024, seed: int
     for attempt in range(MAX_IMAGE_ATTEMPTS):
         attempt_seed = base_seed if attempt == 0 else random.randint(0, 2**31 - 1)
         data = _fetch_once(prompt, width, height, attempt_seed)
+        if data is None:
+            log.warning("falha ao buscar imagem (tentativa %d/%d) — tentando de novo", attempt + 1, MAX_IMAGE_ATTEMPTS)
+            continue
         if not _is_blank(data):
             return data
         log.warning("imagem quase em branco (tentativa %d/%d) — tentando de novo", attempt + 1, MAX_IMAGE_ATTEMPTS)
         best = best or data
 
+    if best is None:
+        raise RuntimeError("não foi possível gerar imagem após todas as tentativas (Pollinations indisponível)")
     log.warning("todas as tentativas saíram quase em branco — usando a última mesmo assim")
-    assert best is not None
     return best
