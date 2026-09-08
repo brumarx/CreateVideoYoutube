@@ -9,3 +9,4 @@ __pycache__/
 .venv/
 .claude/
 assets/music/*.mp3
+.code-graph/

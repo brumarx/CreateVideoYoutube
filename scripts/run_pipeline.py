@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import random
 import re
 import shutil
 import sys
@@ -60,6 +61,11 @@ def run(
     long_form: bool = False,
 ) -> None:
     channel = ChannelConfig.load(channel_name)
+    # 1 voz sorteada por vídeo (não por cena — narrador tem que ser
+    # consistente do início ao fim), conforme os pesos configurados no
+    # painel. Antes era sempre a mesma voz fixa por canal.
+    voices, weights = zip(*channel.tts_voice_weights.items())
+    tts_voice = random.choices(voices, weights=weights, k=1)[0]
 
     facts = None
     if channel_name == "politica" and not long_form:
@@ -95,7 +101,7 @@ def run(
     work_dir = Path(__file__).resolve().parent.parent / "output" / f"job_{job_id}"
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    log.info("[%s] gerando roteiro (%s) para: %s", job_id, "longo" if long_form else "curto", topic)
+    log.info("[%s] gerando roteiro (%s) para: %s (voz: %s)", job_id, "longo" if long_form else "curto", topic, tts_voice)
     script = generate_script(channel, topic, facts, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes)
     update(job_id, status="scripted")
 
@@ -103,7 +109,7 @@ def run(
     for i, scene in enumerate(script["scenes"]):
         log.info("[%s] cena %d/%d", job_id, i + 1, len(script["scenes"]))
         audio_path = work_dir / f"scene_{i}.mp3"
-        narrate(scene["narration"], audio_path, voice=channel.tts_voice)
+        narrate(scene["narration"], audio_path, voice=tts_voice)
 
         # pede a imagem já no formato final do vídeo — pedir quadrado e
         # esticar depois no ffmpeg distorcia e borrava tudo

@@ -2,7 +2,10 @@ niche: "curiosidades e histórias intrigantes (fatos pouco conhecidos, mistério
 watermark: "@FractalCurioso"
 accent: "#c084fc"
 language: "pt-BR"
-tts_voice: "pt-BR-FranciscaNeural"
+tts_voice_weights:
+  pt-BR-AntonioNeural: 50
+  pt-BR-FranciscaNeural: 30
+  pt-BR-ThalitaMultilingualNeural: 20
 scenes_per_video: 8
 upload_privacy: "public"
 uploads_per_day: 1

@@ -32,6 +32,10 @@ class LLMKeys:
     gemini: list[str] = field(default_factory=lambda: _keys("GEMINI_API_KEYS"))
 
 
+# Únicas 3 vozes pt-BR grátis do edge-tts (checado ao vivo via
+# edge_tts.list_voices()) — 1 masculina, 2 femininas.
+FREE_TTS_VOICES = ("pt-BR-AntonioNeural", "pt-BR-FranciscaNeural", "pt-BR-ThalitaMultilingualNeural")
+
 POLLINATIONS_API_KEYS = _keys("POLLINATIONS_API_KEYS")
 YOUTUBE_CLIENT_SECRET_FILE = ROOT / os.getenv(
     "YOUTUBE_CLIENT_SECRET_FILE", "credentials/client_secret.json"
@@ -43,7 +47,10 @@ class ChannelConfig:
     name: str
     niche: str
     language: str
-    tts_voice: str
+    # sorteio ponderado entre as 3 vozes grátis (1 vídeo = 1 voz, sorteada
+    # na hora) — antes era fixa por canal, sempre a mesma narradora todo
+    # dia. {"pt-BR-AntonioNeural": 50, "pt-BR-FranciscaNeural": 30, ...}
+    tts_voice_weights: dict[str, int]
     prompt_base: str
     scenes_per_video: int
     upload_privacy: str
@@ -80,7 +87,10 @@ class ChannelConfig:
             name=name,
             niche=data["niche"],
             language=data.get("language", "pt-BR"),
-            tts_voice=data.get("tts_voice", "pt-BR-FranciscaNeural"),
+            tts_voice_weights=data.get(
+                "tts_voice_weights",
+                {"pt-BR-AntonioNeural": 50, "pt-BR-FranciscaNeural": 30, "pt-BR-ThalitaMultilingualNeural": 20},
+            ),
             prompt_base=data["prompt_base"],
             scenes_per_video=data.get("scenes_per_video", 8),
             upload_privacy=data.get("upload_privacy", "private"),
