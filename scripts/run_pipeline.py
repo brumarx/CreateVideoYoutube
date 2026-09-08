@@ -138,9 +138,13 @@ def run(
     update(job_id, status="rendered", video_path=str(final_video))
     log.info("[%s] vídeo pronto: %s", job_id, final_video)
 
-    thumb_prompt = script["scenes"][0]["image_prompt"]
+    # campos dedicados de thumbnail (LLM às vezes esquece com modelo fraco
+    # da cascata) — cai pro título/cena 1 se faltar, nunca quebra o vídeo
+    # por causa só da thumbnail.
+    thumb_prompt = script.get("thumbnail_image_prompt") or script["scenes"][0]["image_prompt"]
+    thumb_text = script.get("thumbnail_text") or script["title"]
     thumb_path = work_dir / "thumbnail.jpg"
-    make_thumbnail(thumb_prompt, script["title"], thumb_path)
+    make_thumbnail(thumb_prompt, thumb_text, thumb_path, accent=channel.accent)
     update(job_id, thumbnail_path=str(thumb_path))
     log.info("[%s] thumbnail pronta: %s", job_id, thumb_path)
 

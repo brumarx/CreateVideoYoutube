@@ -75,6 +75,8 @@ Número de cenas: {n_scenes}
 Gere um JSON com exatamente este formato:
 {{
   "title": "título chamativo, até 100 caracteres",
+  "thumbnail_text": "gancho CURTÍSSIMO pra thumbnail, no máximo 4 palavras, tipo manchete de banca de jornal — não é o título, é a frase que faz alguém parar de rolar o feed",
+  "thumbnail_image_prompt": "prompt em inglês pro momento MAIS visualmente marcante/dramático de toda a história (não precisa ser a cena 1) — close-up, alto contraste, cor vibrante, um único foco claro na imagem, mesmas regras das outras imagens: SEM texto, palavras, logos, botões ou UI",
   "description": "descrição para o YouTube, 2-3 parágrafos, com contexto e call-to-action",
   "tags": ["tag1", "tag2", "..."],
   "scenes": [
@@ -91,7 +93,14 @@ total (~{min_minutes:.0f} a {max_minutes:.0f} minutos narrados). Se não
 tiver conteúdo real suficiente pra encher uma cena no tamanho pedido,
 aprofunde com mais detalhes concretos (contexto, números, comparações,
 consequências) em vez de encurtar — nunca encher linguiça repetindo a
-mesma ideia com palavras diferentes só pra bater a contagem."""
+mesma ideia com palavras diferentes só pra bater a contagem.
+
+REGRA CRÍTICA sobre "thumbnail_text": thumbnail boa hoje em dia NÃO é o
+título inteiro colado na imagem — é uma frase mínima (2 a 4 palavras) que
+gera curiosidade sozinha, sem contexto nenhum, tipo "ELA FOI PROIBIDA",
+"O ERRO DE R$ 2 MILHÕES", "ISSO É REAL?". Pode usar número, pode terminar
+em pergunta, nunca uma frase completa com sujeito+verbo+complemento igual
+o título."""
 
 
 def _extract_json(raw: str) -> dict:
