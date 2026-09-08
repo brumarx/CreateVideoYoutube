@@ -27,9 +27,14 @@ WATERMARK_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
 
 def _escape_drawtext(text: str) -> str:
-    # o parser do drawtext trata ':', '\' e apóstrofo como especiais mesmo
-    # dentro de aspas simples.
-    return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+    # o parser do drawtext trata ':' e '\' como especiais mesmo dentro de
+    # aspas simples. Apóstrofo é pior ainda: escapar com "\'" quebra o
+    # parser do filtergraph quando tem vírgula logo depois (ex.: "O'Donnell,
+    # interveio..." vira "No such filter" porque o parser fecha a aspa no
+    # lugar errado) — mais simples e robusto trocar por aspa tipográfica
+    # (’), que não é caractere especial pra ffmpeg nenhum.
+    text = text.replace("'", "’")
+    return text.replace("\\", "\\\\").replace(":", "\\:")
 
 
 def _list_number_filter(number: int, height: int, accent: str) -> str:
