@@ -63,6 +63,9 @@ class ChannelConfig:
     short_max_minutes: float
     long_min_minutes: float
     long_max_minutes: float
+    # marca d'água (@handle do canal) gravada em toda cena — dificulta
+    # repostagem sem crédito e ajuda a provar autoria se alguém roubar.
+    watermark: str
 
     @staticmethod
     def load(name: str) -> "ChannelConfig":
@@ -85,4 +88,5 @@ class ChannelConfig:
             short_max_minutes=data.get("short_max_minutes", 6),
             long_min_minutes=data.get("long_min_minutes", 15),
             long_max_minutes=data.get("long_max_minutes", 20),
+            watermark=data.get("watermark", f"@{name}"),
         )
