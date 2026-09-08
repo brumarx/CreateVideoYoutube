@@ -103,6 +103,16 @@ TEMPLATE = """
         <button type="submit" class="save-link">salvar duração e formato</button>
       </form>
 
+      <form method="post" action="{{ url_for('save_voices', channel=c.name) }}">
+        <label style="display:block; font-size:11px; color:#9aa0a8; margin-top:10px;">Voz da narração (sorteada por vídeo, peso relativo)</label>
+        <div class="durations">
+          <label>Antonio (M)<input type="number" min="0" step="1" name="voice_antonio" value="{{ c.voice_antonio }}"></label>
+          <label>Francisca (F)<input type="number" min="0" step="1" name="voice_francisca" value="{{ c.voice_francisca }}"></label>
+          <label>Thalita (F)<input type="number" min="0" step="1" name="voice_thalita" value="{{ c.voice_thalita }}"></label>
+        </div>
+        <button type="submit" class="save-link">salvar vozes</button>
+      </form>
+
       <details class="topics">
         <summary>Fila de temas ({{ c.topics_pending }} pendente(s) de {{ c.topics|length }})</summary>
         {% for t in c.topics %}
@@ -183,6 +193,9 @@ def _load_channels() -> list[dict]:
                 "long_min_minutes": cfg.get("long_min_minutes", 15),
                 "long_max_minutes": cfg.get("long_max_minutes", 20),
                 "daily_format": cfg.get("daily_format", "short"),
+                "voice_antonio": cfg.get("tts_voice_weights", {}).get("pt-BR-AntonioNeural", 50),
+                "voice_francisca": cfg.get("tts_voice_weights", {}).get("pt-BR-FranciscaNeural", 30),
+                "voice_thalita": cfg.get("tts_voice_weights", {}).get("pt-BR-ThalitaMultilingualNeural", 20),
             }
         )
     return channels
@@ -239,6 +252,39 @@ def save_duration(channel: str):
         else:
             text = f"{replacement}\n{text}"
 
+    path.write_text(text)
+    return redirect(url_for("index", saved=1))
+
+
+@app.route("/voices/<channel>", methods=["POST"])
+def save_voices(channel: str):
+    """Persiste o peso de sorteio de cada voz grátis (mapa de tamanho fixo,
+    sempre as 3 mesmas chaves — substitui o bloco inteiro em vez de tentar
+    editar item a item como a fila de temas)."""
+    path = ROOT / "channels" / f"{channel}.yaml"
+    if not path.exists():
+        return redirect(url_for("index"))
+
+    weights = {}
+    for form_field, voice_id in (
+        ("voice_antonio", "pt-BR-AntonioNeural"),
+        ("voice_francisca", "pt-BR-FranciscaNeural"),
+        ("voice_thalita", "pt-BR-ThalitaMultilingualNeural"),
+    ):
+        try:
+            weights[voice_id] = max(int(request.form.get(form_field, "0")), 0)
+        except ValueError:
+            weights[voice_id] = 0
+    if not any(weights.values()):
+        return redirect(url_for("index"))  # não deixa zerar tudo (ninguém narraria)
+
+    block = "tts_voice_weights:\n" + "".join(f"  {voice}: {w}\n" for voice, w in weights.items())
+    text = path.read_text()
+    pattern = r"^tts_voice_weights:[ \t]*\n(?:  .*\n)*"
+    if re.search(pattern, text, flags=re.MULTILINE):
+        text = re.sub(pattern, block, text, count=1, flags=re.MULTILINE)
+    else:
+        text = block + text
     path.write_text(text)
     return redirect(url_for("index", saved=1))
 
