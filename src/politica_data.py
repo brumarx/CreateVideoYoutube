@@ -526,6 +526,99 @@ def maiores_salarios_magistrados(limit: int = 5, offset: int = 0) -> list[dict]:
     ]
 
 
+def total_arrecadacao_por_partido(ano: int | None = None, limit: int = 5, offset: int = 0) -> list[dict]:
+    """Total arrecadado em campanha por partido (soma de todos os
+    candidatos a deputado federal do partido). Não existe uma categoria
+    isolada de "Fundo Partidário/FEFC" nos dados de receita — só 4
+    categorias genéricas (recursos próprios, pessoas físicas, internet,
+    comercialização de bens) — então isso é o total arrecadado, não só a
+    fatia pública."""
+    with _connect() as conn:
+        if ano is None:
+            ano = 2022
+        rows = conn.execute(
+            """
+            SELECT d.sigla_partido, COUNT(DISTINCT cr.deputado_id) AS n_candidatos, SUM(cr.valor_receita) AS total
+            FROM campanha_receitas cr
+            JOIN deputados d ON d.id = cr.deputado_id
+            WHERE cr.ano_eleicao = ? AND d.sigla_partido != ''
+            GROUP BY d.sigla_partido
+            ORDER BY total DESC
+            LIMIT ? OFFSET ?
+            """,
+            (ano, limit, offset),
+        ).fetchall()
+    return [
+        {"partido": r[0], "n_candidatos": r[1], "total_arrecadado": round(r[2], 2), "ano_eleicao": ano}
+        for r in rows
+    ]
+
+
+def total_gasto_eleicoes(ano: int | None = None, limit: int = 5, offset: int = 0) -> list[dict]:
+    """Total gasto por TODOS os candidatos numa eleição (soma de
+    campanha_despesas) — é o gasto total de campanha dos candidatos
+    (mistura doação privada + fundo público/FEFC), NÃO o custo do TSE para
+    organizar a eleição em si (esse dado não está nesta base). `limit`/
+    `offset` só existem pra manter a assinatura padrão — sempre devolve 1
+    item (o total do ano)."""
+    with _connect() as conn:
+        if ano is None:
+            ano = 2022
+        row = conn.execute(
+            "SELECT COUNT(*), SUM(total_pago) FROM campanha_despesas WHERE ano_eleicao = ?",
+            (ano,),
+        ).fetchone()
+        if not row or row[1] is None:
+            return []
+        n_despesas, total = row
+    return [{
+        "ano_eleicao": ano,
+        "total_gasto_por_candidatos": round(total, 2),
+        "n_registros_de_despesa": n_despesas,
+    }][offset : offset + limit]
+
+
+def comparacao_judiciario_legislativo(limit: int = 5, offset: int = 0) -> list[dict]:
+    """Compara o que cada magistrado (STF/STJ/TCU) recebe líquido por ano,
+    em média, contra o que um deputado federal recebe PESSOALMENTE por ano
+    (subsídio + auxílio-moradia — sem contar a verba de gabinete/equipe,
+    pra comparar maçã com maçã: só o que cada um embolsa, não orçamento de
+    terceiros)."""
+    with _connect() as conn:
+        ano_mes = _last_complete_month(conn)
+        magistrados_rows = conn.execute(
+            """
+            SELECT m.tribunal,
+                   ROUND(AVG(COALESCE(NULLIF(r.rendimento_liquido, 0), r.total_creditos - r.total_debitos)) * 12, 2)
+            FROM remuneracao_magistrados r JOIN magistrados m ON m.id = r.magistrado_id
+            WHERE r.ano_mes = ?
+              AND COALESCE(NULLIF(r.rendimento_liquido, 0), r.total_creditos - r.total_debitos) > 0
+            GROUP BY m.tribunal
+            """,
+            (ano_mes,),
+        ).fetchall()
+
+        ano_dep = _last_complete_year(conn, "despesas_deputados")
+        row = conn.execute(
+            "SELECT salario_dep, auxilio_moradia FROM verbas_gabinete WHERE ano = ?",
+            (ano_dep,),
+        ).fetchone()
+
+    items = [
+        {"cargo": f"Ministro do {tribunal}", "recebimento_liquido_anual": total, "referencia": ano_mes}
+        for tribunal, total in magistrados_rows
+    ]
+    if row:
+        salario_dep, auxilio_moradia = row
+        items.append({
+            "cargo": "Deputado Federal (só subsídio + auxílio-moradia, sem verba de gabinete)",
+            "recebimento_liquido_anual": round(salario_dep * 12 + auxilio_moradia * 12, 2),
+            "referencia": str(ano_dep),
+        })
+    items.sort(key=lambda i: i["recebimento_liquido_anual"], reverse=True)
+    return items[offset : offset + limit]
+
+
 # (label, fetcher, kwargs_extra, anos_possiveis|None, max_paginas, aviso|None)
 # anos_possiveis=None -> fetcher decide o ano sozinho (não aceita/precisa do
 # parâmetro, ou usa o "último ano completo" automaticamente).
@@ -547,6 +640,9 @@ FACT_FETCHERS = [
     ("quanto custa manter um deputado federal por ano (soma oficial)", custo_anual_deputado, [None], 1, None),
     ("maior crescimento de patrimônio declarado entre candidaturas", maior_crescimento_patrimonio, [None], 6, AVISO_CRESCIMENTO),
     ("maiores salários entre STF, STJ e TCU", maiores_salarios_magistrados, [None], 3, None),
+    ("total arrecadado em campanha por partido", total_arrecadacao_por_partido, [2018, 2022], 3, None),
+    ("total gasto por candidatos numa eleição", total_gasto_eleicoes, [2018, 2022], 1, None),
+    ("comparação de quanto recebe um deputado vs um ministro de tribunal superior", comparacao_judiciario_legislativo, [None], 1, None),
 ]
 
 
