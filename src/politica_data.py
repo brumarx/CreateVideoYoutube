@@ -47,6 +47,20 @@ AVISO_SUSPEITA = (
     "diga que a pessoa 'cometeu' algo ou é culpada de algo."
 )
 
+AVISO_CRESCIMENTO = (
+    "ATENÇÃO: isso é a comparação de patrimônio DECLARADO à Justiça "
+    "Eleitoral entre duas candidaturas da mesma pessoa (por CPF) — não é "
+    "prova de enriquecimento ilícito. Crescimento de patrimônio tem "
+    "inúmeras explicações legítimas (herança, casamento, venda de bem, "
+    "sucesso em negócio próprio antes de entrar pra política). Narre só o "
+    "fato numérico (\"o patrimônio declarado passou de X para Y entre a "
+    "candidatura de ANO1 e ANO2\"), nunca insinue que o cargo público foi a "
+    "causa do crescimento. Além disso, é autodeclarado pelo próprio "
+    "candidato à Justiça Eleitoral — pode conter erro de digitação (ex.: "
+    "casa decimal a mais); sempre diga \"segundo a declaração à Justiça "
+    "Eleitoral\", nunca apresente o valor como fato 100% verificado."
+)
+
 
 def _last_complete_year(conn: sqlite3.Connection, table: str, column: str = "ano") -> int:
     """MAX(ano) da tabela, mas nunca o ano corrente em andamento — um total
@@ -64,6 +78,33 @@ def _connect() -> sqlite3.Connection:
     if not DB_PATH.exists():
         raise FileNotFoundError(f"Banco de política não encontrado: {DB_PATH}")
     return sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+
+
+def _last_complete_month(conn: sqlite3.Connection) -> str:
+    """Último ano_mes (YYYY-MM) de remuneracao_magistrados com dado
+    realmente importado pras 3 cortes (STF/STJ/TCU) — cada corte importa
+    com atraso diferente (visto na prática: um mês só com TCU, sem STF/STJ
+    ainda), e o TCU não preenche `rendimento_liquido` diretamente (só
+    `total_creditos`/`total_debitos`), então nem sempre o MAX(ano_mes) bruto
+    tem dado utilizável pras 3."""
+    current = date.today().strftime("%Y-%m")
+    rows = conn.execute(
+        "SELECT DISTINCT ano_mes FROM remuneracao_magistrados WHERE ano_mes < ? ORDER BY ano_mes DESC LIMIT 8",
+        (current,),
+    ).fetchall()
+    for (ano_mes,) in rows:
+        n_tribunais = conn.execute(
+            """
+            SELECT COUNT(DISTINCT m.tribunal)
+            FROM remuneracao_magistrados r JOIN magistrados m ON m.id = r.magistrado_id
+            WHERE r.ano_mes = ?
+              AND COALESCE(NULLIF(r.rendimento_liquido, 0), r.total_creditos - r.total_debitos) > 0
+            """,
+            (ano_mes,),
+        ).fetchone()[0]
+        if n_tribunais >= 2:
+            return ano_mes
+    return rows[0][0] if rows else current
 
 
 def top_ceap_spenders(ano: int | None = None, limit: int = 5, offset: int = 0) -> list[dict]:
@@ -351,6 +392,52 @@ def suspeitas_patrimonio(limit: int = 5, offset: int = 0) -> list[dict]:
     ]
 
 
+def custo_anual_deputado(ano: int | None = None, limit: int = 5, offset: int = 0) -> list[dict]:
+    """Quebra oficial do que custa manter 1 deputado federal por ano — soma
+    de valores já publicados (subsídio, auxílio-moradia, verba de gabinete
+    pra equipe) + a média real de uso da cota parlamentar (CEAP) no último
+    ano completo. Nenhum valor estimado por nós: tudo vem de colunas já
+    publicadas em `verbas_gabinete` (Ato da Mesa/Lei) ou calculado por soma/
+    média direta de `despesas_deputados`."""
+    with _connect() as conn:
+        if ano is None:
+            ano = _last_complete_year(conn, "despesas_deputados")
+        row = conn.execute(
+            "SELECT salario_dep, auxilio_moradia, valor_anual FROM verbas_gabinete WHERE ano = ?",
+            (ano,),
+        ).fetchone()
+        if row is None:
+            return []
+        salario_dep, auxilio_moradia, verba_gabinete_anual = row
+
+        media_ceap = conn.execute(
+            """
+            SELECT AVG(total) FROM (
+                SELECT SUM(valor_liquido) AS total
+                FROM despesas_deputados
+                WHERE ano = ?
+                GROUP BY deputado_id
+            )
+            """,
+            (ano,),
+        ).fetchone()[0] or 0.0
+
+    subsidio_anual = round(salario_dep * 12, 2)
+    auxilio_moradia_anual = round(auxilio_moradia * 12, 2)
+    verba_gabinete_anual = round(verba_gabinete_anual, 2)
+    media_ceap = round(media_ceap, 2)
+    total = round(subsidio_anual + auxilio_moradia_anual + verba_gabinete_anual + media_ceap, 2)
+
+    items = [
+        {"item": "Subsídio (salário oficial)", "valor_anual": subsidio_anual, "ano": ano},
+        {"item": "Auxílio-moradia", "valor_anual": auxilio_moradia_anual, "ano": ano},
+        {"item": "Verba de gabinete (equipe de até 25 assessores)", "valor_anual": verba_gabinete_anual, "ano": ano},
+        {"item": "Cota parlamentar (CEAP) — média real de uso por deputado", "valor_anual": media_ceap, "ano": ano},
+        {"item": "TOTAL somado (por deputado, por ano)", "valor_anual": total, "ano": ano},
+    ]
+    return items[offset : offset + limit]
+
+
 def suspeitas_ceap(limit: int = 5, offset: int = 0) -> list[dict]:
     """Padrões estatísticos fora do comum em despesas da cota parlamentar
     (score de risco mais alto) — ver AVISO_SUSPEITA no prompt."""
@@ -368,6 +455,73 @@ def suspeitas_ceap(limit: int = 5, offset: int = 0) -> list[dict]:
         ).fetchall()
     return [
         {"nome": r[0], "partido": r[1], "padrao_detectado": r[2], "score_risco": r[3], "ano": r[4]}
+        for r in rows
+    ]
+
+
+def maior_crescimento_patrimonio(limit: int = 5, offset: int = 0) -> list[dict]:
+    """Compara o patrimônio total declarado pela MESMA pessoa (via CPF) em
+    duas candidaturas diferentes (2018/2020/2022/2024) — só `bens_candidatos`
+    tem múltiplos anos; a tabela `patrimonio` isolada só cobre 2022. Filtra
+    fora CPF vazio e limita a RAZÃO de crescimento (não só o valor final) —
+    visto na prática que um "vereador" pulando de R$107 mil pra R$132
+    milhões passa pelo teto de valor absoluto (calibrado pra senador) mas é
+    claramente erro de digitação, não crescimento real; crescimento
+    legítimo raramente multiplica por mais de ~20x em poucos anos."""
+    GROWTH_RATIO_CAP = 20
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            WITH pat AS (
+                SELECT c.nr_cpf_cand AS cpf, c.nm_candidato AS nome, c.ds_cargo AS cargo,
+                       b.ano_eleicao AS ano, SUM(b.vr_bem) AS total
+                FROM bens_candidatos b
+                JOIN candidatos c ON c.sq_candidato = b.sq_candidato
+                WHERE c.nr_cpf_cand != '' AND c.nr_cpf_cand IS NOT NULL
+                GROUP BY b.sq_candidato
+            )
+            SELECT p1.nome, p1.cargo, p1.ano, p1.total, p2.ano, p2.total
+            FROM pat p1
+            JOIN pat p2 ON p2.cpf = p1.cpf AND p2.ano > p1.ano
+            WHERE p2.total > p1.total AND p2.total < ? AND p1.total > 0
+              AND p2.total <= p1.total * ?
+            ORDER BY (p2.total - p1.total) DESC
+            LIMIT ? OFFSET ?
+            """,
+            (PATRIMONIO_SANITY_CAP, GROWTH_RATIO_CAP, limit, offset),
+        ).fetchall()
+    return [
+        {
+            "nome": r[0], "cargo": r[1],
+            "ano_anterior": r[2], "patrimonio_anterior": round(r[3], 2),
+            "ano_recente": r[4], "patrimonio_recente": round(r[5], 2),
+            "crescimento": round(r[5] - r[3], 2),
+        }
+        for r in rows
+    ]
+
+
+def maiores_salarios_magistrados(limit: int = 5, offset: int = 0) -> list[dict]:
+    """Maiores salários líquidos individuais entre STF, STJ e TCU no último
+    mês com dado completo — TCU não preenche `rendimento_liquido` direto
+    (usa total_creditos - total_debitos como equivalente)."""
+    with _connect() as conn:
+        ano_mes = _last_complete_month(conn)
+        rows = conn.execute(
+            """
+            SELECT m.nome, m.tribunal,
+                   COALESCE(NULLIF(r.rendimento_liquido, 0), r.total_creditos - r.total_debitos) AS liquido
+            FROM remuneracao_magistrados r
+            JOIN magistrados m ON m.id = r.magistrado_id
+            WHERE r.ano_mes = ?
+              AND COALESCE(NULLIF(r.rendimento_liquido, 0), r.total_creditos - r.total_debitos) > 0
+            ORDER BY liquido DESC
+            LIMIT ? OFFSET ?
+            """,
+            (ano_mes, limit, offset),
+        ).fetchall()
+    return [
+        {"nome": r[0], "tribunal": r[1], "salario_liquido_mensal": round(r[2], 2), "mes": ano_mes}
         for r in rows
     ]
 
@@ -390,6 +544,9 @@ FACT_FETCHERS = [
     ("condenações do TCU", condenacoes_tcu, [None], 6, None),
     ("padrões estatísticos incomuns entre patrimônio e gastos", suspeitas_patrimonio, [None], 6, AVISO_SUSPEITA),
     ("padrões estatísticos incomuns na cota parlamentar", suspeitas_ceap, [None], 6, AVISO_SUSPEITA),
+    ("quanto custa manter um deputado federal por ano (soma oficial)", custo_anual_deputado, [None], 1, None),
+    ("maior crescimento de patrimônio declarado entre candidaturas", maior_crescimento_patrimonio, [None], 6, AVISO_CRESCIMENTO),
+    ("maiores salários entre STF, STJ e TCU", maiores_salarios_magistrados, [None], 3, None),
 ]
 
 
@@ -421,6 +578,24 @@ def _pick_page(label: str, anos: list[int | None], max_paginas: int, limit: int)
     state[label] = sorted(used)
     _save_used(state)
     return ano, offset
+
+
+def pick_fact_set(label: str, limit: int = 5) -> dict:
+    """Como random_fact_set(), mas força um fetcher específico pelo label em
+    vez de sortear — usado quando o painel (ou um teste manual) quer um tema
+    específico de política em vez de deixar aleatório."""
+    for entry_label, fetcher, anos, max_paginas, aviso in FACT_FETCHERS:
+        if entry_label == label:
+            ano, offset = _pick_page(entry_label, anos, max_paginas, limit)
+            kwargs = {"limit": limit, "offset": offset}
+            if ano is not None:
+                kwargs["ano"] = ano
+            data = fetcher(**kwargs)
+            result = {"tema": entry_label, "dados": data}
+            if aviso:
+                result["aviso"] = aviso
+            return result
+    raise ValueError(f"Nenhum fetcher de política com o label {label!r}")
 
 
 def random_fact_set(limit: int = 5) -> dict:
