@@ -8,12 +8,15 @@ Uso (via cron, 1x/dia):
   .venv/bin/python3 scripts/daily_run.py
 
 Cada canal tem uma cota diária definida em `channels/<nome>.yaml`
-(`uploads_per_day`, padrão 1). Tópicos ficam em `channels/<nome>.yaml`
-(`topics` pro formato curto, `long_form_topics` pro longo) — nunca repete um
-tema já usado (registro persistente em `data/used_topics.json`, ver
-`src/topics.py`); quando a lista fixa acaba, gera um tema novo via LLM
-dentro do nicho do canal. O canal `politica` no formato curto ignora
-tópicos fixos e usa sempre um fato real aleatório do banco de transparência.
+(`uploads_per_day`, padrão 1). Uma fila única de temas fica em
+`channels/<nome>.yaml` -> `topics` (o mesmo tema pode virar um vídeo curto
+ou longo, dependendo de `daily_format` — só sai 1 vídeo/dia por canal
+mesmo, não faz sentido ter fila separada por formato). run_pipeline.py
+escolhe o próximo tema sozinho e nunca repete um já usado (registro em
+`data/used_topics.json`, ver `src/topics.py`); quando a lista fixa acaba,
+gera um tema novo via LLM dentro do nicho do canal. O canal `politica` no
+formato curto ignora a fila e usa sempre um fato real aleatório do banco de
+transparência.
 """
 from __future__ import annotations
 
@@ -27,15 +30,12 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.topics import pick_topic  # noqa: E402
-
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("daily_run")
 
 
 def run_channel(channel_name: str, cfg: dict) -> None:
     uploads_per_day = cfg.get("uploads_per_day", 1)
-    topics = cfg.get("topics", [])
     # curto (padrão) ou longo — configurável por canal em channels/<nome>.yaml
     # (daily_format), editável no painel web.
     long_form = cfg.get("daily_format", "short") == "long"
@@ -46,33 +46,16 @@ def run_channel(channel_name: str, cfg: dict) -> None:
         return
 
     for i in range(uploads_per_day):
-        if long_form:
-            # run_pipeline.py já sorteia sozinho de long_form_topics (ou, pro
-            # canal politica, também usa long_form_topics em vez de fato
-            # aleatório — ver run_pipeline.py) quando --topic não é passado.
-            topic = None
-        elif channel_name == "politica":
-            topic = None  # run_pipeline.py busca fato real sozinho
-        elif not topics:
-            log.warning("[%s] sem tópicos configurados em channels/%s.yaml — pulando", channel_name, channel_name)
-            continue
-        else:
-            topic = pick_topic(channel_name, "short", topics, cfg.get("niche", ""))
-
         cmd = [
             sys.executable, str(ROOT / "scripts" / "run_pipeline.py"),
             "--channel", channel_name,
         ]
         if long_form:
             cmd.append("--long")
-        if topic:
-            cmd += ["--topic", topic]
+        # sem --topic: run_pipeline.py escolhe sozinho da fila única (ou
+        # fato real, pro politica no formato curto).
 
-        log.info(
-            "[%s] upload %d/%d (%s) — tópico: %s",
-            channel_name, i + 1, uploads_per_day, "longo" if long_form else "curto",
-            topic or "(sorteado automaticamente)",
-        )
+        log.info("[%s] upload %d/%d (%s)", channel_name, i + 1, uploads_per_day, "longo" if long_form else "curto")
         result = subprocess.run(cmd, cwd=ROOT)
         if result.returncode != 0:
             log.error("[%s] pipeline falhou (exit %d) — seguindo pros próximos", channel_name, result.returncode)

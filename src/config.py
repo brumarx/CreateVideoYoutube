@@ -51,7 +51,10 @@ class ChannelConfig:
     # Formato longo (documentário, 16:9) — lugares/fenômenos reais
     # específicos pra evitar tema genérico demais pra 15-20min.
     long_form_scenes: int
-    long_form_topics: list[str]
+    # Fila única de temas — só sai 1 vídeo/dia por canal (curto OU longo,
+    # conforme daily_format), então não faz sentido ter lista separada por
+    # formato: era confuso e deixava metade da fila sempre parada.
+    topics: list[str]
     # Duração alvo em minutos — usada pra calcular quantas palavras cada
     # cena precisa ter (contar cena não bastava: o LLM batia a contagem de
     # cenas mas escrevia frases curtas demais, saindo um vídeo bem mais
@@ -77,7 +80,7 @@ class ChannelConfig:
             upload_privacy=data.get("upload_privacy", "private"),
             token_file=ROOT / "credentials" / f"token_{name}.json",
             long_form_scenes=data.get("long_form_scenes", 30),
-            long_form_topics=data.get("long_form_topics", []),
+            topics=data.get("topics", []),
             short_min_minutes=data.get("short_min_minutes", 3),
             short_max_minutes=data.get("short_max_minutes", 6),
             long_min_minutes=data.get("long_min_minutes", 15),

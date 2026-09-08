@@ -57,15 +57,13 @@ def run(
         facts = random_fact_set()
         if topic is None:
             topic = facts["tema"]
-    elif long_form and topic is None:
-        topics = channel.long_form_topics
-        if not topics:
-            raise SystemExit(f"channels/{channel_name}.yaml não tem long_form_topics configurado")
+    elif topic is None and channel.topics:
         # nunca repete um tema já usado — quando a lista fixa esgota, gera
-        # um tema novo via LLM dentro do nicho do canal (ver src/topics.py)
-        topic = pick_topic(channel_name, "long", topics, channel.niche)
+        # um tema novo via LLM dentro do nicho do canal (ver src/topics.py).
+        # Fila única pra curto e longo: só sai 1 vídeo/dia por canal mesmo.
+        topic = pick_topic(channel_name, channel.topics, channel.niche)
     elif topic is None:
-        raise SystemExit("--topic é obrigatório pra esse canal")
+        raise SystemExit(f"channels/{channel_name}.yaml não tem topics configurado e --topic não foi passado")
 
     width, height = (LONG_WIDTH, LONG_HEIGHT) if long_form else (SHORT_WIDTH, SHORT_HEIGHT)
     scenes = channel.long_form_scenes if long_form else None

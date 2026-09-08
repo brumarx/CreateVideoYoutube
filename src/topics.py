@@ -56,22 +56,21 @@ def _generate_new_topic(niche: str, used: list[str]) -> str:
     return topic
 
 
-def pick_topic(channel_name: str, kind: str, pool: list[str], niche: str) -> str:
-    """Escolhe um tema não usado ainda pra `channel_name`/`kind` (ex.: kind
-    "short" ou "long" — mantidos em namespaces separados porque vêm de
-    listas diferentes em channels/<nome>.yaml). Marca como usado e persiste
-    antes de devolver, pra nunca sortear o mesmo tema duas vezes.
+def pick_topic(channel_name: str, pool: list[str], niche: str) -> str:
+    """Escolhe um tema não usado ainda pra `channel_name` — fila única
+    (curto e longo compartilham a mesma lista, já que só sai 1 vídeo/dia por
+    canal). Marca como usado e persiste antes de devolver, pra nunca
+    sortear o mesmo tema duas vezes.
     """
     state = _load()
-    channel_state = state.setdefault(channel_name, {})
-    used = channel_state.setdefault(kind, [])
+    used = state.setdefault(channel_name, [])
     used_set = set(used)
 
     unused = [t for t in pool if t not in used_set]
     if unused:
         topic = random.choice(unused)
     else:
-        log.info("[%s/%s] lista fixa de temas esgotada — pedindo tema novo ao LLM", channel_name, kind)
+        log.info("[%s] lista fixa de temas esgotada — pedindo tema novo ao LLM", channel_name)
         topic = _generate_new_topic(niche, used)
 
     used.append(topic)

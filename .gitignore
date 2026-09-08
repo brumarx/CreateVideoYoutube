@@ -3,6 +3,7 @@ credentials/
 output/
 logs/
 *.db
+data/used_topics.json
 __pycache__/
 *.pyc
 .venv/
