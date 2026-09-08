@@ -114,7 +114,7 @@ def top_ceap_spenders(ano: int | None = None, limit: int = 5, offset: int = 0) -
             ano = _last_complete_year(conn, "despesas_deputados")
         rows = conn.execute(
             """
-            SELECT d.nome, d.sigla_partido, d.sigla_uf, SUM(e.valor_liquido) AS total
+            SELECT d.nome, d.sigla_partido, d.sigla_uf, SUM(e.valor_liquido) AS total, d.url_foto
             FROM despesas_deputados e
             JOIN deputados d ON d.id = e.deputado_id
             WHERE e.ano = ?
@@ -125,7 +125,7 @@ def top_ceap_spenders(ano: int | None = None, limit: int = 5, offset: int = 0) -
             (ano, limit, offset),
         ).fetchall()
     return [
-        {"nome": r[0], "partido": r[1], "uf": r[2], "total_gasto": round(r[3], 2), "ano": ano}
+        {"nome": r[0], "partido": r[1], "uf": r[2], "total_gasto": round(r[3], 2), "ano": ano, "foto_url": r[4]}
         for r in rows
     ]
 
@@ -137,7 +137,7 @@ def top_single_expenses(ano: int | None = None, limit: int = 5, offset: int = 0)
             ano = _last_complete_year(conn, "despesas_deputados")
         rows = conn.execute(
             """
-            SELECT DISTINCT d.nome, e.tipo_despesa, e.nome_fornecedor, e.valor_liquido, e.data_documento
+            SELECT DISTINCT d.nome, e.tipo_despesa, e.nome_fornecedor, e.valor_liquido, e.data_documento, d.url_foto
             FROM despesas_deputados e
             JOIN deputados d ON d.id = e.deputado_id
             WHERE e.ano = ? AND e.valor_liquido > 0
@@ -149,7 +149,7 @@ def top_single_expenses(ano: int | None = None, limit: int = 5, offset: int = 0)
     return [
         {
             "nome": r[0], "tipo_despesa": r[1], "fornecedor": r[2],
-            "valor": round(r[3], 2), "data": r[4], "ano": ano,
+            "valor": round(r[3], 2), "data": r[4], "ano": ano, "foto_url": r[5],
         }
         for r in rows
     ]
@@ -181,7 +181,7 @@ def top_score_politico(ano: int | None = None, limit: int = 5, offset: int = 0) 
             ano = _last_complete_year(conn, "score_politico")
         rows = conn.execute(
             """
-            SELECT d.nome, d.sigla_partido, d.sigla_uf, s.score_total, s.pct_presenca, s.total_proposicoes
+            SELECT d.nome, d.sigla_partido, d.sigla_uf, s.score_total, s.pct_presenca, s.total_proposicoes, d.url_foto
             FROM score_politico s
             JOIN deputados d ON d.id = s.deputado_id
             WHERE s.ano = ?
@@ -193,7 +193,7 @@ def top_score_politico(ano: int | None = None, limit: int = 5, offset: int = 0) 
     return [
         {
             "nome": r[0], "partido": r[1], "uf": r[2], "score": round(r[3], 1),
-            "pct_presenca": round(r[4], 1), "total_proposicoes": r[5], "ano": ano,
+            "pct_presenca": round(r[4], 1), "total_proposicoes": r[5], "ano": ano, "foto_url": r[6],
         }
         for r in rows
     ]
@@ -232,17 +232,18 @@ def top_emendas(ano: int | None = None, limit: int = 5, offset: int = 0) -> list
             ano = _last_complete_year(conn, "emendas_parlamentares")
         rows = conn.execute(
             """
-            SELECT autor_nome, autor_partido, autor_uf, SUM(valor_pago) AS total
-            FROM emendas_parlamentares
-            WHERE ano = ? AND deputado_id IS NOT NULL AND autor_partido != ''
-            GROUP BY deputado_id
+            SELECT em.autor_nome, em.autor_partido, em.autor_uf, SUM(em.valor_pago) AS total, d.url_foto
+            FROM emendas_parlamentares em
+            LEFT JOIN deputados d ON d.id = em.deputado_id
+            WHERE em.ano = ? AND em.deputado_id IS NOT NULL AND em.autor_partido != ''
+            GROUP BY em.deputado_id
             ORDER BY total DESC
             LIMIT ? OFFSET ?
             """,
             (ano, limit, offset),
         ).fetchall()
     return [
-        {"nome": r[0], "partido": r[1], "uf": r[2], "total_pago": round(r[3], 2), "ano": ano}
+        {"nome": r[0], "partido": r[1], "uf": r[2], "total_pago": round(r[3], 2), "ano": ano, "foto_url": r[4]}
         for r in rows
     ]
 
@@ -510,7 +511,8 @@ def maiores_salarios_magistrados(limit: int = 5, offset: int = 0) -> list[dict]:
         rows = conn.execute(
             """
             SELECT m.nome, m.tribunal,
-                   COALESCE(NULLIF(r.rendimento_liquido, 0), r.total_creditos - r.total_debitos) AS liquido
+                   COALESCE(NULLIF(r.rendimento_liquido, 0), r.total_creditos - r.total_debitos) AS liquido,
+                   m.url_foto
             FROM remuneracao_magistrados r
             JOIN magistrados m ON m.id = r.magistrado_id
             WHERE r.ano_mes = ?
@@ -521,7 +523,7 @@ def maiores_salarios_magistrados(limit: int = 5, offset: int = 0) -> list[dict]:
             (ano_mes, limit, offset),
         ).fetchall()
     return [
-        {"nome": r[0], "tribunal": r[1], "salario_liquido_mensal": round(r[2], 2), "mes": ano_mes}
+        {"nome": r[0], "tribunal": r[1], "salario_liquido_mensal": round(r[2], 2), "mes": ano_mes, "foto_url": r[3]}
         for r in rows
     ]
 

@@ -190,7 +190,14 @@ def run(
     thumb_prompt = script.get("thumbnail_image_prompt") or script["scenes"][0]["image_prompt"]
     thumb_text = script.get("thumbnail_text") or script["title"]
     thumb_path = work_dir / "thumbnail.jpg"
-    make_thumbnail(thumb_prompt, thumb_text, thumb_path, accent=channel.accent)
+    # quando o fato citado tem foto OFICIAL da pessoa (deputado/senador/
+    # magistrado — ver src/politica_data.py), usa a foto de verdade em vez
+    # de pedir pra IA inventar o rosto: mais preciso e sem risco de gerar
+    # cara errada atribuída a alguém real.
+    real_photo_url = None
+    if facts and facts.get("dados"):
+        real_photo_url = facts["dados"][0].get("foto_url") or None
+    make_thumbnail(thumb_prompt, thumb_text, thumb_path, accent=channel.accent, real_photo_url=real_photo_url)
     update(job_id, thumbnail_path=str(thumb_path))
     log.info("[%s] thumbnail pronta: %s", job_id, thumb_path)
 
