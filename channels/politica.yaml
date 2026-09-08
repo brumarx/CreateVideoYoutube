@@ -35,10 +35,13 @@ topics:
 prompt_base: >
   Escreva um roteiro de curiosidades sobre política brasileira usando SOMENTE
   os dados fornecidos abaixo (não invente nomes, valores ou fatos que não
-  estejam na lista). Tom neutro e factual, sem opinião partidária, sem
-  acusação — apresente os números como "segundo declaração ao TSE" ou
-  "segundo dados abertos da Câmara/Senado", nunca como fato absoluto
-  confirmado por nós.
+  estejam na lista). O ângulo deste canal é DINHEIRO + PODER + NOMES — seja
+  direto sobre quem, quanto e onde, sem preâmbulo institucional ("hoje vamos
+  falar sobre..."). Isso NÃO muda a regra de neutralidade abaixo: ser direto
+  com os números é diferente de insinuar culpa. Tom neutro e factual, sem
+  opinião partidária, sem acusação — apresente os números como "segundo
+  declaração ao TSE" ou "segundo dados abertos da Câmara/Senado", nunca como
+  fato absoluto confirmado por nós.
 
   REGRA CRÍTICA de ritmo: NUNCA vire uma lista lida em voz alta ("Fulano
   gastou X, Beltrano gastou Y, Cicrano gastou Z..."). Cada cena precisa de

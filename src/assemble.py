@@ -11,7 +11,10 @@ import json
 import random
 import shutil
 import subprocess
+import unicodedata
 from pathlib import Path
+
+from PIL import ImageFont
 
 TRANSITION_DURATION = 0.5  # segundos de crossfade entre cenas
 
@@ -58,28 +61,31 @@ def _list_number_filter(number: int, height: int, accent: str) -> str:
     )
 
 
-def _caption_chunks(narration: str, duration: float, max_chars: int) -> list[tuple[str, float, float]]:
-    """Divide a narração em pedacinhos curtos (por LARGURA de tela, não por
-    número fixo de palavras — uma palavra longa sozinha já pode estourar a
-    tela) com o tempo de exibição de cada um, distribuído proporcionalmente
-    pela duração real do áudio (sem alinhamento por palavra do TTS, mas o
-    edge-tts narra num ritmo bem constante, então fica sincronizado o
-    bastante visualmente)."""
+def _caption_chunks(
+    narration: str, duration: float, font: ImageFont.FreeTypeFont, max_width: float
+) -> list[tuple[str, float, float]]:
+    """Divide a narração (já em maiúsculas) em pedacinhos curtos por LARGURA
+    REAL renderizada (medida com a própria fonte via PIL, não estimada) —
+    uma estimativa de "largura média de caractere" saiu errada na prática e
+    deixou legenda estourando a borda do vídeo e sendo cortada pelo ffmpeg
+    (o corte no meio de uma letra acentuada é o que parecia "acento
+    quebrado"). Tempo de exibição de cada pedaço é proporcional à duração
+    real do áudio (sem alinhamento por palavra do TTS, mas o edge-tts narra
+    num ritmo bem constante, então fica sincronizado o bastante
+    visualmente)."""
     words = narration.split()
     if not words:
         return []
 
     chunks: list[list[str]] = []
     current: list[str] = []
-    current_len = 0
     for w in words:
-        added_len = len(w) + (1 if current else 0)
-        if current and current_len + added_len > max_chars:
+        candidate = " ".join([*current, w])
+        if current and font.getlength(candidate) > max_width:
             chunks.append(current)
-            current, current_len = [w], len(w)
+            current = [w]
         else:
             current.append(w)
-            current_len += added_len
     if current:
         chunks.append(current)
 
@@ -93,18 +99,26 @@ def _caption_chunks(narration: str, duration: float, max_chars: int) -> list[tup
     return out
 
 
+def _strip_accents(text: str) -> str:
+    # bug confirmado do próprio ffmpeg (não é escaping nosso): o filtro
+    # drawtext desta build derruba o ÚLTIMO caractere da string sempre que
+    # ela contém um acento (Ó, Ã, Á etc.) — reproduzido isolado, sem box,
+    # sem borderw, com text= OU textfile=, então não tem workaround de
+    # sintaxe. Solução: tirar o acento só da legenda (a narração falada
+    # continua 100% correta, só o texto na tela perde o acento visual).
+    return "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
+
+
 def _caption_filter(narration: str, duration: float, width: int, height: int) -> str:
     font_size = min(width, height) // 16
     y = int(height * 0.72)
-    # largura média de caractere em bold sans ~0.58x o tamanho da fonte —
-    # limita o pedaço de legenda pra nunca estourar a largura do vídeo
-    # (visto acontecer com chunk fixo de 3 palavras: palavra longa sozinha
-    # já passava da borda; e com 0.85 de folga a linha mais longa encostava
-    # nas duas bordas sem margem nenhuma).
-    max_chars = max(int((width * 0.78 - 32) / (font_size * 0.58)), 6)
+    font = ImageFont.truetype(WATERMARK_FONT, font_size)
+    # margem de 9% de cada lado — sobra segura medida na largura REAL do
+    # texto renderizado (ver _caption_chunks), não numa estimativa.
+    max_width = width * 0.82
     parts = []
-    for text, start, end in _caption_chunks(narration, duration, max_chars):
-        esc = _escape_drawtext(text.upper())
+    for text, start, end in _caption_chunks(_strip_accents(narration.upper()), duration, font, max_width):
+        esc = _escape_drawtext(text)
         parts.append(
             f",drawtext=fontfile='{WATERMARK_FONT}':text='{esc}':"
             f"fontsize={font_size}:fontcolor=white:"

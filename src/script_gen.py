@@ -18,6 +18,7 @@ log = logging.getLogger("script_gen")
 # minutos-alvo em palavras-por-cena, uma meta concreta e verificável.
 WORDS_PER_MINUTE = 130
 MIN_WORDS_RATIO = 0.7  # abaixo disso, tenta de novo antes de aceitar
+MAX_WORDS_RATIO = 1.15  # acima disso, também tenta de novo (nunca tinha teto)
 
 SYSTEM_PROMPT = (
     "Você é um roteirista de vídeos do YouTube no estilo 'faceless' "
@@ -163,14 +164,20 @@ def generate_script(
     min_total_words = round(min_minutes * WORDS_PER_MINUTE * MIN_WORDS_RATIO)
     n_scenes = scenes or channel.scenes_per_video
     total_max_words = round(max_minutes * WORDS_PER_MINUTE)
+    # tolerância de 15% acima do máximo — narração não bate a contagem de
+    # palavras com precisão cirúrgica, rejeitar por 1 palavra a mais forçaria
+    # retry à toa. Mas SEM teto nenhum, o vídeo podia sair bem mais longo que
+    # o configurado (visto na prática: canal configurado pra 8min saiu com
+    # 12min porque só existia checagem de mínimo, nunca de máximo).
+    max_words_ceiling = round(total_max_words * MAX_WORDS_RATIO)
     # ~1.5 tokens/palavra em pt-BR + overhead de JSON/image_prompt (em
     # inglês, ~30-50 palavras por cena) + folga de 40% — sem isso a resposta
     # trunca no meio do JSON pra roteiros longos (visto na prática: 31
     # cenas cortou em ~3100 caracteres com o default baixo do provedor).
     max_tokens = min(int((total_max_words * 1.5 + n_scenes * 60 + 500) * 1.4), 16000)
     last_error: Exception | None = None
-    best_short_script: dict | None = None
-    best_short_words = -1
+    best_script: dict | None = None
+    best_distance = float("inf")
     for attempt in range(3):
         raw = complete(messages, max_tokens=max_tokens)
         try:
@@ -180,24 +187,28 @@ def generate_script(
                 raise ValueError(f"JSON do roteiro sem campos {missing}: {script}")
 
             word_count = sum(len(s.get("narration", "").split()) for s in script["scenes"])
-            if word_count >= min_total_words:
+            if min_total_words <= word_count <= max_words_ceiling:
                 return script
 
-            log.warning(
-                "tentativa %d/3: roteiro curto demais (%d palavras, mínimo %d), tentando de novo",
-                attempt + 1, word_count, min_total_words,
+            distance = (
+                min_total_words - word_count if word_count < min_total_words
+                else word_count - max_words_ceiling
             )
-            if word_count > best_short_words:
-                best_short_script, best_short_words = script, word_count
+            log.warning(
+                "tentativa %d/3: roteiro fora da meta (%d palavras, faixa %d-%d), tentando de novo",
+                attempt + 1, word_count, min_total_words, max_words_ceiling,
+            )
+            if distance < best_distance:
+                best_script, best_distance = script, distance
         except (ValueError, json.JSONDecodeError) as exc:
             last_error = exc
             log.warning("tentativa %d/3: roteiro malformado (%s), tentando de novo", attempt + 1, exc)
 
-    if best_short_script is not None:
+    if best_script is not None:
         log.warning(
-            "usando o melhor roteiro obtido mesmo abaixo da meta (%d palavras, mínimo %d)",
-            best_short_words, min_total_words,
+            "usando o melhor roteiro obtido mesmo fora da faixa de %d-%d palavras",
+            min_total_words, max_words_ceiling,
         )
-        return best_short_script
+        return best_script
 
     raise ValueError(f"LLM não devolveu roteiro válido após 3 tentativas: {last_error}")
