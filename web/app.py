@@ -82,6 +82,9 @@ TEMPLATE = """
       <h2>{{ c.name }}
         {% if c.has_token %}<span class="badge ok">token OK</span>{% else %}<span class="badge warn">sem token</span>{% endif %}
       </h2>
+      {% if c.youtube_handle %}
+      <div class="meta"><a href="https://www.youtube.com/{{ c.youtube_handle }}" target="_blank">youtube.com/{{ c.youtube_handle }}</a></div>
+      {% endif %}
       <div class="niche">{{ c.niche }}</div>
       <div class="meta">{{ c.uploads_per_day }} vídeo(s)/dia · privacidade: {{ c.upload_privacy }}</div>
 
@@ -181,6 +184,7 @@ def _load_channels() -> list[dict]:
         channels.append(
             {
                 "name": name,
+                "youtube_handle": cfg.get("youtube_handle", ""),
                 "niche": cfg.get("niche", ""),
                 "uploads_per_day": cfg.get("uploads_per_day", 1),
                 "upload_privacy": cfg.get("upload_privacy", "private"),
