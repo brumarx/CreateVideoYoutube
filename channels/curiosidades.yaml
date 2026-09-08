@@ -6,9 +6,9 @@ youtube_handle: "@fractalcurioso"
 channel_title: "Fractal Curioso"
 language: "pt-BR"
 tts_voice_weights:
-  pt-BR-AntonioNeural: 0
+  pt-BR-AntonioNeural: 100
   pt-BR-FranciscaNeural: 0
-  pt-BR-ThalitaMultilingualNeural: 100
+  pt-BR-ThalitaMultilingualNeural: 0
 scenes_per_video: 8
 upload_privacy: "public"
 uploads_per_day: 1
