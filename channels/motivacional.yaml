@@ -1,5 +1,6 @@
 niche: "motivacional e desenvolvimento pessoal"
 watermark: "@ÂnguloInterno"
+accent: "#ff9248"
 language: "pt-BR"
 tts_voice: "pt-BR-FranciscaNeural"
 scenes_per_video: 6

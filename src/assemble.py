@@ -30,6 +30,27 @@ def _escape_drawtext(text: str) -> str:
     return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
 
 
+def _list_number_filter(number: int, height: int, accent: str) -> str:
+    """"Selo" de contagem regressiva (vídeo de lista, ex.: "10 fatos..."):
+    número grande no canto, cartão translúcido escuro com borda na cor de
+    destaque do canal — não é só um texto solto, pra ficar com cara de
+    coisa desenhada de propósito, não gambiarra."""
+    font_size = height // 7
+    margin = font_size // 3
+    box_size = int(font_size * 1.6)
+    hexcolor = accent.lstrip("#")
+    return (
+        f",drawbox=x={margin}:y={margin}:w={box_size}:h={box_size}:"
+        f"color=black@0.55:t=fill"
+        f",drawbox=x={margin}:y={margin}:w={box_size}:h={box_size}:"
+        f"color=0x{hexcolor}@0.9:t=4"
+        f",drawtext=fontfile='{WATERMARK_FONT}':text='{number}':"
+        f"fontsize={font_size}:fontcolor=0x{hexcolor}:"
+        f"borderw=4:bordercolor=black@0.7:"
+        f"x={margin}+({box_size}-text_w)/2:y={margin}+({box_size}-text_h)/2"
+    )
+
+
 def _ffprobe_duration(path: Path) -> float:
     out = subprocess.run(
         [
@@ -48,13 +69,17 @@ def render_scene(
     width: int = VIDEO_WIDTH,
     height: int = VIDEO_HEIGHT,
     watermark: str | None = None,
+    list_number: int | None = None,
+    accent: str = "#ffffff",
 ) -> Path:
     """Renderiza uma cena: zoom lento na imagem, sincronizado com a duração
     do áudio. `width`/`height` permitem vertical (Shorts, padrão) ou
     horizontal (vídeo longo tipo documentário). `watermark` (ex.:
     "@FractalCurioso") grava o @ do canal no canto — não impede repostagem,
     mas prova de onde saiu o vídeo original e desestimula quem rouba
-    conteúdo sem dar trabalho nenhum a mais pra quem assiste."""
+    conteúdo sem dar trabalho nenhum a mais pra quem assiste. `list_number`
+    (vídeo de lista, ex.: "10 fatos...") grava um selo de contagem
+    regressiva no canto oposto ao watermark."""
     duration = _ffprobe_duration(audio_path)
     fps = 30
     frames = max(int(duration * fps), 1)
@@ -71,6 +96,8 @@ def render_scene(
         f"crop={upscale_w}:{upscale_h},"
         f"zoompan=z='min(zoom+0.0007,1.3)':d={frames}:s={width}x{height}:fps={fps}"
     )
+    if list_number is not None:
+        filter_complex += _list_number_filter(list_number, height, accent)
     if watermark:
         font_size = max(width, height) // 45
         margin = font_size

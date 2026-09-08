@@ -66,7 +66,9 @@ def _generate_new_topic(niche: str, used: list[str]) -> str:
         f"algo muito parecido/reformulado):\n{used_block}\n\n"
         "Responda com UM ÚNICO tema novo, específico e ainda não coberto "
         "acima, em português, numa linha só, sem numeração, sem aspas, sem "
-        "explicação — só o texto do tema."
+        "explicação — só o texto do tema. Se for um tema de lista ('N "
+        "fatos/coisas sobre...'), o N NUNCA pode passar de 10 — nada de "
+        "20, 30, 40 itens."
     )
     messages = [{"role": "user", "content": prompt}]
     topic = complete(messages, max_tokens=200).strip().strip('"').strip("-").strip()
