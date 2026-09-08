@@ -9,14 +9,14 @@ Uso (via cron, 1x/dia):
 
 Cada canal tem uma cota diária definida em `channels/<nome>.yaml`
 (`uploads_per_day`, padrão 1). Tópicos ficam em `channels/<nome>.yaml`
-(`topics`, uma lista) — cada rodada consome o próximo tópico não usado
-ainda (controlado via `data/topics_state.json`); quando a lista acaba,
-recomeça do início. O canal `politica` ignora tópicos fixos e usa sempre
-um fato real aleatório do banco de transparência.
+(`topics` pro formato curto, `long_form_topics` pro longo) — nunca repete um
+tema já usado (registro persistente em `data/used_topics.json`, ver
+`src/topics.py`); quando a lista fixa acaba, gera um tema novo via LLM
+dentro do nicho do canal. O canal `politica` no formato curto ignora
+tópicos fixos e usa sempre um fato real aleatório do banco de transparência.
 """
 from __future__ import annotations
 
-import json
 import logging
 import subprocess
 import sys
@@ -25,32 +25,15 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-STATE_FILE = ROOT / "data" / "topics_state.json"
+sys.path.insert(0, str(ROOT))
+
+from src.topics import pick_topic  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("daily_run")
 
 
-def _load_state() -> dict:
-    if STATE_FILE.exists():
-        return json.loads(STATE_FILE.read_text())
-    return {}
-
-
-def _save_state(state: dict) -> None:
-    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2))
-
-
-def _next_topic(channel_name: str, topics: list[str], state: dict) -> str | None:
-    if not topics:
-        return None
-    idx = state.get(channel_name, 0) % len(topics)
-    state[channel_name] = idx + 1
-    return topics[idx]
-
-
-def run_channel(channel_name: str, cfg: dict, state: dict) -> None:
+def run_channel(channel_name: str, cfg: dict) -> None:
     uploads_per_day = cfg.get("uploads_per_day", 1)
     topics = cfg.get("topics", [])
     # curto (padrão) ou longo — configurável por canal em channels/<nome>.yaml
@@ -70,11 +53,11 @@ def run_channel(channel_name: str, cfg: dict, state: dict) -> None:
             topic = None
         elif channel_name == "politica":
             topic = None  # run_pipeline.py busca fato real sozinho
+        elif not topics:
+            log.warning("[%s] sem tópicos configurados em channels/%s.yaml — pulando", channel_name, channel_name)
+            continue
         else:
-            topic = _next_topic(channel_name, topics, state)
-            if topic is None:
-                log.warning("[%s] sem tópicos configurados em channels/%s.yaml — pulando", channel_name, channel_name)
-                continue
+            topic = pick_topic(channel_name, "short", topics, cfg.get("niche", ""))
 
         cmd = [
             sys.executable, str(ROOT / "scripts" / "run_pipeline.py"),
@@ -96,14 +79,12 @@ def run_channel(channel_name: str, cfg: dict, state: dict) -> None:
 
 
 def main() -> None:
-    state = _load_state()
     channels_dir = ROOT / "channels"
 
     for yaml_path in sorted(channels_dir.glob("*.yaml")):
         channel_name = yaml_path.stem
         cfg = yaml.safe_load(yaml_path.read_text())
-        run_channel(channel_name, cfg, state)
-        _save_state(state)  # salva progresso incremental, não só no fim
+        run_channel(channel_name, cfg)
 
     log.info("rodada diária concluída")
 

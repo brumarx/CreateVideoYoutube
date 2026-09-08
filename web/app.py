@@ -7,7 +7,7 @@ Uso: .venv/bin/python3 web/app.py
 """
 from __future__ import annotations
 
-import random
+import json
 import re
 import subprocess
 import sys
@@ -20,6 +20,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.orchestrator import recent_jobs  # noqa: E402
+from src.topics import STATE_FILE as USED_TOPICS_FILE  # noqa: E402
+from src.topics import pick_topic  # noqa: E402
 
 app = Flask(__name__)
 
@@ -55,6 +57,14 @@ TEMPLATE = """
   .durations label { flex: 1; font-size: 11px; color: #9aa0a8; }
   .durations input { width: 100%; box-sizing: border-box; padding: 5px 6px; margin-top: 2px; background: #0f1115; border: 1px solid #262b35; border-radius: 6px; color: #e6e6e6; font-size: 12px; }
   .save-link { background: none; border: none; color: #6ea8ff; font-size: 11px; cursor: pointer; padding: 0; text-decoration: underline; }
+  details.topics { margin-top: 10px; font-size: 12px; }
+  details.topics summary { cursor: pointer; color: #9aa0a8; }
+  details.topics summary:hover { color: #c7cbd1; }
+  .topic-item { padding: 4px 2px; border-bottom: 1px solid #1c2028; color: #c7cbd1; }
+  .topic-item.used { color: #55595f; text-decoration: line-through; }
+  .topic-add { display: flex; gap: 6px; margin-top: 8px; }
+  .topic-add input { flex: 1; min-width: 0; box-sizing: border-box; padding: 5px 6px; background: #0f1115; border: 1px solid #262b35; border-radius: 6px; color: #e6e6e6; font-size: 12px; }
+  .topic-add button { padding: 5px 10px; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -90,6 +100,30 @@ TEMPLATE = """
         <button type="submit" class="save-link">salvar duração e formato</button>
       </form>
 
+      <details class="topics">
+        <summary>Fila de temas curtos ({{ c.topics_pending }} pendente(s) de {{ c.topics|length }})</summary>
+        {% for t in c.topics %}
+        <div class="topic-item {{ 'used' if t in c.used_short }}">{{ t }}</div>
+        {% endfor %}
+        <form class="topic-add" method="post" action="{{ url_for('add_topic', channel=c.name) }}">
+          <input type="hidden" name="kind" value="short">
+          <input type="text" name="topic" placeholder="Novo tema curto..." required>
+          <button type="submit">+</button>
+        </form>
+      </details>
+
+      <details class="topics">
+        <summary>Fila de temas longos ({{ c.long_pending }} pendente(s) de {{ c.long_form_topics|length }})</summary>
+        {% for t in c.long_form_topics %}
+        <div class="topic-item {{ 'used' if t in c.used_long }}">{{ t }}</div>
+        {% endfor %}
+        <form class="topic-add" method="post" action="{{ url_for('add_topic', channel=c.name) }}">
+          <input type="hidden" name="kind" value="long">
+          <input type="text" name="topic" placeholder="Novo tema longo..." required>
+          <button type="submit">+</button>
+        </form>
+      </details>
+
       {% if c.has_token %}
       <form method="post">
         <input type="text" name="topic" placeholder="Tema (opcional — vazio sorteia da lista)"
@@ -120,12 +154,23 @@ TEMPLATE = """
 """
 
 
+def _used_topics() -> dict:
+    if USED_TOPICS_FILE.exists():
+        return json.loads(USED_TOPICS_FILE.read_text())
+    return {}
+
+
 def _load_channels() -> list[dict]:
+    used = _used_topics()
     channels = []
     for yaml_path in sorted((ROOT / "channels").glob("*.yaml")):
         cfg = yaml.safe_load(yaml_path.read_text())
         name = yaml_path.stem
         token_file = ROOT / "credentials" / f"token_{name}.json"
+        topics = cfg.get("topics", [])
+        long_form_topics = cfg.get("long_form_topics", [])
+        used_short = set(used.get(name, {}).get("short", []))
+        used_long = set(used.get(name, {}).get("long", []))
         channels.append(
             {
                 "name": name,
@@ -133,7 +178,12 @@ def _load_channels() -> list[dict]:
                 "uploads_per_day": cfg.get("uploads_per_day", 1),
                 "upload_privacy": cfg.get("upload_privacy", "private"),
                 "has_token": token_file.exists(),
-                "topics": cfg.get("topics", []),
+                "topics": topics,
+                "long_form_topics": long_form_topics,
+                "used_short": used_short,
+                "used_long": used_long,
+                "topics_pending": len([t for t in topics if t not in used_short]),
+                "long_pending": len([t for t in long_form_topics if t not in used_long]),
                 "short_min_minutes": cfg.get("short_min_minutes", 3),
                 "short_max_minutes": cfg.get("short_max_minutes", 6),
                 "long_min_minutes": cfg.get("long_min_minutes", 15),
@@ -154,6 +204,8 @@ def index():
     any_public = any(c["upload_privacy"] == "public" for c in channels)
     if request.args.get("saved") == "1":
         flash = "Duração salva."
+    elif request.args.get("topic_added") == "1":
+        flash = "Tema adicionado à fila."
     elif request.args.get("busy") == "1":
         flash = "Já tem um vídeo sendo gerado agora — espere terminar antes de rodar outro (evita estourar a memória da máquina)."
     else:
@@ -197,6 +249,39 @@ def save_duration(channel: str):
     return redirect(url_for("index", saved=1))
 
 
+def _yaml_append_list_item(text: str, key: str, value: str) -> str:
+    """Adiciona `value` como último item da lista YAML `key:` (formato
+    `  - "..."`), sem reescrever o arquivo inteiro (preserva comentários e
+    formatação do resto do YAML)."""
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    new_line = f'  - "{escaped}"'
+    pattern = rf"(^{re.escape(key)}:[ \t]*\n(?:  - .*\n)*)"
+    match = re.search(pattern, text, flags=re.MULTILINE)
+    if match:
+        insert_at = match.end()
+        return text[:insert_at] + new_line + "\n" + text[insert_at:]
+    sep = "" if text.endswith("\n") else "\n"
+    return text + sep + f"{key}:\n{new_line}\n"
+
+
+@app.route("/topics/<channel>", methods=["POST"])
+def add_topic(channel: str):
+    """Adiciona um tema fixo na fila do canal (topics ou long_form_topics,
+    conforme `kind`) — fica lá esperando o pipeline consumir (cron ou
+    disparo manual, nunca repete — ver src/topics.py)."""
+    path = ROOT / "channels" / f"{channel}.yaml"
+    topic = request.form.get("topic", "").strip()
+    kind = request.form.get("kind", "short")
+    if not path.exists() or not topic:
+        return redirect(url_for("index"))
+
+    key = "long_form_topics" if kind == "long" else "topics"
+    text = path.read_text()
+    text = _yaml_append_list_item(text, key, topic)
+    path.write_text(text)
+    return redirect(url_for("index", topic_added=1))
+
+
 def _pipeline_already_running() -> bool:
     """A máquina já roda pouca RAM sobrando com outros serviços — rodar 2+
     pipelines (LLM + ffmpeg) ao mesmo tempo é o tipo de coisa que derruba o
@@ -226,11 +311,13 @@ def run_channel(channel: str):
         # sem tema digitado: run_pipeline.py exige --topic pra qualquer
         # canal fora do "politica" (que busca fato real sozinho) — sem
         # isso o processo falha de cara. --long sorteia sozinho de
-        # long_form_topics quando --topic não é passado.
-        channels = {c["name"]: c for c in _load_channels()}
-        topics = channels.get(channel, {}).get("topics", [])
+        # long_form_topics quando --topic não é passado (nunca repete —
+        # ver src/topics.py).
+        info = {c["name"]: c for c in _load_channels()}
+        topics = info.get(channel, {}).get("topics", [])
+        niche = info.get(channel, {}).get("niche", "")
         if topics:
-            cmd += ["--topic", random.choice(topics)]
+            cmd += ["--topic", pick_topic(channel, "short", topics, niche)]
 
     subprocess.Popen(cmd, cwd=ROOT)
     return redirect(url_for("index"))

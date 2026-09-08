@@ -4,7 +4,7 @@ tts_voice: "pt-BR-FranciscaNeural"
 scenes_per_video: 8
 upload_privacy: "public"
 uploads_per_day: 1
-daily_format: "short"
+daily_format: "long"
 short_min_minutes: 3
 short_max_minutes: 6
 long_min_minutes: 6
@@ -30,6 +30,14 @@ long_form_topics:
   - "por que o deserto do Saara já foi verde"
   - "como a Groenlândia é o maior segredo geográfico do planeta"
   - "30 fatos insanos sobre o Egito antigo"
+  - "10 coisas que foram encontradas onde não deveriam existir"
+  - "10 mistérios que a ciência ainda não conseguiu explicar"
+  - "10 coisas bizarras que acontecem no seu corpo sem você perceber"
+  - "Os lugares mais estranhos onde seres humanos realmente vivem"
+  - "0 objetos comuns que escondem uma história absurda"
+  - "10 descobertas acidentais que mudaram o mundo"
+  - "Coisas que parecem falsas, mas são 100% reais"
+  - "0 animais que parecem inventados por um computador"
 prompt_base: >
   Escreva um roteiro envolvente no estilo de canais de curiosidades/histórias
   do YouTube (tipo Reddit stories / fatos incríveis). Comece com um gancho
