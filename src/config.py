@@ -66,6 +66,9 @@ class ChannelConfig:
     # marca d'água (@handle do canal) gravada em toda cena — dificulta
     # repostagem sem crédito e ajuda a provar autoria se alguém roubar.
     watermark: str
+    # cor de destaque do canal (hex) — usada no número de contagem regressiva
+    # dos vídeos de lista ("10 fatos sobre...", ver run_pipeline.py).
+    accent: str
 
     @staticmethod
     def load(name: str) -> "ChannelConfig":
@@ -89,4 +92,5 @@ class ChannelConfig:
             long_min_minutes=data.get("long_min_minutes", 15),
             long_max_minutes=data.get("long_max_minutes", 20),
             watermark=data.get("watermark", f"@{name}"),
+            accent=data.get("accent", "#ffffff"),
         )

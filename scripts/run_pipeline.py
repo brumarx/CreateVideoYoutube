@@ -7,13 +7,17 @@ Uso:
   python3 scripts/run_pipeline.py --channel curiosidades --topic "..." --publish-at 2026-09-08T12:00:00Z
 
 Formato longo (documentário, 16:9, ~15-20min, sobre um lugar/fenômeno real
-específico — ver channels/<nome>.yaml -> long_form_topics):
+específico — ver channels/<nome>.yaml -> topics):
   python3 scripts/run_pipeline.py --channel curiosidades --long --dry-run
+
+Tema com número no início (ex.: "10 fatos sobre...") no formato curto vira
+vídeo de lista: 1 cena por item, com selo de contagem regressiva.
 """
 from __future__ import annotations
 
 import argparse
 import logging
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -40,6 +44,13 @@ SHORT_WIDTH, SHORT_HEIGHT = 1080, 1920
 # específico. Ver channels/<nome>.yaml -> long_form_scenes/long_form_topics.
 LONG_WIDTH, LONG_HEIGHT = 1920, 1080
 
+# Vídeo de lista (ex.: "10 fatos sobre..."), só no formato curto: 1 cena =
+# 1 item, com selo de contagem regressiva gravado na cena (ver
+# src/assemble.py). Nunca mais que isso — vídeo de "30 fatos" vira maçante
+# e o selo de card fica com número gigante demais pra manter elegante.
+LIST_TOPIC_RE = re.compile(r"^(\d+)\s")
+MAX_LIST_ITEMS = 10
+
 
 def run(
     channel_name: str,
@@ -65,8 +76,18 @@ def run(
     elif topic is None:
         raise SystemExit(f"channels/{channel_name}.yaml não tem topics configurado e --topic não foi passado")
 
+    list_count = None
+    if not long_form:
+        m = LIST_TOPIC_RE.match(topic or "")
+        if m:
+            list_count = min(int(m.group(1)), MAX_LIST_ITEMS)
+            if list_count != int(m.group(1)):
+                # corrige o texto também (título/roteiro têm que bater com
+                # a contagem real de cenas/selos, não o número original)
+                topic = f"{list_count}{topic[m.end(1):]}"
+
     width, height = (LONG_WIDTH, LONG_HEIGHT) if long_form else (SHORT_WIDTH, SHORT_HEIGHT)
-    scenes = channel.long_form_scenes if long_form else None
+    scenes = channel.long_form_scenes if long_form else list_count
     min_minutes = channel.long_min_minutes if long_form else channel.short_min_minutes
     max_minutes = channel.long_max_minutes if long_form else channel.short_max_minutes
 
@@ -90,8 +111,12 @@ def run(
         image_path = work_dir / f"scene_{i}.png"
         image_path.write_bytes(image_bytes)
 
+        list_number = (list_count - i) if list_count else None
         scene_video_path = work_dir / f"scene_{i}.mp4"
-        render_scene(image_path, audio_path, scene_video_path, width=width, height=height, watermark=channel.watermark)
+        render_scene(
+            image_path, audio_path, scene_video_path, width=width, height=height,
+            watermark=channel.watermark, list_number=list_number, accent=channel.accent,
+        )
         scene_videos.append(scene_video_path)
 
     update(job_id, status="narrated")
@@ -141,7 +166,7 @@ def run(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--channel", required=True)
-    parser.add_argument("--topic", default=None, help="obrigatório, exceto pro canal 'politica' (usa dado real aleatório) ou --long (usa long_form_topics)")
+    parser.add_argument("--topic", default=None, help="obrigatório, exceto pro canal 'politica' no curto (usa dado real aleatório) ou quando channels/<nome>.yaml tem topics (escolhe sozinho)")
     parser.add_argument("--dry-run", action="store_true", help="gera tudo mas não publica")
     parser.add_argument("--publish-at", default=None, help="ISO 8601 UTC, ex: 2026-09-08T12:00:00Z")
     parser.add_argument("--long", action="store_true", help="formato longo/documentário (16:9, ~15-20min, lugar real específico)")

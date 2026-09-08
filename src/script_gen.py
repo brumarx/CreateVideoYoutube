@@ -34,7 +34,11 @@ SYSTEM_PROMPT = (
     "características visuais REAIS e reconhecíveis daquele lugar exato "
     "(arquitetura, paisagem, clima, cor típica) — nunca um lugar genérico "
     "nem de outro país. Errar isso (ex.: pedir imagem de Nova York numa "
-    "cena sobre o Rio de Janeiro) é o pior erro possível neste roteiro."
+    "cena sobre o Rio de Janeiro) é o pior erro possível neste roteiro. "
+    "REGRA CRÍTICA sobre vídeos de lista ('N fatos/coisas/dicas sobre...'): "
+    "NUNCA sugira ou escreva um título/tema com mais de 10 itens — nada de "
+    "'20 fatos', '30 coisas', '50 curiosidades'. O máximo é sempre 10; "
+    "prefira listas menores (5, 7, 10) a forçar uma lista longa e repetitiva."
 )
 
 

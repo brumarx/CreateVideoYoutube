@@ -1,5 +1,6 @@
 niche: "curiosidades e explicações atemporais sobre tecnologia e inteligência artificial"
 watermark: "@NúcleoTechBR"
+accent: "#3ec6ff"
 language: "pt-BR"
 tts_voice: "pt-BR-AntonioNeural"
 scenes_per_video: 6

@@ -117,6 +117,7 @@ TEMPLATE = """
           <input type="text" name="topic" placeholder="Novo tema..." required>
           <button type="submit">+</button>
         </form>
+        <div style="font-size:11px; color:#7d838c; margin-top:6px;">temas de lista ("N fatos/coisas sobre...") são limitados a no máximo 10 itens — números maiores são ajustados sozinhos ao salvar.</div>
         {% if c.name == "politica" %}
         <div style="font-size:11px; color:#7d838c; margin-top:6px;">no formato curto, política ignora esta fila e usa sempre um fato real do banco de transparência — só o formato longo consome estes temas.</div>
         {% endif %}
@@ -291,13 +292,27 @@ def _yaml_delete_list_item(text: str, key: str, index: int) -> str | None:
     return text[:start] + "".join(lines) + text[end:]
 
 
+LIST_TOPIC_RE = re.compile(r"^(\d+)(\s)")
+MAX_LIST_ITEMS = 10
+
+
+def _clamp_list_topic(topic: str) -> str:
+    """Tema de lista ("N fatos/coisas sobre...") nunca passa de 10 — o
+    vídeo vira 1 cena por item, então 20/30/40 ficava maçante e o selo de
+    número desproporcional. Ajusta o N sozinho em vez de rejeitar."""
+    m = LIST_TOPIC_RE.match(topic)
+    if m and int(m.group(1)) > MAX_LIST_ITEMS:
+        return f"{MAX_LIST_ITEMS}{m.group(2)}{topic[m.end():]}"
+    return topic
+
+
 @app.route("/topics/<channel>", methods=["POST"])
 def add_topic(channel: str):
     """Adiciona um tema fixo na fila do canal (`topics` — fila única pra
     curto e longo) — fica lá esperando o pipeline consumir (cron ou disparo
     manual, nunca repete — ver src/topics.py)."""
     path = ROOT / "channels" / f"{channel}.yaml"
-    topic = request.form.get("topic", "").strip()
+    topic = _clamp_list_topic(request.form.get("topic", "").strip())
     if not path.exists() or not topic:
         return redirect(url_for("index"))
 
@@ -312,7 +327,7 @@ def update_topic(channel: str):
     """Edita o texto de um tema já existente na lista fixa (ex.: trocar '30
     fatos' por '10 fatos') sem mexer na posição nem nos outros itens."""
     path = ROOT / "channels" / f"{channel}.yaml"
-    new_topic = request.form.get("topic", "").strip()
+    new_topic = _clamp_list_topic(request.form.get("topic", "").strip())
     try:
         index = int(request.form.get("index", ""))
     except ValueError:
