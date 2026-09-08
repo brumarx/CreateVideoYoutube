@@ -9,17 +9,21 @@ short_min_minutes: 3
 short_max_minutes: 6
 long_min_minutes: 4
 long_max_minutes: 8
-# Formato longo: só temas de FUNCIONAMENTO do sistema (não fatos sobre
-# pessoas específicas) — sem o grounding de dados reais do short, um
-# roteiro de 15-20min sem essa base seria arriscado demais sobre gente real.
+# formato curto ignora esta lista de temas — usa sempre um fato real
+# aleatório do banco de transparência (ver src/politica_data.py), pra nunca
+# inventar número/nome sobre gente real. Só o formato longo consome a fila
+# abaixo, e só com temas de FUNCIONAMENTO do sistema (não sobre pessoas
+# específicas) — sem o grounding de dados reais do short, um roteiro de
+# 15-20min sem essa base seria arriscado demais sobre gente real.
 long_form_scenes: 24
-long_form_topics:
+topics:
   - "como funciona a cota parlamentar (CEAP) explicada do zero"
   - "como funciona o financiamento de campanhas eleitorais no Brasil"
   - "como funciona o processo eleitoral brasileiro, do voto à posse"
   - "como funciona o sistema de emendas parlamentares no Brasil"
   - "como funciona a fiscalização de gastos públicos no Brasil"
   - "como funciona a Lei da Ficha Limpa e o que ela realmente proíbe"
+  - "Quanto os políticos brasileiros realmente ganham?"
 prompt_base: >
   Escreva um roteiro de curiosidades sobre política brasileira usando SOMENTE
   os dados fornecidos abaixo (não invente nomes, valores ou fatos que não

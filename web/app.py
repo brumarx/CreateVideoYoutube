@@ -21,7 +21,6 @@ sys.path.insert(0, str(ROOT))
 
 from src.orchestrator import recent_jobs  # noqa: E402
 from src.topics import STATE_FILE as USED_TOPICS_FILE  # noqa: E402
-from src.topics import pick_topic  # noqa: E402
 
 app = Flask(__name__)
 
@@ -105,39 +104,22 @@ TEMPLATE = """
       </form>
 
       <details class="topics">
-        <summary>Fila de temas curtos ({{ c.topics_pending }} pendente(s) de {{ c.topics|length }})</summary>
+        <summary>Fila de temas ({{ c.topics_pending }} pendente(s) de {{ c.topics|length }})</summary>
         {% for t in c.topics %}
         <form class="topic-edit" method="post" action="{{ url_for('update_topic', channel=c.name) }}">
-          <input type="hidden" name="kind" value="short">
           <input type="hidden" name="index" value="{{ loop.index0 }}">
-          <input type="text" name="topic" value="{{ t }}" class="{{ 'used' if t in c.used_short }}">
+          <input type="text" name="topic" value="{{ t }}" class="{{ 'used' if t in c.used_topics }}">
           <button type="submit" title="salvar edição">salvar</button>
           <button type="submit" formaction="{{ url_for('delete_topic', channel=c.name) }}" class="danger" title="remover">remover</button>
         </form>
         {% endfor %}
         <form class="topic-add" method="post" action="{{ url_for('add_topic', channel=c.name) }}">
-          <input type="hidden" name="kind" value="short">
-          <input type="text" name="topic" placeholder="Novo tema curto..." required>
+          <input type="text" name="topic" placeholder="Novo tema..." required>
           <button type="submit">+</button>
         </form>
-      </details>
-
-      <details class="topics">
-        <summary>Fila de temas longos ({{ c.long_pending }} pendente(s) de {{ c.long_form_topics|length }})</summary>
-        {% for t in c.long_form_topics %}
-        <form class="topic-edit" method="post" action="{{ url_for('update_topic', channel=c.name) }}">
-          <input type="hidden" name="kind" value="long">
-          <input type="hidden" name="index" value="{{ loop.index0 }}">
-          <input type="text" name="topic" value="{{ t }}" class="{{ 'used' if t in c.used_long }}">
-          <button type="submit" title="salvar edição">salvar</button>
-          <button type="submit" formaction="{{ url_for('delete_topic', channel=c.name) }}" class="danger" title="remover">remover</button>
-        </form>
-        {% endfor %}
-        <form class="topic-add" method="post" action="{{ url_for('add_topic', channel=c.name) }}">
-          <input type="hidden" name="kind" value="long">
-          <input type="text" name="topic" placeholder="Novo tema longo..." required>
-          <button type="submit">+</button>
-        </form>
+        {% if c.name == "politica" %}
+        <div style="font-size:11px; color:#7d838c; margin-top:6px;">no formato curto, política ignora esta fila e usa sempre um fato real do banco de transparência — só o formato longo consome estes temas.</div>
+        {% endif %}
       </details>
 
       {% if c.has_token %}
@@ -184,9 +166,7 @@ def _load_channels() -> list[dict]:
         name = yaml_path.stem
         token_file = ROOT / "credentials" / f"token_{name}.json"
         topics = cfg.get("topics", [])
-        long_form_topics = cfg.get("long_form_topics", [])
-        used_short = set(used.get(name, {}).get("short", []))
-        used_long = set(used.get(name, {}).get("long", []))
+        used_topics = set(used.get(name, []))
         channels.append(
             {
                 "name": name,
@@ -195,11 +175,8 @@ def _load_channels() -> list[dict]:
                 "upload_privacy": cfg.get("upload_privacy", "private"),
                 "has_token": token_file.exists(),
                 "topics": topics,
-                "long_form_topics": long_form_topics,
-                "used_short": used_short,
-                "used_long": used_long,
-                "topics_pending": len([t for t in topics if t not in used_short]),
-                "long_pending": len([t for t in long_form_topics if t not in used_long]),
+                "used_topics": used_topics,
+                "topics_pending": len([t for t in topics if t not in used_topics]),
                 "short_min_minutes": cfg.get("short_min_minutes", 3),
                 "short_max_minutes": cfg.get("short_max_minutes", 6),
                 "long_min_minutes": cfg.get("long_min_minutes", 15),
@@ -316,18 +293,16 @@ def _yaml_delete_list_item(text: str, key: str, index: int) -> str | None:
 
 @app.route("/topics/<channel>", methods=["POST"])
 def add_topic(channel: str):
-    """Adiciona um tema fixo na fila do canal (topics ou long_form_topics,
-    conforme `kind`) — fica lá esperando o pipeline consumir (cron ou
-    disparo manual, nunca repete — ver src/topics.py)."""
+    """Adiciona um tema fixo na fila do canal (`topics` — fila única pra
+    curto e longo) — fica lá esperando o pipeline consumir (cron ou disparo
+    manual, nunca repete — ver src/topics.py)."""
     path = ROOT / "channels" / f"{channel}.yaml"
     topic = request.form.get("topic", "").strip()
-    kind = request.form.get("kind", "short")
     if not path.exists() or not topic:
         return redirect(url_for("index"))
 
-    key = "long_form_topics" if kind == "long" else "topics"
     text = path.read_text()
-    text = _yaml_append_list_item(text, key, topic)
+    text = _yaml_append_list_item(text, "topics", topic)
     path.write_text(text)
     return redirect(url_for("index", topic_added=1))
 
@@ -337,7 +312,6 @@ def update_topic(channel: str):
     """Edita o texto de um tema já existente na lista fixa (ex.: trocar '30
     fatos' por '10 fatos') sem mexer na posição nem nos outros itens."""
     path = ROOT / "channels" / f"{channel}.yaml"
-    kind = request.form.get("kind", "short")
     new_topic = request.form.get("topic", "").strip()
     try:
         index = int(request.form.get("index", ""))
@@ -346,9 +320,8 @@ def update_topic(channel: str):
     if not path.exists() or not new_topic:
         return redirect(url_for("index"))
 
-    key = "long_form_topics" if kind == "long" else "topics"
     text = path.read_text()
-    updated = _yaml_replace_list_item(text, key, index, new_topic)
+    updated = _yaml_replace_list_item(text, "topics", index, new_topic)
     if updated is None:
         return redirect(url_for("index"))
     path.write_text(updated)
@@ -360,7 +333,6 @@ def delete_topic(channel: str):
     """Remove um tema da lista fixa (não mexe em quem já foi usado — só
     tira da fila de pendentes)."""
     path = ROOT / "channels" / f"{channel}.yaml"
-    kind = request.form.get("kind", "short")
     try:
         index = int(request.form.get("index", ""))
     except ValueError:
@@ -368,9 +340,8 @@ def delete_topic(channel: str):
     if not path.exists():
         return redirect(url_for("index"))
 
-    key = "long_form_topics" if kind == "long" else "topics"
     text = path.read_text()
-    updated = _yaml_delete_list_item(text, key, index)
+    updated = _yaml_delete_list_item(text, "topics", index)
     if updated is None:
         return redirect(url_for("index"))
     path.write_text(updated)
@@ -402,17 +373,9 @@ def run_channel(channel: str):
 
     if custom_topic:
         cmd += ["--topic", custom_topic]
-    elif not long_form and channel != "politica":
-        # sem tema digitado: run_pipeline.py exige --topic pra qualquer
-        # canal fora do "politica" (que busca fato real sozinho) — sem
-        # isso o processo falha de cara. --long sorteia sozinho de
-        # long_form_topics quando --topic não é passado (nunca repete —
-        # ver src/topics.py).
-        info = {c["name"]: c for c in _load_channels()}
-        topics = info.get(channel, {}).get("topics", [])
-        niche = info.get(channel, {}).get("niche", "")
-        if topics:
-            cmd += ["--topic", pick_topic(channel, "short", topics, niche)]
+    # sem tema digitado: run_pipeline.py escolhe sozinho da fila única do
+    # canal (nunca repete — ver src/topics.py), ou usa fato real pro
+    # politica no formato curto.
 
     subprocess.Popen(cmd, cwd=ROOT)
     return redirect(url_for("index"))

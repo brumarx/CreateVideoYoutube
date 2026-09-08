@@ -9,6 +9,7 @@ short_min_minutes: 3
 short_max_minutes: 6
 long_min_minutes: 6
 long_max_minutes: 8
+long_form_scenes: 26
 topics:
   - "como lidar com o medo de começar algo novo"
   - "por que consistência importa mais que motivação"
@@ -24,8 +25,11 @@ topics:
   - "Pare de esperar o momento certo — ele nunca vai chegar"
   - "Aos 30, 40 ou 50 anos: ainda dá tempo de recomeçar"
   - "Você está mais perto de desistir do que imagina — NÃO DESISTA"
-long_form_scenes: 26
-long_form_topics:
+  - "Enquanto você dorme, alguém está construindo a vida que você queria"
+  - "Se ninguém acredita em você, use isso como combustível"
+  - "Um dia você vai agradecer por não ter desistido"
+  - "A vida muda quando você decide parar de dar desculpas"
+  - "Assista quando estiver pensando em desistir"
   - "a vida completa de Thomas Edison e os milhares de fracassos antes do sucesso"
   - "como Nelson Mandela saiu de 27 anos de prisão pra transformar um país"
   - "a história real de como a Nike quase faliu antes de virar gigante"

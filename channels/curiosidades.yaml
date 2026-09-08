@@ -9,6 +9,7 @@ short_min_minutes: 3
 short_max_minutes: 6
 long_min_minutes: 6
 long_max_minutes: 8
+long_form_scenes: 30
 topics:
   - "um recorde mundial real e bizarro pouco conhecido"
   - "um fato real e pouco conhecido sobre o oceano profundo"
@@ -20,8 +21,6 @@ topics:
   - "uma cidade real abandonada com uma história intrigante"
   - "uma lei real e estranha que ainda existe em algum país"
   - "um animal real com uma habilidade quase inacreditável"
-long_form_scenes: 30
-long_form_topics:
   - "30 fatos geográficos insanos sobre Portugal"
   - "30 fatos geográficos insanos sobre o Brasil"
   - "por que a Islândia é geologicamente única no mundo"
