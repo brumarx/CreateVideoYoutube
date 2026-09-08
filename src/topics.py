@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import re
 from pathlib import Path
 
 from .providers import complete
@@ -21,6 +22,28 @@ log = logging.getLogger("topics")
 
 ROOT = Path(__file__).resolve().parent.parent
 STATE_FILE = ROOT / "data" / "used_topics.json"
+CHANNELS_DIR = ROOT / "channels"
+
+
+def _append_topic_to_yaml(channel_name: str, topic: str) -> None:
+    """Grava um tema gerado na hora (LLM, lista fixa esgotada) de volta em
+    channels/<nome>.yaml -> topics, pra ele aparecer na fila do painel em
+    vez de ficar só invisível em data/used_topics.json."""
+    path = CHANNELS_DIR / f"{channel_name}.yaml"
+    if not path.exists():
+        return
+    text = path.read_text()
+    escaped = topic.replace("\\", "\\\\").replace('"', '\\"')
+    new_line = f'  - "{escaped}"'
+    pattern = r"^topics:[ \t]*\n((?:  - .*\n)*)"
+    match = re.search(pattern, text, flags=re.MULTILINE)
+    if match:
+        insert_at = match.end()
+        text = text[:insert_at] + new_line + "\n" + text[insert_at:]
+    else:
+        sep = "" if text.endswith("\n") else "\n"
+        text = text + sep + f"topics:\n{new_line}\n"
+    path.write_text(text)
 
 
 def _load() -> dict:
@@ -72,6 +95,7 @@ def pick_topic(channel_name: str, pool: list[str], niche: str) -> str:
     else:
         log.info("[%s] lista fixa de temas esgotada — pedindo tema novo ao LLM", channel_name)
         topic = _generate_new_topic(niche, used)
+        _append_topic_to_yaml(channel_name, topic)
 
     used.append(topic)
     _save(state)
