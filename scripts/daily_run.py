@@ -53,6 +53,9 @@ def _next_topic(channel_name: str, topics: list[str], state: dict) -> str | None
 def run_channel(channel_name: str, cfg: dict, state: dict) -> None:
     uploads_per_day = cfg.get("uploads_per_day", 1)
     topics = cfg.get("topics", [])
+    # curto (padrão) ou longo — configurável por canal em channels/<nome>.yaml
+    # (daily_format), editável no painel web.
+    long_form = cfg.get("daily_format", "short") == "long"
     token_file = ROOT / "credentials" / f"token_{channel_name}.json"
 
     if not token_file.exists():
@@ -60,7 +63,12 @@ def run_channel(channel_name: str, cfg: dict, state: dict) -> None:
         return
 
     for i in range(uploads_per_day):
-        if channel_name == "politica":
+        if long_form:
+            # run_pipeline.py já sorteia sozinho de long_form_topics (ou, pro
+            # canal politica, também usa long_form_topics em vez de fato
+            # aleatório — ver run_pipeline.py) quando --topic não é passado.
+            topic = None
+        elif channel_name == "politica":
             topic = None  # run_pipeline.py busca fato real sozinho
         else:
             topic = _next_topic(channel_name, topics, state)
@@ -72,10 +80,16 @@ def run_channel(channel_name: str, cfg: dict, state: dict) -> None:
             sys.executable, str(ROOT / "scripts" / "run_pipeline.py"),
             "--channel", channel_name,
         ]
+        if long_form:
+            cmd.append("--long")
         if topic:
             cmd += ["--topic", topic]
 
-        log.info("[%s] upload %d/%d — tópico: %s", channel_name, i + 1, uploads_per_day, topic or "(fato real aleatório)")
+        log.info(
+            "[%s] upload %d/%d (%s) — tópico: %s",
+            channel_name, i + 1, uploads_per_day, "longo" if long_form else "curto",
+            topic or "(sorteado automaticamente)",
+        )
         result = subprocess.run(cmd, cwd=ROOT)
         if result.returncode != 0:
             log.error("[%s] pipeline falhou (exit %d) — seguindo pros próximos", channel_name, result.returncode)

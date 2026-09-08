@@ -44,7 +44,11 @@ def render_scene(
     fps = 30
     frames = max(int(duration * fps), 1)
 
-    upscale_w, upscale_h = width * 2, height * 2
+    # 1.5x (não 2x) já dá supersampling suficiente pro zoom máximo de 1.3x
+    # (1.5/1.3 ainda sobra folga) — só que processando 44% menos pixel que
+    # 2x, o que importa nesta máquina que já roda pouca RAM sobrando com
+    # outros serviços (ariaBot etc.) ligados ao mesmo tempo.
+    upscale_w, upscale_h = int(width * 1.5), int(height * 1.5)
     filter_complex = (
         # crop-to-fill em vez de esticar: sem distorção mesmo se a imagem
         # gerada não vier exatamente na proporção certa.
@@ -60,7 +64,7 @@ def render_scene(
             "-loop", "1", "-i", str(image_path),
             "-i", str(audio_path),
             "-filter:v", filter_complex,
-            "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-c:v", "libx264", "-preset", "veryfast", "-threads", "2", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "192k",
             "-t", str(duration),
             "-shortest",

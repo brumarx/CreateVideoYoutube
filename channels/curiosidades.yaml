@@ -4,6 +4,11 @@ tts_voice: "pt-BR-FranciscaNeural"
 scenes_per_video: 8
 upload_privacy: "public"
 uploads_per_day: 1
+daily_format: "short"
+short_min_minutes: 3
+short_max_minutes: 6
+long_min_minutes: 6
+long_max_minutes: 8
 topics:
   - "um recorde mundial real e bizarro pouco conhecido"
   - "um fato real e pouco conhecido sobre o oceano profundo"

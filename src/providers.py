@@ -130,12 +130,14 @@ def _rotator_for(keys: list[str]) -> KeyRotator:
     return _rotators[cache_id]
 
 
-def _call_openai_compat(endpoint: str, api_key: str, model: str, messages: list[dict]) -> tuple[str | None, int | None]:
+def _call_openai_compat(
+    endpoint: str, api_key: str, model: str, messages: list[dict], max_tokens: int
+) -> tuple[str | None, int | None]:
     try:
         resp = httpx.post(
             endpoint,
             headers={"Authorization": f"Bearer {api_key}"},
-            json={"model": model, "messages": messages, "temperature": 0.8},
+            json={"model": model, "messages": messages, "temperature": 0.8, "max_tokens": max_tokens},
             timeout=60,
         )
         if resp.status_code != 200:
@@ -149,12 +151,17 @@ def _call_openai_compat(endpoint: str, api_key: str, model: str, messages: list[
         return None, None
 
 
-def _call_gemini(api_key: str, model: str, messages: list[dict]) -> str | None:
+def _call_gemini(api_key: str, model: str, messages: list[dict], max_tokens: int) -> str | None:
     prompt = "\n\n".join(m["content"] for m in messages)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     try:
         resp = httpx.post(
-            url, json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=60
+            url,
+            json={
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"maxOutputTokens": max_tokens},
+            },
+            timeout=60,
         )
         if resp.status_code != 200:
             log.warning("gemini (%s) -> HTTP %s: %s", model, resp.status_code, resp.text[:200])
@@ -166,10 +173,15 @@ def _call_gemini(api_key: str, model: str, messages: list[dict]) -> str | None:
         return None
 
 
-def complete(messages: list[dict], keys: LLMKeys | None = None) -> str:
+def complete(messages: list[dict], keys: LLMKeys | None = None, max_tokens: int = 4096) -> str:
     """Roda a cascata de provedores (com rodízio de chaves e descoberta
     dinâmica de modelo dentro de cada um) e devolve a primeira resposta não
     vazia.
+
+    `max_tokens` importa MUITO pra roteiros longos: sem limite explícito
+    cada provedor usa seu próprio default (baixo), e a resposta trunca no
+    meio do JSON — foi exatamente o que quebrou o roteiro de formato longo
+    (31 cenas) antes desse parâmetro existir.
 
     Levanta RuntimeError se nenhum provedor configurado conseguir responder.
     """
@@ -186,7 +198,7 @@ def complete(messages: list[dict], keys: LLMKeys | None = None) -> str:
             if not models:
                 continue
             for model in models:
-                result, status = _call_openai_compat(chat_endpoint, api_key, model, messages)
+                result, status = _call_openai_compat(chat_endpoint, api_key, model, messages, max_tokens)
                 if result:
                     log.info("resposta via %s/%s", name, model)
                     return result
@@ -199,7 +211,7 @@ def complete(messages: list[dict], keys: LLMKeys | None = None) -> str:
         for api_key in rotator.order():
             models = _fetch_gemini_models(api_key)
             for model in models:
-                result = _call_gemini(api_key, model, messages)
+                result = _call_gemini(api_key, model, messages, max_tokens)
                 if result:
                     log.info("resposta via gemini/%s", model)
                     return result
