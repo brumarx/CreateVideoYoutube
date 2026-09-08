@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 import random
 import re
 import shutil
@@ -25,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.assemble import add_background_music, concat_scenes, render_scene
+from src.assemble import _ffprobe_duration, add_background_music, concat_scenes, render_scene
 from src.config import ChannelConfig
 from src.orchestrator import enqueue, update
 from src.script_gen import generate_script
@@ -51,6 +52,45 @@ LONG_WIDTH, LONG_HEIGHT = 1920, 1080
 # e o selo de card fica com número gigante demais pra manter elegante.
 LIST_TOPIC_RE = re.compile(r"^(\d+)\s")
 MAX_LIST_ITEMS = 10
+
+# Capítulos (timestamps na descrição, "0:00 ..." etc.) só no formato longo —
+# no curto (poucos minutos) não faz sentido. YouTube exige pelo menos 3
+# marcações, a primeira em 0:00, e no mínimo 10s entre cada uma. Título de
+# cada capítulo vem das primeiras palavras da narração daquela cena (gerado
+# por código, não pelo LLM — não adiciona campo novo obrigatório no JSON,
+# que já teve problema de robustez em roteiros longos).
+MIN_CHAPTER_GAP_SECONDS = 10
+MAX_CHAPTERS = 8
+
+
+def _chapter_label(narration: str, max_words: int = 6) -> str:
+    words = narration.strip().split()[:max_words]
+    label = " ".join(words).rstrip(",.;:!?-")
+    return label[:1].upper() + label[1:] if label else "Continua"
+
+
+def _build_chapters(scenes: list[dict], durations: list[float]) -> str:
+    n = len(scenes)
+    if n < 3 or len(durations) != n:
+        return ""
+
+    n_chapters = min(MAX_CHAPTERS, max(3, n // 4))
+    group_size = math.ceil(n / n_chapters)
+
+    lines = []
+    cumulative = 0.0
+    last_ts = -MIN_CHAPTER_GAP_SECONDS
+    idx = 0
+    while idx < n:
+        if cumulative - last_ts >= MIN_CHAPTER_GAP_SECONDS or not lines:
+            mm, ss = divmod(int(cumulative), 60)
+            lines.append(f"{mm}:{ss:02d} {_chapter_label(scenes[idx]['narration'])}")
+            last_ts = cumulative
+        group_end = min(idx + group_size, n)
+        cumulative += sum(durations[idx:group_end])
+        idx = group_end
+
+    return "\n".join(lines) if len(lines) >= 3 else ""
 
 
 def run(
@@ -106,10 +146,12 @@ def run(
     update(job_id, status="scripted")
 
     scene_videos = []
+    scene_durations = []
     for i, scene in enumerate(script["scenes"]):
         log.info("[%s] cena %d/%d", job_id, i + 1, len(script["scenes"]))
         audio_path = work_dir / f"scene_{i}.mp3"
         narrate(scene["narration"], audio_path, voice=tts_voice)
+        scene_durations.append(_ffprobe_duration(audio_path))
 
         # pede a imagem já no formato final do vídeo — pedir quadrado e
         # esticar depois no ffmpeg distorcia e borrava tudo
@@ -122,6 +164,7 @@ def run(
         render_scene(
             image_path, audio_path, scene_video_path, width=width, height=height,
             watermark=channel.watermark, list_number=list_number, accent=channel.accent,
+            caption=scene["narration"] if channel.captions else None,
         )
         scene_videos.append(scene_video_path)
 
@@ -149,10 +192,37 @@ def run(
     log.info("[%s] thumbnail pronta: %s", job_id, thumb_path)
 
     description = script["description"]
+    if long_form:
+        # timestamps calculados a partir da duração real de cada narração
+        # (não estimados) — só faz sentido no documentário, o curto é curto
+        # demais pra precisar de capítulo.
+        chapters = _build_chapters(script["scenes"], scene_durations)
+        if chapters:
+            description = chapters + "\n\n" + description
+
     if channel_name == "politica":
         # link fixo pro site fonte dos dados — sempre gerado por código
         # (nunca pelo LLM), pra garantir que aponta pro lugar certo sempre.
         description += "\n\nFonte dos dados: https://brmx.org/politica/"
+
+    # hashtags fixas do canal (config, não LLM) — 3-5 é o recomendado hoje
+    # em dia (mais que isso o YouTube ignora todas); os 3 primeiros hashtags
+    # que aparecem na descrição saem exibidos acima do título. #Shorts só
+    # entra no formato curto (é o que classifica o vídeo pra prateleira de
+    # Shorts) — no formato longo não faz sentido.
+    if channel.youtube_handle:
+        # CTA de inscrição — link direto de "increva-se" (sub_confirmation=1
+        # abre o popup de inscrição na hora). Retenção de sessão/inscritos é
+        # sinal de recomendação do YouTube; gerado por código pra sempre
+        # apontar pro canal certo.
+        description += (
+            f"\n\n👉 Inscreva-se pra não perder o próximo vídeo: "
+            f"https://www.youtube.com/{channel.youtube_handle}?sub_confirmation=1"
+        )
+
+    hashtags = (["#Shorts"] if not long_form else []) + list(channel.hashtags)
+    if hashtags:
+        description += "\n\n" + " ".join(hashtags)
 
     if dry_run:
         log.info("[%s] --dry-run: não vou publicar. Revise %s manualmente.", job_id, final_video)

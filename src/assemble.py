@@ -1,7 +1,9 @@
 """Monta o vídeo final: para cada cena, imagem (efeito Ken Burns) + narração;
-concatena tudo em um mp4 e mistura música de fundo em volume baixo. Sem
-legenda embutida (removida a pedido — cobria demais a imagem). Só usa
-ffmpeg via subprocess — sem moviepy.
+concatena tudo em um mp4 e mistura música de fundo em volume baixo. Legenda
+embutida estilo TikTok (2-3 palavras por vez, faixa escura só atrás do
+texto) — uma tentativa anterior foi removida por cobrir demais a imagem;
+esta é bem menor e fica numa faixa central-baixa que não encosta no selo de
+lista nem na marca d'água. Só usa ffmpeg via subprocess — sem moviepy.
 """
 from __future__ import annotations
 
@@ -51,6 +53,64 @@ def _list_number_filter(number: int, height: int, accent: str) -> str:
     )
 
 
+def _caption_chunks(narration: str, duration: float, max_chars: int) -> list[tuple[str, float, float]]:
+    """Divide a narração em pedacinhos curtos (por LARGURA de tela, não por
+    número fixo de palavras — uma palavra longa sozinha já pode estourar a
+    tela) com o tempo de exibição de cada um, distribuído proporcionalmente
+    pela duração real do áudio (sem alinhamento por palavra do TTS, mas o
+    edge-tts narra num ritmo bem constante, então fica sincronizado o
+    bastante visualmente)."""
+    words = narration.split()
+    if not words:
+        return []
+
+    chunks: list[list[str]] = []
+    current: list[str] = []
+    current_len = 0
+    for w in words:
+        added_len = len(w) + (1 if current else 0)
+        if current and current_len + added_len > max_chars:
+            chunks.append(current)
+            current, current_len = [w], len(w)
+        else:
+            current.append(w)
+            current_len += added_len
+    if current:
+        chunks.append(current)
+
+    total_words = len(words)
+    out = []
+    t = 0.0
+    for chunk in chunks:
+        chunk_dur = duration * (len(chunk) / total_words)
+        out.append((" ".join(chunk), t, t + chunk_dur))
+        t += chunk_dur
+    return out
+
+
+def _caption_filter(narration: str, duration: float, width: int, height: int) -> str:
+    font_size = min(width, height) // 16
+    y = int(height * 0.72)
+    # largura média de caractere em bold sans ~0.58x o tamanho da fonte —
+    # limita o pedaço de legenda pra nunca estourar a largura do vídeo
+    # (visto acontecer com chunk fixo de 3 palavras: palavra longa sozinha
+    # já passava da borda; e com 0.85 de folga a linha mais longa encostava
+    # nas duas bordas sem margem nenhuma).
+    max_chars = max(int((width * 0.78 - 32) / (font_size * 0.58)), 6)
+    parts = []
+    for text, start, end in _caption_chunks(narration, duration, max_chars):
+        esc = _escape_drawtext(text.upper())
+        parts.append(
+            f",drawtext=fontfile='{WATERMARK_FONT}':text='{esc}':"
+            f"fontsize={font_size}:fontcolor=white:"
+            f"borderw=3:bordercolor=black:"
+            f"box=1:boxcolor=black@0.55:boxborderw=16:"
+            f"x=(w-text_w)/2:y={y}:"
+            f"enable='between(t,{start:.3f},{end:.3f})'"
+        )
+    return "".join(parts)
+
+
 def _ffprobe_duration(path: Path) -> float:
     out = subprocess.run(
         [
@@ -71,6 +131,7 @@ def render_scene(
     watermark: str | None = None,
     list_number: int | None = None,
     accent: str = "#ffffff",
+    caption: str | None = None,
 ) -> Path:
     """Renderiza uma cena: zoom lento na imagem, sincronizado com a duração
     do áudio. `width`/`height` permitem vertical (Shorts, padrão) ou
@@ -79,7 +140,8 @@ def render_scene(
     mas prova de onde saiu o vídeo original e desestimula quem rouba
     conteúdo sem dar trabalho nenhum a mais pra quem assiste. `list_number`
     (vídeo de lista, ex.: "10 fatos...") grava um selo de contagem
-    regressiva no canto oposto ao watermark."""
+    regressiva no canto oposto ao watermark. `caption` (texto da narração
+    dessa cena) grava legenda estilo TikTok, 2-3 palavras por vez."""
     duration = _ffprobe_duration(audio_path)
     # 24 (não 30) fps — 20% menos frames pra codificar em CPU fraca (Pi 5,
     # sem encoder de vídeo por hardware nesse modelo) sem ficar perceptível
@@ -92,15 +154,29 @@ def render_scene(
     # 2x, o que importa nesta máquina que já roda pouca RAM sobrando com
     # outros serviços (ariaBot etc.) ligados ao mesmo tempo.
     upscale_w, upscale_h = int(width * 1.5), int(height * 1.5)
+
+    # cenas longas (>8s de narração) ficam muitos segundos com zoom
+    # contínuo e nada mudando na tela — atenção cai depois de ~5-7s sem
+    # nenhuma mudança visual. Um "pulso" breve de zoom mais rápido no meio
+    # da cena quebra a monotonia sem cortar cena nem gastar reencode extra
+    # (mesmo filtro zoompan, só muda a taxa por uma janela curta de frames).
+    zoom_expr = "min(zoom+0.0007,1.3)"
+    if duration > 8.0:
+        mid = frames // 2
+        window = max(int(fps * 0.35), 3)
+        zoom_expr = f"min(zoom+if(between(on,{mid - window},{mid + window}),0.006,0.0007),1.3)"
+
     filter_complex = (
         # crop-to-fill em vez de esticar: sem distorção mesmo se a imagem
         # gerada não vier exatamente na proporção certa.
         f"scale={upscale_w}:{upscale_h}:force_original_aspect_ratio=increase,"
         f"crop={upscale_w}:{upscale_h},"
-        f"zoompan=z='min(zoom+0.0007,1.3)':d={frames}:s={width}x{height}:fps={fps}"
+        f"zoompan=z='{zoom_expr}':d={frames}:s={width}x{height}:fps={fps}"
     )
     if list_number is not None:
         filter_complex += _list_number_filter(list_number, height, accent)
+    if caption:
+        filter_complex += _caption_filter(caption, duration, width, height)
     if watermark:
         font_size = max(width, height) // 45
         margin = font_size

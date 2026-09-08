@@ -76,6 +76,25 @@ class ChannelConfig:
     # cor de destaque do canal (hex) — usada no número de contagem regressiva
     # dos vídeos de lista ("10 fatos sobre...", ver run_pipeline.py).
     accent: str
+    # hashtags fixas do canal (sem "#Shorts" — isso é adicionado por código
+    # só no formato curto, ver run_pipeline.py). 3-5 é o recomendado hoje em
+    # dia: uma ampla, uma de nicho, uma de marca — mais que isso o YouTube
+    # ignora todas. Geradas por código (não pelo LLM) pra nunca sair errado
+    # ou faltando.
+    hashtags: list[str]
+    # @handle real do canal no YouTube (ex.: "@fractalcurioso", sem acento —
+    # é diferente da watermark, que é só texto decorativo gravado na cena).
+    # Usado pra montar o link de inscrição no fim da descrição. Vazio =
+    # canal ainda não confirmou o handle (não gera link quebrado).
+    youtube_handle: str
+    # nome de exibição real do canal (ex.: "Fractal Curioso") — usado só
+    # pra nomear a playlist automática (ver src/upload.py), não afeta nada
+    # do vídeo em si.
+    channel_title: str
+    # legenda embutida estilo TikTok (2-3 palavras por vez) — maior fator
+    # de retenção pra canal sem apresentador (maioria assiste mudo), mas
+    # dá pra desligar por canal se algum estilo não combinar.
+    captions: bool
 
     @staticmethod
     def load(name: str) -> "ChannelConfig":
@@ -103,4 +122,8 @@ class ChannelConfig:
             long_max_minutes=data.get("long_max_minutes", 20),
             watermark=data.get("watermark", f"@{name}"),
             accent=data.get("accent", "#ffffff"),
+            hashtags=data.get("hashtags", []),
+            youtube_handle=data.get("youtube_handle", ""),
+            channel_title=data.get("channel_title", name),
+            captions=data.get("captions", True),
         )

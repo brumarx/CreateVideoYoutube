@@ -2,6 +2,7 @@
 scripts/auth_youtube.py (um token.json por canal)."""
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
@@ -18,6 +19,10 @@ SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube",
 ]
+
+# playlist_id de cada canal, criada 1x e reaproveitada (evita duplicar
+# playlist a cada upload e evita ter que fazer playlists().list toda vez).
+PLAYLIST_STATE_FILE = Path(__file__).resolve().parent.parent / "data" / "playlists.json"
 
 
 def _load_credentials(token_file: Path) -> Credentials:
@@ -84,4 +89,59 @@ def upload_video(
             # customizada via API — não deve derrubar o upload em si.
             log.warning("não consegui setar a thumbnail de %s: %s", video_id, exc)
 
+    try:
+        _add_to_channel_playlist(youtube, channel, video_id)
+    except Exception as exc:
+        # playlist é bônus (ajuda tempo de sessão) — nunca derruba o upload.
+        log.warning("não consegui adicionar %s à playlist: %s", video_id, exc)
+
     return video_id
+
+
+def _load_playlist_state() -> dict:
+    if PLAYLIST_STATE_FILE.exists():
+        return json.loads(PLAYLIST_STATE_FILE.read_text())
+    return {}
+
+
+def _save_playlist_state(state: dict) -> None:
+    PLAYLIST_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    PLAYLIST_STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2))
+
+
+def _get_or_create_playlist(youtube, channel: ChannelConfig) -> str:
+    """1 playlist por canal, com todos os uploads (curto + longo) — mantém
+    quem assiste vendo mais vídeos seus em sequência (tempo de sessão é
+    sinal real de recomendação do YouTube). Criada 1x, id salvo em
+    data/playlists.json pra nunca duplicar."""
+    state = _load_playlist_state()
+    cached = state.get(channel.name)
+    if cached:
+        return cached
+
+    body = {
+        "snippet": {
+            "title": f"{channel.channel_title} — Todos os vídeos",
+            "description": f"Todos os vídeos do canal {channel.channel_title}.",
+        },
+        "status": {"privacyStatus": "public"},
+    }
+    response = youtube.playlists().insert(part="snippet,status", body=body).execute()
+    playlist_id = response["id"]
+    state[channel.name] = playlist_id
+    _save_playlist_state(state)
+    log.info("playlist criada pro canal %s: %s", channel.name, playlist_id)
+    return playlist_id
+
+
+def _add_to_channel_playlist(youtube, channel: ChannelConfig, video_id: str) -> None:
+    playlist_id = _get_or_create_playlist(youtube, channel)
+    youtube.playlistItems().insert(
+        part="snippet",
+        body={
+            "snippet": {
+                "playlistId": playlist_id,
+                "resourceId": {"kind": "youtube#video", "videoId": video_id},
+            }
+        },
+    ).execute()

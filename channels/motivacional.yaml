@@ -1,15 +1,18 @@
 niche: "motivacional e desenvolvimento pessoal"
 watermark: "@ÂnguloInterno"
 accent: "#ff9248"
+hashtags: ["#Motivacional", "#DesenvolvimentoPessoal", "#AnguloInterno"]
+youtube_handle: "@angulointerno"
+channel_title: "Ângulo Interno"
 language: "pt-BR"
 tts_voice_weights:
-  pt-BR-AntonioNeural: 50
-  pt-BR-FranciscaNeural: 30
-  pt-BR-ThalitaMultilingualNeural: 20
+  pt-BR-AntonioNeural: 100
+  pt-BR-FranciscaNeural: 0
+  pt-BR-ThalitaMultilingualNeural: 0
 scenes_per_video: 6
 upload_privacy: "public"
 uploads_per_day: 1
-daily_format: "short"  # "short" ou "long" — formato usado no cron diario, configuravel pelo painel
+daily_format: "long"
 short_min_minutes: 3
 short_max_minutes: 6
 long_min_minutes: 6
