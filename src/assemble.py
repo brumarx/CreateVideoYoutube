@@ -7,8 +7,11 @@ from __future__ import annotations
 
 import json
 import random
+import shutil
 import subprocess
 from pathlib import Path
+
+TRANSITION_DURATION = 0.5  # segundos de crossfade entre cenas
 
 # Formato padrão (Shorts/Reels, vertical). Vídeos longos passam
 # width/height explícitos pra render_scene (16:9).
@@ -76,21 +79,49 @@ def render_scene(
 
 
 def concat_scenes(scene_paths: list[Path], output_path: Path) -> Path:
-    """Concatena os mp4 de cada cena num vídeo final único."""
+    """Concatena os mp4 de cada cena com um crossfade suave entre elas (em
+    vez do corte seco de antes — imagem parava, sumia e só depois entrava a
+    próxima). Usa xfade (vídeo) + acrossfade (áudio) encadeados; precisa
+    reencodar (não dá pra usar concat demuxer + `-c copy` com transição)."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    list_file = output_path.with_suffix(".txt")
-    list_file.write_text("\n".join(f"file '{p.resolve()}'" for p in scene_paths))
+
+    if len(scene_paths) == 1:
+        shutil.copy(scene_paths[0], output_path)
+        return output_path
+
+    durations = [_ffprobe_duration(p) for p in scene_paths]
+    # crossfade não pode passar da cena mais curta (offset ficaria negativo)
+    transition = min(TRANSITION_DURATION, min(durations) * 0.4)
+
+    inputs = []
+    for p in scene_paths:
+        inputs += ["-i", str(p)]
+
+    filter_parts = []
+    v_label, a_label = "0:v", "0:a"
+    cumulative = durations[0]
+    for i in range(1, len(scene_paths)):
+        next_v, next_a = f"v{i}", f"a{i}"
+        offset = cumulative - transition
+        filter_parts.append(
+            f"[{v_label}][{i}:v]xfade=transition=fade:duration={transition:.3f}:offset={offset:.3f}[{next_v}]"
+        )
+        filter_parts.append(f"[{a_label}][{i}:a]acrossfade=d={transition:.3f}[{next_a}]")
+        v_label, a_label = next_v, next_a
+        cumulative += durations[i] - transition
 
     subprocess.run(
         [
             "ffmpeg", "-y",
-            "-f", "concat", "-safe", "0", "-i", str(list_file),
-            "-c", "copy",
+            *inputs,
+            "-filter_complex", ";".join(filter_parts),
+            "-map", f"[{v_label}]", "-map", f"[{a_label}]",
+            "-c:v", "libx264", "-preset", "veryfast", "-threads", "2", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "192k",
             str(output_path),
         ],
         check=True, capture_output=True, text=True,
     )
-    list_file.unlink()
     return output_path
 
 
