@@ -52,6 +52,14 @@ class ChannelConfig:
     # específicos pra evitar tema genérico demais pra 15-20min.
     long_form_scenes: int
     long_form_topics: list[str]
+    # Duração alvo em minutos — usada pra calcular quantas palavras cada
+    # cena precisa ter (contar cena não bastava: o LLM batia a contagem de
+    # cenas mas escrevia frases curtas demais, saindo um vídeo bem mais
+    # curto que o pedido).
+    short_min_minutes: float
+    short_max_minutes: float
+    long_min_minutes: float
+    long_max_minutes: float
 
     @staticmethod
     def load(name: str) -> "ChannelConfig":
@@ -70,4 +78,8 @@ class ChannelConfig:
             token_file=ROOT / "credentials" / f"token_{name}.json",
             long_form_scenes=data.get("long_form_scenes", 30),
             long_form_topics=data.get("long_form_topics", []),
+            short_min_minutes=data.get("short_min_minutes", 3),
+            short_max_minutes=data.get("short_max_minutes", 6),
+            long_min_minutes=data.get("long_min_minutes", 15),
+            long_max_minutes=data.get("long_max_minutes", 20),
         )

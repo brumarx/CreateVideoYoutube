@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import shutil
 import sys
 from pathlib import Path
 
@@ -33,13 +34,10 @@ log = logging.getLogger("run_pipeline")
 
 # Formato curto (Shorts, vertical) — padrão.
 SHORT_WIDTH, SHORT_HEIGHT = 1080, 1920
-SHORT_DURATION_HINT = "3 a 6 minutos"
 
 # Formato longo (documentário, horizontal) — muitas cenas, lugar real
 # específico. Ver channels/<nome>.yaml -> long_form_scenes/long_form_topics.
 LONG_WIDTH, LONG_HEIGHT = 1920, 1080
-LONG_DEFAULT_SCENES = 30
-LONG_DURATION_HINT = "15 a 20 minutos"
 
 
 def run(
@@ -70,14 +68,15 @@ def run(
 
     width, height = (LONG_WIDTH, LONG_HEIGHT) if long_form else (SHORT_WIDTH, SHORT_HEIGHT)
     scenes = channel.long_form_scenes if long_form else None
-    duration_hint = LONG_DURATION_HINT if long_form else SHORT_DURATION_HINT
+    min_minutes = channel.long_min_minutes if long_form else channel.short_min_minutes
+    max_minutes = channel.long_max_minutes if long_form else channel.short_max_minutes
 
     job_id = enqueue(channel_name, topic)
     work_dir = Path(__file__).resolve().parent.parent / "output" / f"job_{job_id}"
     work_dir.mkdir(parents=True, exist_ok=True)
 
     log.info("[%s] gerando roteiro (%s) para: %s", job_id, "longo" if long_form else "curto", topic)
-    script = generate_script(channel, topic, facts, scenes=scenes, duration_hint=duration_hint)
+    script = generate_script(channel, topic, facts, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes)
     update(job_id, status="scripted")
 
     scene_videos = []
@@ -127,6 +126,11 @@ def run(
     )
     update(job_id, status="uploaded", youtube_video_id=video_id)
     log.info("[%s] publicado: https://youtu.be/%s", job_id, video_id)
+
+    # já está no YouTube — não precisa mais guardar os arquivos (vídeo longo
+    # sozinho passa de 400MB, HD ia encher rápido rodando todo dia)
+    shutil.rmtree(work_dir, ignore_errors=True)
+    log.info("[%s] arquivos locais removidos (%s)", job_id, work_dir)
 
 
 def main() -> None:

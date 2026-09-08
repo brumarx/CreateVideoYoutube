@@ -4,6 +4,11 @@ tts_voice: "pt-BR-AntonioNeural"
 scenes_per_video: 7
 upload_privacy: "public"
 uploads_per_day: 1
+daily_format: "short"  # "short" ou "long" — formato usado no cron diario, configuravel pelo painel
+short_min_minutes: 3
+short_max_minutes: 6
+long_min_minutes: 4
+long_max_minutes: 8
 # Formato longo: só temas de FUNCIONAMENTO do sistema (não fatos sobre
 # pessoas específicas) — sem o grounding de dados reais do short, um
 # roteiro de 15-20min sem essa base seria arriscado demais sobre gente real.
