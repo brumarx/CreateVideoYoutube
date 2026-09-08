@@ -138,6 +138,56 @@ def _extract_json(raw: str) -> dict:
     return json.loads(match.group(0))
 
 
+# Trava de CÓDIGO (não só instrução de prompt) contra rosto de pessoa real
+# nomeada — a regra no SYSTEM_PROMPT falha uma fração real das vezes na
+# prática (visto: um vídeo sobre a Kathrine Switzer real saiu com uma cena
+# de close no rosto dela mesmo com a regra no prompt). Detecta tema com
+# nome próprio (2+ palavras capitalizadas seguidas, ex.: "Kathrine
+# Switzer", "Nelson Mandela") e substitui qualquer image_prompt arriscado
+# por um genérico seguro, sem depender só do LLM ter seguido a instrução.
+_PROPER_NAME_RE = re.compile(r"\b[A-ZÀ-Ý][a-zà-ÿ]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ]+)+\b")
+_SAFE_NO_FACE_RE = re.compile(
+    r"\bno faces? (visible|shown)\b|\bface (is|are) not (shown|visible)\b|"
+    r"\bface (hidden|obscured|not shown|not visible)\b|\bwithout (a|the|any) face\b|"
+    r"\bno visible face\b",
+    re.IGNORECASE,
+)
+_RISKY_FACE_RE = re.compile(
+    r"\bface\b|\bfacial expression\b|\bher eyes\b|\bhis eyes\b|\beyes wide\b|"
+    r"\bportrait\b|\bclose-?up of (a|the) (wom[ae]n|man|girl|boy|person)\b|"
+    r"\bdetermined expression\b",
+    re.IGNORECASE,
+)
+_SAFE_FALLBACK_IMAGE_PROMPT = (
+    "symbolic wide shot related to the story, no identifiable face, focus on "
+    "hands, objects, a silhouette seen from behind, or the surrounding "
+    "environment, cinematic lighting, no text, no words, no letters, no "
+    "numbers, no logos, no UI, no buttons, no watermark, no signs, no "
+    "signage, no plaques, no banners, no billboards"
+)
+
+
+def _is_risky_face_prompt(prompt: str) -> bool:
+    if not prompt or _SAFE_NO_FACE_RE.search(prompt):
+        return False
+    return bool(_RISKY_FACE_RE.search(prompt))
+
+
+def _sanitize_person_images(topic: str, script: dict) -> dict:
+    if not _PROPER_NAME_RE.search(topic):
+        return script
+    for i, scene in enumerate(script.get("scenes", [])):
+        prompt = scene.get("image_prompt", "")
+        if _is_risky_face_prompt(prompt):
+            log.warning("cena %d: image_prompt arriscado (rosto de pessoa real), substituindo: %s", i, prompt[:150])
+            scene["image_prompt"] = _SAFE_FALLBACK_IMAGE_PROMPT
+    thumb_prompt = script.get("thumbnail_image_prompt")
+    if _is_risky_face_prompt(thumb_prompt or ""):
+        log.warning("thumbnail_image_prompt arriscado (rosto de pessoa real), substituindo: %s", (thumb_prompt or "")[:150])
+        script["thumbnail_image_prompt"] = _SAFE_FALLBACK_IMAGE_PROMPT
+    return script
+
+
 def generate_script(
     channel: ChannelConfig,
     topic: str,
@@ -188,7 +238,7 @@ def generate_script(
 
             word_count = sum(len(s.get("narration", "").split()) for s in script["scenes"])
             if min_total_words <= word_count <= max_words_ceiling:
-                return script
+                return _sanitize_person_images(topic, script)
 
             distance = (
                 min_total_words - word_count if word_count < min_total_words
@@ -209,6 +259,6 @@ def generate_script(
             "usando o melhor roteiro obtido mesmo fora da faixa de %d-%d palavras",
             min_total_words, max_words_ceiling,
         )
-        return best_script
+        return _sanitize_person_images(topic, best_script)
 
     raise ValueError(f"LLM não devolveu roteiro válido após 3 tentativas: {last_error}")
