@@ -28,6 +28,18 @@ SYSTEM_PROMPT = (
     "por isso NUNCA peça texto, palavras, letras, números escritos, botões, "
     "ícones de interface, logos ou telas de 'inscreva-se'/'curta' na "
     "imagem. Descreva só cenário, objetos, pessoas e atmosfera visual. "
+    "REGRA CRÍTICA sobre pessoas reais nomeadas: se a cena cita o nome de "
+    "uma pessoa real específica (político, magistrado, empresário etc.), o "
+    "'image_prompt' NUNCA pode tentar descrever o rosto ou a aparência "
+    "dela — a IA de imagem não conhece rostos reais de forma confiável e "
+    "pode gerar um rosto errado atribuído àquela pessoa (ou até confundir o "
+    "nome com outra coisa completamente diferente, tipo gerar o animal "
+    "'lula' em vez do político Lula). Em vez disso, use algo simbólico e "
+    "genérico que não afirme ser 'aquela' pessoa: um prédio público real "
+    "(Congresso Nacional, STF, etc.), objetos (pilha de dinheiro, pasta de "
+    "documentos, balança da justiça, mesa de audiência) ou uma silhueta "
+    "genérica sem feições reconhecíveis, nunca uma pessoa com rosto "
+    "detalhado apresentada como se fosse aquele indivíduo. "
     "REGRA CRÍTICA sobre lugares reais: se a cena menciona um país, cidade, "
     "monumento ou acidente geográfico REAL específico (ex.: Portugal, "
     "Amazônia, Holanda), o 'image_prompt' tem que descrever as "
@@ -83,7 +95,7 @@ Gere um JSON com exatamente este formato:
 {{
   "title": "título chamativo, até 100 caracteres",
   "thumbnail_text": "gancho CURTÍSSIMO pra thumbnail, no máximo 4 palavras, tipo manchete de banca de jornal — não é o título, é a frase que faz alguém parar de rolar o feed",
-  "thumbnail_image_prompt": "prompt em inglês pro momento MAIS visualmente marcante/dramático de toda a história (não precisa ser a cena 1) — close-up, alto contraste, cor vibrante, um único foco claro na imagem. Se a cena central tem uma pessoa, descreva uma expressão facial EXAGERADA e genuína (chocada, olhos arregalados, boca aberta, maravilhada, com medo) — rosto humano com emoção forte é o maior fator isolado de clique em thumbnail. Se não tiver pessoa, use um objeto/cenário com contraste visual forte numa composição que gere uma pergunta na cabeça de quem vê (dois elementos que não parecem combinar, criando tensão). Mesma regra das outras imagens: SEM texto, palavras, logos, botões ou UI",
+  "thumbnail_image_prompt": "prompt em inglês pro momento MAIS visualmente marcante/dramático de toda a história (não precisa ser a cena 1) — close-up, alto contraste, cor vibrante, um único foco claro na imagem. Se a cena central tem uma pessoa GENÉRICA/FICTÍCIA (sem nome real, ex.: um personagem histórico só descrito, alguém comum de uma história motivacional), descreva uma expressão facial EXAGERADA e genuína (chocada, olhos arregalados, boca aberta, maravilhada, com medo) — rosto humano com emoção forte é o maior fator isolado de clique em thumbnail. Se a cena central envolve uma PESSOA REAL NOMEADA (político, magistrado etc.), NUNCA descreva o rosto dela (mesma regra crítica do resto do roteiro) — use símbolo/objeto/prédio público em vez de rosto. Se não tiver pessoa, use um objeto/cenário com contraste visual forte numa composição que gere uma pergunta na cabeça de quem vê (dois elementos que não parecem combinar, criando tensão). Mesma regra das outras imagens: SEM texto, palavras, logos, botões ou UI",
   "description": "descrição para o YouTube, 2-3 parágrafos, com contexto e call-to-action",
   "tags": ["tag1", "tag2", "..."],
   "scenes": [

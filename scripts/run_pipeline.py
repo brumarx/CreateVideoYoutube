@@ -99,6 +99,7 @@ def run(
     dry_run: bool,
     publish_at: str | None,
     long_form: bool = False,
+    fact_label: str | None = None,
 ) -> None:
     channel = ChannelConfig.load(channel_name)
     # 1 voz sorteada por vídeo (não por cena — narrador tem que ser
@@ -109,9 +110,11 @@ def run(
 
     facts = None
     if channel_name == "politica" and not long_form:
-        from src.politica_data import random_fact_set
+        from src.politica_data import pick_fact_set, random_fact_set
 
-        facts = random_fact_set()
+        # --fact-label força um tema específico (teste manual/painel) em vez
+        # de sortear entre os fetchers.
+        facts = pick_fact_set(fact_label) if fact_label else random_fact_set()
         if topic is None:
             topic = facts["tema"]
     elif topic is None and channel.topics:
@@ -253,9 +256,10 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="gera tudo mas não publica")
     parser.add_argument("--publish-at", default=None, help="ISO 8601 UTC, ex: 2026-09-08T12:00:00Z")
     parser.add_argument("--long", action="store_true", help="formato longo/documentário (16:9, ~15-20min, lugar real específico)")
+    parser.add_argument("--fact-label", default=None, help="só canal 'politica' no curto: força um tema específico de src.politica_data.FACT_FETCHERS em vez de sortear")
     args = parser.parse_args()
 
-    run(args.channel, args.topic, args.dry_run, args.publish_at, long_form=args.long)
+    run(args.channel, args.topic, args.dry_run, args.publish_at, long_form=args.long, fact_label=args.fact_label)
 
 
 if __name__ == "__main__":
