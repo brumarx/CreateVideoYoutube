@@ -1,4 +1,5 @@
 niche: "curiosidades factuais sobre política brasileira (dados públicos oficiais: TSE, Câmara, Senado, Portal da Transparência)"
+watermark: "@NúmerosdaRepública"
 language: "pt-BR"
 tts_voice: "pt-BR-AntonioNeural"
 scenes_per_video: 7

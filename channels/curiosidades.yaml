@@ -1,4 +1,5 @@
 niche: "curiosidades e histórias intrigantes (fatos pouco conhecidos, mistérios, eventos históricos)"
+watermark: "@FractalCurioso"
 language: "pt-BR"
 tts_voice: "pt-BR-FranciscaNeural"
 scenes_per_video: 8
@@ -36,7 +37,7 @@ topics:
   - "0 objetos comuns que escondem uma história absurda"
   - "10 descobertas acidentais que mudaram o mundo"
   - "Coisas que parecem falsas, mas são 100% reais"
-  - "0 animais que parecem inventados por um computador"
+  - "10 animais que parecem inventados por um computador"
   - "O que aconteceria se a Lua desaparecesse amanhã?"
 prompt_base: >
   Escreva um roteiro envolvente no estilo de canais de curiosidades/histórias

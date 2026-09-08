@@ -21,6 +21,14 @@ VIDEO_HEIGHT = 1920
 MUSIC_DIR = Path(__file__).resolve().parent.parent / "assets" / "music"
 MUSIC_VOLUME_DB = -23  # bem baixo — não pode competir com a narração
 
+WATERMARK_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+
+def _escape_drawtext(text: str) -> str:
+    # o parser do drawtext trata ':', '\' e apóstrofo como especiais mesmo
+    # dentro de aspas simples.
+    return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+
 
 def _ffprobe_duration(path: Path) -> float:
     out = subprocess.run(
@@ -39,10 +47,14 @@ def render_scene(
     output_path: Path,
     width: int = VIDEO_WIDTH,
     height: int = VIDEO_HEIGHT,
+    watermark: str | None = None,
 ) -> Path:
     """Renderiza uma cena: zoom lento na imagem, sincronizado com a duração
     do áudio. `width`/`height` permitem vertical (Shorts, padrão) ou
-    horizontal (vídeo longo tipo documentário)."""
+    horizontal (vídeo longo tipo documentário). `watermark` (ex.:
+    "@FractalCurioso") grava o @ do canal no canto — não impede repostagem,
+    mas prova de onde saiu o vídeo original e desestimula quem rouba
+    conteúdo sem dar trabalho nenhum a mais pra quem assiste."""
     duration = _ffprobe_duration(audio_path)
     fps = 30
     frames = max(int(duration * fps), 1)
@@ -59,6 +71,15 @@ def render_scene(
         f"crop={upscale_w}:{upscale_h},"
         f"zoompan=z='min(zoom+0.0007,1.3)':d={frames}:s={width}x{height}:fps={fps}"
     )
+    if watermark:
+        font_size = max(width, height) // 45
+        margin = font_size
+        filter_complex += (
+            f",drawtext=fontfile='{WATERMARK_FONT}':text='{_escape_drawtext(watermark)}':"
+            f"fontsize={font_size}:fontcolor=white@0.55:"
+            f"borderw=2:bordercolor=black@0.4:"
+            f"x=w-text_w-{margin}:y=h-text_h-{margin}"
+        )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(

@@ -91,7 +91,7 @@ def run(
         image_path.write_bytes(image_bytes)
 
         scene_video_path = work_dir / f"scene_{i}.mp4"
-        render_scene(image_path, audio_path, scene_video_path, width=width, height=height)
+        render_scene(image_path, audio_path, scene_video_path, width=width, height=height, watermark=channel.watermark)
         scene_videos.append(scene_video_path)
 
     update(job_id, status="narrated")
@@ -110,6 +110,12 @@ def run(
     update(job_id, thumbnail_path=str(thumb_path))
     log.info("[%s] thumbnail pronta: %s", job_id, thumb_path)
 
+    description = script["description"]
+    if channel_name == "politica":
+        # link fixo pro site fonte dos dados — sempre gerado por código
+        # (nunca pelo LLM), pra garantir que aponta pro lugar certo sempre.
+        description += "\n\nFonte dos dados: https://brmx.org/politica/"
+
     if dry_run:
         log.info("[%s] --dry-run: não vou publicar. Revise %s manualmente.", job_id, final_video)
         return
@@ -118,7 +124,7 @@ def run(
         channel,
         final_video,
         title=script["title"],
-        description=script["description"],
+        description=description,
         tags=script["tags"],
         thumbnail_path=thumb_path,
         publish_at=publish_at,
