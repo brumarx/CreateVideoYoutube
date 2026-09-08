@@ -20,6 +20,10 @@ topics:
   - "o valor de terminar o que você começa"
   - "como construir disciplina quando não tem vontade"
   - "por que descanso faz parte do sucesso, não é preguiça"
+  - "Você não está cansado da vida. Está cansado de viver assim"
+  - "Pare de esperar o momento certo — ele nunca vai chegar"
+  - "Aos 30, 40 ou 50 anos: ainda dá tempo de recomeçar"
+  - "Você está mais perto de desistir do que imagina — NÃO DESISTA"
 long_form_scenes: 26
 long_form_topics:
   - "a vida completa de Thomas Edison e os milhares de fracassos antes do sucesso"
@@ -28,6 +32,7 @@ long_form_topics:
   - "como Viktor Frankl sobreviveu a campos de concentração e mudou a psicologia"
   - "a virada real de Steve Jobs depois de ser demitido da própria empresa"
   - "como a maratonista Kathrine Switzer correu a Boston Marathon proibida por ser mulher"
+  - "Ninguém vai salvar você — comece a mudar sua vida hoje"
 prompt_base: >
   Escreva um roteiro motivacional/inspiracional no estilo de canais de
   desenvolvimento pessoal do YouTube. Tom inspirador e direto, storytelling

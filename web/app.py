@@ -60,8 +60,12 @@ TEMPLATE = """
   details.topics { margin-top: 10px; font-size: 12px; }
   details.topics summary { cursor: pointer; color: #9aa0a8; }
   details.topics summary:hover { color: #c7cbd1; }
-  .topic-item { padding: 4px 2px; border-bottom: 1px solid #1c2028; color: #c7cbd1; }
-  .topic-item.used { color: #55595f; text-decoration: line-through; }
+  .topic-edit { display: flex; gap: 4px; margin-top: 4px; align-items: center; }
+  .topic-edit input[type=text] { flex: 1; min-width: 0; box-sizing: border-box; padding: 4px 6px; background: #0f1115; border: 1px solid #262b35; border-radius: 6px; color: #c7cbd1; font-size: 12px; }
+  .topic-edit input[type=text].used { color: #55595f; text-decoration: line-through; }
+  .topic-edit button { padding: 4px 8px; font-size: 11px; }
+  .topic-edit button.danger { background: #3a1616; color: #e08f8f; }
+  .topic-edit button.danger:hover { background: #4a1c1c; }
   .topic-add { display: flex; gap: 6px; margin-top: 8px; }
   .topic-add input { flex: 1; min-width: 0; box-sizing: border-box; padding: 5px 6px; background: #0f1115; border: 1px solid #262b35; border-radius: 6px; color: #e6e6e6; font-size: 12px; }
   .topic-add button { padding: 5px 10px; font-size: 12px; }
@@ -103,7 +107,13 @@ TEMPLATE = """
       <details class="topics">
         <summary>Fila de temas curtos ({{ c.topics_pending }} pendente(s) de {{ c.topics|length }})</summary>
         {% for t in c.topics %}
-        <div class="topic-item {{ 'used' if t in c.used_short }}">{{ t }}</div>
+        <form class="topic-edit" method="post" action="{{ url_for('update_topic', channel=c.name) }}">
+          <input type="hidden" name="kind" value="short">
+          <input type="hidden" name="index" value="{{ loop.index0 }}">
+          <input type="text" name="topic" value="{{ t }}" class="{{ 'used' if t in c.used_short }}">
+          <button type="submit" title="salvar edição">salvar</button>
+          <button type="submit" formaction="{{ url_for('delete_topic', channel=c.name) }}" class="danger" title="remover">remover</button>
+        </form>
         {% endfor %}
         <form class="topic-add" method="post" action="{{ url_for('add_topic', channel=c.name) }}">
           <input type="hidden" name="kind" value="short">
@@ -115,7 +125,13 @@ TEMPLATE = """
       <details class="topics">
         <summary>Fila de temas longos ({{ c.long_pending }} pendente(s) de {{ c.long_form_topics|length }})</summary>
         {% for t in c.long_form_topics %}
-        <div class="topic-item {{ 'used' if t in c.used_long }}">{{ t }}</div>
+        <form class="topic-edit" method="post" action="{{ url_for('update_topic', channel=c.name) }}">
+          <input type="hidden" name="kind" value="long">
+          <input type="hidden" name="index" value="{{ loop.index0 }}">
+          <input type="text" name="topic" value="{{ t }}" class="{{ 'used' if t in c.used_long }}">
+          <button type="submit" title="salvar edição">salvar</button>
+          <button type="submit" formaction="{{ url_for('delete_topic', channel=c.name) }}" class="danger" title="remover">remover</button>
+        </form>
         {% endfor %}
         <form class="topic-add" method="post" action="{{ url_for('add_topic', channel=c.name) }}">
           <input type="hidden" name="kind" value="long">
@@ -264,6 +280,40 @@ def _yaml_append_list_item(text: str, key: str, value: str) -> str:
     return text + sep + f"{key}:\n{new_line}\n"
 
 
+def _yaml_list_block_match(text: str, key: str):
+    pattern = rf"^{re.escape(key)}:[ \t]*\n((?:  - .*\n)*)"
+    return re.search(pattern, text, flags=re.MULTILINE)
+
+
+def _yaml_replace_list_item(text: str, key: str, index: int, new_value: str) -> str | None:
+    """Substitui o item `index` (0-based, ordem de aparição no YAML) da
+    lista `key:` pelo texto novo. Devolve None se o índice/chave não bater
+    (ex.: alguém editou o YAML por fora entre a página carregar e o
+    submit) — o chamador ignora a mudança em vez de corromper o arquivo."""
+    match = _yaml_list_block_match(text, key)
+    if not match:
+        return None
+    lines = match.group(1).splitlines(keepends=True)
+    if index < 0 or index >= len(lines):
+        return None
+    escaped = new_value.replace("\\", "\\\\").replace('"', '\\"')
+    lines[index] = f'  - "{escaped}"\n'
+    start, end = match.start(1), match.end(1)
+    return text[:start] + "".join(lines) + text[end:]
+
+
+def _yaml_delete_list_item(text: str, key: str, index: int) -> str | None:
+    match = _yaml_list_block_match(text, key)
+    if not match:
+        return None
+    lines = match.group(1).splitlines(keepends=True)
+    if index < 0 or index >= len(lines):
+        return None
+    del lines[index]
+    start, end = match.start(1), match.end(1)
+    return text[:start] + "".join(lines) + text[end:]
+
+
 @app.route("/topics/<channel>", methods=["POST"])
 def add_topic(channel: str):
     """Adiciona um tema fixo na fila do canal (topics ou long_form_topics,
@@ -279,6 +329,51 @@ def add_topic(channel: str):
     text = path.read_text()
     text = _yaml_append_list_item(text, key, topic)
     path.write_text(text)
+    return redirect(url_for("index", topic_added=1))
+
+
+@app.route("/topics/<channel>/update", methods=["POST"])
+def update_topic(channel: str):
+    """Edita o texto de um tema já existente na lista fixa (ex.: trocar '30
+    fatos' por '10 fatos') sem mexer na posição nem nos outros itens."""
+    path = ROOT / "channels" / f"{channel}.yaml"
+    kind = request.form.get("kind", "short")
+    new_topic = request.form.get("topic", "").strip()
+    try:
+        index = int(request.form.get("index", ""))
+    except ValueError:
+        return redirect(url_for("index"))
+    if not path.exists() or not new_topic:
+        return redirect(url_for("index"))
+
+    key = "long_form_topics" if kind == "long" else "topics"
+    text = path.read_text()
+    updated = _yaml_replace_list_item(text, key, index, new_topic)
+    if updated is None:
+        return redirect(url_for("index"))
+    path.write_text(updated)
+    return redirect(url_for("index", topic_added=1))
+
+
+@app.route("/topics/<channel>/delete", methods=["POST"])
+def delete_topic(channel: str):
+    """Remove um tema da lista fixa (não mexe em quem já foi usado — só
+    tira da fila de pendentes)."""
+    path = ROOT / "channels" / f"{channel}.yaml"
+    kind = request.form.get("kind", "short")
+    try:
+        index = int(request.form.get("index", ""))
+    except ValueError:
+        return redirect(url_for("index"))
+    if not path.exists():
+        return redirect(url_for("index"))
+
+    key = "long_form_topics" if kind == "long" else "topics"
+    text = path.read_text()
+    updated = _yaml_delete_list_item(text, key, index)
+    if updated is None:
+        return redirect(url_for("index"))
+    path.write_text(updated)
     return redirect(url_for("index", topic_added=1))
 
 
