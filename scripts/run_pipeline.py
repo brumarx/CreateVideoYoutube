@@ -25,6 +25,7 @@ from src.config import ChannelConfig
 from src.orchestrator import enqueue, update
 from src.script_gen import generate_script
 from src.thumbnail import make_thumbnail
+from src.topics import pick_topic
 from src.tts import narrate
 from src.upload import upload_video
 from src.visuals import generate_image
@@ -60,9 +61,9 @@ def run(
         topics = channel.long_form_topics
         if not topics:
             raise SystemExit(f"channels/{channel_name}.yaml não tem long_form_topics configurado")
-        import random
-
-        topic = random.choice(topics)
+        # nunca repete um tema já usado — quando a lista fixa esgota, gera
+        # um tema novo via LLM dentro do nicho do canal (ver src/topics.py)
+        topic = pick_topic(channel_name, "long", topics, channel.niche)
     elif topic is None:
         raise SystemExit("--topic é obrigatório pra esse canal")
 
