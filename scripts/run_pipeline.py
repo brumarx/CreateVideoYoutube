@@ -122,7 +122,10 @@ def run(
     update(job_id, status="narrated")
 
     raw_video = work_dir / "raw.mp4"
-    concat_scenes(scene_videos, raw_video)
+    # crossfade obriga reencodar o vídeo inteiro — caro numa CPU fraca sem
+    # encoder de hardware (Pi 5). Vale a pena pro curto (poucos minutos);
+    # no longo (15-20min) usa corte seco instantâneo (ver src/assemble.py).
+    concat_scenes(scene_videos, raw_video, crossfade=not long_form)
 
     final_video = work_dir / "final.mp4"
     add_background_music(raw_video, final_video)

@@ -81,7 +81,10 @@ def render_scene(
     (vídeo de lista, ex.: "10 fatos...") grava um selo de contagem
     regressiva no canto oposto ao watermark."""
     duration = _ffprobe_duration(audio_path)
-    fps = 30
+    # 24 (não 30) fps — 20% menos frames pra codificar em CPU fraca (Pi 5,
+    # sem encoder de vídeo por hardware nesse modelo) sem ficar perceptível
+    # pra conteúdo narrado/foto (sem movimento rápido de verdade).
+    fps = 24
     frames = max(int(duration * fps), 1)
 
     # 1.5x (não 2x) já dá supersampling suficiente pro zoom máximo de 1.3x
@@ -126,16 +129,41 @@ def render_scene(
     return output_path
 
 
-def concat_scenes(scene_paths: list[Path], output_path: Path) -> Path:
-    """Concatena os mp4 de cada cena com um crossfade suave entre elas (em
-    vez do corte seco de antes — imagem parava, sumia e só depois entrava a
-    próxima). Usa xfade (vídeo) + acrossfade (áudio) encadeados; precisa
-    reencodar (não dá pra usar concat demuxer + `-c copy` com transição)."""
+def _concat_fast(scene_paths: list[Path], output_path: Path) -> Path:
+    """Concat demuxer + `-c copy` — só remuxa o bitstream, não reencoda
+    nada. Instantâneo mesmo num Pi, mas sem transição (corte seco)."""
+    list_file = output_path.with_suffix(".txt")
+    list_file.write_text("\n".join(f"file '{p.resolve()}'" for p in scene_paths))
+    subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-f", "concat", "-safe", "0", "-i", str(list_file),
+            "-c", "copy",
+            str(output_path),
+        ],
+        check=True, capture_output=True, text=True,
+    )
+    list_file.unlink()
+    return output_path
+
+
+def concat_scenes(scene_paths: list[Path], output_path: Path, crossfade: bool = True) -> Path:
+    """Concatena os mp4 de cada cena. `crossfade=True` usa xfade (vídeo) +
+    acrossfade (áudio) encadeados pra transição suave — mas isso obriga
+    reencodar o vídeo inteiro do zero, o que é caro numa CPU fraca sem
+    encoder de hardware (Raspberry Pi 5 não tem bloco de encode H.264 —
+    testado, `h264_v4l2m2m` não acha dispositivo). Por isso run_pipeline.py
+    só liga crossfade no formato curto (poucos minutos); formato longo
+    (15-20min) usa `crossfade=False` (corte seco, mas instantâneo — via
+    `_concat_fast`, sem reencode nenhum)."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     if len(scene_paths) == 1:
         shutil.copy(scene_paths[0], output_path)
         return output_path
+
+    if not crossfade:
+        return _concat_fast(scene_paths, output_path)
 
     durations = [_ffprobe_duration(p) for p in scene_paths]
     # crossfade não pode passar da cena mais curta (offset ficaria negativo)
@@ -164,7 +192,11 @@ def concat_scenes(scene_paths: list[Path], output_path: Path) -> Path:
             *inputs,
             "-filter_complex", ";".join(filter_parts),
             "-map", f"[{v_label}]", "-map", f"[{a_label}]",
-            "-c:v", "libx264", "-preset", "veryfast", "-threads", "2", "-pix_fmt", "yuv420p",
+            # esse reencode só roda pro formato curto (poucos minutos, 1 vez),
+            # então vale gastar os 4 núcleos do Pi + preset mais rápido —
+            # diferente do render_scene (roda muitas vezes por vídeo, aí sim
+            # precisa deixar núcleo sobrando pro resto da máquina).
+            "-c:v", "libx264", "-preset", "ultrafast", "-threads", "4", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "192k",
             str(output_path),
         ],
