@@ -37,7 +37,14 @@ def _escape_drawtext(text: str) -> str:
     # lugar errado) — mais simples e robusto trocar por aspa tipográfica
     # (’), que não é caractere especial pra ffmpeg nenhum.
     text = text.replace("'", "’")
-    return text.replace("\\", "\\\\").replace(":", "\\:")
+    text = text.replace("\\", "\\\\").replace(":", "\\:")
+    # bug confirmado do próprio ffmpeg: qualquer texto com acento (Ó, Ã, Á,
+    # Ú etc.) sai com o ÚLTIMO caractere cortado (visto na prática: a marca
+    # d'água "@NúmerosdaRepública" saiu "@NúmerosdaRepúbli" no vídeo
+    # publicado — a legenda já tinha sido corrigida, mas a marca d'água
+    # usava esta mesma função sem passar por _strip_accents). Centralizado
+    # aqui pra proteger todo uso de drawtext, não só a legenda.
+    return _strip_accents(text)
 
 
 def _list_number_filter(number: int, height: int, accent: str) -> str:
