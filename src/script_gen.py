@@ -38,7 +38,14 @@ SYSTEM_PROMPT = (
     "REGRA CRÍTICA sobre vídeos de lista ('N fatos/coisas/dicas sobre...'): "
     "NUNCA sugira ou escreva um título/tema com mais de 10 itens — nada de "
     "'20 fatos', '30 coisas', '50 curiosidades'. O máximo é sempre 10; "
-    "prefira listas menores (5, 7, 10) a forçar uma lista longa e repetitiva."
+    "prefira listas menores (5, 7, 10) a forçar uma lista longa e repetitiva. "
+    "REGRA CRÍTICA sobre o gancho inicial: mais da metade de quem assiste "
+    "decide continuar ou não nos primeiros 3 segundos, então a PRIMEIRA "
+    "frase da primeira cena tem que entregar o fato mais chocante/intrigante "
+    "ou uma pergunta que gera curiosidade imediata — NUNCA comece com "
+    "saudação, apresentação do canal, contexto histórico/geográfico ou "
+    "'hoje vamos falar sobre...'. Vá direto ao ponto mais interessante e só "
+    "depois explique o contexto."
 )
 
 
@@ -76,7 +83,7 @@ Gere um JSON com exatamente este formato:
 {{
   "title": "título chamativo, até 100 caracteres",
   "thumbnail_text": "gancho CURTÍSSIMO pra thumbnail, no máximo 4 palavras, tipo manchete de banca de jornal — não é o título, é a frase que faz alguém parar de rolar o feed",
-  "thumbnail_image_prompt": "prompt em inglês pro momento MAIS visualmente marcante/dramático de toda a história (não precisa ser a cena 1) — close-up, alto contraste, cor vibrante, um único foco claro na imagem, mesmas regras das outras imagens: SEM texto, palavras, logos, botões ou UI",
+  "thumbnail_image_prompt": "prompt em inglês pro momento MAIS visualmente marcante/dramático de toda a história (não precisa ser a cena 1) — close-up, alto contraste, cor vibrante, um único foco claro na imagem. Se a cena central tem uma pessoa, descreva uma expressão facial EXAGERADA e genuína (chocada, olhos arregalados, boca aberta, maravilhada, com medo) — rosto humano com emoção forte é o maior fator isolado de clique em thumbnail. Se não tiver pessoa, use um objeto/cenário com contraste visual forte numa composição que gere uma pergunta na cabeça de quem vê (dois elementos que não parecem combinar, criando tensão). Mesma regra das outras imagens: SEM texto, palavras, logos, botões ou UI",
   "description": "descrição para o YouTube, 2-3 parágrafos, com contexto e call-to-action",
   "tags": ["tag1", "tag2", "..."],
   "scenes": [

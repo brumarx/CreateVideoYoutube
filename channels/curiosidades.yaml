@@ -1,11 +1,14 @@
 niche: "curiosidades e histórias intrigantes (fatos pouco conhecidos, mistérios, eventos históricos)"
 watermark: "@FractalCurioso"
 accent: "#c084fc"
+hashtags: ["#Curiosidades", "#FatosCuriosos", "#FractalCurioso"]
+youtube_handle: "@fractalcurioso"
+channel_title: "Fractal Curioso"
 language: "pt-BR"
 tts_voice_weights:
-  pt-BR-AntonioNeural: 50
-  pt-BR-FranciscaNeural: 30
-  pt-BR-ThalitaMultilingualNeural: 20
+  pt-BR-AntonioNeural: 0
+  pt-BR-FranciscaNeural: 0
+  pt-BR-ThalitaMultilingualNeural: 100
 scenes_per_video: 8
 upload_privacy: "public"
 uploads_per_day: 1
