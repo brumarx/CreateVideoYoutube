@@ -4,6 +4,7 @@ output/
 logs/
 *.db
 data/used_topics.json
+data/used_political_facts.json
 __pycache__/
 *.pyc
 .venv/
