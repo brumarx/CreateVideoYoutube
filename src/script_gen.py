@@ -28,18 +28,24 @@ SYSTEM_PROMPT = (
     "por isso NUNCA peça texto, palavras, letras, números escritos, botões, "
     "ícones de interface, logos ou telas de 'inscreva-se'/'curta' na "
     "imagem. Descreva só cenário, objetos, pessoas e atmosfera visual. "
-    "REGRA CRÍTICA sobre pessoas reais nomeadas: se a cena cita o nome de "
-    "uma pessoa real específica (político, magistrado, empresário etc.), o "
-    "'image_prompt' NUNCA pode tentar descrever o rosto ou a aparência "
-    "dela — a IA de imagem não conhece rostos reais de forma confiável e "
-    "pode gerar um rosto errado atribuído àquela pessoa (ou até confundir o "
-    "nome com outra coisa completamente diferente, tipo gerar o animal "
-    "'lula' em vez do político Lula). Em vez disso, use algo simbólico e "
-    "genérico que não afirme ser 'aquela' pessoa: um prédio público real "
-    "(Congresso Nacional, STF, etc.), objetos (pilha de dinheiro, pasta de "
-    "documentos, balança da justiça, mesa de audiência) ou uma silhueta "
-    "genérica sem feições reconhecíveis, nunca uma pessoa com rosto "
-    "detalhado apresentada como se fosse aquele indivíduo. "
+    "REGRA CRÍTICA sobre pessoas reais nomeadas (política, magistrado, "
+    "empresário, atleta, figura histórica — QUALQUER pessoa real "
+    "identificável pelo nome, não só política): se a história tem essa "
+    "pessoa como protagonista de uma cena, o 'image_prompt' NUNCA pode ser "
+    "um CLOSE NO ROSTO, mesmo descrito de forma genérica tipo 'a woman's "
+    "face' ou 'a determined man' — isso NÃO livra a regra, porque o "
+    "contexto (uniforme, número de peito, cargo, brasão, veste) deixa claro "
+    "pra quem assiste que aquele rosto genérico É pra ser ela, e a IA de "
+    "imagem não sabe gerar o rosto real dessa pessoa (pode sair errado, ou "
+    "até confundir o nome com outra coisa, tipo gerar o animal 'lula' em "
+    "vez do político Lula). Regra prática: quando o protagonista é uma "
+    "pessoa real, a câmera NUNCA foca no rosto dela — descreva de costas, "
+    "silhueta ao longe, mãos/pés/objetos pessoais em close (um crachá, "
+    "número de peito, uniforme, uma caneta assinando), o ambiente ao redor, "
+    "ou um prédio/símbolo relacionado — nunca um retrato ou close facial "
+    "dramático que o espectador vá interpretar como sendo o rosto daquela "
+    "pessoa. Isso vale pro 'image_prompt' de toda cena E pro "
+    "'thumbnail_image_prompt'. "
     "REGRA CRÍTICA sobre lugares reais: se a cena menciona um país, cidade, "
     "monumento ou acidente geográfico REAL específico (ex.: Portugal, "
     "Amazônia, Holanda), o 'image_prompt' tem que descrever as "
@@ -95,7 +101,7 @@ Gere um JSON com exatamente este formato:
 {{
   "title": "título chamativo, até 100 caracteres",
   "thumbnail_text": "gancho CURTÍSSIMO pra thumbnail, no máximo 4 palavras, tipo manchete de banca de jornal — não é o título, é a frase que faz alguém parar de rolar o feed",
-  "thumbnail_image_prompt": "prompt em inglês pro momento MAIS visualmente marcante/dramático de toda a história (não precisa ser a cena 1) — close-up, alto contraste, cor vibrante, um único foco claro na imagem. Se a cena central tem uma pessoa GENÉRICA/FICTÍCIA (sem nome real, ex.: um personagem histórico só descrito, alguém comum de uma história motivacional), descreva uma expressão facial EXAGERADA e genuína (chocada, olhos arregalados, boca aberta, maravilhada, com medo) — rosto humano com emoção forte é o maior fator isolado de clique em thumbnail. Se a cena central envolve uma PESSOA REAL NOMEADA (político, magistrado etc.), NUNCA descreva o rosto dela (mesma regra crítica do resto do roteiro) — use símbolo/objeto/prédio público em vez de rosto. Se não tiver pessoa, use um objeto/cenário com contraste visual forte numa composição que gere uma pergunta na cabeça de quem vê (dois elementos que não parecem combinar, criando tensão). Mesma regra das outras imagens: SEM texto, palavras, logos, botões ou UI",
+  "thumbnail_image_prompt": "prompt em inglês pro momento MAIS visualmente marcante/dramático de toda a história (não precisa ser a cena 1) — close-up, alto contraste, cor vibrante, um único foco claro na imagem. Primeiro pergunte: essa história tem UM protagonista real específico e identificável (uma pessoa que existiu/existe de verdade, com nome — político, atleta, empresário, figura histórica, NÃO importa se o nome aparece literalmente neste prompt)? Se SIM: NUNCA um close no rosto, nem descrito de forma genérica ('a woman's face', 'a determined man') — o contexto (uniforme, número de peito, roupa de época, cargo) já entrega pra quem assiste que aquele rosto É pra ser ela, e a IA não sabe gerar o rosto real dela. Use em vez disso um close em mãos/objeto pessoal (crachá, número de peito, caneta, uniforme), uma silhueta de costas/longe, ou um símbolo/cenário forte relacionado à história. Se NÃO (a cena é sobre um personagem fictício, genérico, ou 'alguém' sem identidade real específica): aí sim pode descrever uma expressão facial EXAGERADA e genuína (chocada, olhos arregalados, boca aberta, maravilhada, com medo) — rosto humano com emoção forte é o maior fator isolado de clique em thumbnail. Se não tiver pessoa nenhuma, use um objeto/cenário com contraste visual forte numa composição que gere uma pergunta na cabeça de quem vê. Mesma regra das outras imagens: SEM texto, palavras, logos, botões ou UI",
   "description": "descrição para o YouTube, 2-3 parágrafos, com contexto e call-to-action",
   "tags": ["tag1", "tag2", "..."],
   "scenes": [
