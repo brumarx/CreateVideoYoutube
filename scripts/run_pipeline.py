@@ -192,14 +192,20 @@ def run(
 
         list_number = (list_count - i) if list_count else None
         scene_video_path = work_dir / f"scene_{i}.mp4"
-        render_scene(
-            image_path, audio_path, scene_video_path, width=width, height=height,
-            watermark=channel.watermark, list_number=list_number, accent=channel.accent,
-            caption=scene["narration"] if channel.captions else None,
-            video_path=stock_clip_path,
-        )
-        if stock_clip_path is not None:
-            stock_clip_path.unlink(missing_ok=True)
+        try:
+            render_scene(
+                image_path, audio_path, scene_video_path, width=width, height=height,
+                watermark=channel.watermark, list_number=list_number, accent=channel.accent,
+                caption=scene["narration"] if channel.captions else None,
+                video_path=stock_clip_path,
+            )
+        finally:
+            # sem finally, um clipe baixado (10-20MB) vaza pro /tmp toda vez
+            # que o ffmpeg falhar (já visto de verdade nesta sessão — erro de
+            # rede, arquivo truncado) — acumula disco silenciosamente rodando
+            # todo dia em 5 canais.
+            if stock_clip_path is not None:
+                stock_clip_path.unlink(missing_ok=True)
         scene_videos.append(scene_video_path)
 
     update(job_id, status="narrated")
