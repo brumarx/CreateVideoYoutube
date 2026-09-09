@@ -118,7 +118,13 @@ def _strip_accents(text: str) -> str:
 
 def _caption_filter(narration: str, duration: float, width: int, height: int) -> str:
     font_size = min(width, height) // 16
-    y = int(height * 0.72)
+    # calculado a partir do RODAPÉ (não do topo) — uma fração fixa da
+    # altura total (72%) deixava a legenda "no meio" no formato longo
+    # (16:9, mais baixo/achatado que o vertical): a mesma % de cima pra
+    # baixo sobra bem menos espaço embaixo numa tela mais baixa. Margem
+    # fixa de baixo funciona igual nos dois formatos.
+    margin_bottom = int(height * 0.08)
+    y = height - margin_bottom - font_size
     font = ImageFont.truetype(WATERMARK_FONT, font_size)
     # margem de 9% de cada lado — sobra segura medida na largura REAL do
     # texto renderizado (ver _caption_chunks), não numa estimativa.
