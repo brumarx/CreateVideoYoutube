@@ -170,7 +170,7 @@ def render_scene(
     regressiva no canto oposto ao watermark. `caption` (texto da narração
     dessa cena) grava legenda estilo TikTok, 2-3 palavras por vez.
 
-    `video_path` (opcional, ver src/stock_video.py): filmagem REAL de banco
+    `video_path` (opcional, ver src/stock_media.py): filmagem REAL de banco
     de vídeo em vez de imagem estática — fica muito mais viva na tela que
     qualquer imagem gerada por IA com zoom simulado. Quando informado,
     `image_path` é ignorado; o clipe é cortado/loopado pra bater com a
@@ -233,7 +233,7 @@ def _overlay_filter_suffix(
     list_number: int | None, accent: str, caption: str | None,
 ) -> str:
     """Filtros compartilhados entre cena de imagem (zoompan) e cena de
-    vídeo real (src/stock_video.py) — legenda, selo de lista e marca
+    vídeo real (src/stock_media.py) — legenda, selo de lista e marca
     d'água não dependem de como o vídeo de fundo foi gerado."""
     suffix = ""
     if list_number is not None:
@@ -264,7 +264,7 @@ def _render_scene_from_video(
     caption: str | None,
 ) -> Path:
     """Filmagem REAL de banco de vídeo (Pexels) em vez de imagem estática
-    com zoom — ver src/stock_video.py. `-stream_loop -1` cobre o caso do
+    com zoom — ver src/stock_media.py. `-stream_loop -1` cobre o caso do
     clipe ser mais curto que a narração (comum: clipe de banco costuma ter
     5-20s); `-t duration` corta no tamanho certo tanto se loopou quanto se
     o clipe já era mais longo."""
