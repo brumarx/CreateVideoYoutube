@@ -154,7 +154,7 @@ TEMPLATE = """
       <form method="post">
         <input type="text" name="topic" placeholder="Tema (opcional — vazio sorteia da lista)"
                style="width:100%; box-sizing:border-box; padding:6px 8px; margin-bottom:8px; background:#0f1115; border:1px solid #262b35; border-radius:6px; color:#e6e6e6; font-size:12px;">
-        <button type="submit" formaction="{{ url_for('run_channel', channel=c.name) }}">Rodar short</button>
+        <button type="submit" formaction="{{ url_for('run_channel', channel=c.name, long=0) }}">Rodar short</button>
         <button type="submit" formaction="{{ url_for('run_channel', channel=c.name, long=1) }}" style="margin-left:6px">Rodar longo (16:9)</button>
       </form>
       {% endif %}
@@ -445,7 +445,13 @@ def run_channel(channel: str):
     if _pipeline_already_running():
         return redirect(url_for("index", busy=1))
 
-    long_form = request.args.get("long") == "1"
+    # 3 estados: "1" força --long, "0" força --no-long, ausente não passa
+    # flag nenhuma (run_pipeline.py resolve sozinho pelo daily_format do
+    # yaml — ver commit b1542ee). Sem isso, os botões "Rodar short" e
+    # "Fatos reais" desse painel ficavam sem efeito assim que um canal
+    # tinha daily_format: "long" salvo (bug real, achado pelo usuário):
+    # omitir a flag não força mais curto, só herda o padrão do yaml.
+    long_param = request.args.get("long")
     custom_topic = request.form.get("topic", "").strip()
     fact_label = request.form.get("fact_label", "").strip()
     # nice/ionice — mesmo tratamento que o cron já dá pro daily_run.py, pra
@@ -453,8 +459,16 @@ def run_channel(channel: str):
     # disparado manualmente pelo painel.
     cmd = ["nice", "-n", "19", "ionice", "-c", "3", sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel]
 
-    if long_form:
+    if fact_label:
+        # --fact-label só faz sentido no formato curto (só ali política busca
+        # fato real) — força curto, independente do que o botão pediu.
+        cmd.append("--no-long")
+    elif long_param == "1":
         cmd.append("--long")
+    elif long_param == "0":
+        cmd.append("--no-long")
+    # long_param ausente e sem fact_label: nem --long nem --no-long, deixa
+    # run_pipeline.py resolver pelo daily_format do yaml.
 
     if custom_topic:
         cmd += ["--topic", custom_topic]
