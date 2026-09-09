@@ -185,7 +185,7 @@ def run(
     concat_scenes(scene_videos, raw_video, crossfade=not long_form)
 
     final_video = work_dir / "final.mp4"
-    add_background_music(raw_video, final_video)
+    _, music_attribution = add_background_music(raw_video, final_video)
     update(job_id, status="rendered", video_path=str(final_video))
     log.info("[%s] vídeo pronto: %s", job_id, final_video)
 
@@ -219,6 +219,11 @@ def run(
         # link fixo pro site fonte dos dados — sempre gerado por código
         # (nunca pelo LLM), pra garantir que aponta pro lugar certo sempre.
         description += "\n\nFonte dos dados: https://brmx.org/politica/"
+
+    if music_attribution:
+        # a licença CC BY (assets/music/ATTRIBUTION.md) exige creditar a
+        # faixa na descrição de todo vídeo que a usa.
+        description += f"\n\nMúsica: {music_attribution}"
 
     # hashtags fixas do canal (config, não LLM) — 3-5 é o recomendado hoje
     # em dia (mais que isso o YouTube ignora todas); os 3 primeiros hashtags

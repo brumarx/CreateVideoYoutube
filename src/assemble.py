@@ -307,17 +307,33 @@ def concat_scenes(scene_paths: list[Path], output_path: Path, crossfade: bool = 
     return output_path
 
 
-def add_background_music(video_path: Path, output_path: Path, music_dir: Path = MUSIC_DIR) -> Path:
+# A licença CC BY 4.0 (ver assets/music/ATTRIBUTION.md) exige creditar a
+# faixa na descrição de todo vídeo que a usa — mapa fixo em vez de parsear o
+# markdown, pra nunca publicar sem atribuição por causa de um parse errado.
+TRACK_ATTRIBUTION = {
+    "morning.mp3": '"Morning" Kevin MacLeod (incompetech.com) — Licensed under Creative Commons: By Attribution 4.0 License',
+    "evening.mp3": '"Evening" Kevin MacLeod (incompetech.com) — Licensed under Creative Commons: By Attribution 4.0 License',
+    "deep_relaxation.mp3": '"Deep Relaxation" Kevin MacLeod (incompetech.com) — Licensed under Creative Commons: By Attribution 4.0 License',
+    "study_and_relax.mp3": '"Study And Relax" Kevin MacLeod (incompetech.com) — Licensed under Creative Commons: By Attribution 4.0 License',
+}
+
+
+def add_background_music(video_path: Path, output_path: Path, music_dir: Path = MUSIC_DIR) -> tuple[Path, str | None]:
     """Mistura uma faixa de música de fundo (grátis, CC BY — ver
     assets/music/ATTRIBUTION.md) em volume bem baixo sob a narração já
     existente no vídeo. Escolhe uma faixa aleatória e recorta pra duração
     do vídeo. Se não houver faixa nenhuma em `music_dir`, devolve o vídeo
-    original sem mexer (música é bônus, não bloqueia o pipeline)."""
+    original sem mexer (música é bônus, não bloqueia o pipeline).
+
+    Devolve também a linha de atribuição da faixa escolhida (None se não
+    usou música nenhuma), pra quem chamar colocar na descrição do vídeo —
+    a licença exige isso."""
     tracks = sorted(music_dir.glob("*.mp3"))
     if not tracks:
-        return video_path
+        return video_path, None
 
     track = random.choice(tracks)
+    attribution = TRACK_ATTRIBUTION.get(track.name)
     duration = _ffprobe_duration(video_path)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -335,4 +351,4 @@ def add_background_music(video_path: Path, output_path: Path, music_dir: Path = 
         ],
         check=True, capture_output=True, text=True,
     )
-    return output_path
+    return output_path, attribution
