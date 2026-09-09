@@ -75,6 +75,7 @@ def _prompt_for(
     scenes: int | None = None,
     min_minutes: float = 3,
     max_minutes: float = 6,
+    web_facts: list[dict] | None = None,
 ) -> str:
     facts_block = ""
     if facts:
@@ -84,6 +85,18 @@ extrapole, não cite nenhum nome/valor que não esteja aqui; atribua sempre à
 fonte, ex.: "segundo declaração ao TSE" / "segundo dados abertos da
 Câmara"):
 {json.dumps(facts, ensure_ascii=False, indent=2)}
+"""
+
+    web_facts_block = ""
+    if web_facts:
+        trechos = "\n\n".join(f"- [{f['titulo']}]({f['url']}): {f['trecho']}" for f in web_facts)
+        web_facts_block = f"""
+PESQUISA REAL NA INTERNET (o tema foi digitado por uma pessoa — use estes
+trechos como base factual; NÃO invente nome, número, data ou evento que
+não apareça aqui ou nos DADOS REAIS acima; se os trechos não bastarem pra
+cobrir o tema com segurança, foque no que ESTÁ confirmado neles em vez de
+completar com suposição):
+{trechos}
 """
 
     n_scenes = scenes or channel.scenes_per_video
@@ -97,7 +110,7 @@ Câmara"):
 Tópico do vídeo: {topic}
 Idioma: {channel.language}
 Número de cenas: {n_scenes}
-{facts_block}
+{facts_block}{web_facts_block}
 Gere um JSON com exatamente este formato:
 {{
   "title": "título chamativo, até 100 caracteres",
@@ -208,10 +221,15 @@ def generate_script(
     scenes: int | None = None,
     min_minutes: float = 3,
     max_minutes: float = 6,
+    web_facts: list[dict] | None = None,
 ) -> dict:
     """Gera o roteiro completo do vídeo. Se `facts` for passado (ex.: saída
     de politica_data.random_fact_set()), o roteiro é obrigado a usar só
-    esses dados reais em vez de a IA inventar números/nomes. `scenes`,
+    esses dados reais em vez de a IA inventar números/nomes. `web_facts`
+    (ex.: saída de web_search.search_topic_facts()) faz o mesmo papel pra
+    tema digitado por uma pessoa — ancora em trecho real com fonte, em vez
+    de só "conhecimento geral" do LLM (pode estar desatualizado/errado, e
+    inventar fato sobre pessoa real é o pior erro possível). `scenes`,
     `min_minutes` e `max_minutes` permitem gerar roteiros bem mais longos
     (formato documentário) sem mudar a config padrão do canal — ver
     ChannelConfig.short_min_minutes/long_min_minutes etc.
@@ -220,7 +238,7 @@ def generate_script(
     acontece)."""
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": _prompt_for(channel, topic, facts, scenes, min_minutes, max_minutes)},
+        {"role": "user", "content": _prompt_for(channel, topic, facts, scenes, min_minutes, max_minutes, web_facts)},
     ]
 
     required = {"title", "description", "tags", "scenes"}
