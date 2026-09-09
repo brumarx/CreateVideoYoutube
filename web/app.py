@@ -460,16 +460,14 @@ def run_channel(channel: str):
     # disparado manualmente pelo painel.
     cmd = ["nice", "-n", "19", "ionice", "-c", "3", sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel]
 
-    if fact_label:
-        # --fact-label só faz sentido no formato curto (só ali política busca
-        # fato real) — força curto, independente do que o botão pediu.
-        cmd.append("--no-long")
-    elif long_param == "1":
+    if long_param == "1":
         cmd.append("--long")
     elif long_param == "0":
         cmd.append("--no-long")
-    # long_param ausente e sem fact_label: nem --long nem --no-long, deixa
-    # run_pipeline.py resolver pelo daily_format do yaml.
+    # long_param ausente: nem --long nem --no-long, deixa run_pipeline.py
+    # resolver pelo daily_format do yaml. --fact-label funciona nos dois
+    # formatos agora (curto/longo é só formato e duração — não decide
+    # sozinho se o roteiro usa dado real do banco, ver run_pipeline.py).
 
     if custom_topic:
         cmd += ["--topic", custom_topic]
