@@ -277,6 +277,15 @@ def run(
     real_photo_url = None
     if facts and facts.get("dados"):
         real_photo_url = facts["dados"][0].get("foto_url") or None
+    elif channel_name == "politica" and user_provided_topic:
+        # tema digitado à mão (sem `facts` do banco) pode citar alguém que
+        # JÁ está cadastrado com foto oficial (deputado/senador/magistrado)
+        # mesmo sem ser o fato sorteado — ver politica_data.foto_pessoa_conhecida.
+        from src.politica_data import foto_pessoa_conhecida
+
+        real_photo_url = foto_pessoa_conhecida(topic)
+        if real_photo_url:
+            log.info("[%s] foto oficial encontrada no banco pra pessoa citada no tema", job_id)
     make_thumbnail(thumb_prompt, thumb_text, thumb_path, accent=channel.accent, real_photo_url=real_photo_url)
     update(job_id, thumbnail_path=str(thumb_path))
     log.info("[%s] thumbnail pronta: %s", job_id, thumb_path)
