@@ -154,6 +154,23 @@ def run(
     script = generate_script(channel, topic, facts, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes)
     update(job_id, status="scripted")
 
+    # CTA falado (like + se inscrever) — gerado por CÓDIGO, nunca pelo LLM,
+    # pra nunca faltar. Antes só existia um link na descrição, que quase
+    # ninguém lê assistindo; pedido em voz alta no fim converte muito mais.
+    # Cena extra depois das da LLM, passa pela mesma pipeline de
+    # renderização sem precisar de tratamento especial.
+    original_scene_count = len(script["scenes"])
+    script["scenes"].append({
+        "narration": f"Se esse vídeo te ajudou, deixa o like e se inscreve no {channel.channel_title} pra não perder o próximo.",
+        "image_prompt": (
+            "Close-up of a hand giving a thumbs up gesture, warm natural lighting, "
+            "genuine happy mood, no text, no words, no letters, no numbers, no logos, "
+            "no UI, no buttons, no watermark, no signs, no signage, no plaques, no "
+            "banners, no billboards"
+        ),
+        "stock_query": "thumbs up hand gesture",
+    })
+
     scene_videos = []
     scene_durations = []
     for i, scene in enumerate(script["scenes"]):
@@ -190,7 +207,9 @@ def run(
             image_path = work_dir / f"scene_{i}.png"
             image_path.write_bytes(image_bytes)
 
-        list_number = (list_count - i) if list_count else None
+        # i < original_scene_count: a cena de CTA (adicionada por código,
+        # depois das da LLM) nunca é uma das cenas numeradas da lista.
+        list_number = (list_count - i) if list_count and i < original_scene_count else None
         scene_video_path = work_dir / f"scene_{i}.mp4"
         try:
             render_scene(
