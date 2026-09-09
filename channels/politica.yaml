@@ -13,8 +13,8 @@ scenes_per_video: 7
 upload_privacy: "public"
 uploads_per_day: 1
 daily_format: "long"
-short_min_minutes: 3
-short_max_minutes: 6
+short_min_minutes: 1
+short_max_minutes: 2
 long_min_minutes: 6
 long_max_minutes: 8
 # formato curto ignora esta lista de temas — usa sempre um fato real
