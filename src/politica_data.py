@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import sqlite3
 from datetime import date
 from pathlib import Path
@@ -716,3 +717,40 @@ def random_fact_set(limit: int = 5) -> dict:
             return result
     # todos os 3 sorteados vieram vazios (raro) — cai pro mais confiável
     return {"tema": FACT_FETCHERS[0][0], "dados": FACT_FETCHERS[0][1](limit=limit)}
+
+
+_PROPER_NAME_RE = re.compile(
+    r"\b[A-ZÀ-Ý][a-zà-ÿ]+(?:\s+(?:de|da|do|dos|das|e)\s+[A-ZÀ-Ý][a-zà-ÿ]+|\s+[A-ZÀ-Ý][a-zà-ÿ]+)+\b"
+)
+
+# tabelas que já têm foto oficial cadastrada (mesmo padrão usado pelos
+# fetchers acima) — cobre deputado, senador e magistrado (STF/STJ/TCU).
+_TABELAS_COM_FOTO = ("deputados", "senadores", "magistrados")
+
+
+def foto_pessoa_conhecida(texto: str) -> str | None:
+    """Procura, dentro de `texto` (ex.: um tema digitado à mão no painel),
+    o nome de alguém já cadastrado no banco com foto oficial (deputado,
+    senador, ministro do STF/STJ/TCU) e devolve a URL da foto — ou None se
+    ninguém bater.
+
+    Motivação: quando o tema é sobre uma pessoa real nomeada e não vem do
+    banco (ver web_search.py), a thumbnail cairia pra imagem gerada por
+    IA, que a REGRA CRÍTICA em script_gen.py já proíbe de mostrar o rosto
+    dela — mas se a pessoa JÁ tem foto oficial cadastrada aqui (achado de
+    verdade: Alexandre de Moraes já está na tabela `magistrados`, com foto
+    do Wikimedia Commons), usar a foto real é seguro e muito melhor que
+    não ter foto nenhuma."""
+    candidatos = _PROPER_NAME_RE.findall(texto)
+    if not candidatos:
+        return None
+    with _connect() as conn:
+        for nome in candidatos:
+            for tabela in _TABELAS_COM_FOTO:
+                row = conn.execute(
+                    f"SELECT url_foto FROM {tabela} WHERE nome LIKE ? AND url_foto IS NOT NULL AND url_foto != '' LIMIT 1",
+                    (f"%{nome}%",),
+                ).fetchone()
+                if row and row[0]:
+                    return row[0]
+    return None

@@ -166,7 +166,19 @@ def _extract_json(raw: str) -> dict:
 # nome próprio (2+ palavras capitalizadas seguidas, ex.: "Kathrine
 # Switzer", "Nelson Mandela") e substitui qualquer image_prompt arriscado
 # por um genérico seguro, sem depender só do LLM ter seguido a instrução.
-_PROPER_NAME_RE = re.compile(r"\b[A-ZÀ-Ý][a-zà-ÿ]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ]+)+\b")
+#
+# Bug crítico achado de verdade (2026-09-09): a versão original da regex
+# não aceitava preposição minúscula no meio do nome ("de", "da", "do"),
+# então "Alexandre de Moraes" não batia NADA — só "Alexandre" e "Moraes"
+# isolados, cada um com 1 palavra só. Como o gate abaixo exige match pra
+# sequer rodar a sanitização, um tema só com esse nome (sem mais nenhum
+# nome próprio de 2+ palavras) passaria batido, sem proteção nenhuma.
+# Nomes brasileiros com preposição são extremamente comuns (Luiz Inácio
+# Lula da Silva, Maria de Fátima, etc.) — corrigido pra aceitar de/da/do/
+# dos/das/e no meio da sequência.
+_PROPER_NAME_RE = re.compile(
+    r"\b[A-ZÀ-Ý][a-zà-ÿ]+(?:\s+(?:de|da|do|dos|das|e)\s+[A-ZÀ-Ý][a-zà-ÿ]+|\s+[A-ZÀ-Ý][a-zà-ÿ]+)+\b"
+)
 _SAFE_NO_FACE_RE = re.compile(
     r"\bno faces? (visible|shown)\b|\bface (is|are) not (shown|visible)\b|"
     r"\bface (hidden|obscured|not shown|not visible)\b|\bwithout (a|the|any) face\b|"
