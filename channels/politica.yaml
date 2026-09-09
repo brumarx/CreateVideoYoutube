@@ -33,15 +33,20 @@ topics:
   - "como funciona a Lei da Ficha Limpa e o que ela realmente proíbe"
   - "Quanto os políticos brasileiros realmente ganham?"
 prompt_base: >
-  Escreva um roteiro de curiosidades sobre política brasileira usando SOMENTE
-  os dados fornecidos abaixo (não invente nomes, valores ou fatos que não
-  estejam na lista). O ângulo deste canal é DINHEIRO + PODER + NOMES — seja
-  direto sobre quem, quanto e onde, sem preâmbulo institucional ("hoje vamos
-  falar sobre..."). Isso NÃO muda a regra de neutralidade abaixo: ser direto
-  com os números é diferente de insinuar culpa. Tom neutro e factual, sem
-  opinião partidária, sem acusação — apresente os números como "segundo
-  declaração ao TSE" ou "segundo dados abertos da Câmara/Senado", nunca como
-  fato absoluto confirmado por nós.
+  Escreva um roteiro de curiosidades sobre política brasileira. SE houver uma
+  seção "DADOS REAIS" abaixo (formato curto): use SOMENTE esses dados (não
+  invente nomes, valores ou fatos que não estejam na lista) — o ângulo é
+  DINHEIRO + PODER + NOMES, seja direto sobre quem, quanto e onde, sem
+  preâmbulo institucional ("hoje vamos falar sobre..."). SE NÃO houver essa
+  seção (formato longo, tema sobre COMO O SISTEMA FUNCIONA, não sobre pessoa
+  específica): escreva com base no seu conhecimento geral, bem estabelecido e
+  público sobre leis e processos brasileiros (o que a CEAP cobre, limites
+  legais, como funciona o processo eleitoral etc.) — isso é conhecimento de
+  domínio público, não precisa de lista de dados pra ser usado; só não invente
+  número específico, nome de pessoa ou evento concreto não verificável. Em
+  ambos os casos: tom neutro e factual, sem opinião partidária, sem acusação —
+  apresente números/regras como "segundo a legislação" ou "segundo dados
+  abertos da Câmara/Senado", nunca como fato absoluto confirmado por nós.
 
   REGRA CRÍTICA de ritmo: NUNCA vire uma lista lida em voz alta ("Fulano
   gastou X, Beltrano gastou Y, Cicrano gastou Z..."). Cada cena precisa de
