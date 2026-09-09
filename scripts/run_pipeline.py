@@ -120,7 +120,12 @@ def run(
     tts_voice = random.choices(voices, weights=weights, k=1)[0]
 
     facts = None
-    if channel_name == "politica" and not long_form:
+    # curto/longo é só formato e duração — não decide sozinho se usa dado
+    # real do banco. No curto, SEMPRE usa (random_fact_set/pick_fact_set);
+    # no longo, só usa quando fact_label foi passado explicitamente (senão
+    # segue o design original: tema genérico de "como o sistema funciona",
+    # sem grounding de um fato só pra sustentar 15-20min).
+    if channel_name == "politica" and (not long_form or fact_label):
         from src.politica_data import pick_fact_set, random_fact_set
 
         # --fact-label força um tema específico (teste manual/painel) em vez
