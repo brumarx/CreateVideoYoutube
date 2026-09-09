@@ -151,9 +151,10 @@ TEMPLATE = """
       {% endif %}
 
       {% if c.has_token %}
-      <form method="post">
+      <form method="post" style="margin-top:12px; padding:8px; border:1px solid #2a7a4a; border-radius:8px; background:#0f1a13;">
+        <label style="display:block; font-size:11px; color:#5fd88a; margin-bottom:4px; font-weight:600;">▶ RODAR AGORA (tema digitado aqui é buscado na internet antes de escrever)</label>
         <input type="text" name="topic" placeholder="Tema (opcional — vazio sorteia da lista)"
-               style="width:100%; box-sizing:border-box; padding:6px 8px; margin-bottom:8px; background:#0f1115; border:1px solid #262b35; border-radius:6px; color:#e6e6e6; font-size:12px;">
+               style="width:100%; box-sizing:border-box; padding:6px 8px; margin-bottom:8px; background:#0f1115; border:1px solid #2a7a4a; border-radius:6px; color:#e6e6e6; font-size:12px;">
         <button type="submit" formaction="{{ url_for('run_channel', channel=c.name, long=0) }}">Rodar short</button>
         <button type="submit" formaction="{{ url_for('run_channel', channel=c.name, long=1) }}" style="margin-left:6px">Rodar longo (16:9)</button>
       </form>
