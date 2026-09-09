@@ -26,6 +26,12 @@ log = logging.getLogger("thumbnail")
 THUMB_WIDTH = 1280
 THUMB_HEIGHT = 720
 
+# Wikimedia Commons/Wikipedia bloqueiam requisição sem User-Agent
+# identificável (política deles: meta.wikimedia.org/wiki/User-Agent_policy)
+# — achado de verdade: foto oficial de Flávio Dino (fonte real cadastrada
+# no banco) devolveu 403 sem isso, mesmo a URL estando certa.
+_HTTP_HEADERS = {"User-Agent": "YoutubeAIPipeline/1.0 (https://github.com/brumarx/CreateVideoYoutube)"}
+
 STROKE_WIDTH = 8  # contorno preto grosso — dá contraste em cima de QUALQUER imagem
 GRADIENT_RATIO = 0.45  # gradiente escuro nos últimos 45% da altura, por trás do texto
 
@@ -80,7 +86,7 @@ def _hex_to_rgb(hexcolor: str) -> tuple[int, int, int]:
 
 def _fetch_real_photo(url: str) -> Image.Image | None:
     try:
-        resp = httpx.get(url, timeout=20, follow_redirects=True)
+        resp = httpx.get(url, timeout=20, follow_redirects=True, headers=_HTTP_HEADERS)
         resp.raise_for_status()
         return Image.open(io.BytesIO(resp.content)).convert("RGB")
     except Exception as exc:
