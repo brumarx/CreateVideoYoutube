@@ -95,6 +95,11 @@ class ChannelConfig:
     # de retenção pra canal sem apresentador (maioria assiste mudo), mas
     # dá pra desligar por canal se algum estilo não combinar.
     captions: bool
+    # "short" (vertical, Shorts) ou "long" (16:9, documentário) — fonte
+    # única de verdade pro formato do dia, editável no painel. run_pipeline.py
+    # só usa outra coisa se --long/--no-long for passado explicitamente na
+    # linha de comando (teste manual pontual).
+    daily_format: str
 
     @staticmethod
     def load(name: str) -> "ChannelConfig":
@@ -126,4 +131,5 @@ class ChannelConfig:
             youtube_handle=data.get("youtube_handle", ""),
             channel_title=data.get("channel_title", name),
             captions=data.get("captions", True),
+            daily_format=data.get("daily_format", "short"),
         )

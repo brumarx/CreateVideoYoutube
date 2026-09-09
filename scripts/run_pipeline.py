@@ -98,10 +98,15 @@ def run(
     topic: str | None,
     dry_run: bool,
     publish_at: str | None,
-    long_form: bool = False,
+    long_form: bool | None = None,
     fact_label: str | None = None,
 ) -> None:
     channel = ChannelConfig.load(channel_name)
+    # None = respeita o que está configurado no painel (channels/<nome>.yaml
+    # -> daily_format); só quem passar --long/--no-long explícito na linha de
+    # comando força um formato pontual diferente do que a UI tem salvo.
+    if long_form is None:
+        long_form = channel.daily_format == "long"
     # 1 voz sorteada por vídeo (não por cena — narrador tem que ser
     # consistente do início ao fim), conforme os pesos configurados no
     # painel. Antes era sempre a mesma voz fixa por canal.
@@ -262,7 +267,12 @@ def main() -> None:
     parser.add_argument("--topic", default=None, help="obrigatório, exceto pro canal 'politica' no curto (usa dado real aleatório) ou quando channels/<nome>.yaml tem topics (escolhe sozinho)")
     parser.add_argument("--dry-run", action="store_true", help="gera tudo mas não publica")
     parser.add_argument("--publish-at", default=None, help="ISO 8601 UTC, ex: 2026-09-08T12:00:00Z")
-    parser.add_argument("--long", action="store_true", help="formato longo/documentário (16:9, ~15-20min, lugar real específico)")
+    parser.add_argument(
+        "--long", action=argparse.BooleanOptionalAction, default=None,
+        help="formato longo/documentário (16:9). Sem essa flag, usa o que estiver "
+             "salvo em channels/<nome>.yaml -> daily_format (editável no painel). "
+             "--no-long força o formato curto mesmo que o painel esteja em 'long'.",
+    )
     parser.add_argument("--fact-label", default=None, help="só canal 'politica' no curto: força um tema específico de src.politica_data.FACT_FETCHERS em vez de sortear")
     args = parser.parse_args()
 

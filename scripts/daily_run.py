@@ -36,9 +36,7 @@ log = logging.getLogger("daily_run")
 
 def run_channel(channel_name: str, cfg: dict) -> None:
     uploads_per_day = cfg.get("uploads_per_day", 1)
-    # curto (padrão) ou longo — configurável por canal em channels/<nome>.yaml
-    # (daily_format), editável no painel web.
-    long_form = cfg.get("daily_format", "short") == "long"
+    daily_format = cfg.get("daily_format", "short")
     token_file = ROOT / "credentials" / f"token_{channel_name}.json"
 
     if not token_file.exists():
@@ -46,16 +44,17 @@ def run_channel(channel_name: str, cfg: dict) -> None:
         return
 
     for i in range(uploads_per_day):
+        # sem --long/--no-long: run_pipeline.py lê channels/<nome>.yaml ->
+        # daily_format sozinho (fonte única de verdade, editável no painel —
+        # não duplica a decisão aqui pra nunca dessincronizar da UI).
+        # sem --topic: run_pipeline.py escolhe sozinho da fila única (ou
+        # fato real, pro politica no formato curto).
         cmd = [
             sys.executable, str(ROOT / "scripts" / "run_pipeline.py"),
             "--channel", channel_name,
         ]
-        if long_form:
-            cmd.append("--long")
-        # sem --topic: run_pipeline.py escolhe sozinho da fila única (ou
-        # fato real, pro politica no formato curto).
 
-        log.info("[%s] upload %d/%d (%s)", channel_name, i + 1, uploads_per_day, "longo" if long_form else "curto")
+        log.info("[%s] upload %d/%d (%s)", channel_name, i + 1, uploads_per_day, daily_format)
         result = subprocess.run(cmd, cwd=ROOT)
         if result.returncode != 0:
             log.error("[%s] pipeline falhou (exit %d) — seguindo pros próximos", channel_name, result.returncode)
