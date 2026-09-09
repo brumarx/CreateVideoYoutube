@@ -149,7 +149,7 @@ def _ffprobe_duration(path: Path) -> float:
 
 
 def render_scene(
-    image_path: Path,
+    image_path: Path | None,
     audio_path: Path,
     output_path: Path,
     width: int = VIDEO_WIDTH,
@@ -158,6 +158,7 @@ def render_scene(
     list_number: int | None = None,
     accent: str = "#ffffff",
     caption: str | None = None,
+    video_path: Path | None = None,
 ) -> Path:
     """Renderiza uma cena: zoom lento na imagem, sincronizado com a duração
     do áudio. `width`/`height` permitem vertical (Shorts, padrão) ou
@@ -167,7 +168,15 @@ def render_scene(
     conteúdo sem dar trabalho nenhum a mais pra quem assiste. `list_number`
     (vídeo de lista, ex.: "10 fatos...") grava um selo de contagem
     regressiva no canto oposto ao watermark. `caption` (texto da narração
-    dessa cena) grava legenda estilo TikTok, 2-3 palavras por vez."""
+    dessa cena) grava legenda estilo TikTok, 2-3 palavras por vez.
+
+    `video_path` (opcional, ver src/stock_video.py): filmagem REAL de banco
+    de vídeo em vez de imagem estática — fica muito mais viva na tela que
+    qualquer imagem gerada por IA com zoom simulado. Quando informado,
+    `image_path` é ignorado; o clipe é cortado/loopado pra bater com a
+    duração do áudio (looping cobre clipe mais curto que a narração)."""
+    if video_path is not None:
+        return _render_scene_from_video(video_path, audio_path, output_path, width, height, watermark, list_number, accent, caption)
     duration = _ffprobe_duration(audio_path)
     # 24 (não 30) fps — 20% menos frames pra codificar em CPU fraca (Pi 5,
     # sem encoder de vídeo por hardware nesse modelo) sem ficar perceptível
@@ -199,19 +208,7 @@ def render_scene(
         f"crop={upscale_w}:{upscale_h},"
         f"zoompan=z='{zoom_expr}':d={frames}:s={width}x{height}:fps={fps}"
     )
-    if list_number is not None:
-        filter_complex += _list_number_filter(list_number, height, accent)
-    if caption:
-        filter_complex += _caption_filter(caption, duration, width, height)
-    if watermark:
-        font_size = max(width, height) // 45
-        margin = font_size
-        filter_complex += (
-            f",drawtext=fontfile='{WATERMARK_FONT}':text='{_escape_drawtext(watermark)}':"
-            f"fontsize={font_size}:fontcolor=white@0.55:"
-            f"borderw=2:bordercolor=black@0.4:"
-            f"x=w-text_w-{margin}:y=h-text_h-{margin}"
-        )
+    filter_complex += _overlay_filter_suffix(duration, width, height, watermark, list_number, accent, caption)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
@@ -220,6 +217,70 @@ def render_scene(
             "-loop", "1", "-i", str(image_path),
             "-i", str(audio_path),
             "-filter:v", filter_complex,
+            "-c:v", "libx264", "-preset", "veryfast", "-threads", "2", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "192k",
+            "-t", str(duration),
+            "-shortest",
+            str(output_path),
+        ],
+        check=True, capture_output=True, text=True,
+    )
+    return output_path
+
+
+def _overlay_filter_suffix(
+    duration: float, width: int, height: int, watermark: str | None,
+    list_number: int | None, accent: str, caption: str | None,
+) -> str:
+    """Filtros compartilhados entre cena de imagem (zoompan) e cena de
+    vídeo real (src/stock_video.py) — legenda, selo de lista e marca
+    d'água não dependem de como o vídeo de fundo foi gerado."""
+    suffix = ""
+    if list_number is not None:
+        suffix += _list_number_filter(list_number, height, accent)
+    if caption:
+        suffix += _caption_filter(caption, duration, width, height)
+    if watermark:
+        font_size = max(width, height) // 45
+        margin = font_size
+        suffix += (
+            f",drawtext=fontfile='{WATERMARK_FONT}':text='{_escape_drawtext(watermark)}':"
+            f"fontsize={font_size}:fontcolor=white@0.55:"
+            f"borderw=2:bordercolor=black@0.4:"
+            f"x=w-text_w-{margin}:y=h-text_h-{margin}"
+        )
+    return suffix
+
+
+def _render_scene_from_video(
+    video_path: Path,
+    audio_path: Path,
+    output_path: Path,
+    width: int,
+    height: int,
+    watermark: str | None,
+    list_number: int | None,
+    accent: str,
+    caption: str | None,
+) -> Path:
+    """Filmagem REAL de banco de vídeo (Pexels) em vez de imagem estática
+    com zoom — ver src/stock_video.py. `-stream_loop -1` cobre o caso do
+    clipe ser mais curto que a narração (comum: clipe de banco costuma ter
+    5-20s); `-t duration` corta no tamanho certo tanto se loopou quanto se
+    o clipe já era mais longo."""
+    duration = _ffprobe_duration(audio_path)
+    fps = 24
+    filter_v = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps={fps}"
+    filter_v += _overlay_filter_suffix(duration, width, height, watermark, list_number, accent, caption)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-stream_loop", "-1", "-i", str(video_path),
+            "-i", str(audio_path),
+            "-map", "0:v", "-map", "1:a",
+            "-filter:v", filter_v,
             "-c:v", "libx264", "-preset", "veryfast", "-threads", "2", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "192k",
             "-t", str(duration),
