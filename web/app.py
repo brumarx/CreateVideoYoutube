@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.orchestrator import recent_jobs  # noqa: E402
+from src.politica_data import FACT_FETCHERS  # noqa: E402
 from src.topics import STATE_FILE as USED_TOPICS_FILE  # noqa: E402
 
 app = Flask(__name__)
@@ -136,6 +137,19 @@ TEMPLATE = """
         {% endif %}
       </details>
 
+      {% if c.fact_labels %}
+      <details class="topics">
+        <summary>Fatos reais do banco de dados ({{ c.fact_labels|length }} tipos — sorteado no formato curto)</summary>
+        <div style="font-size:11px; color:#7d838c; margin: 4px 0 8px;">estes não são editáveis (vêm de src/politica_data.py, não do yaml) — escolha um pra forçar esse fato específico numa rodada manual, em vez de sortear.</div>
+        {% for label in c.fact_labels %}
+        <form method="post" action="{{ url_for('run_channel', channel=c.name) }}" style="margin-bottom:4px;">
+          <input type="hidden" name="fact_label" value="{{ label }}">
+          <button type="submit" style="width:100%; text-align:left; padding:4px 6px; font-size:12px;">{{ label }}</button>
+        </form>
+        {% endfor %}
+      </details>
+      {% endif %}
+
       {% if c.has_token %}
       <form method="post">
         <input type="text" name="topic" placeholder="Tema (opcional — vazio sorteia da lista)"
@@ -200,6 +214,11 @@ def _load_channels() -> list[dict]:
                 "voice_antonio": cfg.get("tts_voice_weights", {}).get("pt-BR-AntonioNeural", 50),
                 "voice_francisca": cfg.get("tts_voice_weights", {}).get("pt-BR-FranciscaNeural", 30),
                 "voice_thalita": cfg.get("tts_voice_weights", {}).get("pt-BR-ThalitaMultilingualNeural", 20),
+                # política no formato curto ignora `topics` (lista acima) e
+                # sorteia um destes ~20 fatos reais do banco de transparência
+                # (ver src/politica_data.py) — sem isso listado aqui, a fila
+                # real de temas do canal fica invisível na UI.
+                "fact_labels": [label for label, *_ in FACT_FETCHERS] if name == "politica" else [],
             }
         )
     return channels
@@ -428,6 +447,7 @@ def run_channel(channel: str):
 
     long_form = request.args.get("long") == "1"
     custom_topic = request.form.get("topic", "").strip()
+    fact_label = request.form.get("fact_label", "").strip()
     # nice/ionice — mesmo tratamento que o cron já dá pro daily_run.py, pra
     # não competir por CPU/IO com os outros serviços da máquina quando
     # disparado manualmente pelo painel.
@@ -441,6 +461,11 @@ def run_channel(channel: str):
     # sem tema digitado: run_pipeline.py escolhe sozinho da fila única do
     # canal (nunca repete — ver src/topics.py), ou usa fato real pro
     # politica no formato curto.
+
+    if fact_label:
+        # força um fato específico de src.politica_data.FACT_FETCHERS em vez
+        # de sortear — botão "Fatos reais do banco de dados" no painel.
+        cmd += ["--fact-label", fact_label]
 
     subprocess.Popen(cmd, cwd=ROOT)
     return redirect(url_for("index"))
