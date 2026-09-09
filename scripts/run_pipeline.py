@@ -103,6 +103,11 @@ def run(
     fact_label: str | None = None,
 ) -> None:
     channel = ChannelConfig.load(channel_name)
+    # guardado ANTES de qualquer auto-preenchimento abaixo — só um tema
+    # digitado por uma pessoa de verdade deve disparar busca na internet
+    # (ver web_facts mais abaixo); tema vindo da fila/banco interno já tem
+    # grounding próprio, buscar de novo seria redundante.
+    user_provided_topic = topic is not None
     # None = respeita o que está configurado no painel (channels/<nome>.yaml
     # -> daily_format); só quem passar --long/--no-long explícito na linha de
     # comando força um formato pontual diferente do que a UI tem salvo.
@@ -150,8 +155,27 @@ def run(
     work_dir = Path(__file__).resolve().parent.parent / "output" / f"job_{job_id}"
     work_dir.mkdir(parents=True, exist_ok=True)
 
+    # Tema digitado por uma pessoa (não vindo da fila nem do banco interno)
+    # pode ser sobre qualquer coisa — inclusive um evento real específico ou
+    # pessoa real nomeada, onde "conhecimento geral" do LLM não é confiável
+    # o bastante (pode estar desatualizado/errado). Busca fato real com
+    # fonte antes de escrever, em vez de recusar o tema ou arriscar
+    # inventar (ver src/web_search.py). Sem TAVILY_API_KEYS configurada,
+    # cai pro comportamento antigo sem bloquear nada.
+    web_facts = None
+    if user_provided_topic and facts is None:
+        from src.web_search import search_topic_facts
+
+        web_facts = search_topic_facts(topic)
+        if web_facts:
+            log.info("[%s] tema digitado ancorado com %d fonte(s) da internet", job_id, len(web_facts))
+        else:
+            log.info("[%s] tema digitado sem busca na internet (sem chave configurada ou sem resultado)", job_id)
+
     log.info("[%s] gerando roteiro (%s) para: %s (voz: %s)", job_id, "longo" if long_form else "curto", topic, tts_voice)
-    script = generate_script(channel, topic, facts, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes)
+    script = generate_script(
+        channel, topic, facts, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes, web_facts=web_facts,
+    )
     update(job_id, status="scripted")
 
     # CTA falado (like + se inscrever) — gerado por CÓDIGO, nunca pelo LLM,
@@ -270,6 +294,13 @@ def run(
         # link fixo pro site fonte dos dados — sempre gerado por código
         # (nunca pelo LLM), pra garantir que aponta pro lugar certo sempre.
         description += "\n\nFonte dos dados: https://brmx.org/politica/"
+
+    if web_facts:
+        # transparência: tema digitado por pessoa foi ancorado em busca
+        # real — lista as fontes usadas (gerado por código, sempre as
+        # URLs reais devolvidas pela busca, nunca inventado pelo LLM).
+        fontes = "\n".join(f"- {f['titulo']}: {f['url']}" for f in web_facts)
+        description += f"\n\nFontes consultadas:\n{fontes}"
 
     if music_attribution:
         # a licença CC BY (assets/music/ATTRIBUTION.md) exige creditar a
