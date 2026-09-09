@@ -37,6 +37,7 @@ class LLMKeys:
 FREE_TTS_VOICES = ("pt-BR-AntonioNeural", "pt-BR-FranciscaNeural", "pt-BR-ThalitaMultilingualNeural")
 
 POLLINATIONS_API_KEYS = _keys("POLLINATIONS_API_KEYS")
+PEXELS_API_KEYS = _keys("PEXELS_API_KEYS")
 YOUTUBE_CLIENT_SECRET_FILE = ROOT / os.getenv(
     "YOUTUBE_CLIENT_SECRET_FILE", "credentials/client_secret.json"
 )

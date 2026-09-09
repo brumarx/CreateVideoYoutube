@@ -30,6 +30,7 @@ from src.assemble import _ffprobe_duration, add_background_music, concat_scenes,
 from src.config import ChannelConfig
 from src.orchestrator import enqueue, update
 from src.script_gen import generate_script
+from src.stock_video import search_stock_clip
 from src.thumbnail import make_thumbnail
 from src.topics import pick_topic
 from src.tts import narrate
@@ -161,11 +162,20 @@ def run(
         narrate(scene["narration"], audio_path, voice=tts_voice)
         scene_durations.append(_ffprobe_duration(audio_path))
 
-        # pede a imagem já no formato final do vídeo — pedir quadrado e
-        # esticar depois no ffmpeg distorcia e borrava tudo
-        image_bytes = generate_image(scene["image_prompt"], width=width, height=height)
-        image_path = work_dir / f"scene_{i}.png"
-        image_path.write_bytes(image_bytes)
+        # filmagem REAL de banco de vídeo (Pexels) sempre que o LLM achar
+        # que a cena existe filmada de verdade (stock_query) — fica muito
+        # mais viva na tela que imagem estática com zoom. Sem chave
+        # configurada, sem resultado, ou stock_query nulo, cai pro caminho
+        # antigo (imagem gerada por IA) automaticamente.
+        stock_clip_path = search_stock_clip(scene.get("stock_query") or "", width, height)
+
+        image_path = None
+        if stock_clip_path is None:
+            # pede a imagem já no formato final do vídeo — pedir quadrado e
+            # esticar depois no ffmpeg distorcia e borrava tudo
+            image_bytes = generate_image(scene["image_prompt"], width=width, height=height)
+            image_path = work_dir / f"scene_{i}.png"
+            image_path.write_bytes(image_bytes)
 
         list_number = (list_count - i) if list_count else None
         scene_video_path = work_dir / f"scene_{i}.mp4"
@@ -173,7 +183,10 @@ def run(
             image_path, audio_path, scene_video_path, width=width, height=height,
             watermark=channel.watermark, list_number=list_number, accent=channel.accent,
             caption=scene["narration"] if channel.captions else None,
+            video_path=stock_clip_path,
         )
+        if stock_clip_path is not None:
+            stock_clip_path.unlink(missing_ok=True)
         scene_videos.append(scene_video_path)
 
     update(job_id, status="narrated")

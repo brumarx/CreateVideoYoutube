@@ -106,7 +106,7 @@ Gere um JSON com exatamente este formato:
   "description": "descrição para o YouTube, 2-3 parágrafos, com contexto e call-to-action",
   "tags": ["tag1", "tag2", "..."],
   "scenes": [
-    {{"narration": "texto que o narrador vai falar nesta cena", "image_prompt": "prompt em inglês, só cenário/objetos/atmosfera — SEM texto, palavras, logos, botões ou UI"}}
+    {{"narration": "texto que o narrador vai falar nesta cena", "image_prompt": "prompt em inglês, só cenário/objetos/atmosfera — SEM texto, palavras, logos, botões ou UI", "stock_query": "2 a 4 palavras em inglês pra buscar filmagem REAL de banco de vídeo que combine com esta cena (ex.: 'zebra grazing field', 'train bridge aerial', 'stock market trading'). Só faz sentido se o que a cena descreve existe filmado de verdade (natureza, cidade, objeto genérico, animal, paisagem) — se for algo abstrato/conceitual que só dá pra ilustrar (um conceito, um gráfico, uma situação muito específica da história), deixe null. NUNCA inclua nome de pessoa real aqui."}}
   ]
 }}
 
@@ -120,6 +120,14 @@ tiver conteúdo real suficiente pra encher uma cena no tamanho pedido,
 aprofunde com mais detalhes concretos (contexto, números, comparações,
 consequências) em vez de encurtar — nunca encher linguiça repetindo a
 mesma ideia com palavras diferentes só pra bater a contagem.
+
+REGRA CRÍTICA sobre "stock_query": priorize filmagem REAL sobre imagem
+gerada sempre que o assunto existe filmado de verdade — filmagem real de
+banco de vídeo (animal, paisagem, cidade, objeto, natureza, situação do
+dia a dia) fica muito mais viva na tela que qualquer imagem estática
+gerada por IA com zoom. Só deixe null quando for algo que realmente não
+existe filmado (um conceito abstrato, uma cena muito específica da
+história que não tem como achar pronta).
 
 REGRA CRÍTICA sobre "thumbnail_text": thumbnail boa hoje em dia NÃO é o
 título inteiro colado na imagem — é uma frase mínima (2 a 4 palavras) que
@@ -181,6 +189,11 @@ def _sanitize_person_images(topic: str, script: dict) -> dict:
         if _is_risky_face_prompt(prompt):
             log.warning("cena %d: image_prompt arriscado (rosto de pessoa real), substituindo: %s", i, prompt[:150])
             scene["image_prompt"] = _SAFE_FALLBACK_IMAGE_PROMPT
+            # zera stock_query também — nunca busca filmagem real usando o
+            # nome da pessoa (a busca cairia numa foto/vídeo de banco que
+            # não é dela, mas o contexto arriscado já mostra que o LLM
+            # tratou essa cena como sendo sobre ela especificamente).
+            scene["stock_query"] = None
     thumb_prompt = script.get("thumbnail_image_prompt")
     if _is_risky_face_prompt(thumb_prompt or ""):
         log.warning("thumbnail_image_prompt arriscado (rosto de pessoa real), substituindo: %s", (thumb_prompt or "")[:150])
