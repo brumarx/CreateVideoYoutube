@@ -167,9 +167,17 @@ def run(
         # 2) foto REAL (Pexels) — pra quando o assunto não tem clipe mas
         #    tem foto (ex.: objeto específico, evento, foto histórica);
         # 3) imagem gerada por IA — só quando nada real foi encontrado.
-        # Sem PEXELS_API_KEYS configurada, ou sem stock_query, ou sem
-        # resultado, cada nível cai pro próximo automaticamente.
-        stock_query = scene.get("stock_query") or ""
+        # Sem PEXELS_API_KEYS configurada, ou sem resultado, cada nível cai
+        # pro próximo automaticamente.
+        #
+        # stock_query é preenchido pelo LLM, mas a cascata de modelos
+        # gratuitos às vezes cai num modelo mais fraco que ignora campo
+        # extra do schema (visto de verdade: roteiro veio sem stock_query
+        # nenhum, mesmo num tema perfeito pra vídeo real). Vídeo real é
+        # prioridade — em vez de desistir e ir direto pra IA só porque o
+        # LLM esqueceu o campo, usa as primeiras palavras do image_prompt
+        # (esse sim sempre vem preenchido) como busca de reserva.
+        stock_query = scene.get("stock_query") or " ".join(scene["image_prompt"].split()[:8])
         stock_clip_path = search_stock_clip(stock_query, width, height)
 
         image_path = None
