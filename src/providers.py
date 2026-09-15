@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Callable
 
 import httpx
 
@@ -192,20 +193,41 @@ def _call_gemini(api_key: str, model: str, messages: list[dict], max_tokens: int
         return None
 
 
-def complete(messages: list[dict], keys: LLMKeys | None = None, max_tokens: int = 4096) -> str:
+def complete(
+    messages: list[dict],
+    keys: LLMKeys | None = None,
+    max_tokens: int = 4096,
+    validate: Callable[[str], bool] | None = None,
+) -> str:
     """Roda a cascata de provedores (com rodízio de chaves e descoberta
     dinâmica de modelo dentro de cada um) e devolve a primeira resposta não
-    vazia.
+    vazia (e, se `validate` for passado, que também passe nele).
+
+    `validate` existe pra nunca aceitar resposta estruturalmente quebrada
+    (ex.: roteiro sem JSON válido, tema vazado com raciocínio) só porque foi
+    a primeira a vir — sem isso, um modelo grátis ruim/instável que sempre
+    "responde" algo (só que garbage) fazia a cascata parar nele igual toda
+    vez, e quem chama (script_gen, topics) gastava as próprias tentativas
+    de retry inteiras batendo nesse mesmo modelo quebrado em vez de mudar
+    de provedor/modelo (bug real: 3 tentativas seguidas do roteiro vieram
+    do mesmo modelo repetindo "{" sem fechar o JSON). Com `validate`, um
+    resultado que falha nele é tratado como se o modelo não tivesse
+    respondido — a cascata segue pro próximo modelo/chave/provedor na hora,
+    dentro da MESMA chamada.
 
     `max_tokens` importa MUITO pra roteiros longos: sem limite explícito
     cada provedor usa seu próprio default (baixo), e a resposta trunca no
     meio do JSON — foi exatamente o que quebrou o roteiro de formato longo
     (31 cenas) antes desse parâmetro existir.
 
-    Levanta RuntimeError se nenhum provedor configurado conseguir responder.
+    Levanta RuntimeError se nenhum provedor configurado conseguir responder
+    (ou, com `validate`, se nenhum devolver algo que passe na validação).
     """
     if keys is None:
         keys = LLMKeys()
+
+    def _ok(result: str | None) -> bool:
+        return bool(result) and (validate is None or validate(result))
 
     for name, key_attr, chat_endpoint, models_endpoint in OPENAI_COMPAT_PROVIDERS:
         provider_keys = getattr(keys, key_attr)
@@ -218,9 +240,11 @@ def complete(messages: list[dict], keys: LLMKeys | None = None, max_tokens: int 
                 continue
             for model in models:
                 result, status = _call_openai_compat(chat_endpoint, api_key, model, messages, max_tokens)
-                if result:
+                if _ok(result):
                     log.info("resposta via %s/%s", name, model)
-                    return result
+                    return result  # type: ignore[return-value]
+                if result and validate is not None:
+                    log.warning("resposta de %s/%s não passou na validação, tentando próximo modelo", name, model)
                 if status in (401, 403):
                     rotator.ban(api_key)
                     break  # próxima chave, não adianta repetir modelos com a mesma
@@ -231,12 +255,14 @@ def complete(messages: list[dict], keys: LLMKeys | None = None, max_tokens: int 
             models = _fetch_gemini_models(api_key)
             for model in models:
                 result = _call_gemini(api_key, model, messages, max_tokens)
-                if result:
+                if _ok(result):
                     log.info("resposta via gemini/%s", model)
-                    return result
+                    return result  # type: ignore[return-value]
+                if result and validate is not None:
+                    log.warning("resposta de gemini/%s não passou na validação, tentando próximo modelo", model)
 
     raise RuntimeError(
-        "Nenhum provedor LLM respondeu. Confira as chaves no .env "
-        "(XAI_API_KEYS, GROQ_API_KEYS, CEREBRAS_API_KEYS, OPENROUTER_API_KEYS, "
-        "MISTRAL_API_KEYS, GEMINI_API_KEYS)."
+        "Nenhum provedor LLM respondeu (ou nenhuma resposta passou na validação). "
+        "Confira as chaves no .env (XAI_API_KEYS, GROQ_API_KEYS, CEREBRAS_API_KEYS, "
+        "OPENROUTER_API_KEYS, MISTRAL_API_KEYS, GEMINI_API_KEYS)."
     )

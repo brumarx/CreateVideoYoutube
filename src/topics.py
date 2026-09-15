@@ -70,6 +70,17 @@ def _is_valid_topic(topic: str) -> bool:
     return len(topic) >= _MIN_TOPIC_LEN and not _GARBAGE_RE.search(topic)
 
 
+def _first_line(raw: str) -> str:
+    # às vezes o modelo devolve mais de uma linha mesmo pedindo pra não —
+    # fica só com a primeira linha não vazia.
+    cleaned = raw.strip().strip('"').strip("-").strip()
+    for line in cleaned.splitlines():
+        line = line.strip()
+        if line:
+            return line
+    return cleaned
+
+
 def _generate_new_topic(niche: str, used: list[str]) -> str:
     used_block = "\n".join(f"- {t}" for t in used) or "(nenhum ainda)"
     prompt = (
@@ -85,31 +96,28 @@ def _generate_new_topic(niche: str, used: list[str]) -> str:
     )
     messages = [{"role": "user", "content": prompt}]
 
-    # Retry: um provedor "reasoning model" pode devolver lixo (raciocínio
-    # vazado, resposta cortada) mesmo depois da limpeza em providers.py —
-    # tenta mais algumas vezes (cascata de provedores roda de novo a cada
-    # chamada) antes de desistir, em vez de aceitar/gravar qualquer coisa.
+    # `validate` faz a cascata de provedores/modelos em providers.complete()
+    # já pular pro próximo modelo na hora que um vier com lixo (raciocínio
+    # vazado, resposta cortada) — em vez de aceitar a primeira resposta não
+    # vazia e só descobrir depois que era garbage. Mesmo assim mantém um
+    # retry externo: às vezes TODOS os modelos disponíveis nesse momento
+    # estão instáveis (rate limit, sobrecarga) e uma nova rodada da cascata
+    # já resolve.
     last_topic = ""
-    for attempt in range(4):
-        raw = complete(messages, max_tokens=200).strip().strip('"').strip("-").strip()
-        # às vezes o modelo devolve mais de uma linha mesmo pedindo pra não —
-        # fica só com a primeira linha não vazia.
-        topic = raw
-        for line in raw.splitlines():
-            line = line.strip()
-            if line:
-                topic = line
-                break
+    for attempt in range(3):
+        try:
+            raw = complete(messages, max_tokens=200, validate=lambda r: _is_valid_topic(_first_line(r)))
+        except RuntimeError as exc:
+            last_topic = str(exc)
+            log.warning("tentativa %d/3: nenhum provedor devolveu tema válido (%s), tentando de novo", attempt + 1, exc)
+            continue
+        topic = _first_line(raw)
         if _is_valid_topic(topic):
             return topic
-        last_topic = topic
-        log.warning(
-            "tentativa %d/4: tema gerado pelo LLM parece inválido (%r), tentando de novo",
-            attempt + 1, topic[:80],
-        )
+        last_topic = topic  # defensivo: não deveria acontecer com validate acima
 
     raise RuntimeError(
-        f"LLM não devolveu um tema válido após 4 tentativas (último: {last_topic!r})"
+        f"LLM não devolveu um tema válido após 3 tentativas (último: {last_topic!r})"
     )
 
 
