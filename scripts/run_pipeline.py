@@ -159,207 +159,213 @@ def run(
     job_id = enqueue(channel_name, topic)
     work_dir = Path(__file__).resolve().parent.parent / "output" / f"job_{job_id}"
     work_dir.mkdir(parents=True, exist_ok=True)
+    try:
 
-    # Tema digitado por uma pessoa (não vindo da fila nem do banco interno)
-    # pode ser sobre qualquer coisa — inclusive um evento real específico ou
-    # pessoa real nomeada, onde "conhecimento geral" do LLM não é confiável
-    # o bastante (pode estar desatualizado/errado). Busca fato real com
-    # fonte antes de escrever, em vez de recusar o tema ou arriscar
-    # inventar (ver src/web_search.py). Sem TAVILY_API_KEYS configurada,
-    # cai pro comportamento antigo sem bloquear nada.
-    web_facts = None
-    if user_provided_topic and facts is None:
-        from src.web_search import search_topic_facts
+        # Tema digitado por uma pessoa (não vindo da fila nem do banco interno)
+        # pode ser sobre qualquer coisa — inclusive um evento real específico ou
+        # pessoa real nomeada, onde "conhecimento geral" do LLM não é confiável
+        # o bastante (pode estar desatualizado/errado). Busca fato real com
+        # fonte antes de escrever, em vez de recusar o tema ou arriscar
+        # inventar (ver src/web_search.py). Sem TAVILY_API_KEYS configurada,
+        # cai pro comportamento antigo sem bloquear nada.
+        web_facts = None
+        if user_provided_topic and facts is None:
+            from src.web_search import search_topic_facts
 
-        web_facts = search_topic_facts(topic)
-        if web_facts:
-            log.info("[%s] tema digitado ancorado com %d fonte(s) da internet", job_id, len(web_facts))
-        else:
-            log.info("[%s] tema digitado sem busca na internet (sem chave configurada ou sem resultado)", job_id)
+            web_facts = search_topic_facts(topic)
+            if web_facts:
+                log.info("[%s] tema digitado ancorado com %d fonte(s) da internet", job_id, len(web_facts))
+            else:
+                log.info("[%s] tema digitado sem busca na internet (sem chave configurada ou sem resultado)", job_id)
 
-    log.info("[%s] gerando roteiro (%s) para: %s (voz: %s)", job_id, "longo" if long_form else "curto", topic, tts_voice)
-    script = generate_script(
-        channel, topic, facts, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes, web_facts=web_facts,
-    )
-    update(job_id, status="scripted")
-
-    # CTA falado (like + se inscrever) — gerado por CÓDIGO, nunca pelo LLM,
-    # pra nunca faltar. Antes só existia um link na descrição, que quase
-    # ninguém lê assistindo; pedido em voz alta no fim converte muito mais.
-    # Cena extra depois das da LLM, passa pela mesma pipeline de
-    # renderização sem precisar de tratamento especial.
-    original_scene_count = len(script["scenes"])
-    script["scenes"].append({
-        "narration": f"Se esse vídeo te ajudou, deixa o like e se inscreve no {channel.channel_title} pra não perder o próximo.",
-        "image_prompt": (
-            "Close-up of a hand giving a thumbs up gesture, warm natural lighting, "
-            "genuine happy mood, no text, no words, no letters, no numbers, no logos, "
-            "no UI, no buttons, no watermark, no signs, no signage, no plaques, no "
-            "banners, no billboards"
-        ),
-        "stock_query": "thumbs up hand gesture",
-    })
-
-    scene_videos = []
-    scene_durations = []
-    for i, scene in enumerate(script["scenes"]):
-        log.info("[%s] cena %d/%d", job_id, i + 1, len(script["scenes"]))
-        audio_path = work_dir / f"scene_{i}.mp3"
-        narrate(scene["narration"], audio_path, voice=tts_voice)
-        scene_durations.append(_ffprobe_duration(audio_path))
-
-        # Cascata de conteúdo visual, do mais vivo/crível pro último recurso:
-        # 1) filmagem REAL (Pexels) — muito mais viva que imagem com zoom;
-        # 2) foto REAL (Pexels) — pra quando o assunto não tem clipe mas
-        #    tem foto (ex.: objeto específico, evento, foto histórica);
-        # 3) imagem gerada por IA — só quando nada real foi encontrado.
-        # Sem PEXELS_API_KEYS configurada, ou sem resultado, cada nível cai
-        # pro próximo automaticamente.
-        #
-        # stock_query é preenchido pelo LLM, mas a cascata de modelos
-        # gratuitos às vezes cai num modelo mais fraco que ignora campo
-        # extra do schema (visto de verdade: roteiro veio sem stock_query
-        # nenhum, mesmo num tema perfeito pra vídeo real). Vídeo real é
-        # prioridade — em vez de desistir e ir direto pra IA só porque o
-        # LLM esqueceu o campo, usa as primeiras palavras do image_prompt
-        # (esse sim sempre vem preenchido) como busca de reserva.
-        stock_query = scene.get("stock_query") or " ".join(scene["image_prompt"].split()[:8])
-        stock_clip_path = search_stock_clip(stock_query, width, height)
-
-        image_path = None
-        if stock_clip_path is None:
-            image_bytes = search_stock_photo(stock_query, width, height)
-            if image_bytes is None:
-                # pede a imagem já no formato final do vídeo — pedir quadrado
-                # e esticar depois no ffmpeg distorcia e borrava tudo
-                image_bytes = generate_image(scene["image_prompt"], width=width, height=height)
-            image_path = work_dir / f"scene_{i}.png"
-            image_path.write_bytes(image_bytes)
-
-        # i < original_scene_count: a cena de CTA (adicionada por código,
-        # depois das da LLM) nunca é uma das cenas numeradas da lista.
-        list_number = (list_count - i) if list_count and i < original_scene_count else None
-        scene_video_path = work_dir / f"scene_{i}.mp4"
-        try:
-            render_scene(
-                image_path, audio_path, scene_video_path, width=width, height=height,
-                watermark=channel.watermark, list_number=list_number, accent=channel.accent,
-                caption=scene["narration"] if channel.captions else None,
-                video_path=stock_clip_path,
-            )
-        finally:
-            # sem finally, um clipe baixado (10-20MB) vaza pro /tmp toda vez
-            # que o ffmpeg falhar (já visto de verdade nesta sessão — erro de
-            # rede, arquivo truncado) — acumula disco silenciosamente rodando
-            # todo dia em 5 canais.
-            if stock_clip_path is not None:
-                stock_clip_path.unlink(missing_ok=True)
-        scene_videos.append(scene_video_path)
-
-    update(job_id, status="narrated")
-
-    raw_video = work_dir / "raw.mp4"
-    # crossfade obriga reencodar o vídeo inteiro — caro numa CPU fraca sem
-    # encoder de hardware (Pi 5). Vale a pena pro curto (poucos minutos);
-    # no longo (15-20min) usa corte seco instantâneo (ver src/assemble.py).
-    concat_scenes(scene_videos, raw_video, crossfade=not long_form)
-
-    final_video = work_dir / "final.mp4"
-    _, music_attribution = add_background_music(raw_video, final_video)
-    update(job_id, status="rendered", video_path=str(final_video))
-    log.info("[%s] vídeo pronto: %s", job_id, final_video)
-
-    # campos dedicados de thumbnail (LLM às vezes esquece com modelo fraco
-    # da cascata) — cai pro título/cena 1 se faltar, nunca quebra o vídeo
-    # por causa só da thumbnail.
-    thumb_prompt = script.get("thumbnail_image_prompt") or script["scenes"][0]["image_prompt"]
-    thumb_text = script.get("thumbnail_text") or script["title"]
-    thumb_path = work_dir / "thumbnail.jpg"
-    # quando o fato citado tem foto OFICIAL da pessoa (deputado/senador/
-    # magistrado — ver src/politica_data.py), usa a foto de verdade em vez
-    # de pedir pra IA inventar o rosto: mais preciso e sem risco de gerar
-    # cara errada atribuída a alguém real.
-    real_photo_url = None
-    if facts and facts.get("dados"):
-        real_photo_url = facts["dados"][0].get("foto_url") or None
-    elif channel_name == "politica" and user_provided_topic:
-        # tema digitado à mão (sem `facts` do banco) pode citar alguém que
-        # JÁ está cadastrado com foto oficial (deputado/senador/magistrado)
-        # mesmo sem ser o fato sorteado — ver politica_data.foto_pessoa_conhecida.
-        from src.politica_data import foto_pessoa_conhecida
-
-        real_photo_url = foto_pessoa_conhecida(topic)
-        if real_photo_url:
-            log.info("[%s] foto oficial encontrada no banco pra pessoa citada no tema", job_id)
-    make_thumbnail(thumb_prompt, thumb_text, thumb_path, accent=channel.accent, real_photo_url=real_photo_url)
-    update(job_id, thumbnail_path=str(thumb_path))
-    log.info("[%s] thumbnail pronta: %s", job_id, thumb_path)
-
-    description = script["description"]
-    if long_form:
-        # timestamps calculados a partir da duração real de cada narração
-        # (não estimados) — só faz sentido no documentário, o curto é curto
-        # demais pra precisar de capítulo.
-        chapters = _build_chapters(script["scenes"], scene_durations)
-        if chapters:
-            description = chapters + "\n\n" + description
-
-    if channel_name == "politica":
-        # link fixo pro site fonte dos dados — sempre gerado por código
-        # (nunca pelo LLM), pra garantir que aponta pro lugar certo sempre.
-        description += "\n\nFonte dos dados: https://brmx.org/politica/"
-
-    if web_facts:
-        # transparência: tema digitado por pessoa foi ancorado em busca
-        # real — lista as fontes usadas (gerado por código, sempre as
-        # URLs reais devolvidas pela busca, nunca inventado pelo LLM).
-        fontes = "\n".join(f"- {f['titulo']}: {f['url']}" for f in web_facts)
-        description += f"\n\nFontes consultadas:\n{fontes}"
-
-    if music_attribution:
-        # a licença CC BY (assets/music/ATTRIBUTION.md) exige creditar a
-        # faixa na descrição de todo vídeo que a usa.
-        description += f"\n\nMúsica: {music_attribution}"
-
-    # hashtags fixas do canal (config, não LLM) — 3-5 é o recomendado hoje
-    # em dia (mais que isso o YouTube ignora todas); os 3 primeiros hashtags
-    # que aparecem na descrição saem exibidos acima do título. #Shorts só
-    # entra no formato curto (é o que classifica o vídeo pra prateleira de
-    # Shorts) — no formato longo não faz sentido.
-    if channel.youtube_handle:
-        # CTA de inscrição — link direto de "increva-se" (sub_confirmation=1
-        # abre o popup de inscrição na hora). Retenção de sessão/inscritos é
-        # sinal de recomendação do YouTube; gerado por código pra sempre
-        # apontar pro canal certo.
-        description += (
-            f"\n\n👉 Inscreva-se pra não perder o próximo vídeo: "
-            f"https://www.youtube.com/{channel.youtube_handle}?sub_confirmation=1"
+        log.info("[%s] gerando roteiro (%s) para: %s (voz: %s)", job_id, "longo" if long_form else "curto", topic, tts_voice)
+        script = generate_script(
+            channel, topic, facts, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes, web_facts=web_facts,
         )
+        update(job_id, status="scripted")
 
-    hashtags = (["#Shorts"] if not long_form else []) + list(channel.hashtags)
-    if hashtags:
-        description += "\n\n" + " ".join(hashtags)
+        # CTA falado (like + se inscrever) — gerado por CÓDIGO, nunca pelo LLM,
+        # pra nunca faltar. Antes só existia um link na descrição, que quase
+        # ninguém lê assistindo; pedido em voz alta no fim converte muito mais.
+        # Cena extra depois das da LLM, passa pela mesma pipeline de
+        # renderização sem precisar de tratamento especial.
+        original_scene_count = len(script["scenes"])
+        script["scenes"].append({
+            "narration": f"Se esse vídeo te ajudou, deixa o like e se inscreve no {channel.channel_title} pra não perder o próximo.",
+            "image_prompt": (
+                "Close-up of a hand giving a thumbs up gesture, warm natural lighting, "
+                "genuine happy mood, no text, no words, no letters, no numbers, no logos, "
+                "no UI, no buttons, no watermark, no signs, no signage, no plaques, no "
+                "banners, no billboards"
+            ),
+            "stock_query": "thumbs up hand gesture",
+        })
 
-    if dry_run:
-        log.info("[%s] --dry-run: não vou publicar. Revise %s manualmente.", job_id, final_video)
-        return
+        scene_videos = []
+        scene_durations = []
+        for i, scene in enumerate(script["scenes"]):
+            log.info("[%s] cena %d/%d", job_id, i + 1, len(script["scenes"]))
+            audio_path = work_dir / f"scene_{i}.mp3"
+            narrate(scene["narration"], audio_path, voice=tts_voice)
+            scene_durations.append(_ffprobe_duration(audio_path))
 
-    video_id = upload_video(
-        channel,
-        final_video,
-        title=script["title"],
-        description=description,
-        tags=script["tags"],
-        thumbnail_path=thumb_path,
-        publish_at=publish_at,
-    )
-    update(job_id, status="uploaded", youtube_video_id=video_id)
-    log.info("[%s] publicado: https://youtu.be/%s", job_id, video_id)
+            # Cascata de conteúdo visual, do mais vivo/crível pro último recurso:
+            # 1) filmagem REAL (Pexels) — muito mais viva que imagem com zoom;
+            # 2) foto REAL (Pexels) — pra quando o assunto não tem clipe mas
+            #    tem foto (ex.: objeto específico, evento, foto histórica);
+            # 3) imagem gerada por IA — só quando nada real foi encontrado.
+            # Sem PEXELS_API_KEYS configurada, ou sem resultado, cada nível cai
+            # pro próximo automaticamente.
+            #
+            # stock_query é preenchido pelo LLM, mas a cascata de modelos
+            # gratuitos às vezes cai num modelo mais fraco que ignora campo
+            # extra do schema (visto de verdade: roteiro veio sem stock_query
+            # nenhum, mesmo num tema perfeito pra vídeo real). Vídeo real é
+            # prioridade — em vez de desistir e ir direto pra IA só porque o
+            # LLM esqueceu o campo, usa as primeiras palavras do image_prompt
+            # (esse sim sempre vem preenchido) como busca de reserva.
+            stock_query = scene.get("stock_query") or " ".join(scene["image_prompt"].split()[:8])
+            stock_clip_path = search_stock_clip(stock_query, width, height)
 
-    # já está no YouTube — não precisa mais guardar os arquivos (vídeo longo
-    # sozinho passa de 400MB, HD ia encher rápido rodando todo dia)
-    shutil.rmtree(work_dir, ignore_errors=True)
-    log.info("[%s] arquivos locais removidos (%s)", job_id, work_dir)
+            image_path = None
+            if stock_clip_path is None:
+                image_bytes = search_stock_photo(stock_query, width, height)
+                if image_bytes is None:
+                    # pede a imagem já no formato final do vídeo — pedir quadrado
+                    # e esticar depois no ffmpeg distorcia e borrava tudo
+                    image_bytes = generate_image(scene["image_prompt"], width=width, height=height)
+                image_path = work_dir / f"scene_{i}.png"
+                image_path.write_bytes(image_bytes)
+
+            # i < original_scene_count: a cena de CTA (adicionada por código,
+            # depois das da LLM) nunca é uma das cenas numeradas da lista.
+            list_number = (list_count - i) if list_count and i < original_scene_count else None
+            scene_video_path = work_dir / f"scene_{i}.mp4"
+            try:
+                render_scene(
+                    image_path, audio_path, scene_video_path, width=width, height=height,
+                    watermark=channel.watermark, list_number=list_number, accent=channel.accent,
+                    caption=scene["narration"] if channel.captions else None,
+                    video_path=stock_clip_path,
+                )
+            finally:
+                # sem finally, um clipe baixado (10-20MB) vaza pro /tmp toda vez
+                # que o ffmpeg falhar (já visto de verdade nesta sessão — erro de
+                # rede, arquivo truncado) — acumula disco silenciosamente rodando
+                # todo dia em 5 canais.
+                if stock_clip_path is not None:
+                    stock_clip_path.unlink(missing_ok=True)
+            scene_videos.append(scene_video_path)
+
+        update(job_id, status="narrated")
+
+        raw_video = work_dir / "raw.mp4"
+        # crossfade obriga reencodar o vídeo inteiro — caro numa CPU fraca sem
+        # encoder de hardware (Pi 5). Vale a pena pro curto (poucos minutos);
+        # no longo (15-20min) usa corte seco instantâneo (ver src/assemble.py).
+        concat_scenes(scene_videos, raw_video, crossfade=not long_form)
+
+        final_video = work_dir / "final.mp4"
+        _, music_attribution = add_background_music(raw_video, final_video)
+        update(job_id, status="rendered", video_path=str(final_video))
+        log.info("[%s] vídeo pronto: %s", job_id, final_video)
+
+        # campos dedicados de thumbnail (LLM às vezes esquece com modelo fraco
+        # da cascata) — cai pro título/cena 1 se faltar, nunca quebra o vídeo
+        # por causa só da thumbnail.
+        thumb_prompt = script.get("thumbnail_image_prompt") or script["scenes"][0]["image_prompt"]
+        thumb_text = script.get("thumbnail_text") or script["title"]
+        thumb_path = work_dir / "thumbnail.jpg"
+        # quando o fato citado tem foto OFICIAL da pessoa (deputado/senador/
+        # magistrado — ver src/politica_data.py), usa a foto de verdade em vez
+        # de pedir pra IA inventar o rosto: mais preciso e sem risco de gerar
+        # cara errada atribuída a alguém real.
+        real_photo_url = None
+        if facts and facts.get("dados"):
+            real_photo_url = facts["dados"][0].get("foto_url") or None
+        elif channel_name == "politica" and user_provided_topic:
+            # tema digitado à mão (sem `facts` do banco) pode citar alguém que
+            # JÁ está cadastrado com foto oficial (deputado/senador/magistrado)
+            # mesmo sem ser o fato sorteado — ver politica_data.foto_pessoa_conhecida.
+            from src.politica_data import foto_pessoa_conhecida
+
+            real_photo_url = foto_pessoa_conhecida(topic)
+            if real_photo_url:
+                log.info("[%s] foto oficial encontrada no banco pra pessoa citada no tema", job_id)
+        make_thumbnail(thumb_prompt, thumb_text, thumb_path, accent=channel.accent, real_photo_url=real_photo_url)
+        update(job_id, thumbnail_path=str(thumb_path))
+        log.info("[%s] thumbnail pronta: %s", job_id, thumb_path)
+
+        description = script["description"]
+        if long_form:
+            # timestamps calculados a partir da duração real de cada narração
+            # (não estimados) — só faz sentido no documentário, o curto é curto
+            # demais pra precisar de capítulo.
+            chapters = _build_chapters(script["scenes"], scene_durations)
+            if chapters:
+                description = chapters + "\n\n" + description
+
+        if channel_name == "politica":
+            # link fixo pro site fonte dos dados — sempre gerado por código
+            # (nunca pelo LLM), pra garantir que aponta pro lugar certo sempre.
+            description += "\n\nFonte dos dados: https://brmx.org/politica/"
+
+        if web_facts:
+            # transparência: tema digitado por pessoa foi ancorado em busca
+            # real — lista as fontes usadas (gerado por código, sempre as
+            # URLs reais devolvidas pela busca, nunca inventado pelo LLM).
+            fontes = "\n".join(f"- {f['titulo']}: {f['url']}" for f in web_facts)
+            description += f"\n\nFontes consultadas:\n{fontes}"
+
+        if music_attribution:
+            # a licença CC BY (assets/music/ATTRIBUTION.md) exige creditar a
+            # faixa na descrição de todo vídeo que a usa.
+            description += f"\n\nMúsica: {music_attribution}"
+
+        # hashtags fixas do canal (config, não LLM) — 3-5 é o recomendado hoje
+        # em dia (mais que isso o YouTube ignora todas); os 3 primeiros hashtags
+        # que aparecem na descrição saem exibidos acima do título. #Shorts só
+        # entra no formato curto (é o que classifica o vídeo pra prateleira de
+        # Shorts) — no formato longo não faz sentido.
+        if channel.youtube_handle:
+            # CTA de inscrição — link direto de "increva-se" (sub_confirmation=1
+            # abre o popup de inscrição na hora). Retenção de sessão/inscritos é
+            # sinal de recomendação do YouTube; gerado por código pra sempre
+            # apontar pro canal certo.
+            description += (
+                f"\n\n👉 Inscreva-se pra não perder o próximo vídeo: "
+                f"https://www.youtube.com/{channel.youtube_handle}?sub_confirmation=1"
+            )
+
+        hashtags = (["#Shorts"] if not long_form else []) + list(channel.hashtags)
+        if hashtags:
+            description += "\n\n" + " ".join(hashtags)
+
+        if dry_run:
+            log.info("[%s] --dry-run: não vou publicar. Revise %s manualmente.", job_id, final_video)
+            return
+
+        video_id = upload_video(
+            channel,
+            final_video,
+            title=script["title"],
+            description=description,
+            tags=script["tags"],
+            thumbnail_path=thumb_path,
+            publish_at=publish_at,
+        )
+        update(job_id, status="uploaded", youtube_video_id=video_id)
+        log.info("[%s] publicado: https://youtu.be/%s", job_id, video_id)
+
+        # já está no YouTube — não precisa mais guardar os arquivos (vídeo longo
+        # sozinho passa de 400MB, HD ia encher rápido rodando todo dia)
+        shutil.rmtree(work_dir, ignore_errors=True)
+        log.info("[%s] arquivos locais removidos (%s)", job_id, work_dir)
+
+    except Exception as exc:
+        log.error("[%s] pipeline falhou: %s", job_id, exc)
+        update(job_id, status="failed", error=str(exc)[:2000])
+        raise
 
 
 def main() -> None:
