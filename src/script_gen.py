@@ -159,6 +159,20 @@ def _extract_json(raw: str) -> dict:
     return json.loads(match.group(0))
 
 
+def _is_parseable_script(raw: str, required: set[str]) -> bool:
+    """Validador passado pra `complete()` — rejeita na hora qualquer
+    resposta que não vira roteiro utilizável, pra cascata de provedores já
+    pular pro próximo modelo/chave em vez de aceitar garbage (visto na
+    prática: um modelo grátis instável respondia só `{` repetido sem nunca
+    fechar o JSON, e as 3 tentativas de retry caíam nele de novo porque a
+    cascata sempre parava no primeiro "não vazio")."""
+    try:
+        script = _extract_json(raw)
+    except (ValueError, json.JSONDecodeError):
+        return False
+    return required <= script.keys()
+
+
 # Trava de CÓDIGO (não só instrução de prompt) contra rosto de pessoa real
 # nomeada — a regra no SYSTEM_PROMPT falha uma fração real das vezes na
 # prática (visto: um vídeo sobre a Kathrine Switzer real saiu com uma cena
@@ -272,8 +286,11 @@ def generate_script(
     best_script: dict | None = None
     best_distance = float("inf")
     for attempt in range(3):
-        raw = complete(messages, max_tokens=max_tokens)
         try:
+            # `validate` já garante que `raw` é JSON parseável com os campos
+            # obrigatórios — cascata inteira de provedores/modelos é
+            # percorrida ANTES de aceitar qualquer coisa (ver providers.complete).
+            raw = complete(messages, max_tokens=max_tokens, validate=lambda r: _is_parseable_script(r, required))
             script = _extract_json(raw)
             missing = required - script.keys()
             if missing:
@@ -293,7 +310,7 @@ def generate_script(
             )
             if distance < best_distance:
                 best_script, best_distance = script, distance
-        except (ValueError, json.JSONDecodeError) as exc:
+        except (ValueError, json.JSONDecodeError, RuntimeError) as exc:
             last_error = exc
             log.warning("tentativa %d/3: roteiro malformado (%s), tentando de novo", attempt + 1, exc)
 
