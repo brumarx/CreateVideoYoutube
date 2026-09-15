@@ -57,6 +57,19 @@ def _save(state: dict) -> None:
     STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2))
 
 
+# Tamanho mínimo pra considerar um tema "de verdade" — qualquer coisa mais
+# curta é quase certamente lixo (tag de raciocínio vazada, pontuação solta,
+# resposta cortada). Visto na prática: tema virou literalmente "<think>".
+_MIN_TOPIC_LEN = 12
+# Sinais de que o LLM vazou raciocínio interno ou markdown em vez de
+# responder só com o tema — mesmo depois do provider já tentar limpar isso.
+_GARBAGE_RE = re.compile(r"<think|</think|^```|^\{|^\[", re.IGNORECASE)
+
+
+def _is_valid_topic(topic: str) -> bool:
+    return len(topic) >= _MIN_TOPIC_LEN and not _GARBAGE_RE.search(topic)
+
+
 def _generate_new_topic(niche: str, used: list[str]) -> str:
     used_block = "\n".join(f"- {t}" for t in used) or "(nenhum ainda)"
     prompt = (
@@ -71,14 +84,33 @@ def _generate_new_topic(niche: str, used: list[str]) -> str:
         "20, 30, 40 itens."
     )
     messages = [{"role": "user", "content": prompt}]
-    topic = complete(messages, max_tokens=200).strip().strip('"').strip("-").strip()
-    # às vezes o modelo devolve mais de uma linha mesmo pedindo pra não —
-    # fica só com a primeira linha não vazia.
-    for line in topic.splitlines():
-        line = line.strip()
-        if line:
-            return line
-    return topic
+
+    # Retry: um provedor "reasoning model" pode devolver lixo (raciocínio
+    # vazado, resposta cortada) mesmo depois da limpeza em providers.py —
+    # tenta mais algumas vezes (cascata de provedores roda de novo a cada
+    # chamada) antes de desistir, em vez de aceitar/gravar qualquer coisa.
+    last_topic = ""
+    for attempt in range(4):
+        raw = complete(messages, max_tokens=200).strip().strip('"').strip("-").strip()
+        # às vezes o modelo devolve mais de uma linha mesmo pedindo pra não —
+        # fica só com a primeira linha não vazia.
+        topic = raw
+        for line in raw.splitlines():
+            line = line.strip()
+            if line:
+                topic = line
+                break
+        if _is_valid_topic(topic):
+            return topic
+        last_topic = topic
+        log.warning(
+            "tentativa %d/4: tema gerado pelo LLM parece inválido (%r), tentando de novo",
+            attempt + 1, topic[:80],
+        )
+
+    raise RuntimeError(
+        f"LLM não devolveu um tema válido após 4 tentativas (último: {last_topic!r})"
+    )
 
 
 def pick_topic(channel_name: str, pool: list[str], niche: str) -> str:

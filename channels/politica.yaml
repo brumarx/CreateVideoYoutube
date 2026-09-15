@@ -15,8 +15,8 @@ uploads_per_day: 1
 daily_format: "long"
 short_min_minutes: 1
 short_max_minutes: 2
-long_min_minutes: 6
-long_max_minutes: 8
+long_min_minutes: 4
+long_max_minutes: 5
 # formato curto ignora esta lista de temas — usa sempre um fato real
 # aleatório do banco de transparência (ver src/politica_data.py), pra nunca
 # inventar número/nome sobre gente real. Só o formato longo consome a fila
@@ -32,6 +32,8 @@ topics:
   - "como funciona a fiscalização de gastos públicos no Brasil"
   - "como funciona a Lei da Ficha Limpa e o que ela realmente proíbe"
   - "Quanto os políticos brasileiros realmente ganham?"
+  - "O que acontece com o mandato de um congressista que se afasta para assumir cargo no Executivo"
+  - "Como o Senado Federal é composto e como o regimento interno define a hierarquia entre os senadores"
 prompt_base: >
   Escreva um roteiro de curiosidades sobre política brasileira. SE houver uma
   seção "DADOS REAIS" abaixo (formato curto): use SOMENTE esses dados (não

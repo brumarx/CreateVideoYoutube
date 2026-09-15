@@ -15,8 +15,8 @@ uploads_per_day: 1
 daily_format: "long"
 short_min_minutes: 1
 short_max_minutes: 2
-long_min_minutes: 6
-long_max_minutes: 8
+long_min_minutes: 4
+long_max_minutes: 5
 long_form_scenes: 24
 topics:
   - "como usar o ChatGPT para escrever textos melhores, passo a passo"

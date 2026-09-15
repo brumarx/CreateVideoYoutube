@@ -10,12 +10,30 @@ no processo.
 from __future__ import annotations
 
 import logging
+import re
 
 import httpx
 
 from .config import LLMKeys
 
 log = logging.getLogger("providers")
+
+# Alguns modelos grátis são "reasoning models" e devolvem um bloco
+# <think>...</think> com o raciocínio antes da resposta de verdade, mesmo
+# quando o prompt não pede isso — se isso vazar sem tratamento pro chamador
+# (script_gen, topics), vira roteiro/tema quebrado (já aconteceu: tema virou
+# literalmente "<think>" e roteiro saiu com o raciocínio bruto em vez de
+# JSON). Também acontece de a resposta cortar (max_tokens insuficiente) no
+# MEIO do bloco de raciocínio — nesse caso não sobra nenhuma resposta real,
+# então trata como se o modelo não tivesse respondido nada.
+_THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+
+
+def _strip_reasoning(content: str) -> str | None:
+    if "<think>" in content.lower() and "</think>" not in content.lower():
+        return None
+    cleaned = _THINK_BLOCK_RE.sub("", content).strip()
+    return cleaned or None
 
 # Substrings que indicam modelo não-chat (voz, imagem, moderação, código
 # especializado, etc.) — filtradas da lista de candidatos.
@@ -145,7 +163,7 @@ def _call_openai_compat(
             return None, resp.status_code
         data = resp.json()
         content = data["choices"][0]["message"]["content"]
-        return (content.strip() if content else None), 200
+        return (_strip_reasoning(content) if content else None), 200
     except Exception as exc:  # rede, timeout, JSON malformado, etc.
         log.warning("%s (%s) falhou: %s", endpoint, model, exc)
         return None, None
@@ -167,7 +185,8 @@ def _call_gemini(api_key: str, model: str, messages: list[dict], max_tokens: int
             log.warning("gemini (%s) -> HTTP %s: %s", model, resp.status_code, resp.text[:200])
             return None
         data = resp.json()
-        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        return _strip_reasoning(text) if text else None
     except Exception as exc:
         log.warning("gemini (%s) falhou: %s", model, exc)
         return None

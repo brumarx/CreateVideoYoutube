@@ -15,8 +15,8 @@ uploads_per_day: 1
 daily_format: "long"
 short_min_minutes: 1
 short_max_minutes: 2
-long_min_minutes: 6
-long_max_minutes: 10
+long_min_minutes: 4
+long_max_minutes: 5
 long_form_scenes: 28
 topics:
   - "como a inteligência artificial realmente aprende, explicado de forma simples"
@@ -37,6 +37,7 @@ topics:
   - "como o Burj Khalifa foi construído no meio do deserto"
   - "como funciona a Estação Espacial Internacional por dentro"
   - "como a Noruega escondeu um cofre de sementes dentro de uma montanha"
+  - "Tecnologias escondidas dos humanos"
 prompt_base: >
   Escreva um roteiro explicativo/curiosidades sobre tecnologia e IA no
   estilo de canais educativos do YouTube. O ângulo deste canal é "COISAS QUE
