@@ -30,13 +30,16 @@ TEMPLATE = """
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Painel — YouTube AI Pipeline</title>
 <style>
+  * { -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; }
   body { font-family: system-ui, sans-serif; background: #0f1115; color: #e6e6e6; margin: 0; padding: 32px; }
   h1 { font-size: 22px; margin-bottom: 4px; }
   .sub { color: #9aa0a8; font-size: 13px; margin-bottom: 28px; }
   .channels { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; margin-bottom: 36px; }
-  .card { background: #171a21; border: 1px solid #262b35; border-radius: 10px; padding: 18px; }
+  .card { background: #171a21; border: 1px solid #262b35; border-radius: 10px; padding: 18px; min-width: 0; }
   .card h2 { font-size: 16px; margin: 0 0 6px; }
   .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 20px; margin-left: 6px; }
   .ok { background: #16351f; color: #5fd685; }
@@ -44,31 +47,46 @@ TEMPLATE = """
   .niche { color: #9aa0a8; font-size: 13px; margin: 6px 0 12px; }
   .meta { font-size: 12px; color: #7d838c; }
   form { margin-top: 12px; }
-  button { background: #2d6cdf; color: white; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  button { background: #2d6cdf; color: white; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; min-height: 34px; }
   button:hover { background: #3d7bef; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  input, select, button { font-family: inherit; }
+  input[type=text], input[type=number], select { font-size: 16px; }
+  .table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 480px; }
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #262b35; }
   th { color: #9aa0a8; font-weight: 500; }
   a { color: #6ea8ff; }
   .status-uploaded { color: #5fd685; }
   .status-failed, .status-error { color: #e05f5f; }
   .flash { background: #16351f; color: #5fd685; padding: 10px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 13px; }
-  .durations { display: flex; gap: 8px; margin: 10px 0; }
-  .durations label { flex: 1; font-size: 11px; color: #9aa0a8; }
-  .durations input { width: 100%; box-sizing: border-box; padding: 5px 6px; margin-top: 2px; background: #0f1115; border: 1px solid #262b35; border-radius: 6px; color: #e6e6e6; font-size: 12px; }
-  .save-link { background: none; border: none; color: #6ea8ff; font-size: 11px; cursor: pointer; padding: 0; text-decoration: underline; }
+  .durations { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .durations label { flex: 1; min-width: 120px; font-size: 11px; color: #9aa0a8; }
+  .durations input { width: 100%; box-sizing: border-box; padding: 8px 6px; margin-top: 2px; background: #0f1115; border: 1px solid #262b35; border-radius: 6px; color: #e6e6e6; font-size: 16px; }
+  .save-link { background: none; border: none; color: #6ea8ff; font-size: 13px; cursor: pointer; padding: 6px 0; text-decoration: underline; min-height: 34px; }
   details.topics { margin-top: 10px; font-size: 12px; }
-  details.topics summary { cursor: pointer; color: #9aa0a8; }
+  details.topics summary { cursor: pointer; color: #9aa0a8; padding: 6px 0; }
   details.topics summary:hover { color: #c7cbd1; }
-  .topic-edit { display: flex; gap: 4px; margin-top: 4px; align-items: center; }
-  .topic-edit input[type=text] { flex: 1; min-width: 0; box-sizing: border-box; padding: 4px 6px; background: #0f1115; border: 1px solid #262b35; border-radius: 6px; color: #c7cbd1; font-size: 12px; }
+  .topic-edit { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; align-items: center; }
+  .topic-edit input[type=text] { flex: 1 1 100%; min-width: 0; box-sizing: border-box; padding: 7px 8px; background: #0f1115; border: 1px solid #262b35; border-radius: 6px; color: #c7cbd1; font-size: 14px; }
   .topic-edit input[type=text].used { color: #55595f; text-decoration: line-through; }
-  .topic-edit button { padding: 4px 8px; font-size: 11px; }
+  .topic-edit button { padding: 7px 10px; font-size: 12px; min-height: 34px; }
   .topic-edit button.danger { background: #3a1616; color: #e08f8f; }
   .topic-edit button.danger:hover { background: #4a1c1c; }
-  .topic-add { display: flex; gap: 6px; margin-top: 8px; }
-  .topic-add input { flex: 1; min-width: 0; box-sizing: border-box; padding: 5px 6px; background: #0f1115; border: 1px solid #262b35; border-radius: 6px; color: #e6e6e6; font-size: 12px; }
-  .topic-add button { padding: 5px 10px; font-size: 12px; }
+  .topic-add { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .topic-add input { flex: 1 1 100%; min-width: 0; box-sizing: border-box; padding: 7px 8px; background: #0f1115; border: 1px solid #262b35; border-radius: 6px; color: #e6e6e6; font-size: 14px; }
+  .topic-add button { padding: 7px 14px; font-size: 12px; min-height: 34px; }
+
+  @media (max-width: 600px) {
+    body { padding: 16px; }
+    h1 { font-size: 19px; }
+    .channels { grid-template-columns: 1fr; gap: 12px; }
+    .card { padding: 14px; }
+    button { width: 100%; }
+    .topic-edit button, .topic-add button { width: auto; }
+    table { font-size: 12px; min-width: 420px; }
+    th, td { padding: 8px 6px; }
+    td:nth-child(3) { max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  }
 </style>
 </head>
 <body>
@@ -91,7 +109,7 @@ TEMPLATE = """
 
       <form method="post" action="{{ url_for('save_duration', channel=c.name) }}">
         <label style="display:block; font-size:11px; color:#9aa0a8; margin-top:6px;">Formato do cron diário
-          <select name="daily_format" style="width:100%; box-sizing:border-box; padding:5px 6px; margin-top:2px; background:#0f1115; border:1px solid #262b35; border-radius:6px; color:#e6e6e6; font-size:12px;">
+          <select name="daily_format" style="width:100%; box-sizing:border-box; padding:8px 6px; margin-top:2px; background:#0f1115; border:1px solid #262b35; border-radius:6px; color:#e6e6e6;">
             <option value="short" {{ "selected" if c.daily_format == "short" }}>Curto (vertical, Shorts)</option>
             <option value="long" {{ "selected" if c.daily_format == "long" }}>Longo (16:9, documentário)</option>
           </select>
@@ -154,9 +172,11 @@ TEMPLATE = """
       <form method="post" style="margin-top:12px; padding:8px; border:1px solid #2a7a4a; border-radius:8px; background:#0f1a13;">
         <label style="display:block; font-size:11px; color:#5fd88a; margin-bottom:4px; font-weight:600;">▶ RODAR AGORA (tema digitado aqui é buscado na internet antes de escrever)</label>
         <input type="text" name="topic" placeholder="Tema (opcional — vazio sorteia da lista)"
-               style="width:100%; box-sizing:border-box; padding:6px 8px; margin-bottom:8px; background:#0f1115; border:1px solid #2a7a4a; border-radius:6px; color:#e6e6e6; font-size:12px;">
-        <button type="submit" formaction="{{ url_for('run_channel', channel=c.name, long=0) }}">Rodar short</button>
-        <button type="submit" formaction="{{ url_for('run_channel', channel=c.name, long=1) }}" style="margin-left:6px">Rodar longo (16:9)</button>
+               style="width:100%; box-sizing:border-box; padding:8px; margin-bottom:8px; background:#0f1115; border:1px solid #2a7a4a; border-radius:6px; color:#e6e6e6; font-size:16px;">
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+          <button type="submit" formaction="{{ url_for('run_channel', channel=c.name, long=0) }}" style="flex:1; min-width:120px;">Rodar short</button>
+          <button type="submit" formaction="{{ url_for('run_channel', channel=c.name, long=1) }}" style="flex:1; min-width:120px;">Rodar longo (16:9)</button>
+        </div>
       </form>
       {% endif %}
     </div>
@@ -164,6 +184,7 @@ TEMPLATE = """
   </div>
 
   <h1>Jobs recentes</h1>
+  <div class="table-wrap">
   <table>
     <tr><th>ID</th><th>Canal</th><th>Tópico</th><th>Status</th><th>Vídeo</th></tr>
     {% for j in jobs %}
@@ -176,6 +197,7 @@ TEMPLATE = """
     </tr>
     {% endfor %}
   </table>
+  </div>
 </body>
 </html>
 """

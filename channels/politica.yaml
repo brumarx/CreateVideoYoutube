@@ -35,6 +35,7 @@ topics:
   - "O que acontece com o mandato de um congressista que se afasta para assumir cargo no Executivo"
   - "Como o Senado Federal é composto e como o regimento interno define a hierarquia entre os senadores"
   - "Como o Portal da Transparência permite rastrear cada centavo gasto pelos parlamentares em diárias e passagens aéreas"
+  - "Quais são os fatos curiosos sobre os recursos financeiros compartilhados entre as Câmaras no Brasil?"
 prompt_base: >
   Escreva um roteiro de curiosidades sobre política brasileira. SE houver uma
   seção "DADOS REAIS" abaixo (formato curto): use SOMENTE esses dados (não
