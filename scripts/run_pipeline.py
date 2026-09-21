@@ -26,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.assemble import _ffprobe_duration, add_background_music, concat_scenes, render_scene
+from src.assemble import SFX_DIR, _ffprobe_duration, add_background_music, concat_scenes, render_scene
 from src.config import ChannelConfig
 from src.orchestrator import enqueue, update
 from src.script_gen import generate_script
@@ -226,7 +226,7 @@ def run(
         for i, scene in enumerate(script["scenes"]):
             log.info("[%s] cena %d/%d", job_id, i + 1, len(script["scenes"]))
             audio_path = work_dir / f"scene_{i}.mp3"
-            narrate(scene["narration"], audio_path, voice=tts_voice)
+            _, word_boundaries = narrate(scene["narration"], audio_path, voice=tts_voice)
             scene_durations.append(_ffprobe_duration(audio_path))
 
             # Cascata de conteúdo visual, do mais vivo/crível pro último recurso:
@@ -278,6 +278,9 @@ def run(
                     image_path, audio_path, scene_video_path, width=width, height=height,
                     watermark=channel.watermark, list_number=list_number, accent=channel.accent,
                     caption=scene["narration"] if channel.captions else None,
+                    word_boundaries=word_boundaries if channel.captions else None,
+                    stat_overlay=scene.get("stat_overlay"),
+                    impact_beat=bool(scene.get("impact_beat")),
                     video_path=stock_clip_path,
                 )
             finally:
@@ -295,10 +298,12 @@ def run(
         # crossfade obriga reencodar o vídeo inteiro — caro numa CPU fraca sem
         # encoder de hardware (Pi 5). Vale a pena pro curto (poucos minutos);
         # no longo (15-20min) usa corte seco instantâneo (ver src/assemble.py).
-        concat_scenes(scene_videos, raw_video, crossfade=not long_form)
+        concat_scenes(
+            scene_videos, raw_video, crossfade=not long_form, sfx_path=SFX_DIR / "whoosh.mp3",
+        )
 
         final_video = work_dir / "final.mp4"
-        _, music_attribution = add_background_music(raw_video, final_video)
+        _, music_attribution = add_background_music(raw_video, final_video, mood=script.get("mood"))
         update(job_id, status="rendered", video_path=str(final_video))
         log.info("[%s] vídeo pronto: %s", job_id, final_video)
 
