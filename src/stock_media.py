@@ -15,7 +15,9 @@ nunca bloqueia nem quebra o pipeline por causa disso.
 """
 from __future__ import annotations
 
+import json
 import logging
+import re
 import tempfile
 from pathlib import Path
 
@@ -29,6 +31,65 @@ log = logging.getLogger("stock_media")
 VIDEO_SEARCH_URL = "https://api.pexels.com/videos/search"
 PHOTO_SEARCH_URL = "https://api.pexels.com/v1/search"
 MIN_CLIP_HEIGHT = 480  # não usa clipe abaixo disso — qualidade mínima aceitável
+
+# Estado "usado recentemente" (vídeos/fotos, por id) — sem isso, uma busca
+# genérica sempre devolve o MESMO clipe mais popular do Pexels pra
+# qualquer vídeo que usar aquele termo, virando repetição visível entre
+# vídeos completamente diferentes (visto de verdade: um clipe de "pilha de
+# dinheiro" apareceu em dezenas de vídeos). Guarda só os últimos
+# _RECENT_CAP ids por tipo — não precisa durar pra sempre, só evitar
+# repetir o que saiu há pouco tempo.
+_RECENT_STATE_FILE = Path(__file__).resolve().parent.parent / "data" / "stock_media_recent.json"
+_RECENT_CAP = 300
+
+
+def _load_recent() -> dict[str, list[str]]:
+    if _RECENT_STATE_FILE.exists():
+        try:
+            return json.loads(_RECENT_STATE_FILE.read_text())
+        except (json.JSONDecodeError, OSError):
+            return {}
+    return {}
+
+
+def _mark_recent(kind: str, item_id: str) -> None:
+    state = _load_recent()
+    ids = state.get(kind, [])
+    ids = [i for i in ids if i != item_id] + [item_id]
+    state[kind] = ids[-_RECENT_CAP:]
+    _RECENT_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _RECENT_STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2))
+
+
+_WORD_RE = re.compile(r"[a-z]+")
+
+
+def _relevance_score(query: str, descriptive_text: str) -> int:
+    """Conta quantas palavras da busca aparecem no texto descritivo do
+    candidato (slug da URL pro vídeo, campo `alt` pra foto) — sinal simples
+    mas direto de que aquele candidato específico é sobre o que foi pedido,
+    em vez de confiar cegamente que o primeiro resultado do Pexels é o
+    melhor pra ESTA cena."""
+    query_words = set(_WORD_RE.findall(query.lower()))
+    text_words = set(_WORD_RE.findall((descriptive_text or "").lower()))
+    return len(query_words & text_words)
+
+
+def _pick_best_candidate(query: str, items: list[dict], kind: str, describe) -> dict:
+    """Escolhe entre os candidatos (até 5, ordem original do Pexels, sempre
+    não-vazia — quem chama já garantiu isso) combinando relevância (quantas
+    palavras da busca aparecem na descrição do candidato) com "não usado
+    recentemente" — nunca falha por causa disso: se todos já saíram
+    recentemente, usa o de melhor pontuação mesmo assim, em vez de desistir
+    do vídeo real."""
+    recent = set(_load_recent().get(kind, []))
+
+    def score(item: dict) -> tuple[int, int]:
+        item_id = str(item.get("id"))
+        relevance = _relevance_score(query, describe(item))
+        return (relevance, 0 if item_id not in recent else -1)
+
+    return max(items, key=score)
 
 
 def _pick_best_file(video: dict, width: int, height: int) -> dict | None:
@@ -84,7 +145,8 @@ def search_stock_clip(query: str, width: int, height: int) -> Path | None:
             log.info("pexels sem resultado pra: %r", query)
             return None
 
-        picked = _pick_best_file(videos[0], width, height)
+        chosen = _pick_best_candidate(query, videos, "video", lambda v: v.get("url", ""))
+        picked = _pick_best_file(chosen, width, height)
         if not picked or not picked.get("link"):
             return None
 
@@ -98,6 +160,7 @@ def search_stock_clip(query: str, width: int, height: int) -> Path | None:
         tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
         tmp.write(video_resp.content)
         tmp.close()
+        _mark_recent("video", str(chosen.get("id")))
         log.info("clipe real encontrado pra %r (%sx%s)", query, picked.get("width"), picked.get("height"))
         return Path(tmp.name)
 
@@ -138,7 +201,8 @@ def search_stock_photo(query: str, width: int, height: int) -> bytes | None:
             log.info("pexels sem foto pra: %r", query)
             return None
 
-        src = photos[0].get("src", {})
+        chosen = _pick_best_candidate(query, photos, "photo", lambda p: p.get("alt", ""))
+        src = chosen.get("src", {})
         url = src.get("large2x") or src.get("original") or src.get("large")
         if not url:
             return None
@@ -150,6 +214,7 @@ def search_stock_photo(query: str, width: int, height: int) -> bytes | None:
             log.warning("download da foto pexels falhou (%r): %s", query, exc)
             return None
 
+        _mark_recent("photo", str(chosen.get("id")))
         log.info("foto real encontrada pra %r", query)
         return photo_resp.content
 
