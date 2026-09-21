@@ -6,6 +6,7 @@ logs/
 data/used_topics.json
 data/used_political_facts.json
 data/playlists.json
+data/botafogo_covered_matches.json
 __pycache__/
 *.pyc
 .venv/
