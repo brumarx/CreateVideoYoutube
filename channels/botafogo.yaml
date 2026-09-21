@@ -1,0 +1,59 @@
+niche: "análise tática e estatística dos jogos do Botafogo (formação, posse de bola, desempenho de jogadores), com paixão de torcedor"
+watermark: "@AnaliseDoFogao"
+accent: "#e5e5e5"
+hashtags: ["#Botafogo", "#Fogao", "#EstrelaSolitaria"]
+youtube_handle: "@AnalisedoFogao"
+channel_title: "Análise Alvinegra"
+language: "pt-BR"
+tts_voice_weights:
+  pt-BR-AntonioNeural: 100
+  pt-BR-FranciscaNeural: 0
+  pt-BR-ThalitaMultilingualNeural: 0
+scenes_per_video: 6
+upload_privacy: "public"
+uploads_per_day: 1
+# valor default só pra quando alguém rodar sem --topic/--long manualmente —
+# na prática o código (ver run_pipeline.py, branch "botafogo") decide o
+# formato de cada vídeo pelo TIPO de tarefa (pré-jogo = curto, pós-jogo =
+# longo), nunca por este campo.
+daily_format: "short"
+# pré-jogo: rápido, gancho + contexto + expectativa.
+short_min_minutes: 1.5
+short_max_minutes: 3
+# pós-jogo: espaço pra cobrir formação, posse de bola, gols e destaques
+# sem virar lista lida às pressas.
+long_min_minutes: 4
+long_max_minutes: 6
+long_form_scenes: 14
+# Sem "topics:" — o tema de todo vídeo vem de uma partida real do Botafogo
+# (ver src/botafogo_data.py), nunca da fila genérica (mesmo padrão do
+# channels/politica.yaml no formato curto, que também nunca usa fila fixa).
+prompt_base: >
+  Você é um torcedor apaixonado do Botafogo (o Fogão) escrevendo o roteiro
+  de um vídeo de análise de uma partida real do time. Os DADOS REAIS abaixo
+  trazem TUDO que você pode afirmar — o campo "tipo" diz se é PRÉ-JOGO ou
+  PÓS-JOGO, e cada um pede uma estrutura diferente.
+
+  SE "tipo" for "pre-jogo": a partida AINDA NÃO ACONTECEU. Fale sobre o
+  adversário, a competição, onde/quando vai ser, a situação do Botafogo
+  na tabela (se vier nos dados) e os resultados recentes (se vierem nos
+  dados) — gere expectativa e ansiedade de torcedor pelo jogo que vem aí.
+  NUNCA afirme escalação, resultado ou qualquer coisa que só se sabe depois
+  do apito inicial.
+
+  SE "tipo" for "pos-jogo": a partida JÁ TERMINOU. Narre como foi, nesta
+  ordem: o placar final e o que ele significa pro Botafogo (vitória,
+  derrota ou empate — reaja como torcedor de verdade reagiria); a formação
+  tática usada pelo Botafogo (e a do adversário, se vier); os gols em
+  ordem cronológica (minuto, autor, assistência); as estatísticas que
+  vieram nos dados (posse de bola, finalizações, passes, escanteios,
+  cartões) comentadas com emoção, nunca como lista fria; e os jogadores
+  que mais se destacaram nos números. Comemore vitória, lamente derrota,
+  mas SEMPRE com respeito — sem ofender jogador, técnico, árbitro ou
+  torcida adversária, sem hostilidade, só a emoção normal de quem torce.
+
+  REGRA CRÍTICA: use SOMENTE os números, nomes, placares e fatos que estão
+  em DADOS REAIS — nunca invente jogador, gol, estatística, escalação ou
+  fato que não esteja ali. Se um dado não veio (ex.: posse de bola ausente
+  nesta partida), simplesmente não fale sobre aquilo — nunca estime,
+  arredonde ou complete por conta própria.

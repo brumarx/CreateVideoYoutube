@@ -111,6 +111,10 @@ def run(
     # None = respeita o que está configurado no painel (channels/<nome>.yaml
     # -> daily_format); só quem passar --long/--no-long explícito na linha de
     # comando força um formato pontual diferente do que a UI tem salvo.
+    # Guardado ANTES do default abaixo: o canal "botafogo" decide o formato
+    # pelo TIPO de tarefa (pré-jogo/pós-jogo), mas um --long/--no-long
+    # explícito na linha de comando (teste manual) ainda tem prioridade.
+    user_forced_format = long_form is not None
     if long_form is None:
         long_form = channel.daily_format == "long"
     # 1 voz sorteada por vídeo (não por cena — narrador tem que ser
@@ -133,6 +137,22 @@ def run(
         facts = pick_fact_set(fact_label) if fact_label else random_fact_set()
         if topic is None:
             topic = facts["tema"]
+    elif channel_name == "botafogo":
+        from src.botafogo_data import next_pending_task
+
+        # Botafogo não joga todo dia — sem prévia ou pós-jogo pendente,
+        # não gera vídeo nenhum hoje (silêncio, não erro; ver
+        # src/botafogo_data.py). O `return` acontece ANTES do `enqueue()`
+        # abaixo, então não cria job nenhum no banco nesses dias.
+        task = next_pending_task()
+        if task is None:
+            log.info("[botafogo] sem jogo pendente de prévia ou pós-jogo — nada a publicar hoje")
+            return
+        facts = task["facts"]
+        if topic is None:
+            topic = task["titulo"]
+        if not user_forced_format:
+            long_form = task["tipo"] == "pos-jogo"
     elif topic is None and channel.topics:
         # nunca repete um tema já usado — quando a lista fixa esgota, gera
         # um tema novo via LLM dentro do nicho do canal (ver src/topics.py).
