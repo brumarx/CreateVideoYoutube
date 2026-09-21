@@ -9,11 +9,14 @@ e sem chave).
 from __future__ import annotations
 
 import base64
+import io
 import logging
 import random
+import time
 import urllib.parse
 
 import httpx
+from PIL import Image, ImageFilter
 
 from .config import POLLINATIONS_API_KEYS
 from .providers import LLMKeys, _fetch_gemini_models, _rotator_for
@@ -21,7 +24,14 @@ from .providers import LLMKeys, _fetch_gemini_models, _rotator_for
 log = logging.getLogger("visuals")
 
 MIN_VALID_BYTES = 1000
-MAX_IMAGE_ATTEMPTS = 3
+# 3 tentativas praticamente de volta (sem espera) não sobrevivem a uma
+# instabilidade real do Pollinations — já aconteceu de 4 jobs seguidos
+# perderem o vídeo INTEIRO (já renderizado, faltando só a thumbnail) porque
+# as 3 tentativas caíram todas dentro da mesma janela de ~500 contínuo.
+# Mais tentativas + espera crescente entre elas dão tempo de uma instabilidade
+# passageira passar sem custar tanto num pipeline automático/sem gente olhando.
+MAX_IMAGE_ATTEMPTS = 6
+_RETRY_BACKOFF_SECONDS = 10
 
 # Testei detectar imagem "quase em branco" (aconteceu de verdade: uma cena
 # virou um gradiente azul liso) por estatística de pixel (densidade de
@@ -60,13 +70,42 @@ def _try_keyed(prompt: str, width: int, height: int, seed: int) -> bytes | None:
             resp = httpx.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=90)
             if resp.status_code == 200 and _looks_like_image(resp.content):
                 return resp.content
-            if resp.status_code in (401, 403):
+            if resp.status_code in (401, 403, 402):
+                # 402 = sem saldo — não volta a ficar positivo sozinho durante
+                # o processo, então bane igual a um erro de auth pra não gastar
+                # o resto das tentativas (e das cenas seguintes) batendo numa
+                # chave morta (aconteceu: 120/120 chamadas em 402 num dia).
                 rotator.ban(api_key)
             else:
                 log.warning("pollinations keyed -> HTTP %s", resp.status_code)
         except Exception as exc:
             log.warning("pollinations keyed falhou: %s", exc)
     return None
+
+
+# O endpoint anônimo ignora `nologo=true` (testado ao vivo: aparece sempre,
+# mesmo com o parâmetro) — carimba "pollinations.ai" no canto inferior
+# direito, dentro dessa faixa proporcional (medido em várias resoluções).
+# Como não tem como pedir pra API não colocar, borramos por cima depois.
+_WATERMARK_X0_RATIO = 0.70
+_WATERMARK_Y0_RATIO = 0.80
+
+
+def _blur_watermark(data: bytes) -> bytes:
+    try:
+        img = Image.open(io.BytesIO(data))
+        fmt = img.format or "PNG"
+        img = img.convert("RGB") if fmt == "JPEG" else img.convert("RGBA")
+        w, h = img.size
+        x0, y0 = int(w * _WATERMARK_X0_RATIO), int(h * _WATERMARK_Y0_RATIO)
+        corner = img.crop((x0, y0, w, h)).filter(ImageFilter.GaussianBlur(radius=max(w, h) * 0.03))
+        img.paste(corner, (x0, y0))
+        buf = io.BytesIO()
+        img.save(buf, format=fmt)
+        return buf.getvalue()
+    except Exception as exc:
+        log.warning("não consegui borrar a marca d'água do Pollinations: %s", exc)
+        return data
 
 
 def _try_anonymous(prompt: str, width: int, height: int, seed: int) -> bytes | None:
@@ -84,7 +123,9 @@ def _try_anonymous(prompt: str, width: int, height: int, seed: int) -> bytes | N
     if not _looks_like_image(resp.content):
         log.warning("pollinations anônimo devolveu resposta inválida")
         return None
-    return resp.content
+    # `nologo=true` não é respeitado nesse endpoint — sempre carimba
+    # "pollinations.ai" no canto; borra antes de devolver pro chamador.
+    return _blur_watermark(resp.content)
 
 
 _NO_TEXT_SUFFIX = (
@@ -162,6 +203,8 @@ def generate_image(prompt: str, width: int = 1024, height: int = 1024, seed: int
 
     best: bytes | None = None
     for attempt in range(MAX_IMAGE_ATTEMPTS):
+        if attempt > 0:
+            time.sleep(_RETRY_BACKOFF_SECONDS * attempt)
         attempt_seed = base_seed if attempt == 0 else random.randint(0, 2**31 - 1)
         data = _fetch_once(prompt, width, height, attempt_seed)
         if data is None:
