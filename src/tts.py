@@ -22,8 +22,14 @@ RETRY_DELAY_S = 3
 
 
 async def _synthesize(text: str, output_path: Path, voice: str) -> None:
+    # -15% (valor antigo) saía devagar demais e monótono — feedback direto
+    # de quem assistiu vários vídeos publicados: "muito chatos, precisam de
+    # mais entonação e vontade". Velocidade normal + tom um pouco mais alto
+    # soa bem mais engajado sem virar corrida de fala. Se mudar de novo,
+    # recalibrar WORDS_PER_MINUTE em script_gen.py junto (duração do vídeo
+    # depende dessa velocidade).
     communicate = edge_tts.Communicate(
-        text, voice, pitch="+5Hz", rate="-15%", volume="+10%"
+        text, voice, pitch="+8Hz", rate="+0%", volume="+15%"
     )
     await communicate.save(str(output_path))
 
