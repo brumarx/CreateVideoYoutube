@@ -601,26 +601,33 @@ def concat_scenes(
     return output_path
 
 
-# A licença CC BY 4.0 (ver assets/music/ATTRIBUTION.md) exige creditar a
-# faixa na descrição de todo vídeo que a usa — mapa fixo em vez de parsear o
-# markdown, pra nunca publicar sem atribuição por causa de um parse errado.
+# As faixas do Kevin MacLeod (CC BY 4.0) EXIGEM essa linha na descrição de
+# todo vídeo que usa a faixa; as do Pixabay Content License não exigem
+# (atribuição opcional), mas incluídas do mesmo jeito por boa prática — ver
+# assets/music/ATTRIBUTION.md pros detalhes de licença de cada uma. Mapa
+# fixo em vez de parsear o markdown, pra nunca publicar sem atribuição por
+# causa de um parse errado.
 TRACK_ATTRIBUTION = {
     "morning.mp3": '"Morning" Kevin MacLeod (incompetech.com) — Licensed under Creative Commons: By Attribution 4.0 License',
     "evening.mp3": '"Evening" Kevin MacLeod (incompetech.com) — Licensed under Creative Commons: By Attribution 4.0 License',
     "deep_relaxation.mp3": '"Deep Relaxation" Kevin MacLeod (incompetech.com) — Licensed under Creative Commons: By Attribution 4.0 License',
     "study_and_relax.mp3": '"Study And Relax" Kevin MacLeod (incompetech.com) — Licensed under Creative Commons: By Attribution 4.0 License',
+    "tense_suspense.mp3": '"Tense Suspense" by leberch (Pixabay)',
+    "animado_motivational.mp3": '"Inspirational Cinematic Motivational Music" by SigmaMusicArt (Pixabay)',
 }
 
 # Clima mais próximo de cada faixa — usado por add_background_music(mood=...)
 # pra não sortear música de "relaxar estudando" pra narrar uma derrota ou
 # uma denúncia grave (feedback direto: descompasso feio entre tom do vídeo
-# e trilha). Nenhuma faixa cobre bem "tenso"/"animado" ainda — só entram
-# mais opções aqui quando o catálogo crescer (ver plano de SFX/música).
+# e trilha). "tense_suspense.mp3"/"animado_motivational.mp3" (Pixabay,
+# baixadas 2026-09-21) cobrem os climas que faltavam.
 TRACK_MOOD = {
     "morning.mp3": "neutro",
     "evening.mp3": "melancolico",
     "deep_relaxation.mp3": "calmo",
     "study_and_relax.mp3": "neutro",
+    "tense_suspense.mp3": "tenso",
+    "animado_motivational.mp3": "animado",
 }
 
 
