@@ -11,12 +11,16 @@ from .providers import complete
 
 log = logging.getLogger("script_gen")
 
-# edge-tts com rate="-15%" narra a ~130 palavras/minuto em pt-BR (medido nos
-# vídeos já publicados). Pedir "um vídeo de X minutos" pro LLM não funciona:
-# ele bate a CONTAGEM de cenas mas escreve frases curtas demais em cada uma
-# (visto num vídeo longo que saiu com 4min em vez de 15-20). Por isso convertemos
-# minutos-alvo em palavras-por-cena, uma meta concreta e verificável.
-WORDS_PER_MINUTE = 130
+# edge-tts com rate="+0%" (ver src/tts.py — subiu de "-15%" por soar
+# monótono/devagar demais) narra a ~150 palavras/minuto em pt-BR (medido:
+# -15% dava ~130 wpm, +0% mede ~15% mais rápido). Pedir "um vídeo de X
+# minutos" pro LLM não funciona: ele bate a CONTAGEM de cenas mas escreve
+# frases curtas demais em cada uma (visto num vídeo longo que saiu com 4min
+# em vez de 15-20). Por isso convertemos minutos-alvo em palavras-por-cena,
+# uma meta concreta e verificável. Se a velocidade da narração mudar de
+# novo, remedir e ajustar aqui junto — senão a duração real do vídeo
+# desalinha do que o painel mostra.
+WORDS_PER_MINUTE = 150
 MIN_WORDS_RATIO = 0.7  # abaixo disso, tenta de novo antes de aceitar
 MAX_WORDS_RATIO = 1.15  # acima disso, também tenta de novo (nunca tinha teto)
 
@@ -64,7 +68,20 @@ SYSTEM_PROMPT = (
     "ou uma pergunta que gera curiosidade imediata — NUNCA comece com "
     "saudação, apresentação do canal, contexto histórico/geográfico ou "
     "'hoje vamos falar sobre...'. Vá direto ao ponto mais interessante e só "
-    "depois explique o contexto."
+    "depois explique o contexto. "
+    "REGRA CRÍTICA sobre reter até o fim (não só abrir bem): gancho forte só "
+    "na cena 1 não basta — feedback direto de quem assistiu vários vídeos "
+    "publicados foi que o meio 'fica chato', gente abandona antes do fim. "
+    "TODA cena, não só a primeira, tem que terminar puxando pra próxima: uma "
+    "pergunta em aberto, uma contradição ainda não explicada, uma promessa "
+    "('mas o que aconteceu depois é ainda mais surpreendente'), nunca uma "
+    "frase que soa como ponto final de assunto encerrado. Varie o ritmo das "
+    "frases (curtas e diretas misturadas com uma mais longa, nunca a mesma "
+    "estrutura sintática repetida cena após cena), fale direto com quem "
+    "assiste ('você', 'imagina se...', perguntas retóricas) em vez de tom de "
+    "verbete/enciclopédia, e nunca deixe duas cenas seguidas em tom "
+    "puramente informativo sem reação, tensão ou surpresa nenhuma — isso é "
+    "o que mais mata retenção no meio do vídeo."
 )
 
 
@@ -221,9 +238,27 @@ def _is_risky_face_prompt(prompt: str) -> bool:
 
 
 def _sanitize_person_images(topic: str, script: dict) -> dict:
-    if not _PROPER_NAME_RE.search(topic):
-        return script
+    # Antes só olhava o TÓPICO do vídeo — suficiente quando nome de pessoa
+    # real é exceção rara no tema, mas insuficiente pra um canal como o de
+    # análise de futebol, que cita jogador real pelo nome em quase toda
+    # cena sem esse nome necessariamente aparecer no tópico (ex.: tópico
+    # "Botafogo 3 x 2 Mirassol", narração citando "Arthur Cabral marcou aos
+    # 11 minutos"). Agora cada cena é checada pela própria narração também,
+    # além do tópico — mais protetivo pra todo canal, sem custo (só troca
+    # um image_prompt arriscado quando o texto daquela cena já nomeia
+    # alguém real).
+    topic_has_name = bool(_PROPER_NAME_RE.search(topic))
+    # Rastreado à parte do loop pra decidir se a THUMBNAIL também precisa de
+    # checagem: um vídeo sem pessoa real nenhuma pode (e deve, ver
+    # SYSTEM_PROMPT) usar expressão facial exagerada e genérica na
+    # thumbnail — sanitizar isso à toa derrubaria uma thumbnail boa e
+    # legítima em todo canal sem gente real no roteiro.
+    any_name_mentioned = topic_has_name
     for i, scene in enumerate(script.get("scenes", [])):
+        scene_has_name = topic_has_name or bool(_PROPER_NAME_RE.search(scene.get("narration", "")))
+        any_name_mentioned = any_name_mentioned or scene_has_name
+        if not scene_has_name:
+            continue
         prompt = scene.get("image_prompt", "")
         if _is_risky_face_prompt(prompt):
             log.warning("cena %d: image_prompt arriscado (rosto de pessoa real), substituindo: %s", i, prompt[:150])
@@ -233,10 +268,11 @@ def _sanitize_person_images(topic: str, script: dict) -> dict:
             # não é dela, mas o contexto arriscado já mostra que o LLM
             # tratou essa cena como sendo sobre ela especificamente).
             scene["stock_query"] = None
-    thumb_prompt = script.get("thumbnail_image_prompt")
-    if _is_risky_face_prompt(thumb_prompt or ""):
-        log.warning("thumbnail_image_prompt arriscado (rosto de pessoa real), substituindo: %s", (thumb_prompt or "")[:150])
-        script["thumbnail_image_prompt"] = _SAFE_FALLBACK_IMAGE_PROMPT
+    if any_name_mentioned:
+        thumb_prompt = script.get("thumbnail_image_prompt")
+        if _is_risky_face_prompt(thumb_prompt or ""):
+            log.warning("thumbnail_image_prompt arriscado (rosto de pessoa real), substituindo: %s", (thumb_prompt or "")[:150])
+            script["thumbnail_image_prompt"] = _SAFE_FALLBACK_IMAGE_PROMPT
     return script
 
 
