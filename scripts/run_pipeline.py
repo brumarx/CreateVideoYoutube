@@ -237,19 +237,31 @@ def run(
             # Sem PEXELS_API_KEYS configurada, ou sem resultado, cada nível cai
             # pro próximo automaticamente.
             #
-            # stock_query é preenchido pelo LLM, mas a cascata de modelos
-            # gratuitos às vezes cai num modelo mais fraco que ignora campo
-            # extra do schema (visto de verdade: roteiro veio sem stock_query
-            # nenhum, mesmo num tema perfeito pra vídeo real). Vídeo real é
-            # prioridade — em vez de desistir e ir direto pra IA só porque o
-            # LLM esqueceu o campo, usa as primeiras palavras do image_prompt
-            # (esse sim sempre vem preenchido) como busca de reserva.
-            stock_query = scene.get("stock_query") or " ".join(scene["image_prompt"].split()[:8])
-            stock_clip_path = search_stock_clip(stock_query, width, height)
+            # stock_query ausente (None/chave faltando) é a cascata de
+            # modelos gratuitos caindo num modelo mais fraco que ignora
+            # campo extra do schema (visto de verdade: roteiro veio sem
+            # stock_query nenhum, mesmo num tema perfeito pra vídeo real) —
+            # nesse caso vale tentar buscar mesmo assim, com as primeiras
+            # palavras do image_prompt (esse sim sempre vem preenchido) como
+            # busca de reserva. Já stock_query == "" (string vazia, não
+            # None) é _sanitize_person_images desativando a busca de
+            # PROPÓSITO (cena sobre pessoa real — nunca buscar filmagem
+            # usando o contexto dela); tratar os dois casos igual reabriria
+            # esse buraco de segurança E, na prática, mandava o texto do
+            # _SAFE_FALLBACK_IMAGE_PROMPT pro Pexels como se fosse busca de
+            # verdade (visto nos logs: "symbolic wide shot related to the
+            # story, no" virou clipe repetido dezenas de vezes).
+            raw_stock_query = scene.get("stock_query")
+            if raw_stock_query is None:
+                stock_query = " ".join(scene["image_prompt"].split()[:8])
+            else:
+                stock_query = raw_stock_query or None
+
+            stock_clip_path = search_stock_clip(stock_query, width, height) if stock_query else None
 
             image_path = None
             if stock_clip_path is None:
-                image_bytes = search_stock_photo(stock_query, width, height)
+                image_bytes = search_stock_photo(stock_query, width, height) if stock_query else None
                 if image_bytes is None:
                     # pede a imagem já no formato final do vídeo — pedir quadrado
                     # e esticar depois no ffmpeg distorcia e borrava tudo
