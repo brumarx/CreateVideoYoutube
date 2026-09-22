@@ -11,16 +11,16 @@ from .providers import complete
 
 log = logging.getLogger("script_gen")
 
-# edge-tts com rate="+0%" (ver src/tts.py — subiu de "-15%" por soar
-# monótono/devagar demais) narra a ~150 palavras/minuto em pt-BR (medido:
-# -15% dava ~130 wpm, +0% mede ~15% mais rápido). Pedir "um vídeo de X
+# edge-tts com rate="-8%" (ver src/tts.py — meio-termo entre "-15%", que
+# soava monótono/devagar demais, e "+0%", que ficou rápido demais) narra a
+# ~140 palavras/minuto em pt-BR (medido: -15% dava ~130 wpm, +0% ~150). Pedir "um vídeo de X
 # minutos" pro LLM não funciona: ele bate a CONTAGEM de cenas mas escreve
 # frases curtas demais em cada uma (visto num vídeo longo que saiu com 4min
 # em vez de 15-20). Por isso convertemos minutos-alvo em palavras-por-cena,
 # uma meta concreta e verificável. Se a velocidade da narração mudar de
 # novo, remedir e ajustar aqui junto — senão a duração real do vídeo
 # desalinha do que o painel mostra.
-WORDS_PER_MINUTE = 150
+WORDS_PER_MINUTE = 140
 MIN_WORDS_RATIO = 0.7  # abaixo disso, tenta de novo antes de aceitar
 MAX_WORDS_RATIO = 1.15  # acima disso, também tenta de novo (nunca tinha teto)
 
