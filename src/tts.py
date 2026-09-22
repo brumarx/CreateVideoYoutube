@@ -26,7 +26,8 @@ async def _synthesize(text: str, output_path: Path, voice: str, metadata_path: P
     # -15% (valor antigo) saía devagar demais e monótono — feedback direto
     # de quem assistiu vários vídeos publicados: "muito chatos, precisam de
     # mais entonação e vontade". Velocidade normal + tom um pouco mais alto
-    # soa bem mais engajado sem virar corrida de fala. Se mudar de novo,
+    # soa bem mais engajado. Só que +0% ficou rápido demais na prática
+    # (feedback seguinte), então fica no meio-termo: -8%. Se mudar de novo,
     # recalibrar WORDS_PER_MINUTE em script_gen.py junto (duração do vídeo
     # depende dessa velocidade).
     # boundary="WordBoundary" é obrigatório aqui — o padrão da lib é
@@ -34,7 +35,7 @@ async def _synthesize(text: str, output_path: Path, voice: str, metadata_path: P
     # legenda karaokê palavra a palavra); sem isso o metadata sai vazio de
     # WordBoundary (testado ao vivo: virava 0 palavras sempre).
     communicate = edge_tts.Communicate(
-        text, voice, pitch="+8Hz", rate="+0%", volume="+15%", boundary="WordBoundary"
+        text, voice, pitch="+8Hz", rate="-8%", volume="+15%", boundary="WordBoundary"
     )
     await communicate.save(str(output_path), str(metadata_path))
 
