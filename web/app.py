@@ -85,7 +85,7 @@ TEMPLATE = """
     .topic-edit button, .topic-add button { width: auto; }
     table { font-size: 12px; min-width: 420px; }
     th, td { padding: 8px 6px; }
-    td:nth-child(3) { max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    td.topic-cell { white-space: normal; overflow-wrap: anywhere; }
   }
 </style>
 </head>
@@ -191,7 +191,7 @@ TEMPLATE = """
     <tr>
       <td>{{ j.id }}</td>
       <td>{{ j.channel }}</td>
-      <td>{{ j.topic[:60] }}</td>
+      <td class="topic-cell">{{ j.topic }}</td>
       <td class="status-{{ j.status }}">{{ j.status }}</td>
       <td>{% if j.youtube_video_id %}<a href="https://youtu.be/{{ j.youtube_video_id }}" target="_blank">assistir</a>{% endif %}</td>
     </tr>
