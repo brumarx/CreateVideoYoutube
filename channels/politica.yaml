@@ -41,6 +41,7 @@ topics:
   - "Como o Tribunal de Contas da União calcula e devolve o dinheiro economizado pelo Fundo Partidário"
   - "Como o sistema de apuração eletrônica do TSE garante a integridade do voto por meio de auditorias de segurança e provas lógicas"
   - "Como o processo legislativo funciona na apreciação e aprovação da Código de Conduta dos Parlamentares no Brasil?"
+  - "Como o sistema de renúncia fiscal permite que empresas paguem menos impostos em troca de investimentos aprovados por parlamentares"
 prompt_base: >
   Escreva um roteiro de curiosidades sobre política brasileira. SE houver uma
   seção "DADOS REAIS" abaixo (formato curto): use SOMENTE esses dados (não
