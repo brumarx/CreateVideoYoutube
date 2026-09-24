@@ -1,9 +1,9 @@
 """Narração via edge-tts — baseado em /var/www/html/reacao/bot/tts_edge.py
 do ariaBot (mesma lib, mesma prosódia padrão) — ou via Azure AI Speech
-(API oficial paga da Microsoft, mais vozes pt-BR e sem as falhas
-aleatórias do endpoint grátis) quando o canal tem `tts_provider: "azure"`.
-Azure sem chave, sem cota ou fora do ar cai sozinho pro edge-tts: o vídeo
-nunca deixa de sair por causa da voz."""
+(API oficial da Microsoft) pras vozes pt-BR que o edge-tts não tem. O
+motor é decidido pela própria voz sorteada: as 3 do edge seguem grátis pelo
+edge-tts; qualquer outra vai pela Azure. Azure sem chave, sem cota ou fora
+do ar cai sozinho pro edge-tts: o vídeo nunca deixa de sair por causa da voz."""
 from __future__ import annotations
 
 import asyncio
@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 import edge_tts
+import httpx
 
 from .config import AZURE_SPEECH_KEYS, AZURE_SPEECH_REGION
 
@@ -23,6 +24,36 @@ PITCH, RATE, VOLUME = "+8Hz", "-8%", "+15%"
 # vozes que o edge-tts grátis tem — voz só-Azure usa este fallback
 EDGE_VOICES = {"pt-BR-AntonioNeural", "pt-BR-FranciscaNeural", "pt-BR-ThalitaMultilingualNeural"}
 EDGE_FALLBACK_VOICE = "pt-BR-AntonioNeural"
+
+AZURE_VOICES_CACHE = Path(__file__).resolve().parent.parent / "data" / "azure_voices.json"
+
+
+def azure_voices(locale: str = "pt-BR") -> list[dict]:
+    """Vozes da Azure pro idioma (sem as 3 que o edge já tem), cada uma
+    {"id", "nome", "genero"}. Lista vem da API e fica em cache no disco
+    (muda raramente); sem chave devolve [] — painel só mostra as do edge."""
+    if not AZURE_SPEECH_KEYS:
+        return []
+    voices = None
+    if AZURE_VOICES_CACHE.exists() and time.time() - AZURE_VOICES_CACHE.stat().st_mtime < 7 * 86400:
+        voices = json.loads(AZURE_VOICES_CACHE.read_text())
+    if voices is None:
+        try:
+            resp = httpx.get(
+                f"https://{AZURE_SPEECH_REGION}.tts.speech.microsoft.com/cognitiveservices/voices/list",
+                headers={"Ocp-Apim-Subscription-Key": AZURE_SPEECH_KEYS[0]}, timeout=20,
+            )
+            resp.raise_for_status()
+            voices = resp.json()
+            AZURE_VOICES_CACHE.write_text(json.dumps(voices, ensure_ascii=False))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("não consegui listar vozes da Azure: %s", exc)
+            return []
+    return [
+        {"id": v["ShortName"], "nome": v.get("LocalName") or v["ShortName"], "genero": v.get("Gender", "")}
+        for v in voices
+        if v.get("Locale") == locale and v["ShortName"] not in EDGE_VOICES
+    ]
 
 DEFAULT_VOICE = "pt-BR-FranciscaNeural"
 
@@ -109,22 +140,21 @@ def _synthesize_azure(text: str, output_path: Path, voice: str) -> list[dict]:
     return word_boundaries
 
 
-def narrate(
-    text: str, output_path: Path, voice: str = DEFAULT_VOICE, provider: str = "edge",
-) -> tuple[Path, list[dict]]:
+def narrate(text: str, output_path: Path, voice: str = DEFAULT_VOICE) -> tuple[Path, list[dict]]:
     """Sintetiza `text` em áudio mp3 e devolve (caminho salvo, lista de
     palavras com tempo real `{"text", "start", "end"}` em segundos — vazia
     se o serviço não mandou WordBoundary por algum motivo; quem chamar deve
     cair pra um fallback nesse caso, nunca assumir que sempre vem preenchida)."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    if provider == "azure" and AZURE_SPEECH_KEYS:
-        try:
-            return output_path, _synthesize_azure(text, output_path, voice)
-        except Exception as exc:  # noqa: BLE001 — qualquer falha da Azure cai pro grátis
-            log.warning("azure tts indisponível (%s) — usando edge-tts", exc)
-    elif provider == "azure":
-        log.warning("tts_provider azure sem AZURE_SPEECH_KEYS no .env — usando edge-tts")
     if voice not in EDGE_VOICES:
+        # voz só-Azure
+        if AZURE_SPEECH_KEYS:
+            try:
+                return output_path, _synthesize_azure(text, output_path, voice)
+            except Exception as exc:  # noqa: BLE001 — qualquer falha da Azure cai pro grátis
+                log.warning("azure tts indisponível (%s) — usando edge-tts", exc)
+        else:
+            log.warning("voz %s é da Azure mas não há AZURE_SPEECH_KEYS no .env — usando edge-tts", voice)
         voice = EDGE_FALLBACK_VOICE
     metadata_path = output_path.with_suffix(".wordtimes.json")
     for attempt in range(1, MAX_ATTEMPTS + 1):

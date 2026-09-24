@@ -5,7 +5,6 @@ hashtags: ["#Curiosidades", "#FatosCuriosos", "#FractalCurioso"]
 youtube_handle: "@fractalcurioso"
 channel_title: "Fractal Curioso"
 language: "pt-BR"
-tts_provider: "azure"
 tts_voice_weights:
   pt-BR-AntonioNeural: 100
   pt-BR-FranciscaNeural: 0
