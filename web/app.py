@@ -21,7 +21,7 @@ from flask import Flask, redirect, render_template_string, request, url_for
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.config import ChannelConfig  # noqa: E402
+from src.config import AZURE_SPEECH_KEYS, ChannelConfig  # noqa: E402
 from src.orchestrator import get_job, jobs_with_status, recent_jobs, update  # noqa: E402
 from src.politica_data import FACT_FETCHERS  # noqa: E402
 from src.topics import STATE_FILE as USED_TOPICS_FILE  # noqa: E402
@@ -171,6 +171,12 @@ TEMPLATE = """
       </form>
 
       <form method="post" action="{{ url_for('save_voices', channel=c.name) }}">
+        <label style="display:block; font-size:11px; color:#9aa0a8; margin-top:10px;">Motor de voz
+          <select name="tts_provider" style="width:100%; box-sizing:border-box; padding:8px 6px; margin-top:2px; background:#0f1115; border:1px solid #262b35; border-radius:6px; color:#e6e6e6; font-size:16px;">
+            <option value="edge" {{ "selected" if c.tts_provider == "edge" }}>edge-tts (grátis)</option>
+            <option value="azure" {{ "selected" if c.tts_provider == "azure" }}>Azure AI Speech{{ "" if azure_ready else " — sem chave no .env, usa edge" }}</option>
+          </select>
+        </label>
         <label style="display:block; font-size:11px; color:#9aa0a8; margin-top:10px;">Voz da narração (sorteada por vídeo, peso relativo)</label>
         <div class="durations">
           <label>Antonio (M)<input type="number" min="0" step="1" name="voice_antonio" value="{{ c.voice_antonio }}"></label>
@@ -337,6 +343,7 @@ def _load_channels() -> list[dict]:
                 "upload_privacy": cfg.get("upload_privacy", "private"),
                 "token_status": _token_status(name),
                 "require_approval": cfg.get("require_approval", True),
+                "tts_provider": cfg.get("tts_provider", "edge"),
                 # canais sem fila de temas (botafogo: tema vem da partida)
                 # não usam temas virais.
                 "uses_topic_queue": "topics" in cfg,
@@ -405,6 +412,7 @@ def index():
     return render_template_string(
         TEMPLATE, channels=channels, jobs=jobs, any_public=any_public, flash=flash, total_uploads=total_uploads,
         pending=jobs_with_status("awaiting_approval"),
+        azure_ready=bool(AZURE_SPEECH_KEYS),
     )
 
 
@@ -465,6 +473,11 @@ def save_voices(channel: str):
             weights[voice_id] = 0
     if not any(weights.values()):
         return redirect(url_for("index"))  # não deixa zerar tudo (ninguém narraria)
+
+    provider = request.form.get("tts_provider", "")
+    if provider in ("edge", "azure"):
+        text_now = _yaml_set_scalar(path.read_text(), "tts_provider", f'"{provider}"')
+        path.write_text(text_now)
 
     block = "tts_voice_weights:\n" + "".join(f"  {voice}: {w}\n" for voice, w in weights.items())
     text = path.read_text()

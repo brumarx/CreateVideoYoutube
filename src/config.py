@@ -39,6 +39,10 @@ FREE_TTS_VOICES = ("pt-BR-AntonioNeural", "pt-BR-FranciscaNeural", "pt-BR-Thalit
 POLLINATIONS_API_KEYS = _keys("POLLINATIONS_API_KEYS")
 PEXELS_API_KEYS = _keys("PEXELS_API_KEYS")
 TAVILY_API_KEYS = _keys("TAVILY_API_KEYS")
+# Azure AI Speech (voz neural oficial da Microsoft, ver src/tts.py). Sem
+# chave, canal com tts_provider "azure" cai pro edge-tts grátis.
+AZURE_SPEECH_KEYS = _keys("AZURE_SPEECH_KEYS")
+AZURE_SPEECH_REGION = os.environ.get("AZURE_SPEECH_REGION", "brazilsouth").strip()
 YOUTUBE_CLIENT_SECRET_FILE = ROOT / os.getenv(
     "YOUTUBE_CLIENT_SECRET_FILE", "credentials/client_secret.json"
 )
@@ -112,6 +116,9 @@ class ChannelConfig:
     # vídeo sobe privado e só vira público quando alguém clica "Aprovar" no
     # painel (web/app.py) — última barreira contra roteiro errado no ar.
     require_approval: bool
+    # "edge" (edge-tts, grátis, 3 vozes) ou "azure" (Azure AI Speech, mais
+    # vozes e estável; cai pro edge sozinho se falhar ou sem chave).
+    tts_provider: str
 
     @staticmethod
     def load(name: str) -> "ChannelConfig":
@@ -147,4 +154,5 @@ class ChannelConfig:
             viral_queries=data.get("viral_queries", []),
             viral_share=data.get("viral_share", 0.5),
             require_approval=data.get("require_approval", True),
+            tts_provider=data.get("tts_provider", "edge"),
         )

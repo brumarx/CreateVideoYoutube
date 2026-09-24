@@ -5,6 +5,7 @@ hashtags: ["#Curiosidades", "#FatosCuriosos", "#FractalCurioso"]
 youtube_handle: "@fractalcurioso"
 channel_title: "Fractal Curioso"
 language: "pt-BR"
+tts_provider: "azure"
 tts_voice_weights:
   pt-BR-AntonioNeural: 100
   pt-BR-FranciscaNeural: 0
@@ -54,6 +55,7 @@ topics:
   - "O que aconteceria se a Lua desaparecesse amanhã?"
   - "Coisas proíbidas no Japão"
   - "Animais que matam com uma única mordida"
+  - "7 casos reais em que câmeras de segurança registraram crimes que os suspeitos ignoraram e se gabaram"
 prompt_base: >
   Escreva um roteiro envolvente no estilo de canais de curiosidades/histórias
   do YouTube (tipo Reddit stories / fatos incríveis). O ângulo deste canal é
