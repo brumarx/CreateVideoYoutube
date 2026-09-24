@@ -8,3 +8,4 @@ Pillow>=10.4
 PyYAML>=6.0
 flask>=3.0
 yt-dlp>=2025.1
+azure-cognitiveservices-speech>=1.40

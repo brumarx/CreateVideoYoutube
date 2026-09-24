@@ -259,7 +259,7 @@ def run(
         for i, scene in enumerate(script["scenes"]):
             log.info("[%s] cena %d/%d", job_id, i + 1, len(script["scenes"]))
             audio_path = work_dir / f"scene_{i}.mp3"
-            _, word_boundaries = narrate(scene["narration"], audio_path, voice=tts_voice)
+            _, word_boundaries = narrate(scene["narration"], audio_path, voice=tts_voice, provider=channel.tts_provider)
             scene_durations.append(_ffprobe_duration(audio_path))
 
             # Cascata de conteúdo visual, do mais vivo/crível pro último recurso:
