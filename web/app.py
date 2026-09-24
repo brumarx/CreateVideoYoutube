@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.config import AZURE_SPEECH_KEYS, ChannelConfig  # noqa: E402
+from src.tts import EDGE_VOICES, azure_voices  # noqa: E402
 from src.orchestrator import get_job, jobs_with_status, recent_jobs, update  # noqa: E402
 from src.politica_data import FACT_FETCHERS  # noqa: E402
 from src.topics import STATE_FILE as USED_TOPICS_FILE  # noqa: E402
@@ -171,18 +172,13 @@ TEMPLATE = """
       </form>
 
       <form method="post" action="{{ url_for('save_voices', channel=c.name) }}">
-        <label style="display:block; font-size:11px; color:#9aa0a8; margin-top:10px;">Motor de voz
-          <select name="tts_provider" style="width:100%; box-sizing:border-box; padding:8px 6px; margin-top:2px; background:#0f1115; border:1px solid #262b35; border-radius:6px; color:#e6e6e6; font-size:16px;">
-            <option value="edge" {{ "selected" if c.tts_provider == "edge" }}>edge-tts (grátis)</option>
-            <option value="azure" {{ "selected" if c.tts_provider == "azure" }}>Azure AI Speech{{ "" if azure_ready else " — sem chave no .env, usa edge" }}</option>
-          </select>
-        </label>
-        <label style="display:block; font-size:11px; color:#9aa0a8; margin-top:10px;">Voz da narração (sorteada por vídeo, peso relativo)</label>
+        <label style="display:block; font-size:11px; color:#9aa0a8; margin-top:10px;">Voz da narração (sorteada por vídeo, peso relativo — 0 = nunca)</label>
         <div class="durations">
-          <label>Antonio (M)<input type="number" min="0" step="1" name="voice_antonio" value="{{ c.voice_antonio }}"></label>
-          <label>Francisca (F)<input type="number" min="0" step="1" name="voice_francisca" value="{{ c.voice_francisca }}"></label>
-          <label>Thalita (F)<input type="number" min="0" step="1" name="voice_thalita" value="{{ c.voice_thalita }}"></label>
+          {% for v in c.voices %}
+          <label>{{ v.nome }} ({{ v.genero }}){% if v.azure %} · <span style="color:#6ea8ff;">Azure</span>{% endif %}<input type="number" min="0" step="1" name="w__{{ v.id }}" value="{{ v.peso }}"></label>
+          {% endfor %}
         </div>
+        {% if not azure_ready %}<div style="font-size:11px; color:#7d838c;">mais vozes aparecem aqui quando AZURE_SPEECH_KEYS estiver no .env</div>{% endif %}
         <button type="submit" class="save-link">salvar vozes</button>
       </form>
 
@@ -301,6 +297,27 @@ _TOKEN_CACHE: dict[str, tuple[float, str]] = {}
 _TOKEN_CACHE_TTL = 600
 
 
+EDGE_VOICE_LABELS = {
+    "pt-BR-AntonioNeural": ("Antonio", "M"),
+    "pt-BR-FranciscaNeural": ("Francisca", "F"),
+    "pt-BR-ThalitaMultilingualNeural": ("Thalita", "F"),
+}
+_EDGE_DEFAULT_WEIGHTS = {"pt-BR-AntonioNeural": 50, "pt-BR-FranciscaNeural": 30, "pt-BR-ThalitaMultilingualNeural": 20}
+
+
+def _voice_options(weights: dict) -> list[dict]:
+    """3 vozes do edge (grátis) + vozes pt-BR da Azure, se houver chave."""
+    weights = weights or _EDGE_DEFAULT_WEIGHTS
+    out = [
+        {"id": vid, "nome": nome, "genero": gen, "azure": False, "peso": weights.get(vid, 0)}
+        for vid, (nome, gen) in EDGE_VOICE_LABELS.items()
+    ]
+    for v in azure_voices():
+        gen = {"Male": "M", "Female": "F"}.get(v["genero"], v["genero"][:1])
+        out.append({"id": v["id"], "nome": v["nome"], "genero": gen, "azure": True, "peso": weights.get(v["id"], 0)})
+    return out
+
+
 def _token_status(name: str) -> str:
     """"ok", "missing" ou "invalid"."""
     token_file = ROOT / "credentials" / f"token_{name}.json"
@@ -343,7 +360,6 @@ def _load_channels() -> list[dict]:
                 "upload_privacy": cfg.get("upload_privacy", "private"),
                 "token_status": _token_status(name),
                 "require_approval": cfg.get("require_approval", True),
-                "tts_provider": cfg.get("tts_provider", "edge"),
                 # canais sem fila de temas (botafogo: tema vem da partida)
                 # não usam temas virais.
                 "uses_topic_queue": "topics" in cfg,
@@ -366,9 +382,7 @@ def _load_channels() -> list[dict]:
                 "long_min_minutes": cfg.get("long_min_minutes", 15),
                 "long_max_minutes": cfg.get("long_max_minutes", 20),
                 "daily_format": cfg.get("daily_format", "short"),
-                "voice_antonio": cfg.get("tts_voice_weights", {}).get("pt-BR-AntonioNeural", 50),
-                "voice_francisca": cfg.get("tts_voice_weights", {}).get("pt-BR-FranciscaNeural", 30),
-                "voice_thalita": cfg.get("tts_voice_weights", {}).get("pt-BR-ThalitaMultilingualNeural", 20),
+                "voices": _voice_options(cfg.get("tts_voice_weights", {})),
                 # política no formato curto ignora `topics` (lista acima) e
                 # sorteia um destes ~20 fatos reais do banco de transparência
                 # (ver src/politica_data.py) — sem isso listado aqui, a fila
@@ -462,22 +476,20 @@ def save_voices(channel: str):
         return redirect(url_for("index"))
 
     weights = {}
-    for form_field, voice_id in (
-        ("voice_antonio", "pt-BR-AntonioNeural"),
-        ("voice_francisca", "pt-BR-FranciscaNeural"),
-        ("voice_thalita", "pt-BR-ThalitaMultilingualNeural"),
-    ):
+    for field_name, raw in request.form.items():
+        if not field_name.startswith("w__"):
+            continue
         try:
-            weights[voice_id] = max(int(request.form.get(form_field, "0")), 0)
+            weight = max(int(raw), 0)
         except ValueError:
-            weights[voice_id] = 0
+            weight = 0
+        voice_id = field_name[3:]
+        # vozes do edge sempre ficam no yaml (mesmo com 0, como antes);
+        # as da Azure só entram se tiverem peso
+        if weight or voice_id in EDGE_VOICES:
+            weights[voice_id] = weight
     if not any(weights.values()):
         return redirect(url_for("index"))  # não deixa zerar tudo (ninguém narraria)
-
-    provider = request.form.get("tts_provider", "")
-    if provider in ("edge", "azure"):
-        text_now = _yaml_set_scalar(path.read_text(), "tts_provider", f'"{provider}"')
-        path.write_text(text_now)
 
     block = "tts_voice_weights:\n" + "".join(f"  {voice}: {w}\n" for voice, w in weights.items())
     text = path.read_text()
