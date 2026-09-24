@@ -68,6 +68,11 @@ def main() -> None:
         cfg = yaml.safe_load(yaml_path.read_text())
         run_channel(channel_name, cfg)
 
+    # vídeos já renderizados cujo upload falhou (hoje ou antes — ex. token
+    # OAuth expirado e reautorizado depois). Roda no fim: upload que falhou
+    # por token não gasta cota, então sobra cota pro reenvio.
+    subprocess.run([sys.executable, str(ROOT / "scripts" / "retry_uploads.py")], cwd=ROOT)
+
     log.info("rodada diária concluída")
 
 
