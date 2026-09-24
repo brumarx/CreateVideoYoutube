@@ -21,7 +21,8 @@ from flask import Flask, redirect, render_template_string, request, url_for
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.orchestrator import recent_jobs  # noqa: E402
+from src.config import ChannelConfig  # noqa: E402
+from src.orchestrator import get_job, jobs_with_status, recent_jobs, update  # noqa: E402
 from src.politica_data import FACT_FETCHERS  # noqa: E402
 from src.topics import STATE_FILE as USED_TOPICS_FILE  # noqa: E402
 
@@ -59,6 +60,8 @@ TEMPLATE = """
   th { color: #9aa0a8; font-weight: 500; }
   a { color: #6ea8ff; }
   .status-uploaded { color: #5fd685; }
+  .status-awaiting_approval { color: #e0a94f; }
+  .status-rejected { color: #7d838c; }
   .status-failed, .status-error { color: #e05f5f; }
   .flash { background: #16351f; color: #5fd685; padding: 10px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 13px; }
   .durations { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
@@ -93,10 +96,31 @@ TEMPLATE = """
 </head>
 <body>
   <h1>Pipeline de vídeos IA</h1>
-  <div class="sub">Roda todo dia às 10h via cron. Uploads saem {{ 'públicos' if any_public else 'privados' }} direto.</div>
+  <div class="sub">Roda todo dia às 10h via cron. Todo roteiro passa por revisão de fatos antes de virar vídeo; canais com aprovação ligada sobem privados e esperam você aprovar aqui.</div>
 
   {% if flash %}<div class="flash">{{ flash }}</div>{% endif %}
   {% if total_uploads > 5 %}<div class="flash" style="background:#3a2a12; color:#e0a94f;">Soma de vídeos/dia = {{ total_uploads }}. A cota da API do YouTube aguenta ~5 uploads/dia no total (1.700 unidades cada, limite 10.000) — os últimos canais da rodada vão falhar.</div>{% endif %}
+
+  {% if pending %}
+  <h1>Aguardando aprovação ({{ pending|length }})</h1>
+  <div class="sub">Estes vídeos já estão no YouTube como <b>privados</b>. Assista (logado na conta do canal) e aprove para publicar.</div>
+  <div class="channels">
+    {% for j in pending %}
+    <div class="card">
+      <div class="meta">{{ j.channel }} · job {{ j.id }}</div>
+      <h2 style="margin-top:4px;">{{ j.topic }}</h2>
+      <div class="meta" style="margin:6px 0 10px;">
+        <a href="https://youtu.be/{{ j.youtube_video_id }}" target="_blank">assistir</a> ·
+        <a href="https://studio.youtube.com/video/{{ j.youtube_video_id }}/edit" target="_blank">editar no Studio</a>
+      </div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        <form method="post" action="{{ url_for('approve_job', job_id=j.id) }}" style="flex:1; margin:0;"><button type="submit" style="width:100%; background:#1f7a45;">Aprovar e publicar</button></form>
+        <form method="post" action="{{ url_for('reject_job', job_id=j.id) }}" style="flex:1; margin:0;"><button type="submit" style="width:100%; background:#3a1616; color:#e08f8f;">Rejeitar (fica privado)</button></form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
 
   <div class="channels">
     {% for c in channels %}
@@ -121,6 +145,10 @@ TEMPLATE = """
             </select>
           </label>
         </div>
+        <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#c7cbd1; margin-top:4px;">
+          <input type="hidden" name="require_approval" value="0">
+          <input type="checkbox" name="require_approval" value="1" {{ "checked" if c.require_approval }} style="width:auto;"> exigir minha aprovação antes de publicar
+        </label>
         <button type="submit" class="save-link">salvar publicação</button>
       </form>
 
@@ -308,6 +336,7 @@ def _load_channels() -> list[dict]:
                 "uploads_per_day": cfg.get("uploads_per_day", 1),
                 "upload_privacy": cfg.get("upload_privacy", "private"),
                 "token_status": _token_status(name),
+                "require_approval": cfg.get("require_approval", True),
                 # canais sem fila de temas (botafogo: tema vem da partida)
                 # não usam temas virais.
                 "uses_topic_queue": "topics" in cfg,
@@ -365,12 +394,17 @@ def index():
         flash = "Configuração salva."
     elif request.args.get("topic_added") == "1":
         flash = "Tema adicionado à fila."
+    elif request.args.get("approved") == "1":
+        flash = "Vídeo publicado."
+    elif request.args.get("approve_error"):
+        flash = f"Não consegui publicar: {request.args['approve_error']}"
     elif request.args.get("busy") == "1":
         flash = "Já tem um vídeo sendo gerado agora — espere terminar antes de rodar outro (evita estourar a memória da máquina)."
     else:
         flash = None
     return render_template_string(
         TEMPLATE, channels=channels, jobs=jobs, any_public=any_public, flash=flash, total_uploads=total_uploads,
+        pending=jobs_with_status("awaiting_approval"),
     )
 
 
@@ -463,6 +497,9 @@ def save_publishing(channel: str):
         text = _yaml_set_scalar(text, "uploads_per_day", str(per_day))
     except ValueError:
         pass
+    approval = request.form.getlist("require_approval")
+    if approval:
+        text = _yaml_set_scalar(text, "require_approval", "true" if approval[-1] == "1" else "false")
     privacy = request.form.get("upload_privacy", "")
     if privacy in ("public", "unlisted", "private"):
         text = _yaml_set_scalar(text, "upload_privacy", f'"{privacy}"')
@@ -677,6 +714,31 @@ def delete_topic(channel: str):
         return redirect(url_for("index"))
     path.write_text(updated)
     return redirect(url_for("index", topic_added=1))
+
+
+@app.route("/approve/<int:job_id>", methods=["POST"])
+def approve_job(job_id: int):
+    from src.upload import publish_video
+
+    job = get_job(job_id)
+    if not job or job.status != "awaiting_approval" or not job.youtube_video_id:
+        return redirect(url_for("index"))
+    try:
+        publish_video(ChannelConfig.load(job.channel), job.youtube_video_id)
+    except Exception as exc:  # noqa: BLE001 — token/cota: mostra no painel em vez de dar erro 500
+        return redirect(url_for("index", approve_error=str(exc)[:200]))
+    update(job_id, status="uploaded")
+    return redirect(url_for("index", approved=1))
+
+
+@app.route("/reject/<int:job_id>", methods=["POST"])
+def reject_job(job_id: int):
+    """Não apaga do YouTube — só deixa privado e tira da fila de aprovação
+    (dá pra apagar ou editar à mão no Studio depois)."""
+    job = get_job(job_id)
+    if job and job.status == "awaiting_approval":
+        update(job_id, status="rejected")
+    return redirect(url_for("index"))
 
 
 def _pipeline_already_running() -> bool:

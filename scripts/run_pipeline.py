@@ -29,13 +29,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.assemble import SFX_DIR, _ffprobe_duration, add_background_music, concat_scenes, render_scene
 from src.config import ChannelConfig
+from src.fact_check import BLOCKING_TYPES, feedback_for_rewrite, review_script
 from src.orchestrator import enqueue, update
 from src.script_gen import generate_script
 from src.stock_media import search_stock_clip, search_stock_photo
 from src.thumbnail import make_thumbnail
 from src.topics import pick_topic
 from src.tts import narrate
-from src.upload import UPLOAD_META_FILE, upload_video
+from src.upload import UPLOAD_META_FILE, after_upload_status, upload_video
 from src.visuals import generate_image
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -54,6 +55,8 @@ LONG_WIDTH, LONG_HEIGHT = 1920, 1080
 # e o selo de card fica com número gigante demais pra manter elegante.
 LIST_TOPIC_RE = re.compile(r"^(\d+)\s")
 MAX_LIST_ITEMS = 10
+# reescritas do roteiro depois de reprovado na revisão de fatos
+FACT_CHECK_REWRITES = 2
 
 # Capítulos (timestamps na descrição, "0:00 ..." etc.) só no formato longo —
 # no curto (poucos minutos) não faz sentido. YouTube exige pelo menos 3
@@ -208,6 +211,30 @@ def run(
         script = generate_script(
             channel, topic, facts, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes, web_facts=web_facts,
         )
+        # revisão de fatos ANTES de gastar TTS/render (ver src/fact_check.py):
+        # reprovado, reescreve com o feedback do revisor; se continuar
+        # reprovado, o vídeo não sai — melhor um dia sem vídeo do que um
+        # tutorial de ferramenta inventada ou acusação sem dado no ar.
+        for attempt in range(FACT_CHECK_REWRITES + 1):
+            problems = review_script(script, topic, facts, web_facts)
+            if not problems:  # [] aprovado, None revisor indisponível
+                break
+            log.warning(
+                "[%s] revisão de fatos reprovou (tentativa %d): %s", job_id, attempt + 1,
+                "; ".join(f"{p.get('tipo')}: {p.get('termo')}" for p in problems),
+            )
+            if attempt == FACT_CHECK_REWRITES:
+                if not any(p.get("tipo") in BLOCKING_TYPES for p in problems):
+                    log.warning("[%s] só sobraram ressalvas leves da revisão — segue pra aprovação", job_id)
+                    break
+                raise RuntimeError(
+                    "roteiro reprovado na revisão de fatos: "
+                    + "; ".join(f"{p.get('termo')} ({p.get('motivo')})" for p in problems)
+                )
+            script = generate_script(
+                channel, topic, facts, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes,
+                web_facts=web_facts, revision_feedback=feedback_for_rewrite(problems),
+            )
         update(job_id, status="scripted")
 
         # CTA falado (like + se inscrever) — gerado por CÓDIGO, nunca pelo LLM,
@@ -408,7 +435,7 @@ def run(
             thumbnail_path=thumb_path,
             publish_at=publish_at,
         )
-        update(job_id, status="uploaded", youtube_video_id=video_id)
+        update(job_id, status=after_upload_status(channel), youtube_video_id=video_id)
         log.info("[%s] publicado: https://youtu.be/%s", job_id, video_id)
 
         # já está no YouTube — não precisa mais guardar os arquivos (vídeo longo

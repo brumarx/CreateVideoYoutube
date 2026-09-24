@@ -57,7 +57,10 @@ def upload_video(
     youtube = build("youtube", "v3", credentials=creds)
 
     status = {"privacyStatus": channel.upload_privacy, "selfDeclaredMadeForKids": False}
-    if publish_at:
+    if channel.require_approval:
+        # sobe privado; vira público no "Aprovar" do painel (publish_video)
+        status["privacyStatus"] = "private"
+    elif publish_at:
         status["privacyStatus"] = "private"
         status["publishAt"] = publish_at
 
@@ -100,6 +103,22 @@ def upload_video(
         log.warning("não consegui adicionar %s à playlist: %s", video_id, exc)
 
     return video_id
+
+
+def after_upload_status(channel: ChannelConfig) -> str:
+    """Status do job no banco logo depois do upload."""
+    return "awaiting_approval" if channel.require_approval else "uploaded"
+
+
+def publish_video(channel: ChannelConfig, video_id: str) -> None:
+    """Aprovação no painel: troca o vídeo de privado pra privacidade
+    configurada do canal. Cota: 50 unidades."""
+    youtube = build("youtube", "v3", credentials=_load_credentials(channel.token_file))
+    youtube.videos().update(
+        part="status",
+        body={"id": video_id, "status": {"privacyStatus": channel.upload_privacy, "selfDeclaredMadeForKids": False}},
+    ).execute()
+    log.info("vídeo %s aprovado -> %s", video_id, channel.upload_privacy)
 
 
 def _load_playlist_state() -> dict:
