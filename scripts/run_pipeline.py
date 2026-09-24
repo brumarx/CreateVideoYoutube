@@ -16,6 +16,7 @@ vídeo de lista: 1 cena por item, com selo de contagem regressiva.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import math
 import random
@@ -34,7 +35,7 @@ from src.stock_media import search_stock_clip, search_stock_photo
 from src.thumbnail import make_thumbnail
 from src.topics import pick_topic
 from src.tts import narrate
-from src.upload import upload_video
+from src.upload import UPLOAD_META_FILE, upload_video
 from src.visuals import generate_image
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -386,6 +387,17 @@ def run(
         if dry_run:
             log.info("[%s] --dry-run: não vou publicar. Revise %s manualmente.", job_id, final_video)
             return
+
+        # guardado antes do upload: se ele falhar (token OAuth expirado,
+        # rede), scripts/retry_uploads.py reenvia o vídeo já renderizado sem
+        # precisar gerar tudo de novo.
+        upload_meta = {
+            "title": script["title"],
+            "description": description,
+            "tags": script["tags"],
+            "publish_at": publish_at,
+        }
+        (work_dir / UPLOAD_META_FILE).write_text(json.dumps(upload_meta, ensure_ascii=False, indent=2))
 
         video_id = upload_video(
             channel,

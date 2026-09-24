@@ -22,6 +22,10 @@ SCOPES = [
 
 # playlist_id de cada canal, criada 1x e reaproveitada (evita duplicar
 # playlist a cada upload e evita ter que fazer playlists().list toda vez).
+# metadados do upload (título/descrição/tags) salvos na pasta do job antes de
+# enviar — ver scripts/retry_uploads.py.
+UPLOAD_META_FILE = "upload.json"
+
 PLAYLIST_STATE_FILE = Path(__file__).resolve().parent.parent / "data" / "playlists.json"
 
 
