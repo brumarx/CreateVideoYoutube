@@ -18,6 +18,12 @@ short_max_minutes: 2
 long_min_minutes: 4
 long_max_minutes: 5
 long_form_scenes: 30
+viral_queries:
+  - "curiosidades"
+  - "mistérios não resolvidos"
+  - "fatos que você não sabia"
+  - "história bizarra"
+viral_share: 0.5
 topics:
   - "um recorde mundial real e bizarro pouco conhecido"
   - "um fato real e pouco conhecido sobre o oceano profundo"

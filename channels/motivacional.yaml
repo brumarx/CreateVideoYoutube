@@ -18,6 +18,12 @@ short_max_minutes: 2
 long_min_minutes: 4
 long_max_minutes: 5
 long_form_scenes: 26
+viral_queries:
+  - "motivação"
+  - "vídeo motivacional"
+  - "disciplina mentalidade"
+  - "história de superação"
+viral_share: 0.5
 topics:
   - "como lidar com o medo de começar algo novo"
   - "por que consistência importa mais que motivação"

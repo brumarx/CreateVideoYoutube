@@ -24,6 +24,12 @@ long_max_minutes: 5
 # específicas) — sem o grounding de dados reais do short, um roteiro de
 # 15-20min sem essa base seria arriscado demais sobre gente real.
 long_form_scenes: 24
+viral_queries:
+  - "política brasileira"
+  - "deputados senadores Congresso"
+  - "corrupção Brasil"
+  - "gastos públicos Brasil"
+viral_share: 0.5
 topics:
   - "como funciona a cota parlamentar (CEAP) explicada do zero"
   - "como funciona o financiamento de campanhas eleitorais no Brasil"
