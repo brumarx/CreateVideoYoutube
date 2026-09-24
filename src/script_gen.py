@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from datetime import date
 
 from .config import ChannelConfig
 from .providers import complete
@@ -85,6 +86,19 @@ SYSTEM_PROMPT = (
 )
 
 
+def current_date_rule() -> str:
+    """O LLM não sabe a data de hoje e escrevia "em 2024" / "este ano de
+    2025" como se fosse o presente — isso envelhece o vídeo na hora e passa
+    desleixo. Vai em todo prompt que gera tema ou roteiro."""
+    today = date.today()
+    return (
+        f"DATA DE HOJE: {today.strftime('%d/%m/%Y')} (ano atual: {today.year}). Nunca trate "
+        f"{today.year - 1} ou anos anteriores como o presente ou como \"este ano\"; não diga "
+        "\"recentemente\", \"acabou de lançar\" ou \"a novidade\" sobre algo que você não sabe se "
+        "ainda é atual. Prefira não citar ano quando não for necessário."
+    )
+
+
 def _prompt_for(
     channel: ChannelConfig,
     topic: str,
@@ -123,6 +137,8 @@ completar com suposição):
     words_per_scene_max = max(total_max_words // n_scenes, words_per_scene_min + 1)
 
     return f"""{channel.prompt_base}
+
+{current_date_rule()}
 
 Tópico do vídeo: {topic}
 Idioma: {channel.language}
@@ -303,6 +319,7 @@ def generate_script(
     min_minutes: float = 3,
     max_minutes: float = 6,
     web_facts: list[dict] | None = None,
+    revision_feedback: str | None = None,
 ) -> dict:
     """Gera o roteiro completo do vídeo. Se `facts` for passado (ex.: saída
     de politica_data.random_fact_set()), o roteiro é obrigado a usar só
@@ -319,7 +336,8 @@ def generate_script(
     acontece)."""
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": _prompt_for(channel, topic, facts, scenes, min_minutes, max_minutes, web_facts)},
+        {"role": "user", "content": _prompt_for(channel, topic, facts, scenes, min_minutes, max_minutes, web_facts)
+         + (revision_feedback or "")},
     ]
 
     required = {"title", "description", "tags", "scenes"}

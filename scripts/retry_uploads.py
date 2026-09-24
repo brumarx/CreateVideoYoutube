@@ -29,7 +29,7 @@ from google.auth.exceptions import RefreshError  # noqa: E402
 
 from src.config import ChannelConfig  # noqa: E402
 from src.orchestrator import DB_PATH, update  # noqa: E402
-from src.upload import UPLOAD_META_FILE, upload_video  # noqa: E402
+from src.upload import UPLOAD_META_FILE, after_upload_status, upload_video  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("retry_uploads")
@@ -90,7 +90,7 @@ def main() -> None:
         except Exception as exc:  # noqa: BLE001 — cota/rede: tenta na próxima rodada
             log.error("[%s] reenvio falhou: %s", job_id, exc)
             continue
-        update(job_id, status="uploaded", youtube_video_id=video_id, error=None)
+        update(job_id, status=after_upload_status(channel), youtube_video_id=video_id, error=None)
         log.info("[%s] publicado no reenvio: https://youtu.be/%s", job_id, video_id)
         shutil.rmtree(work_dir, ignore_errors=True)
 

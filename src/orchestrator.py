@@ -82,6 +82,19 @@ def recent_jobs(channel: str | None = None, limit: int = 10) -> list[Job]:
         return [Job(*row) for row in rows]
 
 
+def jobs_with_status(status: str) -> list[Job]:
+    query = "SELECT id, channel, topic, status, video_path, thumbnail_path, youtube_video_id, error FROM jobs WHERE status = ? ORDER BY id"
+    with closing(_connect()) as conn:
+        return [Job(*row) for row in conn.execute(query, (status,)).fetchall()]
+
+
+def get_job(job_id: int) -> Job | None:
+    query = "SELECT id, channel, topic, status, video_path, thumbnail_path, youtube_video_id, error FROM jobs WHERE id = ?"
+    with closing(_connect()) as conn:
+        row = conn.execute(query, (job_id,)).fetchone()
+        return Job(*row) if row else None
+
+
 def next_pending(channel: str | None = None) -> Job | None:
     query = "SELECT id, channel, topic, status, video_path, thumbnail_path, youtube_video_id, error FROM jobs WHERE status = 'pending'"
     params: tuple = ()

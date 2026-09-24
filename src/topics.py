@@ -24,6 +24,7 @@ import re
 from pathlib import Path
 
 from .providers import complete
+from .script_gen import current_date_rule
 
 log = logging.getLogger("topics")
 
@@ -109,7 +110,7 @@ def _generate_new_topic(niche: str, used: list[str]) -> str:
     used_block = "\n".join(f"- {t}" for t in used) or "(nenhum ainda)"
     prompt = (
         f"Você ajuda a planejar temas de vídeos do YouTube para um canal "
-        f"sobre: {niche}.\n\n"
+        f"sobre: {niche}.\n\n{current_date_rule()}\n\n"
         f"Temas JÁ USADOS neste canal (NÃO pode repetir nenhum destes, nem "
         f"algo muito parecido/reformulado):\n{used_block}\n\n"
         "Responda com UM ÚNICO tema novo, específico e ainda não coberto "
@@ -190,7 +191,7 @@ def _generate_viral_topic(niche: str, viral: list[tuple[str, int]], used: list[s
     used_block = "\n".join(f"- {t}" for t in used) or "(nenhum ainda)"
     prompt = (
         f"Você ajuda a planejar temas de vídeos do YouTube para um canal "
-        f"brasileiro sobre: {niche}.\n\n"
+        f"brasileiro sobre: {niche}.\n\n{current_date_rule()}\n\n"
         f"Vídeos que estão BOMBANDO no YouTube neste mês (podem estar em "
         f"outro idioma):\n{viral_block}\n\n"
         f"Temas JÁ USADOS neste canal (NÃO pode repetir nenhum destes, nem "

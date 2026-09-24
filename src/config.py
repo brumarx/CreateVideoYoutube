@@ -109,6 +109,9 @@ class ChannelConfig:
     # fração dos vídeos com tema viral enquanto a fila fixa ainda tem tema
     # (quando ela esgota, é sempre viral).
     viral_share: float
+    # vídeo sobe privado e só vira público quando alguém clica "Aprovar" no
+    # painel (web/app.py) — última barreira contra roteiro errado no ar.
+    require_approval: bool
 
     @staticmethod
     def load(name: str) -> "ChannelConfig":
@@ -143,4 +146,5 @@ class ChannelConfig:
             daily_format=data.get("daily_format", "short"),
             viral_queries=data.get("viral_queries", []),
             viral_share=data.get("viral_share", 0.5),
+            require_approval=data.get("require_approval", True),
         )
