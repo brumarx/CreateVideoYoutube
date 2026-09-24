@@ -157,7 +157,12 @@ def run(
         # nunca repete um tema já usado — quando a lista fixa esgota, gera
         # um tema novo via LLM dentro do nicho do canal (ver src/topics.py).
         # Fila única pra curto e longo: só sai 1 vídeo/dia por canal mesmo.
-        topic = pick_topic(channel_name, channel.topics, channel.niche)
+        # Parte dos temas sai inspirada no que está viral no YouTube no mês
+        # (channels/<nome>.yaml -> viral_queries/viral_share).
+        topic = pick_topic(
+            channel_name, channel.topics, channel.niche,
+            viral_queries=channel.viral_queries, viral_share=channel.viral_share,
+        )
     elif topic is None:
         raise SystemExit(f"channels/{channel_name}.yaml não tem topics configurado e --topic não foi passado")
 

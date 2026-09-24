@@ -102,6 +102,13 @@ class ChannelConfig:
     # só usa outra coisa se --long/--no-long for passado explicitamente na
     # linha de comando (teste manual pontual).
     daily_format: str
+    # buscas no YouTube pra achar o que está viralizando no nicho no mês —
+    # parte dos temas sai inspirada nelas (ver src/topics.py). Vazio = só
+    # a fila fixa.
+    viral_queries: list[str]
+    # fração dos vídeos com tema viral enquanto a fila fixa ainda tem tema
+    # (quando ela esgota, é sempre viral).
+    viral_share: float
 
     @staticmethod
     def load(name: str) -> "ChannelConfig":
@@ -134,4 +141,6 @@ class ChannelConfig:
             channel_title=data.get("channel_title", name),
             captions=data.get("captions", True),
             daily_format=data.get("daily_format", "short"),
+            viral_queries=data.get("viral_queries", []),
+            viral_share=data.get("viral_share", 0.5),
         )

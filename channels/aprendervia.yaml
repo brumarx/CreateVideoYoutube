@@ -18,6 +18,12 @@ short_max_minutes: 2
 long_min_minutes: 4
 long_max_minutes: 5
 long_form_scenes: 24
+viral_queries:
+  - "ChatGPT tutorial"
+  - "inteligência artificial como usar"
+  - "ferramenta de IA grátis"
+  - "prompt IA imagem"
+viral_share: 0.5
 topics:
   - "como usar o ChatGPT para escrever textos melhores, passo a passo"
   - "como gerar imagens com inteligência artificial de graça"
