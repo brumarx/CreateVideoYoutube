@@ -11,6 +11,8 @@ import json
 import re
 import subprocess
 import sys
+import textwrap
+import time
 from pathlib import Path
 
 import yaml
@@ -94,18 +96,33 @@ TEMPLATE = """
   <div class="sub">Roda todo dia às 10h via cron. Uploads saem {{ 'públicos' if any_public else 'privados' }} direto.</div>
 
   {% if flash %}<div class="flash">{{ flash }}</div>{% endif %}
+  {% if total_uploads > 5 %}<div class="flash" style="background:#3a2a12; color:#e0a94f;">Soma de vídeos/dia = {{ total_uploads }}. A cota da API do YouTube aguenta ~5 uploads/dia no total (1.700 unidades cada, limite 10.000) — os últimos canais da rodada vão falhar.</div>{% endif %}
 
   <div class="channels">
     {% for c in channels %}
     <div class="card">
       <h2>{{ c.name }}
-        {% if c.has_token %}<span class="badge ok">token OK</span>{% else %}<span class="badge warn">sem token</span>{% endif %}
+        {% if c.token_status == "ok" %}<span class="badge ok">token OK</span>
+        {% elif c.token_status == "missing" %}<span class="badge warn">sem token</span>
+        {% else %}<span class="badge warn" title="rode scripts/auth_youtube.py --channel {{ c.name }}">token expirado</span>{% endif %}
       </h2>
       {% if c.youtube_handle %}
       <div class="meta"><a href="https://www.youtube.com/{{ c.youtube_handle }}" target="_blank">youtube.com/{{ c.youtube_handle }}</a></div>
       {% endif %}
       <div class="niche">{{ c.niche }}</div>
-      <div class="meta">{{ c.uploads_per_day }} vídeo(s)/dia · privacidade: {{ c.upload_privacy }}</div>
+      <form method="post" action="{{ url_for('save_publishing', channel=c.name) }}">
+        <div class="durations">
+          <label>Vídeos por dia<input type="number" min="0" max="6" step="1" name="uploads_per_day" value="{{ c.uploads_per_day }}"></label>
+          <label>Privacidade
+            <select name="upload_privacy" style="width:100%; box-sizing:border-box; padding:8px 6px; margin-top:2px; background:#0f1115; border:1px solid #262b35; border-radius:6px; color:#e6e6e6; font-size:16px;">
+              {% for opt, lbl in [("public", "público"), ("unlisted", "não listado"), ("private", "privado")] %}
+              <option value="{{ opt }}" {{ "selected" if c.upload_privacy == opt }}>{{ lbl }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        <button type="submit" class="save-link">salvar publicação</button>
+      </form>
 
       <form method="post" action="{{ url_for('save_duration', channel=c.name) }}">
         <label style="display:block; font-size:11px; color:#9aa0a8; margin-top:6px;">Formato do cron diário
@@ -155,6 +172,46 @@ TEMPLATE = """
         {% endif %}
       </details>
 
+      {% if c.uses_topic_queue %}
+      <details class="topics">
+        <summary>Temas virais do YouTube ({{ c.viral_share_pct }}% dos vídeos{{ "" if c.viral_queries else " — desligado, sem buscas" }})</summary>
+        <form method="post" action="{{ url_for('save_viral', channel=c.name) }}">
+          <div style="font-size:11px; color:#7d838c; margin: 4px 0 8px;">busca os vídeos mais vistos do mês com estas buscas e cria um tema original no mesmo gancho. Quando a fila de temas acaba, é sempre viral.</div>
+          <div class="durations">
+            <label>% dos vídeos com tema viral<input type="number" min="0" max="100" step="5" name="viral_share_pct" value="{{ c.viral_share_pct }}"></label>
+          </div>
+          <label style="display:block; font-size:11px; color:#9aa0a8;">Buscas no YouTube (uma por linha)
+            <textarea name="viral_queries" rows="4" style="width:100%; box-sizing:border-box; padding:8px; margin-top:2px; background:#0f1115; border:1px solid #262b35; border-radius:6px; color:#e6e6e6; font-size:14px; font-family:inherit;">{{ c.viral_queries|join("\n") }}</textarea>
+          </label>
+          <button type="submit" class="save-link">salvar temas virais</button>
+        </form>
+      </details>
+      {% endif %}
+
+      <details class="topics">
+        <summary>Identidade e roteiro do canal</summary>
+        <form method="post" action="{{ url_for('save_identity', channel=c.name) }}">
+          {% for key, label, value in c.identity_text %}
+          <label style="display:block; font-size:11px; color:#9aa0a8; margin-top:8px;">{{ label }}
+            <input type="text" name="{{ key }}" value="{{ value }}" style="width:100%; box-sizing:border-box; padding:8px; margin-top:2px; background:#0f1115; border:1px solid #262b35; border-radius:6px; color:#e6e6e6;">
+          </label>
+          {% endfor %}
+          <div class="durations">
+            <label>Cenas (curto)<input type="number" min="3" max="40" step="1" name="scenes_per_video" value="{{ c.scenes_per_video }}"></label>
+            <label>Cenas (longo)<input type="number" min="6" max="60" step="1" name="long_form_scenes" value="{{ c.long_form_scenes }}"></label>
+            <label>Cor de destaque<input type="color" name="accent" value="{{ c.accent }}" style="height:38px; padding:2px;"></label>
+          </div>
+          <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#c7cbd1; margin-top:6px;">
+            <input type="hidden" name="captions" value="0">
+            <input type="checkbox" name="captions" value="1" {{ "checked" if c.captions }} style="width:auto;"> legenda embutida estilo karaokê
+          </label>
+          <label style="display:block; font-size:11px; color:#9aa0a8; margin-top:8px;">Prompt do roteiro (instruções de estilo pro LLM)
+            <textarea name="prompt_base" rows="8" style="width:100%; box-sizing:border-box; padding:8px; margin-top:2px; background:#0f1115; border:1px solid #262b35; border-radius:6px; color:#e6e6e6; font-size:14px; font-family:inherit;">{{ c.prompt_base }}</textarea>
+          </label>
+          <button type="submit" class="save-link">salvar identidade e roteiro</button>
+        </form>
+      </details>
+
       {% if c.fact_labels %}
       <details class="topics">
         <summary>Fatos reais do banco de dados ({{ c.fact_labels|length }} tipos — sorteado no formato curto)</summary>
@@ -168,7 +225,7 @@ TEMPLATE = """
       </details>
       {% endif %}
 
-      {% if c.has_token %}
+      {% if c.token_status == "ok" %}
       <form method="post" style="margin-top:12px; padding:8px; border:1px solid #2a7a4a; border-radius:8px; background:#0f1a13;">
         <label style="display:block; font-size:11px; color:#5fd88a; margin-bottom:4px; font-weight:600;">▶ RODAR AGORA (tema digitado aqui é buscado na internet antes de escrever)</label>
         <input type="text" name="topic" placeholder="Tema (opcional — vazio sorteia da lista)"
@@ -203,6 +260,32 @@ TEMPLATE = """
 """
 
 
+# status do token por canal, com cache — checar de verdade exige um refresh
+# no Google (o arquivo existir não quer dizer nada: token de app OAuth em
+# modo "Teste" expira em 7 dias e o painel continuava dizendo "token OK").
+_TOKEN_CACHE: dict[str, tuple[float, str]] = {}
+_TOKEN_CACHE_TTL = 600
+
+
+def _token_status(name: str) -> str:
+    """"ok", "missing" ou "invalid"."""
+    token_file = ROOT / "credentials" / f"token_{name}.json"
+    if not token_file.exists():
+        return "missing"
+    cached = _TOKEN_CACHE.get(name)
+    if cached and time.time() - cached[0] < _TOKEN_CACHE_TTL:
+        return cached[1]
+    try:
+        from src.upload import _load_credentials
+
+        creds = _load_credentials(token_file)
+        status = "ok" if creds.valid else "invalid"
+    except Exception:  # noqa: BLE001 — RefreshError, rede: trata como inválido
+        status = "invalid"
+    _TOKEN_CACHE[name] = (time.time(), status)
+    return status
+
+
 def _used_topics() -> dict:
     if USED_TOPICS_FILE.exists():
         return json.loads(USED_TOPICS_FILE.read_text())
@@ -215,7 +298,6 @@ def _load_channels() -> list[dict]:
     for yaml_path in sorted((ROOT / "channels").glob("*.yaml")):
         cfg = yaml.safe_load(yaml_path.read_text())
         name = yaml_path.stem
-        token_file = ROOT / "credentials" / f"token_{name}.json"
         topics = cfg.get("topics", [])
         used_topics = set(used.get(name, []))
         channels.append(
@@ -225,7 +307,21 @@ def _load_channels() -> list[dict]:
                 "niche": cfg.get("niche", ""),
                 "uploads_per_day": cfg.get("uploads_per_day", 1),
                 "upload_privacy": cfg.get("upload_privacy", "private"),
-                "has_token": token_file.exists(),
+                "token_status": _token_status(name),
+                # canais sem fila de temas (botafogo: tema vem da partida)
+                # não usam temas virais.
+                "uses_topic_queue": "topics" in cfg,
+                "viral_queries": cfg.get("viral_queries", []),
+                "viral_share_pct": round(cfg.get("viral_share", 0.5) * 100),
+                "identity_text": [
+                    (key, label, (" ".join(cfg.get(key, [])) if key == "hashtags" else cfg.get(key, "")))
+                    for key, label in IDENTITY_TEXT_FIELDS
+                ],
+                "scenes_per_video": cfg.get("scenes_per_video", 8),
+                "long_form_scenes": cfg.get("long_form_scenes", 30),
+                "accent": cfg.get("accent", "#ffffff"),
+                "captions": cfg.get("captions", True),
+                "prompt_base": (cfg.get("prompt_base") or "").strip(),
                 "topics": topics,
                 "used_topics": used_topics,
                 "topics_pending": len([t for t in topics if t not in used_topics]),
@@ -247,6 +343,15 @@ def _load_channels() -> list[dict]:
     return channels
 
 
+IDENTITY_TEXT_FIELDS = (
+    ("channel_title", "Nome do canal (usado na playlist)"),
+    ("youtube_handle", "@handle no YouTube (link de inscrição)"),
+    ("watermark", "Marca d'água gravada no vídeo"),
+    ("niche", "Nicho (usado pra gerar temas e roteiro)"),
+    ("hashtags", "Hashtags (separadas por espaço, 3-5)"),
+    ("language", "Idioma"),
+)
+
 DURATION_FIELDS = ("short_min_minutes", "short_max_minutes", "long_min_minutes", "long_max_minutes")
 
 
@@ -255,15 +360,18 @@ def index():
     channels = _load_channels()
     jobs = recent_jobs(limit=30)
     any_public = any(c["upload_privacy"] == "public" for c in channels)
+    total_uploads = sum(int(c["uploads_per_day"] or 0) for c in channels)
     if request.args.get("saved") == "1":
-        flash = "Duração salva."
+        flash = "Configuração salva."
     elif request.args.get("topic_added") == "1":
         flash = "Tema adicionado à fila."
     elif request.args.get("busy") == "1":
         flash = "Já tem um vídeo sendo gerado agora — espere terminar antes de rodar outro (evita estourar a memória da máquina)."
     else:
         flash = None
-    return render_template_string(TEMPLATE, channels=channels, jobs=jobs, any_public=any_public, flash=flash)
+    return render_template_string(
+        TEMPLATE, channels=channels, jobs=jobs, any_public=any_public, flash=flash, total_uploads=total_uploads,
+    )
 
 
 @app.route("/duration/<channel>", methods=["POST"])
@@ -331,6 +439,122 @@ def save_voices(channel: str):
         text = re.sub(pattern, block, text, count=1, flags=re.MULTILINE)
     else:
         text = block + text
+    path.write_text(text)
+    return redirect(url_for("index", saved=1))
+
+
+def _yaml_set_scalar(text: str, key: str, value: str) -> str:
+    """Troca (ou cria no topo) `key: value` sem reescrever o resto do YAML."""
+    pattern = rf"^{re.escape(key)}:.*$"
+    replacement = f"{key}: {value}"
+    if re.search(pattern, text, flags=re.MULTILINE):
+        return re.sub(pattern, lambda _: replacement, text, count=1, flags=re.MULTILINE)
+    return f"{replacement}\n{text}"
+
+
+@app.route("/publishing/<channel>", methods=["POST"])
+def save_publishing(channel: str):
+    path = ROOT / "channels" / f"{channel}.yaml"
+    if not path.exists():
+        return redirect(url_for("index"))
+    text = path.read_text()
+    try:
+        per_day = min(max(int(request.form.get("uploads_per_day", "")), 0), 6)
+        text = _yaml_set_scalar(text, "uploads_per_day", str(per_day))
+    except ValueError:
+        pass
+    privacy = request.form.get("upload_privacy", "")
+    if privacy in ("public", "unlisted", "private"):
+        text = _yaml_set_scalar(text, "upload_privacy", f'"{privacy}"')
+    path.write_text(text)
+    return redirect(url_for("index", saved=1))
+
+
+def _yaml_quote(value: str) -> str:
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+@app.route("/identity/<channel>", methods=["POST"])
+def save_identity(channel: str):
+    """Identidade do canal + prompt do roteiro. Edição cirúrgica por chave
+    (não yaml.safe_dump) pra preservar comentários e o resto do arquivo."""
+    path = ROOT / "channels" / f"{channel}.yaml"
+    if not path.exists():
+        return redirect(url_for("index"))
+    text = path.read_text()
+
+    for key, _label in IDENTITY_TEXT_FIELDS:
+        if key not in request.form:
+            continue
+        value = request.form.get(key, "").strip()
+        if key == "hashtags":
+            tags = [t if t.startswith("#") else f"#{t}" for t in value.split()]
+            text = _yaml_set_scalar(text, key, "[" + ", ".join(_yaml_quote(t) for t in tags) + "]")
+        elif key == "niche" and not value:
+            continue  # nicho vazio quebraria a geração de temas
+        else:
+            text = _yaml_set_scalar(text, key, _yaml_quote(value))
+
+    for key, lo, hi in (("scenes_per_video", 3, 40), ("long_form_scenes", 6, 60)):
+        try:
+            text = _yaml_set_scalar(text, key, str(min(max(int(request.form.get(key, "")), lo), hi)))
+        except ValueError:
+            pass
+
+    accent = request.form.get("accent", "")
+    if re.fullmatch(r"#[0-9a-fA-F]{6}", accent):
+        text = _yaml_set_scalar(text, "accent", _yaml_quote(accent))
+
+    # checkbox: hidden "0" + checkbox "1" — o último valor enviado vence
+    captions = request.form.getlist("captions")
+    if captions:
+        text = _yaml_set_scalar(text, "captions", "true" if captions[-1] == "1" else "false")
+
+    prompt = request.form.get("prompt_base", "").replace("\r\n", "\n").strip()
+    if prompt:
+        # bloco dobrado (">"), mesmo estilo do arquivo original. No ">" uma
+        # quebra real exige linha em branco entre as linhas — então cada
+        # quebra de linha do textarea vira uma quebra de verdade no texto.
+        lines = [line.strip() for line in prompt.split("\n") if line.strip()]
+        block = "prompt_base: >\n" + "\n".join(
+            textwrap.fill(line, width=78, initial_indent="  ", subsequent_indent="  ", break_on_hyphens=False) + "\n"
+            for line in lines
+        )
+        pattern = r"^prompt_base:.*\n(?:  .*\n|\n(?=  ))*"
+        if re.search(pattern, text, flags=re.MULTILINE):
+            text = re.sub(pattern, lambda _: block, text, count=1, flags=re.MULTILINE)
+        else:
+            text = text.rstrip("\n") + "\n" + block
+
+    yaml.safe_load(text)  # nunca grava um yaml quebrado
+    path.write_text(text)
+    return redirect(url_for("index", saved=1))
+
+
+@app.route("/viral/<channel>", methods=["POST"])
+def save_viral(channel: str):
+    """viral_share (0-1) + viral_queries (lista) — ver src/topics.py."""
+    path = ROOT / "channels" / f"{channel}.yaml"
+    if not path.exists():
+        return redirect(url_for("index"))
+    text = path.read_text()
+    try:
+        pct = min(max(int(request.form.get("viral_share_pct", "")), 0), 100)
+        text = _yaml_set_scalar(text, "viral_share", str(pct / 100))
+    except ValueError:
+        pass
+
+    queries = [q.strip() for q in request.form.get("viral_queries", "").splitlines() if q.strip()]
+    block = "viral_queries:\n" + "".join(
+        '  - "{}"\n'.format(q.replace("\\", "\\\\").replace('"', '\\"')) for q in queries
+    )
+    if not queries:
+        block = "viral_queries: []\n"
+    pattern = r"^viral_queries:.*\n(?:  - .*\n)*"
+    if re.search(pattern, text, flags=re.MULTILINE):
+        text = re.sub(pattern, lambda _: block, text, count=1, flags=re.MULTILINE)
+    else:
+        text = re.sub(r"^topics:", lambda _: block + "topics:", text, count=1, flags=re.MULTILINE)
     path.write_text(text)
     return redirect(url_for("index", saved=1))
 
