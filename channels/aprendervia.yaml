@@ -56,6 +56,8 @@ topics:
   - "como gerar legendas e narração com voz de IA para seus vídeos"
   - "como verificar se uma informação da IA está certa antes de confiar nela"
   - "como usar IA no celular para resolver tarefas do dia a dia"
+  - "Como criar animações curtas e gerar trilha sonora automática para seus vídeos do YouTube usando a IA Lumina e o ChatGPT para acelerar a produção de conteúdo."
+  - "Como reproduzir o visual 80 anos viral nas fotos do Instagram usando prompts de IA e ferramentas gratuitas"
 prompt_base: >
   Escreva um roteiro de tutorial prático no estilo de canais de tecnologia/
   produtividade do YouTube. O ângulo deste canal é PRÁTICO E ACIONÁVEL — o
@@ -65,3 +67,6 @@ prompt_base: >
   de forma que pareça propaganda paga — cite como referência factual (ex.:
   "o ChatGPT", "o Google"), nunca elogie ou recomende uma marca específica
   em excesso. Tom direto, didático e acessível pra quem não é técnico.
+
+# publica sozinho depois da revisão de fatos (sem esperar "Aprovar" no painel)
+require_approval: false

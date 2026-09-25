@@ -64,6 +64,8 @@ topics:
   - "quanto custam as obras públicas paradas no Brasil e por que elas travam"
   - "como funciona o recesso parlamentar e quantos dias de folga o Congresso tem"
   - "como qualquer cidadão pode consultar os gastos de um político no Portal da Transparência"
+  - "5 gastos extravagantes de ministros do STF revelados pelos dados do Portal da Transparência"
+  - "O custo oculto da crise institucional: quanto o contribuinte pagou em horas extras, diárias e passagens para a convivência dos ministros do STF antes da crise"
 prompt_base: >
   Escreva um roteiro de curiosidades sobre política brasileira. SE houver uma
   seção "DADOS REAIS" abaixo (formato curto): use SOMENTE esses dados (não
@@ -98,3 +100,6 @@ prompt_base: >
   estrutura da frase a cada cena — nunca repita o mesmo molde ('nome +
   verbo + valor') duas cenas seguidas. Gancho forte no início, ritmo ágil,
   linguagem acessível para quem não acompanha política de perto.
+
+# publica sozinho depois da revisão de fatos (sem esperar "Aprovar" no painel)
+require_approval: false
