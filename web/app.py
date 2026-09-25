@@ -13,6 +13,7 @@ import subprocess
 import sys
 import textwrap
 import time
+from datetime import datetime
 from pathlib import Path
 
 import yaml
@@ -273,13 +274,16 @@ TEMPLATE = """
   <h1>Jobs recentes</h1>
   <div class="table-wrap">
   <table>
-    <tr><th>ID</th><th>Canal</th><th>Tópico</th><th>Status</th><th>Vídeo</th></tr>
+    <tr><th>ID</th><th>Data</th><th>Canal</th><th>Tópico</th><th>Status</th>
+      <th><a href="{{ url_for('index', sort=None if sort_views else 'views') }}">Views {{ '▼' if sort_views else '⇅' }}</a></th><th>Vídeo</th></tr>
     {% for j in jobs %}
     <tr>
       <td>{{ j.id }}</td>
+      <td style="white-space:nowrap;">{{ j.date_label }}</td>
       <td>{{ j.channel }}</td>
       <td class="topic-cell">{{ j.topic }}</td>
       <td class="status-{{ j.status }}">{{ j.status }}</td>
+      <td style="text-align:right; white-space:nowrap;">{% if j.views is not none %}{{ "{:,}".format(j.views).replace(",", ".") }}{% endif %}</td>
       <td>{% if j.youtube_video_id %}<a href="https://youtu.be/{{ j.youtube_video_id }}" target="_blank">assistir</a>{% endif %}</td>
     </tr>
     {% endfor %}
@@ -335,6 +339,50 @@ def _token_status(name: str) -> str:
         status = "invalid"
     _TOKEN_CACHE[name] = (time.time(), status)
     return status
+
+
+# views por vídeo, com cache — videos.list custa 1 unidade de cota por
+# chamada (até 50 ids), barato, mas não precisa bater no Google a cada F5.
+_VIEWS_CACHE: dict[str, tuple[float, int]] = {}
+_VIEWS_CACHE_TTL = 900
+
+
+def _video_views(jobs) -> dict[str, int]:
+    """{youtube_video_id: views} dos jobs publicados, usando o token de cada
+    canal. Canal com token inválido/sem rede fica sem número (não quebra o painel)."""
+    now = time.time()
+    by_channel: dict[str, list[str]] = {}
+    for j in jobs:
+        vid = j.youtube_video_id
+        if vid and not (vid in _VIEWS_CACHE and now - _VIEWS_CACHE[vid][0] < _VIEWS_CACHE_TTL):
+            by_channel.setdefault(j.channel, []).append(vid)
+    for name, ids in by_channel.items():
+        if _token_status(name) != "ok":
+            continue
+        try:
+            from googleapiclient.discovery import build
+
+            from src.upload import _load_credentials
+
+            creds = _load_credentials(ROOT / "credentials" / f"token_{name}.json")
+            youtube = build("youtube", "v3", credentials=creds, cache_discovery=False)
+            for i in range(0, len(ids), 50):
+                resp = youtube.videos().list(part="statistics", id=",".join(ids[i:i + 50])).execute()
+                for item in resp.get("items", []):
+                    views = int(item.get("statistics", {}).get("viewCount", 0))
+                    _VIEWS_CACHE[item["id"]] = (now, views)
+        except Exception as exc:  # noqa: BLE001 — cota/rede: mostra sem views
+            app.logger.warning("views do canal %s indisponíveis: %s", name, exc)
+    return {vid: v for vid, (_, v) in _VIEWS_CACHE.items()}
+
+
+def _date_label(created_at: str | None) -> str:
+    if not created_at:
+        return ""
+    try:
+        return datetime.fromisoformat(created_at).astimezone().strftime("%d/%m %H:%M")
+    except ValueError:
+        return created_at[:10]
 
 
 def _used_topics() -> dict:
@@ -408,7 +456,15 @@ DURATION_FIELDS = ("short_min_minutes", "short_max_minutes", "long_min_minutes",
 @app.route("/")
 def index():
     channels = _load_channels()
-    jobs = recent_jobs(limit=30)
+    raw_jobs = recent_jobs(limit=30)
+    views = _video_views(raw_jobs)
+    jobs = [
+        {**vars(j), "views": views.get(j.youtube_video_id), "date_label": _date_label(j.created_at)}
+        for j in raw_jobs
+    ]
+    sort_views = request.args.get("sort") == "views"
+    if sort_views:
+        jobs.sort(key=lambda j: j["views"] if j["views"] is not None else -1, reverse=True)
     any_public = any(c["upload_privacy"] == "public" for c in channels)
     total_uploads = sum(int(c["uploads_per_day"] or 0) for c in channels)
     if request.args.get("saved") == "1":
@@ -424,7 +480,7 @@ def index():
     else:
         flash = None
     return render_template_string(
-        TEMPLATE, channels=channels, jobs=jobs, any_public=any_public, flash=flash, total_uploads=total_uploads,
+        TEMPLATE, channels=channels, jobs=jobs, sort_views=sort_views, any_public=any_public, flash=flash, total_uploads=total_uploads,
         pending=jobs_with_status("awaiting_approval"),
         azure_ready=bool(AZURE_SPEECH_KEYS),
     )

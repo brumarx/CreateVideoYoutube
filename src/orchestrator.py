@@ -47,6 +47,7 @@ class Job:
     thumbnail_path: str | None
     youtube_video_id: str | None
     error: str | None
+    created_at: str | None = None
 
 
 def enqueue(channel: str, topic: str) -> int:
@@ -69,7 +70,7 @@ def update(job_id: int, **fields) -> None:
 
 
 def recent_jobs(channel: str | None = None, limit: int = 10) -> list[Job]:
-    query = "SELECT id, channel, topic, status, video_path, thumbnail_path, youtube_video_id, error FROM jobs"
+    query = "SELECT id, channel, topic, status, video_path, thumbnail_path, youtube_video_id, error, created_at FROM jobs"
     params: tuple = ()
     if channel:
         query += " WHERE channel = ?"
