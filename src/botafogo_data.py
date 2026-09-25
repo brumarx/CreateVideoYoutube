@@ -40,6 +40,18 @@ PREVIEW_HORIZON_DAYS = 5
 
 _TIMEOUT = 20
 
+# Dia sem jogo: vídeo de notícias recentes do clube (feed pt-BR da ESPN já
+# filtrado pelo time) — só notícia das últimas NEWS_MAX_AGE_HOURS, no máximo
+# NEWS_PER_VIDEO por vídeo, cada uma usada uma única vez.
+NEWS_FEED_URL = f"https://now.core.api.espn.com/v1/sports/news?lang=pt&region=br&limit=50&teams={BOTAFOGO_ESPN_ID}"
+NEWS_MAX_AGE_HOURS = 48
+NEWS_PER_VIDEO = 3
+NEWS_STORY_CHARS = 1800
+# foto de matéria só entra se foi publicada até N dias antes da matéria — a
+# ESPN reaproveita foto de arquivo (visto de verdade: foto de fev/2025 numa
+# matéria de set/2026), e foto velha num vídeo "de hoje" engana o torcedor.
+NEWS_PHOTO_MAX_AGE_DAYS = 2
+
 
 def _espn_get(url: str) -> dict | None:
     try:
@@ -54,7 +66,7 @@ def _espn_get(url: str) -> dict | None:
 def _load_state() -> dict:
     if STATE_FILE.exists():
         return json.loads(STATE_FILE.read_text())
-    return {"previewed": [], "recapped": []}
+    return {"previewed": [], "recapped": [], "news": []}
 
 
 def _save_state(state: dict) -> None:
@@ -262,12 +274,12 @@ LEAGUES_NOME = {
 def next_pending_task() -> dict | None:
     """Escolhe a próxima tarefa pendente: prioriza recapear o jogo
     concluído mais recente ainda não coberto; se não houver, prevê o
-    próximo jogo agendado (dentro do horizonte) ainda não coberto. `None`
-    quando não há nada pendente hoje — o chamador deve simplesmente não
-    gerar vídeo nenhum nesse dia."""
+    próximo jogo agendado (dentro do horizonte) ainda não coberto; sem jogo
+    nenhum pra cobrir, vídeo de notícias recentes (news_task). `None` quando
+    não há nem isso — o chamador simplesmente não gera vídeo nesse dia."""
     events = _all_events()
     if not events:
-        return None
+        return news_task()
 
     state = _load_state()
     recapped = set(state.get("recapped", []))
@@ -308,7 +320,8 @@ def next_pending_task() -> dict | None:
         key=lambda e: e["date"],
     )
     if not futuros:
-        return None
+        # sem jogo pra cobrir hoje: vídeo com as notícias recentes do clube
+        return news_task()
 
     escolhido = futuros[0]
     summary = _fetch_summary(escolhido["liga_slug"], escolhido["id"])
@@ -318,3 +331,101 @@ def next_pending_task() -> dict | None:
 
     facts = build_preview_facts(escolhido, summary)
     return {"tipo": "pre-jogo", "titulo": f"Botafogo x {facts['adversario']}: prévia", "facts": facts}
+
+
+def _story_text(html: str) -> str:
+    """Texto corrido da matéria — tira tags (<video1>, <alsosee>, links) e
+    corta no limite, sem quebrar palavra."""
+    import html as html_lib
+    import re
+
+    text = re.sub(r"<[^>]+>", " ", html or "")
+    text = re.sub(r"\s+", " ", html_lib.unescape(text)).strip()
+    if len(text) > NEWS_STORY_CHARS:
+        text = text[:NEWS_STORY_CHARS].rsplit(" ", 1)[0] + "…"
+    return text
+
+
+def _is_about_botafogo(article: dict) -> bool:
+    """O feed filtrado pelo time também traz matéria que só CITA o Botafogo
+    de passagem (ranking com 20 clubes, lista da Seleção) — só vale a que tem
+    o clube (ou a SAF/Textor) no TÍTULO (no resumo não basta: o ranking do
+    Palmeiras passava por citar o Botafogo lá)."""
+    text = (article.get("headline") or "").lower()
+    return any(k in text for k in ("botafogo", "fogão", "textor", "alvinegr"))
+
+
+def _photo_is_fresh(url: str, published) -> bool:
+    """Data da foto vem do caminho da URL na CDN da ESPN
+    (`/photo/2026/0925/...`, `/common/2026/0919/...`). Sem data legível,
+    descarta — melhor cair pra outra imagem do que arriscar foto antiga."""
+    import re
+    from datetime import datetime, timezone
+
+    m = re.search(r"/(20\d\d)/(\d\d)(\d\d)/", url)
+    if not m:
+        return False
+    try:
+        photo_day = datetime(int(m[1]), int(m[2]), int(m[3]), tzinfo=timezone.utc)
+    except ValueError:
+        return False
+    return 0 <= (published - photo_day).days <= NEWS_PHOTO_MAX_AGE_DAYS
+
+
+def news_task() -> dict | None:
+    """Tarefa de vídeo de NOTÍCIAS pro dia sem jogo: até NEWS_PER_VIDEO
+    matérias recentes ainda não usadas, com as fotos que vieram nelas.
+    `None` quando não tem notícia nova — nesse caso não sai vídeo."""
+    from datetime import datetime, timedelta, timezone
+
+    data = _espn_get(NEWS_FEED_URL)
+    if not data:
+        return None
+    state = _load_state()
+    used = set(state.get("news", []))
+    limite = datetime.now(timezone.utc) - timedelta(hours=NEWS_MAX_AGE_HOURS)
+
+    escolhidas = []
+    for art in data.get("headlines") or []:
+        art_id = str(art.get("id") or "")
+        published = art.get("published")
+        if not art_id or art_id in used or not published or not _is_about_botafogo(art):
+            continue
+        if datetime.fromisoformat(published.replace("Z", "+00:00")) < limite:
+            continue
+        escolhidas.append(art)
+        if len(escolhidas) == NEWS_PER_VIDEO:
+            break
+    if not escolhidas:
+        return None
+
+    state["news"] = sorted(used | {str(a["id"]) for a in escolhidas})
+    _save_state(state)
+
+    noticias, fotos, fontes = [], [], []
+    for art in escolhidas:
+        noticias.append({
+            "titulo": art.get("headline"),
+            "resumo": art.get("description"),
+            "texto": _story_text(art.get("story") or ""),
+            "publicado_em": art.get("published"),
+        })
+        link = ((art.get("links") or {}).get("web") or {}).get("href")
+        if link:
+            fontes.append({"titulo": art.get("headline"), "url": link})
+        published = datetime.fromisoformat(art["published"].replace("Z", "+00:00"))
+        for img in art.get("images") or []:
+            if not img.get("url") or not _photo_is_fresh(img["url"], published):
+                log.info("foto descartada (antiga ou sem data): %s", img.get("url"))
+                continue
+            if img["url"] not in {f["url"] for f in fotos}:
+                fotos.append({"url": img["url"], "credito": img.get("credit")})
+
+    facts = {"tipo": "noticias", "noticias": noticias}
+    return {
+        "tipo": "noticias",
+        "titulo": f"Notícias do Botafogo: {escolhidas[0].get('headline')}",
+        "facts": facts,
+        "fotos": fotos,
+        "fontes": fontes,
+    }
