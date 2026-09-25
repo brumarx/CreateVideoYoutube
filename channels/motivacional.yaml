@@ -6,9 +6,9 @@ youtube_handle: "@angulointerno"
 channel_title: "Ângulo Interno"
 language: "pt-BR"
 tts_voice_weights:
-  pt-BR-AntonioNeural: 100
-  pt-BR-FranciscaNeural: 0
-  pt-BR-ThalitaMultilingualNeural: 0
+  pt-BR-AntonioNeural: 33
+  pt-BR-FranciscaNeural: 33
+  pt-BR-ThalitaMultilingualNeural: 33
 scenes_per_video: 6
 upload_privacy: "public"
 uploads_per_day: 1
@@ -51,6 +51,8 @@ topics:
   - "a virada real de Steve Jobs depois de ser demitido da própria empresa"
   - "como a maratonista Kathrine Switzer correu a Boston Marathon proibida por ser mulher"
   - "Ninguém vai salvar você — comece a mudar sua vida hoje"
+  - "Os 4 pilares que controlam sua mente, humor, boca e dinheiro e como dominá-los"
+  - "5 passos para dominar seus pensamentos antes que eles controlem sua vida"
 prompt_base: >
   Escreva um roteiro motivacional/inspiracional no estilo de canais de
   desenvolvimento pessoal do YouTube. O ângulo deste canal é HISTÓRIA
@@ -60,3 +62,6 @@ prompt_base: >
   neles em vez de encher com contexto genérico. Tom inspirador e direto,
   storytelling com uma virada emocional, termine com uma mensagem clara de
   ação.
+
+# publica sozinho depois da revisão de fatos (sem esperar "Aprovar" no painel)
+require_approval: false

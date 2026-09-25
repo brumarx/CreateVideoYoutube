@@ -68,3 +68,6 @@ prompt_base: >
   fato que não esteja ali. Se um dado não veio (ex.: posse de bola ausente
   nesta partida), simplesmente não fale sobre aquilo — nunca estime,
   arredonde ou complete por conta própria.
+
+# publica sozinho depois da revisão de fatos (sem esperar "Aprovar" no painel)
+require_approval: false

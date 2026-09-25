@@ -63,3 +63,6 @@ prompt_base: >
   genéricos que parece com centenas de outros vídeos iguais. Comece com um
   gancho forte nos primeiros 5 segundos. Tom curioso, ritmo ágil, frases
   curtas fáceis de narrar em voz alta.
+
+# publica sozinho depois da revisão de fatos (sem esperar "Aprovar" no painel)
+require_approval: false
