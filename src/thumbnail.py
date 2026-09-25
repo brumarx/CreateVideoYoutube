@@ -123,6 +123,28 @@ def _compose_person_photo(photo: Image.Image, width: int, height: int) -> Image.
     return canvas
 
 
+def photo_scene_frame(url: str, width: int, height: int) -> bytes | None:
+    """Foto real de notícia (paisagem, ~16:9) como quadro de cena: foto
+    inteira nítida, encaixada pela largura/altura sem cortar nada, sobre a
+    mesma foto desfocada/escurecida preenchendo o resto — no Short vertical,
+    cortar uma foto 16:9 pro centro sobrava só um terço dela. PNG, ou None
+    se não baixou."""
+    photo = _fetch_real_photo(url)
+    if photo is None:
+        return None
+    ratio = photo.width / photo.height
+    cover_w, cover_h = (int(height * ratio), height) if ratio > width / height else (width, int(width / ratio))
+    bg = photo.resize((cover_w, cover_h))
+    left, top = (cover_w - width) // 2, (cover_h - height) // 2
+    bg = bg.crop((left, top, left + width, top + height)).filter(ImageFilter.GaussianBlur(24))
+    bg = ImageEnhance.Brightness(bg).enhance(0.5)
+    fit_w, fit_h = (width, int(width / ratio)) if ratio > width / height else (int(height * ratio), height)
+    bg.paste(photo.resize((fit_w, fit_h)), ((width - fit_w) // 2, (height - fit_h) // 2))
+    out = io.BytesIO()
+    bg.save(out, format="PNG")
+    return out.getvalue()
+
+
 def make_thumbnail(
     prompt: str,
     hook_text: str,

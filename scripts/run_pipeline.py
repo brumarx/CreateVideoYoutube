@@ -33,7 +33,7 @@ from src.fact_check import BLOCKING_TYPES, feedback_for_rewrite, review_script
 from src.orchestrator import enqueue, update
 from src.script_gen import generate_script
 from src.stock_media import search_stock_clip, search_stock_photo
-from src.thumbnail import make_thumbnail
+from src.thumbnail import make_thumbnail, photo_scene_frame
 from src.topics import pick_topic
 from src.tts import narrate
 from src.upload import UPLOAD_META_FILE, after_upload_status, upload_video
@@ -128,6 +128,10 @@ def run(
     tts_voice = random.choices(voices, weights=weights, k=1)[0]
 
     facts = None
+    # vídeo de notícias do Botafogo: fotos reais das próprias matérias (no
+    # lugar de filmagem genérica) + links das matérias pra descrição
+    news_photos: list[dict] = []
+    news_sources: list[dict] = []
     # curto/longo é só formato e duração — não decide sozinho se usa dado
     # real do banco. No curto, SEMPRE usa (random_fact_set/pick_fact_set);
     # no longo, só usa quando fact_label foi passado explicitamente (senão
@@ -153,6 +157,8 @@ def run(
             log.info("[botafogo] sem jogo pendente de prévia ou pós-jogo — nada a publicar hoje")
             return
         facts = task["facts"]
+        news_photos = task.get("fotos") or []
+        news_sources = task.get("fontes") or []
         if topic is None:
             topic = task["titulo"]
         if not user_forced_format:
@@ -290,10 +296,21 @@ def run(
             else:
                 stock_query = raw_stock_query or None
 
-            stock_clip_path = search_stock_clip(stock_query, width, height) if stock_query else None
+            # notícia do Botafogo: foto real da matéria, em rodízio entre as
+            # cenas (a de CTA no fim segue a cascata normal)
+            news_frame = None
+            if news_photos and i < original_scene_count:
+                news_frame = photo_scene_frame(news_photos[i % len(news_photos)]["url"], width, height)
+
+            stock_clip_path = None
+            if news_frame is None and stock_query:
+                stock_clip_path = search_stock_clip(stock_query, width, height)
 
             image_path = None
-            if stock_clip_path is None:
+            if news_frame is not None:
+                image_path = work_dir / f"scene_{i}.png"
+                image_path.write_bytes(news_frame)
+            elif stock_clip_path is None:
                 image_bytes = search_stock_photo(stock_query, width, height) if stock_query else None
                 if image_bytes is None:
                     # pede a imagem já no formato final do vídeo — pedir quadrado
@@ -351,7 +368,9 @@ def run(
         # de pedir pra IA inventar o rosto: mais preciso e sem risco de gerar
         # cara errada atribuída a alguém real.
         real_photo_url = None
-        if facts and facts.get("dados"):
+        if news_photos:
+            real_photo_url = news_photos[0]["url"]
+        elif facts and facts.get("dados"):
             real_photo_url = facts["dados"][0].get("foto_url") or None
         elif channel_name == "politica" and user_provided_topic:
             # tema digitado à mão (sem `facts` do banco) pode citar alguém que
@@ -386,6 +405,13 @@ def run(
             # URLs reais devolvidas pela busca, nunca inventado pelo LLM).
             fontes = "\n".join(f"- {f['titulo']}: {f['url']}" for f in web_facts)
             description += f"\n\nFontes consultadas:\n{fontes}"
+
+        if news_sources:
+            fontes = "\n".join(f"- {f['titulo']}: {f['url']}" for f in news_sources)
+            creditos = sorted({f["credito"] for f in news_photos if f.get("credito")})
+            description += f"\n\nFonte das notícias (ESPN):\n{fontes}"
+            if creditos:
+                description += "\nFotos: " + "; ".join(creditos)
 
         if music_attribution:
             # a licença CC BY (assets/music/ATTRIBUTION.md) exige creditar a
