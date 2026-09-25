@@ -24,7 +24,7 @@ sys.path.insert(0, str(ROOT))
 
 from src.config import AZURE_SPEECH_KEYS, ChannelConfig  # noqa: E402
 from src.tts import EDGE_VOICES, azure_voices  # noqa: E402
-from src.orchestrator import get_job, jobs_with_status, recent_jobs, update  # noqa: E402
+from src.orchestrator import get_job, jobs_with_status, published_jobs, recent_jobs, update  # noqa: E402
 from src.politica_data import FACT_FETCHERS  # noqa: E402
 from src.topics import STATE_FILE as USED_TOPICS_FILE  # noqa: E402
 
@@ -289,6 +289,26 @@ TEMPLATE = """
     {% endfor %}
   </table>
   </div>
+
+  <h1>Todos os vídeos no ar ({{ all_videos|length }}) — mais vistos primeiro</h1>
+  <p style="font-size:13px; color:#9aa3b2; margin:0 0 8px;">
+    {% for name, total in views_by_channel %}<span style="margin-right:14px;"><b>{{ name }}</b>: {{ "{:,}".format(total).replace(",", ".") }} views</span>{% endfor %}
+  </p>
+  <div class="table-wrap">
+  <table>
+    <tr><th>#</th><th>Data</th><th>Canal</th><th>Tópico</th><th>Views</th><th>Vídeo</th></tr>
+    {% for j in all_videos %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td style="white-space:nowrap;">{{ j.date_label }}</td>
+      <td>{{ j.channel }}</td>
+      <td class="topic-cell">{{ j.topic }}</td>
+      <td style="text-align:right; white-space:nowrap;">{% if j.views is not none %}{{ "{:,}".format(j.views).replace(",", ".") }}{% endif %}</td>
+      <td><a href="https://youtu.be/{{ j.youtube_video_id }}" target="_blank">assistir</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
 </body>
 </html>
 """
@@ -457,7 +477,17 @@ DURATION_FIELDS = ("short_min_minutes", "short_max_minutes", "long_min_minutes",
 def index():
     channels = _load_channels()
     raw_jobs = recent_jobs(limit=30)
-    views = _video_views(raw_jobs)
+    raw_published = published_jobs()
+    views = _video_views(raw_jobs + raw_published)
+    all_videos = [
+        {**vars(j), "views": views.get(j.youtube_video_id), "date_label": _date_label(j.created_at)}
+        for j in raw_published
+    ]
+    all_videos.sort(key=lambda j: j["views"] if j["views"] is not None else -1, reverse=True)
+    totals: dict[str, int] = {}
+    for j in all_videos:
+        totals[j["channel"]] = totals.get(j["channel"], 0) + (j["views"] or 0)
+    views_by_channel = sorted(totals.items(), key=lambda kv: kv[1], reverse=True)
     jobs = [
         {**vars(j), "views": views.get(j.youtube_video_id), "date_label": _date_label(j.created_at)}
         for j in raw_jobs
@@ -480,7 +510,7 @@ def index():
     else:
         flash = None
     return render_template_string(
-        TEMPLATE, channels=channels, jobs=jobs, sort_views=sort_views, any_public=any_public, flash=flash, total_uploads=total_uploads,
+        TEMPLATE, channels=channels, jobs=jobs, sort_views=sort_views, all_videos=all_videos, views_by_channel=views_by_channel, any_public=any_public, flash=flash, total_uploads=total_uploads,
         pending=jobs_with_status("awaiting_approval"),
         azure_ready=bool(AZURE_SPEECH_KEYS),
     )

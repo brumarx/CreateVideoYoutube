@@ -89,6 +89,16 @@ def jobs_with_status(status: str) -> list[Job]:
         return [Job(*row) for row in conn.execute(query, (status,)).fetchall()]
 
 
+def published_jobs() -> list[Job]:
+    """Todo vídeo que está no ar (status uploaded), do mais novo pro mais velho."""
+    query = (
+        "SELECT id, channel, topic, status, video_path, thumbnail_path, youtube_video_id, error, created_at FROM jobs"
+        " WHERE status = 'uploaded' AND youtube_video_id IS NOT NULL ORDER BY id DESC"
+    )
+    with closing(_connect()) as conn:
+        return [Job(*row) for row in conn.execute(query).fetchall()]
+
+
 def get_job(job_id: int) -> Job | None:
     query = "SELECT id, channel, topic, status, video_path, thumbnail_path, youtube_video_id, error FROM jobs WHERE id = ?"
     with closing(_connect()) as conn:
