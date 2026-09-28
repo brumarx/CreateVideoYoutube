@@ -284,7 +284,14 @@ LEAGUES_NOME = {
 }
 
 
-def next_pending_task() -> dict | None:
+def daily_portal_task() -> dict | None:
+    """Vídeo diário com temas do botafogo.win (independente de ter jogo):
+    manchetes do Portal; ESPN só de reserva se o Portal estiver fora do ar
+    ou sem nada novo."""
+    return portal_news_task() or news_task()
+
+
+def next_pending_task(news_fallback: bool = True) -> dict | None:
     """Escolhe a próxima tarefa pendente: prioriza recapear o jogo
     concluído mais recente ainda não coberto; se não houver, prevê o
     próximo jogo agendado (dentro do horizonte) ainda não coberto; sem jogo
@@ -292,7 +299,7 @@ def next_pending_task() -> dict | None:
     não há nem isso — o chamador simplesmente não gera vídeo nesse dia."""
     events = _all_events()
     if not events:
-        return news_task()
+        return (news_task() or portal_news_task()) if news_fallback else None
 
     state = _load_state()
     recapped = set(state.get("recapped", []))
@@ -335,7 +342,7 @@ def next_pending_task() -> dict | None:
     if not futuros:
         # sem jogo pra cobrir hoje: vídeo com as notícias recentes do clube
         # (ESPN primeiro — matéria completa; senão manchetes do Portal)
-        return news_task() or portal_news_task()
+        return (news_task() or portal_news_task()) if news_fallback else None
 
     escolhido = futuros[0]
     summary = _fetch_summary(escolhido["liga_slug"], escolhido["id"])
