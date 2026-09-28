@@ -131,6 +131,7 @@ TEMPLATE = """
         {% if c.token_status == "ok" %}<span class="badge ok">token OK</span>
         {% elif c.token_status == "missing" %}<span class="badge warn">sem token</span>
         {% else %}<span class="badge warn" title="rode scripts/auth_youtube.py --channel {{ c.name }}">token expirado</span>{% endif %}
+        {% if c.token_status == "ok" and not c.can_comment %}<span class="badge warn" title="token sem permissão de comentar: o canal não posta a pergunta depois do upload. Rode scripts/auth_youtube.py --channel {{ c.name }}">sem comentário</span>{% endif %}
       </h2>
       {% if c.youtube_handle %}
       <div class="meta"><a href="https://www.youtube.com/{{ c.youtube_handle }}" target="_blank">youtube.com/{{ c.youtube_handle }}</a></div>
@@ -361,6 +362,18 @@ def _token_status(name: str) -> str:
     return status
 
 
+def _can_comment(name: str) -> bool:
+    """Token tem o escopo de comentar (ver src/upload.py -> COMMENT_SCOPE)?
+    Só lê o arquivo, sem rede."""
+    from src.upload import COMMENT_SCOPE
+
+    try:
+        token = json.loads((ROOT / "credentials" / f"token_{name}.json").read_text())
+    except (OSError, ValueError):
+        return False
+    return COMMENT_SCOPE in (token.get("scopes") or [])
+
+
 # views por vídeo, com cache — videos.list custa 1 unidade de cota por
 # chamada (até 50 ids), barato, mas não precisa bater no Google a cada F5.
 _VIEWS_CACHE: dict[str, tuple[float, int]] = {}
@@ -427,6 +440,7 @@ def _load_channels() -> list[dict]:
                 "uploads_per_day": cfg.get("uploads_per_day", 1),
                 "upload_privacy": cfg.get("upload_privacy", "private"),
                 "token_status": _token_status(name),
+                "can_comment": _can_comment(name),
                 "require_approval": cfg.get("require_approval", True),
                 # canais sem fila de temas (botafogo: tema vem da partida)
                 # não usam temas virais.
