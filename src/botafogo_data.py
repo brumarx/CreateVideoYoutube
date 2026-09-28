@@ -321,11 +321,11 @@ LEAGUES_NOME = {
 }
 
 
-def daily_portal_task() -> dict | None:
+def daily_portal_task(per_video: int = PORTAL_NEWS_PER_VIDEO) -> dict | None:
     """Vídeo diário com temas do botafogo.win (independente de ter jogo):
     manchetes do Portal; ESPN só de reserva se o Portal estiver fora do ar
     ou sem nada novo."""
-    return portal_news_task() or news_task()
+    return portal_news_task(per_video) or news_task()
 
 
 def next_pending_task(news_fallback: bool = True) -> dict | None:
@@ -516,7 +516,7 @@ def _portal_photo_ok(url: str, published) -> bool:
     return bool(m) and (int(m[1]), int(m[2])) == (published.year, published.month)
 
 
-def portal_news_task() -> dict | None:
+def portal_news_task(per_video: int = PORTAL_NEWS_PER_VIDEO) -> dict | None:
     """Tarefa de notícias a partir do Portal Botafogo (reserva da ESPN): até
     PORTAL_NEWS_PER_VIDEO manchetes recentes, de assuntos diferentes, ainda
     não usadas. Matéria própria do portal (authored) vem com o texto
@@ -550,7 +550,7 @@ def portal_news_task() -> dict | None:
         if _is_duplicate(title, escolhidas):
             continue
         escolhidas.append(art)
-        if len(escolhidas) == PORTAL_NEWS_PER_VIDEO:
+        if len(escolhidas) == per_video:
             break
     if not escolhidas:
         return None

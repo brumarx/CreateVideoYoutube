@@ -13,10 +13,10 @@ scenes_per_video: 6
 upload_privacy: "public"
 uploads_per_day: 1
 # valor default só pra quando alguém rodar sem --topic/--long manualmente —
-# na prática o código (ver run_pipeline.py, branch "botafogo") decide o
-# formato de cada vídeo pelo TIPO de tarefa (pré-jogo = curto, pós-jogo =
-# longo), nunca por este campo.
-daily_format: "short"
+# formato do vídeo diário de notícias do botafogo.win. Prévia de jogo é
+# sempre curta e pós-jogo sempre longo, independente deste campo (ver
+# run_pipeline.py, branch "botafogo").
+daily_format: "long"
 # pré-jogo: rápido, gancho + contexto + expectativa.
 short_min_minutes: 1.5
 short_max_minutes: 3
