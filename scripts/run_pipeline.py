@@ -193,7 +193,9 @@ def run(
         # "portal" (1 vídeo/dia com temas do botafogo.win). Sem a opção
         # (execução manual): jogo se houver, senão notícias.
         if botafogo_task == "portal":
-            task = daily_portal_task()
+            # longo precisa de mais notícia de verdade pra 4-6min — com
+            # poucas o LLM estica inventando detalhe e a revisão barra
+            task = daily_portal_task(per_video=8 if channel.daily_format == "long" else 5)
         else:
             task = next_pending_task(news_fallback=botafogo_task != "jogo")
         if task is None:
@@ -205,7 +207,11 @@ def run(
         if topic is None:
             topic = task["titulo"]
         if not user_forced_format:
-            long_form = task["tipo"] == "pos-jogo"
+            # prévia sempre curta, pós-jogo sempre longo; notícias do dia
+            # (botafogo.win) seguem o formato escolhido no painel
+            long_form = task["tipo"] == "pos-jogo" or (
+                task["tipo"] == "noticias" and channel.daily_format == "long"
+            )
     elif topic is None and channel.topics:
         # nunca repete um tema já usado — quando a lista fixa esgota, gera
         # um tema novo via LLM dentro do nicho do canal (ver src/topics.py).
