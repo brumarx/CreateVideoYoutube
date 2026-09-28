@@ -902,6 +902,11 @@ def run_channel(channel: str):
     # formatos agora (curto/longo é só formato e duração — não decide
     # sozinho se o roteiro usa dado real do banco, ver run_pipeline.py).
 
+    if channel == "botafogo" and not custom_topic:
+        # botões do painel no Botafogo = vídeo de temas do botafogo.win
+        # (prévia/pós-jogo continuam saindo sozinhos no daily_run)
+        cmd += ["--botafogo-task", "portal"]
+
     if custom_topic:
         cmd += ["--topic", custom_topic]
     # sem tema digitado: run_pipeline.py escolhe sozinho da fila única do

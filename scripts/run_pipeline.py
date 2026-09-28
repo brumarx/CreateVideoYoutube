@@ -195,7 +195,7 @@ def run(
         if botafogo_task == "portal":
             # longo precisa de mais notícia de verdade pra 4-6min — com
             # poucas o LLM estica inventando detalhe e a revisão barra
-            task = daily_portal_task(per_video=8 if channel.daily_format == "long" else 5)
+            task = daily_portal_task(per_video=8 if long_form else 5)
         else:
             task = next_pending_task(news_fallback=botafogo_task != "jogo")
         if task is None:
