@@ -433,7 +433,7 @@ def news_task() -> dict | None:
                 log.info("foto descartada (antiga ou sem data): %s", img.get("url"))
                 continue
             if img["url"] not in {f["url"] for f in fotos}:
-                fotos.append({"url": img["url"], "credito": img.get("credit")})
+                fotos.append({"url": img["url"], "credito": img.get("credit"), "noticia": len(noticias) - 1})
 
     facts = {"tipo": "noticias", "noticias": noticias}
     return {
@@ -537,7 +537,7 @@ def portal_news_task() -> dict | None:
         published = datetime.fromisoformat(art["published_at"].replace("Z", "+00:00"))
         img = art.get("cover_image_url")
         if img and _portal_photo_ok(img, published) and img not in {f["url"] for f in fotos}:
-            fotos.append({"url": img, "credito": veiculo})
+            fotos.append({"url": img, "credito": veiculo, "noticia": len(noticias) - 1})
 
     return {
         "tipo": "noticias",
