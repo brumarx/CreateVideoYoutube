@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from pathlib import Path
 
@@ -26,6 +27,28 @@ EDGE_VOICES = {"pt-BR-AntonioNeural", "pt-BR-FranciscaNeural", "pt-BR-ThalitaMul
 EDGE_FALLBACK_VOICE = "pt-BR-AntonioNeural"
 
 AZURE_VOICES_CACHE = Path(__file__).resolve().parent.parent / "data" / "azure_voices.json"
+
+# Pronúncia: nome que a voz pt-BR lê errado -> grafia fonética que ela lê
+# certo. Troca só no texto que vai pra síntese; a legenda karaokê volta pra
+# grafia original (ver _restore_spelling). "x" vira "cs" de propósito — em
+# português o "x" pode sair "ch" ("Téchtor").
+PRONUNCIATIONS = {
+    "Textor": "Técstor",  # John Textor (SAF do Botafogo): TÉX-tor, não tex-TÔR
+}
+_PRON_RE = re.compile(r"\b(" + "|".join(map(re.escape, PRONUNCIATIONS)) + r")\b", re.IGNORECASE)
+_SPELLING_BACK = {v.lower(): k for k, v in PRONUNCIATIONS.items()}
+
+
+def _for_speech(text: str) -> str:
+    return _PRON_RE.sub(lambda m: PRONUNCIATIONS[next(k for k in PRONUNCIATIONS if k.lower() == m[1].lower())], text)
+
+
+def _restore_spelling(word_boundaries: list[dict]) -> list[dict]:
+    for w in word_boundaries:
+        original = _SPELLING_BACK.get(w["text"].lower().strip(".,;:!?"))
+        if original:
+            w["text"] = w["text"].replace(w["text"].strip(".,;:!?"), original)
+    return word_boundaries
 
 
 def azure_voices(locale: str = "pt-BR") -> list[dict]:
@@ -146,11 +169,12 @@ def narrate(text: str, output_path: Path, voice: str = DEFAULT_VOICE) -> tuple[P
     se o serviço não mandou WordBoundary por algum motivo; quem chamar deve
     cair pra um fallback nesse caso, nunca assumir que sempre vem preenchida)."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    text = _for_speech(text)
     if voice not in EDGE_VOICES:
         # voz só-Azure
         if AZURE_SPEECH_KEYS:
             try:
-                return output_path, _synthesize_azure(text, output_path, voice)
+                return output_path, _restore_spelling(_synthesize_azure(text, output_path, voice))
             except Exception as exc:  # noqa: BLE001 — qualquer falha da Azure cai pro grátis
                 log.warning("azure tts indisponível (%s) — usando edge-tts", exc)
         else:
@@ -160,7 +184,7 @@ def narrate(text: str, output_path: Path, voice: str = DEFAULT_VOICE) -> tuple[P
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
             word_boundaries = asyncio.run(_synthesize(text, output_path, voice, metadata_path))
-            return output_path, word_boundaries
+            return output_path, _restore_spelling(word_boundaries)
         except edge_tts.exceptions.NoAudioReceived:
             if attempt == MAX_ATTEMPTS:
                 raise
