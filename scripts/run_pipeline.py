@@ -206,8 +206,12 @@ def run(
         # fonte antes de escrever, em vez de recusar o tema ou arriscar
         # inventar (ver src/web_search.py). Sem TAVILY_API_KEYS configurada,
         # cai pro comportamento antigo sem bloquear nada.
+        # politica também busca pra tema da fila/viral: são sempre sobre
+        # instituição/pessoa real e fato recente (ex.: gastos do STF), onde o
+        # LLM sozinho inventava número e a revisão de fatos barrava o
+        # roteiro (3 falhas em 5 dias, jobs 139/146/157/161).
         web_facts = None
-        if user_provided_topic and facts is None:
+        if (user_provided_topic or channel_name == "politica") and facts is None:
             from src.web_search import search_topic_facts
 
             web_facts = search_topic_facts(topic)
@@ -236,6 +240,23 @@ def run(
                 if not any(p.get("tipo") in BLOCKING_TYPES for p in problems):
                     log.warning("[%s] só sobraram ressalvas leves da revisão — segue pra aprovação", job_id)
                     break
+                if channel_name == "politica" and facts is None and not user_provided_topic:
+                    # tema da fila/viral sem dado que sustente: em vez de
+                    # passar o dia sem vídeo, troca por um fato REAL do banco
+                    # (mesmo caminho do formato curto, já com fonte).
+                    from src.politica_data import random_fact_set
+
+                    facts = random_fact_set()
+                    topic = facts["tema"]
+                    web_facts = None
+                    log.warning("[%s] tema reprovado — trocando por dado real do banco: %s", job_id, topic)
+                    update(job_id, topic=topic)
+                    script = generate_script(
+                        channel, topic, facts, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes,
+                    )
+                    problems = review_script(script, topic, facts, None)
+                    if not problems or not any(p.get("tipo") in BLOCKING_TYPES for p in problems):
+                        break
                 raise RuntimeError(
                     "roteiro reprovado na revisão de fatos: "
                     + "; ".join(f"{p.get('termo')} ({p.get('motivo')})" for p in problems)
