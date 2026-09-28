@@ -74,6 +74,28 @@ def _chapter_label(narration: str, max_words: int = 6) -> str:
     return label[:1].upper() + label[1:] if label else "Continua"
 
 
+def _words(text: str) -> set[str]:
+    return {w for w in re.findall(r"\w+", (text or "").lower()) if len(w) > 3}
+
+
+def _news_photo_for_scene(narration: str, facts: dict | None, photos: list[dict]) -> dict | None:
+    """Foto da notícia que ESTA cena narra (mais palavras em comum entre a
+    fala e o título/resumo da notícia) — antes era rodízio (cena i = foto
+    i), e a foto de uma notícia aparecia enquanto a narração falava de
+    outra. Sem notícia reconhecível na fala (abertura genérica,
+    fechamento), devolve None e a cena segue a cascata normal de imagem."""
+    noticias = (facts or {}).get("noticias") or []
+    fala = _words(narration) - {"botafogo", "fogão", "alvinegro", "torcida", "time", "clube"}
+    melhor, melhor_score = None, 1  # pelo menos 2 palavras em comum
+    for idx, n in enumerate(noticias):
+        score = len(fala & _words(f"{n.get('titulo', '')} {n.get('resumo', '')}"))
+        if score > melhor_score:
+            melhor, melhor_score = idx, score
+    if melhor is None:
+        return None
+    return next((f for f in photos if f.get("noticia") == melhor), None)
+
+
 def _chapter_starts(n: int) -> list[int]:
     """Índice da cena que abre cada capítulo — o mesmo agrupamento serve pros
     timestamps da descrição e pro selo "Parte X de Y" na tela."""
@@ -355,7 +377,9 @@ def run(
             # cenas (a de CTA no fim segue a cascata normal)
             news_frame = None
             if news_photos and i < original_scene_count:
-                news_frame = photo_scene_frame(news_photos[i % len(news_photos)]["url"], width, height)
+                photo = _news_photo_for_scene(scene["narration"], facts, news_photos)
+                if photo:
+                    news_frame = photo_scene_frame(photo["url"], width, height)
 
             stock_clip_path = None
             if news_frame is None and stock_query:
