@@ -130,6 +130,7 @@ def run(
     publish_at: str | None,
     long_form: bool | None = None,
     fact_label: str | None = None,
+    botafogo_task: str | None = None,
 ) -> None:
     channel = ChannelConfig.load(channel_name)
     # guardado ANTES de qualquer auto-preenchimento abaixo — só um tema
@@ -171,15 +172,21 @@ def run(
         if topic is None:
             topic = facts["tema"]
     elif channel_name == "botafogo":
-        from src.botafogo_data import next_pending_task
+        from src.botafogo_data import daily_portal_task, next_pending_task
 
         # Botafogo não joga todo dia — sem prévia ou pós-jogo pendente,
         # não gera vídeo nenhum hoje (silêncio, não erro; ver
         # src/botafogo_data.py). O `return` acontece ANTES do `enqueue()`
         # abaixo, então não cria job nenhum no banco nesses dias.
-        task = next_pending_task()
+        # daily_run chama 2x: "jogo" (prévia/pós-jogo, silêncio sem jogo) e
+        # "portal" (1 vídeo/dia com temas do botafogo.win). Sem a opção
+        # (execução manual): jogo se houver, senão notícias.
+        if botafogo_task == "portal":
+            task = daily_portal_task()
+        else:
+            task = next_pending_task(news_fallback=botafogo_task != "jogo")
         if task is None:
-            log.info("[botafogo] sem jogo pendente de prévia ou pós-jogo — nada a publicar hoje")
+            log.info("[botafogo] nada a publicar (%s)", botafogo_task or "jogo/notícias")
             return
         facts = task["facts"]
         news_photos = task.get("fotos") or []
@@ -588,10 +595,17 @@ def main() -> None:
              "salvo em channels/<nome>.yaml -> daily_format (editável no painel). "
              "--no-long força o formato curto mesmo que o painel esteja em 'long'.",
     )
+    parser.add_argument(
+        "--botafogo-task", choices=["jogo", "portal"], default=None,
+        help="só canal 'botafogo': 'jogo' = prévia/pós-jogo; 'portal' = vídeo diário do botafogo.win",
+    )
     parser.add_argument("--fact-label", default=None, help="só canal 'politica' no curto: força um tema específico de src.politica_data.FACT_FETCHERS em vez de sortear")
     args = parser.parse_args()
 
-    run(args.channel, args.topic, args.dry_run, args.publish_at, long_form=args.long, fact_label=args.fact_label)
+    run(
+        args.channel, args.topic, args.dry_run, args.publish_at, long_form=args.long,
+        fact_label=args.fact_label, botafogo_task=args.botafogo_task,
+    )
 
 
 if __name__ == "__main__":

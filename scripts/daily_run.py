@@ -43,6 +43,17 @@ def run_channel(channel_name: str, cfg: dict) -> None:
         log.warning("[%s] sem token OAuth (%s) — pulando, rode auth_youtube.py primeiro", channel_name, token_file.name)
         return
 
+    if channel_name == "botafogo":
+        # 2 vídeos independentes: prévia/pós-jogo quando houver jogo (regras
+        # de sempre, silêncio sem jogo) + 1 por dia com temas do botafogo.win
+        for task in ("jogo", "portal"):
+            cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name, "--botafogo-task", task]
+            log.info("[%s] %s", channel_name, task)
+            result = subprocess.run(cmd, cwd=ROOT)
+            if result.returncode != 0:
+                log.error("[%s] %s falhou (exit %d)", channel_name, task, result.returncode)
+        return
+
     for i in range(uploads_per_day):
         # sem --long/--no-long: run_pipeline.py lê channels/<nome>.yaml ->
         # daily_format sozinho (fonte única de verdade, editável no painel —
