@@ -28,7 +28,7 @@ log = logging.getLogger("fact_check")
 
 _TYPES = {
     "ferramenta_inexistente", "fato_nao_confirmado", "atribuicao_falsa",
-    "acusacao_sem_base", "data_desatualizada", "titulo_enganoso",
+    "acusacao_sem_base", "data_desatualizada", "titulo_enganoso", "fora_da_fonte",
 }
 # tipos que dá pra confirmar com uma busca na internet (existe ou não
 # existe); os outros são problema de redação/atribuição e reprovam direto.
@@ -65,7 +65,15 @@ abaixo ANTES de ele virar vídeo. Aponte SÓ problemas concretos destes tipos:
   recente é X" quando já existe coisa mais nova), ou chama de "novidade" algo
   antigo. HOJE É {today}.
 - "titulo_enganoso": o título promete algo que o roteiro não entrega (ex.:
-  promete "5 gastos revelados pelos dados" e não mostra dado nenhum).
+  promete "5 gastos revelados pelos dados" e não mostra dado nenhum), ou
+  distorce a fonte (ex.: "a saída de Fulano" quando a fonte diz que ele já
+  era ex-jogador).
+- "fora_da_fonte" (SÓ quando há FONTES abaixo): qualquer afirmação, consequência,
+  interpretação ou relação que as FONTES não dizem. Confira frase por frase.
+  Casos típicos: jogador "emprestado pelo clube X" joga em OUTRO clube — dizer
+  que a lesão/fase dele afeta o time X agora é fora_da_fonte; "ex-X" já saiu
+  antes — tratar como saída de agora é fora_da_fonte; "negocia/pode/avalia"
+  narrado como fato consumado; causa ou impacto que a matéria não cita.
 
 Opinião, tom, estilo e afirmações genéricas e verdadeiras NÃO são problema.
 Não invente problema: se o roteiro está ok, devolva lista vazia.
@@ -79,8 +87,25 @@ FONTES:
 ROTEIRO:
 {narration}
 
-Responda SÓ com JSON, neste formato exato:
-{{"problemas": [{{"tipo": "...", "termo": "nome ou afirmação curta (até 8 palavras)", "motivo": "por que é problema, 1 frase"}}]}}"""
+{_checagem_instr if (facts or web_facts) else ""}Responda SÓ com JSON, neste formato exato:
+{{{_checagem_campo if (facts or web_facts) else ""}"problemas": [{{"tipo": "...", "termo": "nome ou afirmação curta (até 8 palavras)", "motivo": "por que é problema, 1 frase"}}]}}"""
+
+
+# Com fonte, o revisor tem que ancorar CADA afirmação num trecho literal —
+# só "procure problemas" deixava passar distorção de relação (ex-jogador
+# tratado como saída de agora: testado, passou 2 de 2 vezes). Afirmação sem
+# trecho vira fora_da_fonte por código (_parse), não pelo julgamento dele.
+_checagem_instr = """ANTES dos problemas, faça a CHECAGEM: liste cada afirmação factual do
+TÍTULO e do ROTEIRO (fatos, números, datas, relações de pessoa com clube/
+cargo, consequências, impactos) e, pra cada uma, copie o trecho LITERAL das
+FONTES que a sustenta — com o MESMO sentido (ex.: "perde o goleiro" NÃO é
+sustentado por "ex-goleiro"; "terá de ajustar o elenco" NÃO é sustentado por
+"emprestado a outro clube"). Sem trecho que sustente, "trecho": null.
+Opinião/emoção de torcedor e chamadas ("deixa nos comentários") não entram.
+
+"""
+_checagem_campo = '"checagem": [{"afirmacao": "...", "trecho": "trecho literal da fonte ou null"}], '
+
 
 
 def _parse(raw: str) -> list[dict] | None:
@@ -94,6 +119,13 @@ def _parse(raw: str) -> list[dict] | None:
     problems = data.get("problemas")
     if not isinstance(problems, list):
         return None
+    for c in data.get("checagem") or []:
+        trecho = str(c.get("trecho") or "").strip() if isinstance(c, dict) else ""
+        if isinstance(c, dict) and c.get("afirmacao") and trecho.lower() in ("", "null", "none", "-"):
+            problems.append({
+                "tipo": "fora_da_fonte", "termo": str(c["afirmacao"])[:80],
+                "motivo": "nenhum trecho das fontes sustenta essa afirmação",
+            })
     # modelo às vezes inventa tipo fora da lista ("fonte não citada") —
     # isso é estilo, não erro factual; só conta o que está definido. Acento
     # vira sem acento ("atribuição_falsa" -> "atribuicao_falsa").
@@ -136,7 +168,7 @@ def review_script(
     try:
         raw = complete(
             [{"role": "user", "content": _review_prompt(script, topic, facts, web_facts)}],
-            max_tokens=1500,
+            max_tokens=3000,
             validate=lambda r: _parse(r) is not None,
         )
         raw_problems = _parse(raw)
@@ -145,6 +177,9 @@ def review_script(
         return None
     if raw_problems is None:
         return None
+    if not (facts or web_facts):
+        # sem fonte não existe "fora da fonte"
+        raw_problems = [p for p in raw_problems if p["tipo"] != "fora_da_fonte"]
 
     problems = []
     for p in raw_problems:
@@ -156,10 +191,13 @@ def review_script(
     return problems
 
 
-# problemas que impedem o vídeo de sair mesmo depois das reescritas; os
-# outros (fato duvidoso, título exagerado) só pedem reescrita — o revisor às
-# vezes implica com fato verdadeiro, e a aprovação no painel ainda vem depois.
-BLOCKING_TYPES = {"ferramenta_inexistente", "atribuicao_falsa", "acusacao_sem_base", "data_desatualizada"}
+# Todo problema apontado impede o vídeo de sair depois das reescritas: os
+# canais publicam sozinhos (sem aprovação manual no painel), então não existe
+# segunda barreira — vídeo errado no ar é pior que o dia sem vídeo (e o
+# daily_run já tenta de novo com outro tema). Antes "fato duvidoso" e
+# "título enganoso" passavam; foi assim que saiu o vídeo do Botafogo que
+# tratava lesão de jogador emprestado como problema do elenco.
+BLOCKING_TYPES = set(_TYPES)
 
 
 def feedback_for_rewrite(problems: list[dict]) -> str:
