@@ -276,7 +276,13 @@ def run(
         # tutorial de ferramenta inventada ou acusação sem dado no ar.
         for attempt in range(FACT_CHECK_REWRITES + 1):
             problems = review_script(script, topic, facts, web_facts)
-            if not problems:  # [] aprovado, None revisor indisponível
+            if problems is None:
+                # revisor fora do ar: tenta 1x de novo; sem revisão o vídeo
+                # NÃO sai (não existe mais aprovação manual depois)
+                problems = review_script(script, topic, facts, web_facts)
+                if problems is None:
+                    raise ScriptRejected("revisor de fatos indisponível — vídeo não sai sem revisão")
+            if not problems:
                 break
             log.warning(
                 "[%s] revisão de fatos reprovou (tentativa %d): %s", job_id, attempt + 1,
@@ -301,7 +307,7 @@ def run(
                         channel, topic, facts, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes,
                     )
                     problems = review_script(script, topic, facts, None)
-                    if not problems or not any(p.get("tipo") in BLOCKING_TYPES for p in problems):
+                    if problems == []:  # None = revisor fora do ar: não aprova
                         break
                 elif channel.topics and facts is None and not user_provided_topic:
                     # demais canais: tema (quase sempre o viral — jobs
@@ -318,11 +324,11 @@ def run(
                             channel, topic, None, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes,
                         )
                         problems = review_script(script, topic, None, None)
-                        if not problems or not any(p.get("tipo") in BLOCKING_TYPES for p in problems):
+                        if problems == []:
                             break
                 raise ScriptRejected(
                     "roteiro reprovado na revisão de fatos: "
-                    + "; ".join(f"{p.get('termo')} ({p.get('motivo')})" for p in problems)
+                    + "; ".join(f"{p.get('termo')} ({p.get('motivo')})" for p in (problems or [{"termo": "revisor de fatos", "motivo": "indisponível"}]))
                 )
             script = generate_script(
                 channel, topic, facts, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes,

@@ -96,6 +96,7 @@ ACCURACY_RULES = """REGRAS DE PRECISÃO (obrigatórias — o roteiro passa por r
 - Tempo verbal de eventos: compare cada data com a DATA DE HOJE acima. Se a data de um jogo/evento é futura, fale no futuro ("vai enfrentar", "no dia 07/10"); se não houver data completa (dia E mês) nos dados, NÃO afirme se já aconteceu ou não — cite só o que a fonte diz.
 - Números, valores, placares, nomes e cargos: só os que aparecem nos DADOS REAIS/fontes. Na dúvida, deixe de fora em vez de arredondar, estimar ou completar.
 - Possibilidade não é fato: se a fonte diz "pode", "deve", "negocia", "avalia", narre como possibilidade.
+- Não tire conclusão, consequência ou impacto que a fonte não diz. Leia a relação de cada pessoa com o assunto exatamente como está: "emprestado pelo clube X" = joga em OUTRO clube (não desfalca X agora); "ex-X" = já saiu antes (não é saída de agora).
 - Nunca acuse ninguém de irregularidade sem que a fonte diga isso com todas as letras."""
 
 
