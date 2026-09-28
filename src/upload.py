@@ -19,6 +19,10 @@ SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube",
 ]
+# comentar exige este escopo a mais (ver scripts/auth_youtube.py). Token
+# autorizado antes dele existir não tem — comentário só é pulado até a
+# próxima reautorização do canal, o upload segue funcionando normal.
+COMMENT_SCOPE = "https://www.googleapis.com/auth/youtube.force-ssl"
 
 # playlist_id de cada canal, criada 1x e reaproveitada (evita duplicar
 # playlist a cada upload e evita ter que fazer playlists().list toda vez).
@@ -35,7 +39,10 @@ def _load_credentials(token_file: Path) -> Credentials:
             f"Token não encontrado: {token_file}. Rode "
             f"`python3 scripts/auth_youtube.py --channel <nome>` primeiro."
         )
-    creds = Credentials.from_authorized_user_file(str(token_file), SCOPES)
+    # escopos que o PRÓPRIO token tem (não SCOPES): pedir no refresh um
+    # escopo que o token não recebeu (ex.: COMMENT_SCOPE num token antigo)
+    # derruba o refresh com invalid_scope.
+    creds = Credentials.from_authorized_user_file(str(token_file))
     if creds.expired and creds.refresh_token:
         creds.refresh(Request())
         token_file.write_text(creds.to_json())
@@ -168,3 +175,51 @@ def _add_to_channel_playlist(youtube, channel: ChannelConfig, video_id: str) -> 
             }
         },
     ).execute()
+
+
+def post_comment(channel: ChannelConfig, video_id: str, text: str) -> None:
+    """Comenta no vídeo como o próprio canal — pergunta pra puxar conversa
+    (comentário é sinal de engajamento pro YouTube). Fixar o comentário a
+    API não permite. Cota: 50 unidades."""
+    creds = _load_credentials(channel.token_file)
+    if not creds.has_scopes([COMMENT_SCOPE]):
+        log.info("token de %s sem permissão de comentar — reautorize o canal pra ativar", channel.name)
+        return
+    youtube = build("youtube", "v3", credentials=creds)
+    youtube.commentThreads().insert(
+        part="snippet",
+        body={
+            "snippet": {
+                "videoId": video_id,
+                "topLevelComment": {"snippet": {"textOriginal": text}},
+            }
+        },
+    ).execute()
+    log.info("comentário postado em %s: %s", video_id, text)
+
+
+def top_channel_videos(channel: ChannelConfig, limit: int = 3) -> list[dict]:
+    """Os `limit` vídeos mais vistos do canal ([{"id", "title", "views"}]),
+    pro "Assista também" da descrição — tela final e cards não dá pra criar
+    pela API, então o link pro próximo vídeo vai por aqui. Lê a playlist de
+    uploads do canal (não o banco local: pega também vídeo antigo/manual).
+    Cota: ~3 unidades."""
+    youtube = build("youtube", "v3", credentials=_load_credentials(channel.token_file))
+    me = youtube.channels().list(part="contentDetails", mine=True).execute()
+    uploads = me["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
+    items = youtube.playlistItems().list(part="contentDetails", playlistId=uploads, maxResults=50).execute()
+    ids = [it["contentDetails"]["videoId"] for it in items.get("items", [])]
+    if not ids:
+        return []
+    resp = youtube.videos().list(part="snippet,statistics,status", id=",".join(ids)).execute()
+    videos = [
+        {
+            "id": v["id"],
+            "title": v["snippet"]["title"],
+            "views": int(v.get("statistics", {}).get("viewCount", 0)),
+        }
+        for v in resp.get("items", [])
+        if v.get("status", {}).get("privacyStatus") == "public"
+    ]
+    videos.sort(key=lambda v: v["views"], reverse=True)
+    return [v for v in videos if v["views"] > 0][:limit]

@@ -29,7 +29,7 @@ from google.auth.exceptions import RefreshError  # noqa: E402
 
 from src.config import ChannelConfig  # noqa: E402
 from src.orchestrator import DB_PATH, update  # noqa: E402
-from src.upload import UPLOAD_META_FILE, after_upload_status, upload_video  # noqa: E402
+from src.upload import UPLOAD_META_FILE, after_upload_status, post_comment, upload_video  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("retry_uploads")
@@ -92,6 +92,11 @@ def main() -> None:
             continue
         update(job_id, status=after_upload_status(channel), youtube_video_id=video_id, error=None)
         log.info("[%s] publicado no reenvio: https://youtu.be/%s", job_id, video_id)
+        if meta.get("comment"):
+            try:
+                post_comment(channel, video_id, meta["comment"])
+            except Exception as exc:  # noqa: BLE001 — engajamento é bônus
+                log.warning("[%s] não consegui comentar no vídeo: %s", job_id, exc)
         shutil.rmtree(work_dir, ignore_errors=True)
 
 

@@ -23,6 +23,8 @@ ROOT = Path(__file__).resolve().parent.parent
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube",
+    # comentar como o canal (src/upload.py -> post_comment)
+    "https://www.googleapis.com/auth/youtube.force-ssl",
 ]
 # Porta explícita e incomum — nada precisa estar escutando nela (não usamos
 # run_local_server), só evita colidir com algum outro serviço já rodando em

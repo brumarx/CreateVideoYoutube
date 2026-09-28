@@ -31,12 +31,12 @@ from src.assemble import SFX_DIR, _ffprobe_duration, add_background_music, conca
 from src.config import ChannelConfig
 from src.fact_check import BLOCKING_TYPES, feedback_for_rewrite, review_script
 from src.orchestrator import enqueue, update
-from src.script_gen import generate_script
+from src.script_gen import engagement_question, generate_script
 from src.stock_media import search_stock_clip, search_stock_photo
 from src.thumbnail import make_thumbnail, photo_scene_frame
 from src.topics import pick_topic
 from src.tts import narrate
-from src.upload import UPLOAD_META_FILE, after_upload_status, upload_video
+from src.upload import UPLOAD_META_FILE, after_upload_status, post_comment, top_channel_videos, upload_video
 from src.visuals import generate_image
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -74,26 +74,29 @@ def _chapter_label(narration: str, max_words: int = 6) -> str:
     return label[:1].upper() + label[1:] if label else "Continua"
 
 
+def _chapter_starts(n: int) -> list[int]:
+    """Índice da cena que abre cada capítulo — o mesmo agrupamento serve pros
+    timestamps da descrição e pro selo "Parte X de Y" na tela."""
+    if n < 3:
+        return []
+    n_chapters = min(MAX_CHAPTERS, max(3, n // 4))
+    group_size = math.ceil(n / n_chapters)
+    return list(range(0, n, group_size))
+
+
 def _build_chapters(scenes: list[dict], durations: list[float]) -> str:
     n = len(scenes)
     if n < 3 or len(durations) != n:
         return ""
 
-    n_chapters = min(MAX_CHAPTERS, max(3, n // 4))
-    group_size = math.ceil(n / n_chapters)
-
     lines = []
-    cumulative = 0.0
     last_ts = -MIN_CHAPTER_GAP_SECONDS
-    idx = 0
-    while idx < n:
+    for idx in _chapter_starts(n):
+        cumulative = sum(durations[:idx])
         if cumulative - last_ts >= MIN_CHAPTER_GAP_SECONDS or not lines:
             mm, ss = divmod(int(cumulative), 60)
             lines.append(f"{mm}:{ss:02d} {_chapter_label(scenes[idx]['narration'])}")
             last_ts = cumulative
-        group_end = min(idx + group_size, n)
-        cumulative += sum(durations[idx:group_end])
-        idx = group_end
 
     return "\n".join(lines) if len(lines) >= 3 else ""
 
@@ -260,6 +263,20 @@ def run(
             "stock_query": "thumbs up hand gesture",
         })
 
+        # selo "Parte X de Y" na tela (só formato longo) no começo de cada
+        # capítulo — marco visível de progresso pra segurar a retenção no
+        # meio do vídeo. O 1º capítulo não ganha selo (não cobre o gancho de
+        # abertura) e a cena de CTA também não.
+        chapter_banners: dict[int, dict] = {}
+        if long_form:
+            starts = [idx for idx in _chapter_starts(len(script["scenes"])) if idx < original_scene_count]
+            for n_part, idx in enumerate(starts, start=1):
+                if idx > 0:
+                    chapter_banners[idx] = {
+                        "index": n_part, "total": len(starts),
+                        "label": _chapter_label(script["scenes"][idx]["narration"]),
+                    }
+
         scene_videos = []
         scene_durations = []
         for i, scene in enumerate(script["scenes"]):
@@ -332,6 +349,7 @@ def run(
                     stat_overlay=scene.get("stat_overlay"),
                     impact_beat=bool(scene.get("impact_beat")),
                     video_path=stock_clip_path,
+                    chapter_banner=chapter_banners.get(i),
                 )
             finally:
                 # sem finally, um clipe baixado (10-20MB) vaza pro /tmp toda vez
@@ -423,6 +441,18 @@ def run(
         # que aparecem na descrição saem exibidos acima do título. #Shorts só
         # entra no formato curto (é o que classifica o vídeo pra prateleira de
         # Shorts) — no formato longo não faz sentido.
+        # "Assista também": os vídeos mais vistos do canal — tela final e
+        # cards não dá pra criar pela API, então o caminho pro próximo vídeo
+        # (tempo de sessão) vai pela descrição. Sem token/cota, só pula.
+        try:
+            top = top_channel_videos(channel)
+        except Exception as exc:  # noqa: BLE001 — bônus, nunca derruba o vídeo
+            log.warning("[%s] sem 'Assista também' (%s)", job_id, exc)
+            top = []
+        if top:
+            links = "\n".join(f"▶ {v['title']}: https://youtu.be/{v['id']}" for v in top)
+            description += f"\n\n📺 Assista também:\n{links}"
+
         if channel.youtube_handle:
             # CTA de inscrição — link direto de "increva-se" (sub_confirmation=1
             # abre o popup de inscrição na hora). Retenção de sessão/inscritos é
@@ -449,6 +479,8 @@ def run(
             "description": description,
             "tags": script["tags"],
             "publish_at": publish_at,
+            # comentário com pergunta postado pelo canal logo depois do upload
+            "comment": engagement_question(script["title"], script["scenes"][:original_scene_count]),
         }
         (work_dir / UPLOAD_META_FILE).write_text(json.dumps(upload_meta, ensure_ascii=False, indent=2))
 
@@ -463,6 +495,10 @@ def run(
         )
         update(job_id, status=after_upload_status(channel), youtube_video_id=video_id)
         log.info("[%s] publicado: https://youtu.be/%s", job_id, video_id)
+        try:
+            post_comment(channel, video_id, upload_meta["comment"])
+        except Exception as exc:  # noqa: BLE001 — engajamento é bônus
+            log.warning("[%s] não consegui comentar no vídeo: %s", job_id, exc)
 
         # já está no YouTube — não precisa mais guardar os arquivos (vídeo longo
         # sozinho passa de 400MB, HD ia encher rápido rodando todo dia)
