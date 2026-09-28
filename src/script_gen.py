@@ -395,3 +395,43 @@ def generate_script(
         return _sanitize_person_images(topic, best_script)
 
     raise ValueError(f"LLM não devolveu roteiro válido após 3 tentativas: {last_error}")
+
+
+# Pergunta do comentário que o canal posta logo depois do upload (ver
+# src/upload.py -> post_comment). Chamada separada e curta — não vira campo
+# novo obrigatório no JSON do roteiro (que já teve problema de robustez em
+# roteiro longo). Falhou a cascata, cai numa pergunta genérica por código.
+_MAX_QUESTION_LEN = 220
+
+
+def _is_valid_question(text: str) -> bool:
+    return 20 <= len(text) <= _MAX_QUESTION_LEN and text.rstrip().endswith("?") and "\n" not in text.strip()
+
+
+def engagement_question(title: str, scenes: list[dict]) -> str:
+    """Pergunta curta que puxa comentário, sobre o conteúdo real do vídeo
+    (ex.: qual das consequências surpreendeu mais)."""
+    fallback = "Qual parte desse vídeo mais te surpreendeu? Conta aqui nos comentários 👇"
+    resumo = " ".join(s.get("narration", "") for s in scenes)[:3000]
+    prompt = (
+        f"Vídeo do YouTube: \"{title}\".\nResumo da narração: {resumo}\n\n"
+        "Escreva UMA pergunta curta (máx. 2 frases), em português do Brasil, "
+        "para o próprio canal postar como comentário e puxar conversa. Cite "
+        "algo concreto do vídeo, de preferência pedindo pra pessoa escolher "
+        "entre 2-3 opções ou dar a opinião dela. Termine com ponto de "
+        "interrogação. Sem aspas, sem hashtag, sem explicação — só a pergunta."
+    )
+
+    def clean(raw: str) -> str:
+        line = next((ln.strip() for ln in raw.strip().splitlines() if ln.strip()), "")
+        return line.strip('"“”').strip()
+
+    try:
+        raw = complete(
+            [{"role": "user", "content": prompt}], max_tokens=200,
+            validate=lambda r: _is_valid_question(clean(r)),
+        )
+        return clean(raw) + " 👇"
+    except RuntimeError as exc:
+        log.warning("pergunta de engajamento: nenhum provedor respondeu (%s) — usando a genérica", exc)
+        return fallback

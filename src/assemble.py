@@ -75,6 +75,40 @@ def _list_number_filter(number: int, height: int, accent: str) -> str:
     )
 
 
+# Selo de capítulo (só formato longo): aparece nos primeiros segundos da cena
+# que abre cada capítulo e some sozinho. Dá a quem assiste um "marco" visível
+# de progresso (Parte 3 de 7) — sugestão do próprio YouTube Studio pra
+# segurar a retenção no meio do vídeo, onde a audiência mais cai.
+CHAPTER_BANNER_SECONDS = 3.5
+CHAPTER_BANNER_FADE = 0.4
+
+
+def _chapter_banner_filter(banner: dict, width: int, height: int, accent: str) -> str:
+    """`banner` = {"index": 3, "total": 7, "label": "..."} — cartão no canto
+    superior esquerdo com "PARTE 3 DE 7" na cor do canal e o título do
+    capítulo embaixo, entrando e saindo com fade."""
+    end = CHAPTER_BANNER_SECONDS
+    fade = CHAPTER_BANNER_FADE
+    alpha = f"if(lt(t,{fade}),t/{fade},if(lt(t,{end - fade}),1,max(0,({end}-t)/{fade})))"
+    enable = f"lt(t,{end})"
+    small = max(height // 30, 18)
+    big = max(height // 20, 24)
+    margin = small * 2
+    hexcolor = accent.lstrip("#")
+    kicker = _escape_drawtext(f"PARTE {banner['index']} DE {banner['total']}")
+    label = _escape_drawtext(banner["label"])
+    return (
+        f",drawtext=fontfile='{WATERMARK_FONT}':text='{kicker}':expansion=none:"
+        f"fontsize={small}:fontcolor=0x{hexcolor}:alpha='{alpha}':enable='{enable}':"
+        f"box=1:boxcolor=black@0.6:boxborderw={small // 2}:"
+        f"x={margin}:y={margin}"
+        f",drawtext=fontfile='{WATERMARK_FONT}':text='{label}':expansion=none:"
+        f"fontsize={big}:fontcolor=white:alpha='{alpha}':enable='{enable}':"
+        f"box=1:boxcolor=black@0.6:boxborderw={big // 3}:"
+        f"x={margin}:y={margin + small + small // 2 + big // 3}"
+    )
+
+
 def _caption_chunks(
     narration: str, duration: float, font: ImageFont.FreeTypeFont, max_width: float
 ) -> list[tuple[str, float, float]]:
@@ -256,6 +290,7 @@ def render_scene(
     stat_overlay: dict | None = None,
     impact_beat: bool = False,
     video_path: Path | None = None,
+    chapter_banner: dict | None = None,
 ) -> Path:
     """Renderiza uma cena: zoom lento na imagem, sincronizado com a duração
     do áudio. `width`/`height` permitem vertical (Shorts, padrão) ou
@@ -270,6 +305,8 @@ def render_scene(
     proporção pra quando não vier tempo real nenhum. `stat_overlay`
     (opcional, ver src/script_gen.py) grava uma barra comparativa animada
     quando a cena citar 2 valores reais comparáveis (ex.: posse de bola).
+    `chapter_banner` (só formato longo, ver _chapter_banner_filter) marca o
+    início de cada capítulo na tela.
 
     `video_path` (opcional, ver src/stock_media.py): filmagem REAL de banco
     de vídeo em vez de imagem estática — fica muito mais viva na tela que
@@ -279,7 +316,7 @@ def render_scene(
     if video_path is not None:
         return _render_scene_from_video(
             video_path, audio_path, output_path, width, height, watermark, list_number, accent,
-            caption, word_boundaries, stat_overlay, impact_beat,
+            caption, word_boundaries, stat_overlay, impact_beat, chapter_banner,
         )
     duration = _ffprobe_duration(audio_path)
     # 24 (não 30) fps — 20% menos frames pra codificar em CPU fraca (Pi 5,
@@ -314,7 +351,7 @@ def render_scene(
     )
     filter_complex += _overlay_filter_suffix(
         duration, width, height, watermark, list_number, accent, caption,
-        word_boundaries, output_path.with_suffix(".ass"), stat_overlay,
+        word_boundaries, output_path.with_suffix(".ass"), stat_overlay, chapter_banner,
     )
 
     impact = _impact_sfx_args(filter_complex, impact_beat)
@@ -411,6 +448,7 @@ def _overlay_filter_suffix(
     list_number: int | None, accent: str, caption: str | None,
     word_boundaries: list[dict] | None = None, ass_path: Path | None = None,
     stat_overlay: dict | None = None,
+    chapter_banner: dict | None = None,
 ) -> str:
     """Filtros compartilhados entre cena de imagem (zoompan) e cena de
     vídeo real (src/stock_media.py) — legenda, selo de lista e marca
@@ -420,6 +458,8 @@ def _overlay_filter_suffix(
         suffix += _list_number_filter(list_number, height, accent)
     if stat_overlay:
         suffix += _stat_bar_filter(stat_overlay, width, height, accent)
+    if chapter_banner:
+        suffix += _chapter_banner_filter(chapter_banner, width, height, accent)
     if word_boundaries and ass_path is not None:
         # legenda karaokê com tempo real (ver _build_ass_captions) — filtro
         # `ass` do libass, uma passada só, mais barato em CPU que a cadeia
@@ -456,6 +496,7 @@ def _render_scene_from_video(
     word_boundaries: list[dict] | None = None,
     stat_overlay: dict | None = None,
     impact_beat: bool = False,
+    chapter_banner: dict | None = None,
 ) -> Path:
     """Filmagem REAL de banco de vídeo (Pexels) em vez de imagem estática
     com zoom — ver src/stock_media.py. `-stream_loop -1` cobre o caso do
@@ -467,7 +508,7 @@ def _render_scene_from_video(
     filter_v = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps={fps}"
     filter_v += _overlay_filter_suffix(
         duration, width, height, watermark, list_number, accent, caption,
-        word_boundaries, output_path.with_suffix(".ass"), stat_overlay,
+        word_boundaries, output_path.with_suffix(".ass"), stat_overlay, chapter_banner,
     )
 
     impact = _impact_sfx_args(filter_v, impact_beat)
