@@ -65,6 +65,17 @@ FACT_CHECK_REWRITES = 2
 # por código, não pelo LLM — não adiciona campo novo obrigatório no JSON,
 # que já teve problema de robustez em roteiros longos).
 MIN_CHAPTER_GAP_SECONDS = 10
+
+# Roteiro reprovado na revisão de fatos mesmo depois das reescritas e do
+# plano B: sai com este código (e não 1) pro scripts/daily_run.py saber que
+# vale tentar o canal de novo — o tema/dado/notícia usado já ficou marcado,
+# então a nova rodada pega outro. Falha de render/upload continua exit 1
+# (upload falho é do scripts/retry_uploads.py, nunca gerar vídeo duplicado).
+EXIT_SCRIPT_REJECTED = 3
+
+
+class ScriptRejected(RuntimeError):
+    pass
 MAX_CHAPTERS = 8
 
 
@@ -303,7 +314,7 @@ def run(
                         problems = review_script(script, topic, None, None)
                         if not problems or not any(p.get("tipo") in BLOCKING_TYPES for p in problems):
                             break
-                raise RuntimeError(
+                raise ScriptRejected(
                     "roteiro reprovado na revisão de fatos: "
                     + "; ".join(f"{p.get('termo')} ({p.get('motivo')})" for p in problems)
                 )
@@ -602,10 +613,13 @@ def main() -> None:
     parser.add_argument("--fact-label", default=None, help="só canal 'politica' no curto: força um tema específico de src.politica_data.FACT_FETCHERS em vez de sortear")
     args = parser.parse_args()
 
-    run(
-        args.channel, args.topic, args.dry_run, args.publish_at, long_form=args.long,
-        fact_label=args.fact_label, botafogo_task=args.botafogo_task,
-    )
+    try:
+        run(
+            args.channel, args.topic, args.dry_run, args.publish_at, long_form=args.long,
+            fact_label=args.fact_label, botafogo_task=args.botafogo_task,
+        )
+    except ScriptRejected:
+        sys.exit(EXIT_SCRIPT_REJECTED)
 
 
 if __name__ == "__main__":

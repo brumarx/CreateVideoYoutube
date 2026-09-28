@@ -86,6 +86,19 @@ SYSTEM_PROMPT = (
 )
 
 
+# Regras anti-erro que valem pra todo roteiro de todo canal — cada uma saiu
+# de um motivo real de reprovação na revisão de fatos (src/fact_check.py):
+# título prometendo o que o roteiro não entrega, evento futuro narrado como
+# passado ("o clássico já passou" com o jogo marcado pra dali 9 dias),
+# número/nome sem fonte.
+ACCURACY_RULES = """REGRAS DE PRECISÃO (obrigatórias — o roteiro passa por revisão de fatos e é descartado se violar):
+- O título, o thumbnail_text e a descrição só podem prometer o que as cenas realmente narram. Nada de título sobre um assunto que o roteiro não cobre.
+- Tempo verbal de eventos: compare cada data com a DATA DE HOJE acima. Se a data de um jogo/evento é futura, fale no futuro ("vai enfrentar", "no dia 07/10"); se não houver data completa (dia E mês) nos dados, NÃO afirme se já aconteceu ou não — cite só o que a fonte diz.
+- Números, valores, placares, nomes e cargos: só os que aparecem nos DADOS REAIS/fontes. Na dúvida, deixe de fora em vez de arredondar, estimar ou completar.
+- Possibilidade não é fato: se a fonte diz "pode", "deve", "negocia", "avalia", narre como possibilidade.
+- Nunca acuse ninguém de irregularidade sem que a fonte diga isso com todas as letras."""
+
+
 def current_date_rule() -> str:
     """O LLM não sabe a data de hoje e escrevia "em 2024" / "este ano de
     2025" como se fosse o presente — isso envelhece o vídeo na hora e passa
@@ -139,6 +152,8 @@ completar com suposição):
     return f"""{channel.prompt_base}
 
 {current_date_rule()}
+
+{ACCURACY_RULES}
 
 Tópico do vídeo: {topic}
 Idioma: {channel.language}
