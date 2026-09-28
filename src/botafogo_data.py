@@ -52,6 +52,19 @@ NEWS_STORY_CHARS = 1800
 # matéria de set/2026), e foto velha num vídeo "de hoje" engana o torcedor.
 NEWS_PHOTO_MAX_AGE_DAYS = 2
 
+# Reserva quando a ESPN não tem notícia nova (visto em Data FIFA: 3+ dias sem
+# nada e o canal parado): o Portal Botafogo (/var/www/html/botafogo, API
+# local) agrega manchetes de várias fontes (FogãoNET, ge, O Globo…) a cada
+# 15 min, já sem duplicata exata e sem homônimo (Botafogo-PB/SP). Manchete
+# agregada só traz título + resumo curto, por isso entram mais por vídeo.
+PORTAL_API = "http://127.0.0.1:8130"
+PORTAL_SITE = "https://botafogo.win"
+PORTAL_NEWS_PER_VIDEO = 5
+# mesma notícia em 3 veículos com títulos diferentes ("Juventus anuncia
+# Neto" x "Neto é anunciado pela Juventus") — acima disso de palavras em
+# comum, conta como a mesma notícia.
+PORTAL_DUP_OVERLAP = 0.4
+
 
 def _espn_get(url: str) -> dict | None:
     try:
@@ -321,7 +334,8 @@ def next_pending_task() -> dict | None:
     )
     if not futuros:
         # sem jogo pra cobrir hoje: vídeo com as notícias recentes do clube
-        return news_task()
+        # (ESPN primeiro — matéria completa; senão manchetes do Portal)
+        return news_task() or portal_news_task()
 
     escolhido = futuros[0]
     summary = _fetch_summary(escolhido["liga_slug"], escolhido["id"])
@@ -426,6 +440,109 @@ def news_task() -> dict | None:
         "tipo": "noticias",
         "titulo": f"Notícias do Botafogo: {escolhidas[0].get('headline')}",
         "facts": facts,
+        "fotos": fotos,
+        "fontes": fontes,
+    }
+
+
+def _title_words(title: str) -> set[str]:
+    import re
+
+    return {w for w in re.findall(r"\w+", title.lower()) if len(w) > 3}
+
+
+def _is_duplicate(title: str, chosen: list[dict]) -> bool:
+    words = _title_words(title)
+    for other in chosen:
+        o = _title_words(other["title"])
+        if words and o and len(words & o) / min(len(words), len(o)) > PORTAL_DUP_OVERLAP:
+            return True
+    return False
+
+
+def _portal_photo_ok(url: str, published) -> bool:
+    """Mesma regra da ESPN (foto de arquivo engana o torcedor), só que a CDN
+    dos veículos agregados costuma ter só ano/mês no caminho
+    (`/uploads/2026/09/...`) — aí aceita se for o mesmo mês da matéria."""
+    import re
+
+    if _photo_is_fresh(url, published):
+        return True
+    m = re.search(r"/(20\d\d)/(\d\d)/", url)
+    return bool(m) and (int(m[1]), int(m[2])) == (published.year, published.month)
+
+
+def portal_news_task() -> dict | None:
+    """Tarefa de notícias a partir do Portal Botafogo (reserva da ESPN): até
+    PORTAL_NEWS_PER_VIDEO manchetes recentes, de assuntos diferentes, ainda
+    não usadas. Matéria própria do portal (authored) vem com o texto
+    inteiro; agregada, só com o resumo do veículo."""
+    from datetime import datetime, timedelta, timezone
+
+    try:
+        resp = httpx.get(f"{PORTAL_API}/articles", params={"per_page": 50}, timeout=_TIMEOUT)
+        resp.raise_for_status()
+        items = resp.json().get("items") or []
+    except Exception as exc:  # noqa: BLE001 — portal fora do ar: sem vídeo hoje
+        log.warning("Portal Botafogo falhou: %s", exc)
+        return None
+
+    state = _load_state()
+    used = set(state.get("portal_news", []))
+    limite = datetime.now(timezone.utc) - timedelta(hours=NEWS_MAX_AGE_HOURS)
+
+    # matéria própria do portal primeiro: é a única com texto inteiro (as
+    # agregadas só têm resumo) — rende o roteiro mais rico
+    items.sort(key=lambda a: a.get("source_type") != "authored")
+    escolhidas: list[dict] = []
+    for art in items:
+        published = art.get("published_at")
+        title = (art.get("title") or "").strip()
+        # post de live/vídeo de canal (ex.: "LIVE DO SETOR") não é notícia
+        if not published or str(art["id"]) in used or len(title) < 25 or "live" in title.lower().split():
+            continue
+        if datetime.fromisoformat(published.replace("Z", "+00:00")) < limite:
+            continue
+        if _is_duplicate(title, escolhidas):
+            continue
+        escolhidas.append(art)
+        if len(escolhidas) == PORTAL_NEWS_PER_VIDEO:
+            break
+    if not escolhidas:
+        return None
+
+    state["portal_news"] = sorted(used | {str(a["id"]) for a in escolhidas})
+    _save_state(state)
+
+    noticias, fotos, fontes = [], [], []
+    for art in escolhidas:
+        texto = ""
+        if art.get("source_type") == "authored":
+            try:
+                detail = httpx.get(f"{PORTAL_API}/articles/{art['slug']}", timeout=_TIMEOUT).json()
+                texto = _story_text(detail.get("body_html") or "")
+            except Exception as exc:  # noqa: BLE001 — fica só com o resumo
+                log.warning("texto da matéria %s indisponível: %s", art["slug"], exc)
+        veiculo = art.get("source_name") or "Portal Botafogo"
+        noticias.append({
+            "titulo": art["title"],
+            "resumo": art.get("excerpt"),
+            "texto": texto,
+            "veiculo": veiculo,
+            "publicado_em": art["published_at"],
+        })
+        # link sempre pro portal (a página da matéria lá já credita e linka o
+        # veículo original) — leva a audiência do canal pro botafogo.win
+        fontes.append({"titulo": f"{art['title']} ({veiculo})", "url": f"{PORTAL_SITE}/noticias/{art['slug']}"})
+        published = datetime.fromisoformat(art["published_at"].replace("Z", "+00:00"))
+        img = art.get("cover_image_url")
+        if img and _portal_photo_ok(img, published) and img not in {f["url"] for f in fotos}:
+            fotos.append({"url": img, "credito": veiculo})
+
+    return {
+        "tipo": "noticias",
+        "titulo": f"Notícias do Botafogo: {escolhidas[0]['title']}",
+        "facts": {"tipo": "noticias", "noticias": noticias},
         "fotos": fotos,
         "fontes": fontes,
     }

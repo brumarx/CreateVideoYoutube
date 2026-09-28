@@ -257,6 +257,23 @@ def run(
                     problems = review_script(script, topic, facts, None)
                     if not problems or not any(p.get("tipo") in BLOCKING_TYPES for p in problems):
                         break
+                elif channel.topics and facts is None and not user_provided_topic:
+                    # demais canais: tema (quase sempre o viral — jobs
+                    # 142/151 do curiosidades) sem base confirmável → troca
+                    # por outro da lista fixa, sem viral, e tenta 1 vez. No
+                    # curto, só tema sem número (selo de lista já foi
+                    # calculado pro tema original).
+                    novo = pick_topic(channel_name, channel.topics, channel.niche)
+                    if long_form or not LIST_TOPIC_RE.match(novo):
+                        topic, web_facts = novo, None
+                        log.warning("[%s] tema reprovado — trocando por outro da fila: %s", job_id, topic)
+                        update(job_id, topic=topic)
+                        script = generate_script(
+                            channel, topic, None, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes,
+                        )
+                        problems = review_script(script, topic, None, None)
+                        if not problems or not any(p.get("tipo") in BLOCKING_TYPES for p in problems):
+                            break
                 raise RuntimeError(
                     "roteiro reprovado na revisão de fatos: "
                     + "; ".join(f"{p.get('termo')} ({p.get('motivo')})" for p in problems)
@@ -448,7 +465,10 @@ def run(
         if news_sources:
             fontes = "\n".join(f"- {f['titulo']}: {f['url']}" for f in news_sources)
             creditos = sorted({f["credito"] for f in news_photos if f.get("credito")})
-            description += f"\n\nFonte das notícias (ESPN):\n{fontes}"
+            if channel_name == "botafogo":
+                description += f"\n\nFonte: https://botafogo.win\n{fontes}"
+            else:
+                description += f"\n\nFonte das notícias:\n{fontes}"
             if creditos:
                 description += "\nFotos: " + "; ".join(creditos)
 

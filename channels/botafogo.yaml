@@ -26,7 +26,8 @@ long_min_minutes: 4
 long_max_minutes: 6
 long_form_scenes: 14
 # Sem "topics:" — o tema de todo vídeo vem de uma partida real do Botafogo
-# ou das notícias recentes do clube em dia sem jogo (ver src/botafogo_data.py),
+# ou das notícias recentes do clube em dia sem jogo (ESPN, ou as manchetes
+# do Portal Botafogo quando a ESPN não tem nada — ver src/botafogo_data.py),
 # nunca da fila genérica (mesmo padrão do
 # channels/politica.yaml no formato curto, que também nunca usa fila fixa).
 prompt_base: >
@@ -55,11 +56,14 @@ prompt_base: >
   torcida adversária, sem hostilidade, só a emoção normal de quem torce.
 
   SE "tipo" for "noticias": é um dia sem jogo — o vídeo conta as notícias
-  recentes do Botafogo que vieram em "noticias" (título, resumo e texto da
-  matéria). Abra com a notícia mais forte como gancho, depois passe por
-  cada uma: o que aconteceu, quem está envolvido e o que isso significa
-  pro Fogão, com a reação de torcedor (esperança, preocupação, cobrança
-  respeitosa). Cite só o que está no texto da matéria — se ela diz que
+  recentes do Botafogo que vieram em "noticias" (título, resumo e, quando
+  houver, o texto da matéria e o "veiculo" que publicou). Abra com a
+  notícia mais forte como gancho, depois passe por cada uma: o que
+  aconteceu, quem está envolvido e o que isso significa pro Fogão, com a
+  reação de torcedor (esperança, preocupação, cobrança respeitosa). Quando
+  vier "veiculo", atribua a informação a ele ("segundo o ge…"). Notícia que
+  só tem título e resumo rende pouco — não estique inventando detalhe, só
+  comente o que está ali. Cite só o que está no título/resumo/texto — se ela diz que
   algo "pode" acontecer, fale como possibilidade, nunca como fato
   consumado. Feche perguntando nos comentários o que a torcida achou.
 
