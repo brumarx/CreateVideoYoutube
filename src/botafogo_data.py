@@ -112,6 +112,43 @@ def _all_events() -> list[dict]:
     return events
 
 
+def _agenda() -> dict:
+    """Contexto de calendário pro vídeo de notícias: data de hoje e os
+    próximos jogos com data COMPLETA (horário de Brasília). Sem isso, uma
+    matéria que diz "clássico no dia 7" virou "o clássico já passou" no
+    roteiro (job 164, barrado na revisão) — o LLM não sabe o mês. Fonte:
+    calendário do Portal (/matches, mais completo); ESPN de reserva."""
+    from datetime import datetime, timedelta, timezone
+
+    brt = timezone(timedelta(hours=-3))
+    agora = datetime.now(timezone.utc)
+    proximos = []
+    try:
+        resp = httpx.get(f"{PORTAL_API}/matches", timeout=_TIMEOUT)
+        resp.raise_for_status()
+        for m in resp.json().get("upcoming") or []:
+            quando = datetime.fromisoformat(m["kickoff"].replace("Z", "+00:00"))
+            if quando >= agora:
+                proximos.append({
+                    "jogo": f"{m['home']['name']} x {m['away']['name']}",
+                    "competicao": m.get("competition"),
+                    "data": quando.astimezone(brt).strftime("%d/%m/%Y às %Hh%M"),
+                    "local": m.get("venue"),
+                })
+    except Exception as exc:  # noqa: BLE001 — cai pra ESPN
+        log.warning("calendário do Portal indisponível (%s) — usando ESPN", exc)
+    if not proximos:
+        for e in sorted((e for e in _all_events() if not e["completed"] and e["date"]), key=lambda e: e["date"]):
+            quando = datetime.fromisoformat(e["date"].replace("Z", "+00:00"))
+            if quando >= agora:
+                proximos.append({
+                    "jogo": e["name"],
+                    "competicao": LEAGUES_NOME.get(e["liga_nome"], e["liga_nome"]),
+                    "data": quando.astimezone(brt).strftime("%d/%m/%Y às %Hh%M"),
+                })
+    return {"hoje": agora.astimezone(brt).strftime("%d/%m/%Y"), "proximos_jogos": proximos[:3]}
+
+
 def _fetch_summary(liga_slug: str, event_id: str) -> dict | None:
     return _espn_get(
         f"https://site.api.espn.com/apis/site/v2/sports/soccer/{liga_slug}/summary?event={event_id}"
@@ -442,7 +479,7 @@ def news_task() -> dict | None:
             if img["url"] not in {f["url"] for f in fotos}:
                 fotos.append({"url": img["url"], "credito": img.get("credit"), "noticia": len(noticias) - 1})
 
-    facts = {"tipo": "noticias", "noticias": noticias}
+    facts = {"tipo": "noticias", "noticias": noticias, **_agenda()}
     return {
         "tipo": "noticias",
         "titulo": f"Notícias do Botafogo: {escolhidas[0].get('headline')}",
@@ -549,7 +586,7 @@ def portal_news_task() -> dict | None:
     return {
         "tipo": "noticias",
         "titulo": f"Notícias do Botafogo: {escolhidas[0]['title']}",
-        "facts": {"tipo": "noticias", "noticias": noticias},
+        "facts": {"tipo": "noticias", "noticias": noticias, **_agenda()},
         "fotos": fotos,
         "fontes": fontes,
     }

@@ -34,6 +34,28 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 log = logging.getLogger("daily_run")
 
 
+# mesmo valor de scripts/run_pipeline.py -> EXIT_SCRIPT_REJECTED
+EXIT_SCRIPT_REJECTED = 3
+
+
+def _run_pipeline(channel_name: str, extra: list[str], label: str) -> None:
+    """Roda o pipeline; roteiro reprovado na revisão de fatos ganha UMA nova
+    tentativa (tema/notícia/dado já usado fica marcado, então sai outro) —
+    melhor um vídeo certo do que o dia perdido. Qualquer outra falha não é
+    repetida aqui (upload falho é do retry_uploads, sem vídeo duplicado)."""
+    cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name, *extra]
+    for attempt in (1, 2):
+        log.info("[%s] %s (tentativa %d)", channel_name, label, attempt)
+        rc = subprocess.run(cmd, cwd=ROOT).returncode
+        if rc == 0:
+            return
+        if rc != EXIT_SCRIPT_REJECTED:
+            log.error("[%s] %s falhou (exit %d) — seguindo pros próximos", channel_name, label, rc)
+            return
+        log.warning("[%s] %s: roteiro reprovado na revisão de fatos", channel_name, label)
+    log.error("[%s] %s: reprovado 2x — sem vídeo hoje", channel_name, label)
+
+
 def run_channel(channel_name: str, cfg: dict) -> None:
     uploads_per_day = cfg.get("uploads_per_day", 1)
     daily_format = cfg.get("daily_format", "short")
@@ -47,11 +69,7 @@ def run_channel(channel_name: str, cfg: dict) -> None:
         # 2 vídeos independentes: prévia/pós-jogo quando houver jogo (regras
         # de sempre, silêncio sem jogo) + 1 por dia com temas do botafogo.win
         for task in ("jogo", "portal"):
-            cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name, "--botafogo-task", task]
-            log.info("[%s] %s", channel_name, task)
-            result = subprocess.run(cmd, cwd=ROOT)
-            if result.returncode != 0:
-                log.error("[%s] %s falhou (exit %d)", channel_name, task, result.returncode)
+            _run_pipeline(channel_name, ["--botafogo-task", task], task)
         return
 
     for i in range(uploads_per_day):
@@ -60,15 +78,7 @@ def run_channel(channel_name: str, cfg: dict) -> None:
         # não duplica a decisão aqui pra nunca dessincronizar da UI).
         # sem --topic: run_pipeline.py escolhe sozinho da fila única (ou
         # fato real, pro politica no formato curto).
-        cmd = [
-            sys.executable, str(ROOT / "scripts" / "run_pipeline.py"),
-            "--channel", channel_name,
-        ]
-
-        log.info("[%s] upload %d/%d (%s)", channel_name, i + 1, uploads_per_day, daily_format)
-        result = subprocess.run(cmd, cwd=ROOT)
-        if result.returncode != 0:
-            log.error("[%s] pipeline falhou (exit %d) — seguindo pros próximos", channel_name, result.returncode)
+        _run_pipeline(channel_name, [], f"upload {i + 1}/{uploads_per_day} ({daily_format})")
 
 
 def main() -> None:
