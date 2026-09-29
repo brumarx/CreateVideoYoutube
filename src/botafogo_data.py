@@ -404,6 +404,30 @@ def _story_text(html: str) -> str:
     return text
 
 
+def _texto_da_fonte(url: str | None) -> str:
+    """Texto da matéria original (sem menu/anúncio/rodapé, via trafilatura)
+    pra notícia agregada que chega do portal só com o título. "" se não deu
+    — quem chama pula a notícia em vez de mandar só o título pro roteiro."""
+    if not url:
+        return ""
+    try:
+        import trafilatura
+
+        resp = httpx.get(url, timeout=12, follow_redirects=True, headers={
+            "User-Agent": "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128 Safari/537.36",
+        })
+        resp.raise_for_status()
+        texto = re.sub(r"\s+", " ", trafilatura.extract(resp.text) or "").strip()
+    except Exception as exc:  # noqa: BLE001 — site fora/bloqueando: pula a notícia
+        log.warning("texto da fonte indisponível (%s): %s", url, exc)
+        return ""
+    if len(texto) < 300:
+        return ""
+    if len(texto) > NEWS_STORY_CHARS:
+        texto = texto[:NEWS_STORY_CHARS].rsplit(" ", 1)[0] + "…"
+    return texto
+
+
 def _is_about_botafogo(article: dict) -> bool:
     """O feed filtrado pelo time também traz matéria que só CITA o Botafogo
     de passagem (ranking com 20 clubes, lista da Seleção) — só vale a que tem
@@ -586,6 +610,13 @@ def portal_news_task(per_video: int = PORTAL_NEWS_PER_VIDEO) -> dict | None:
             continue
         if _is_duplicate(title, escolhidas):
             continue
+        if art.get("source_type") != "authored" and len((art.get("excerpt") or "").strip()) < 80:
+            # agregada sem resumo (mais da metade): só o título fazia o
+            # roteiro "encher linguiça" e a revisão de fatos reprovar
+            art["_texto"] = _texto_da_fonte(art.get("source_url"))
+            if not art["_texto"]:
+                log.info("portal: pulando notícia sem texto: %s", title)
+                continue
         escolhidas.append(art)
         if len(escolhidas) == per_video:
             break
@@ -597,7 +628,7 @@ def portal_news_task(per_video: int = PORTAL_NEWS_PER_VIDEO) -> dict | None:
 
     noticias, fotos, fontes = [], [], []
     for art in escolhidas:
-        texto = ""
+        texto = art.get("_texto") or ""
         if art.get("source_type") == "authored":
             try:
                 detail = httpx.get(f"{PORTAL_API}/articles/{art['slug']}", timeout=_TIMEOUT).json()

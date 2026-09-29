@@ -10,3 +10,4 @@ flask>=3.0
 yt-dlp>=2025.1
 azure-cognitiveservices-speech>=1.40
 rembg[cpu]>=2.0  # recorte do sujeito na thumbnail (opcional: sem ele, foto inteira)
+trafilatura>=1.12  # texto da matéria original quando o portal só manda o título
