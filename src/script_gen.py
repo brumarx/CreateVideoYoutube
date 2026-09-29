@@ -209,7 +209,8 @@ título inteiro colado na imagem — é uma frase mínima (2 a 4 palavras) que
 gera curiosidade sozinha, sem contexto nenhum, tipo "ELA FOI PROIBIDA",
 "O ERRO DE R$ 2 MILHÕES", "ISSO É REAL?". Pode usar número, pode terminar
 em pergunta, nunca uma frase completa com sujeito+verbo+complemento igual
-o título."""
+o título. Marque com *asteriscos* a palavra (ou número) de maior impacto —
+ela sai em amarelo na thumbnail, ex.: "O ERRO DE *R$ 2 MILHÕES*"."""
 
 
 def _extract_json(raw: str) -> dict:
