@@ -34,6 +34,7 @@ AZURE_VOICES_CACHE = Path(__file__).resolve().parent.parent / "data" / "azure_vo
 # português o "x" pode sair "ch" ("Téchtor").
 PRONUNCIATIONS = {
     "Textor": "Técstor",  # John Textor (SAF do Botafogo): TÉX-tor, não tex-TÔR
+    "FogãoNET": "Fogãonéti",  # site FogãoNET: a voz soletrava "Fogão N-E-T"
     "Botafogo.WIN": "botafogo.win",  # maiúsculo a voz soletra "dáblio-i-ene"
 }
 _PRON_RE = re.compile(r"\b(" + "|".join(map(re.escape, PRONUNCIATIONS)) + r")\b", re.IGNORECASE)
