@@ -89,17 +89,27 @@ def _words(text: str) -> set[str]:
     return {w for w in re.findall(r"\w+", (text or "").lower()) if len(w) > 3}
 
 
+_FEMININO = {"feminino", "feminina", "femininas", "meninas", "mulheres", "gloriosas"}
+
+
 def _news_photo_for_scene(narration: str, facts: dict | None, photos: list[dict]) -> dict | None:
-    """Foto da notícia que ESTA cena narra (mais palavras em comum entre a
-    fala e o título/resumo da notícia) — antes era rodízio (cena i = foto
+    """Foto da notícia que ESTA cena narra — antes era rodízio (cena i = foto
     i), e a foto de uma notícia aparecia enquanto a narração falava de
-    outra. Sem notícia reconhecível na fala (abertura genérica,
-    fechamento), devolve None e a cena segue a cascata normal de imagem."""
+    outra. Só conta palavra EXCLUSIVA daquela notícia (que não aparece nas
+    outras do mesmo vídeo): "copa", "sub", "brasil" em comum já fizeram a
+    foto do sub-20 feminino entrar na cena do sub-20 masculino. Notícia de
+    time feminino nunca ilustra cena que não fala de feminino. Sem notícia
+    reconhecível na fala (abertura genérica, fechamento), devolve None e a
+    cena segue a cascata normal de imagem."""
     noticias = (facts or {}).get("noticias") or []
     fala = _words(narration) - {"botafogo", "fogão", "alvinegro", "torcida", "time", "clube"}
-    melhor, melhor_score = None, 1  # pelo menos 2 palavras em comum
-    for idx, n in enumerate(noticias):
-        score = len(fala & _words(f"{n.get('titulo', '')} {n.get('resumo', '')}"))
+    textos = [_words(f"{n.get('titulo', '')} {n.get('resumo', '')}") for n in noticias]
+    melhor, melhor_score = None, 1  # pelo menos 2 palavras exclusivas em comum
+    for idx, palavras in enumerate(textos):
+        if palavras & _FEMININO and not fala & _FEMININO:
+            continue
+        outras = set().union(*(t for j, t in enumerate(textos) if j != idx))
+        score = len(fala & (palavras - outras))
         if score > melhor_score:
             melhor, melhor_score = idx, score
     if melhor is None:
@@ -479,7 +489,11 @@ def run(
         # cara errada atribuída a alguém real.
         real_photo_url = None
         if news_photos:
-            real_photo_url = news_photos[0]["url"]
+            # foto da notícia que o gancho/título citam — news_photos[0] às
+            # vezes era de outra notícia (gancho "PAULINHO VOLTOU" com foto do
+            # time feminino). Sem casar com nenhuma, a IA gera a imagem.
+            photo = _news_photo_for_scene(f"{script['title']} {thumb_text}", facts, news_photos)
+            real_photo_url = photo["url"] if photo else None
         elif facts and facts.get("dados"):
             real_photo_url = facts["dados"][0].get("foto_url") or None
         elif channel_name == "politica" and user_provided_topic:

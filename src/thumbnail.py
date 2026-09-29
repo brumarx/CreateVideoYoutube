@@ -4,11 +4,8 @@ nomeada — ver `real_photo_url`) + gancho curto (2-4 palavras, não o título
 inteiro) escrito em cima da própria imagem, via Pillow. YouTube exige
 recomendado 1280x720.
 
-Estilo: imagem em tela cheia (sem moldura nem faixa sólida comendo espaço —
-isso é o que faz thumbnail automática parecer "slide" em vez de um momento
-real) + texto grande com contorno preto grosso (funciona em cima de
-qualquer fundo, é a técnica padrão de thumbnail que bomba) + gradiente
-escuro sutil por trás do texto como garantia extra de contraste.
+Estilo: ver docstring de `make_thumbnail` (texto condensado empilhado à
+esquerda, imagem/pessoa à direita, borda na cor do canal).
 """
 from __future__ import annotations
 
@@ -32,8 +29,7 @@ THUMB_HEIGHT = 720
 # no banco) devolveu 403 sem isso, mesmo a URL estando certa.
 _HTTP_HEADERS = {"User-Agent": "YoutubeAIPipeline/1.0 (https://github.com/brumarx/CreateVideoYoutube)"}
 
-STROKE_WIDTH = 8  # contorno preto grosso — dá contraste em cima de QUALQUER imagem
-GRADIENT_RATIO = 0.45  # gradiente escuro nos últimos 45% da altura, por trás do texto
+ANTON_FONT = Path(__file__).resolve().parent.parent / "assets" / "fonts" / "Anton-Regular.ttf"
 
 _FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -46,37 +42,6 @@ def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         if Path(path).exists():
             return ImageFont.truetype(path, size)
     return ImageFont.load_default()
-
-
-def _fit_hook_text(
-    text: str, max_width: int, base_size: int = 110, min_size: int = 56,
-) -> tuple[ImageFont.FreeTypeFont | ImageFont.ImageFont, list[str]]:
-    """Encaixa `text` em no máximo 2 linhas medindo largura real (não
-    contagem de caractere — igual já feito pra legenda em assemble.py).
-    Vai diminuindo a fonte até caber; NUNCA descarta palavra — se nem no
-    tamanho mínimo couber em 2 linhas, aceita 3+ linhas em vez de cortar
-    a última palavra silenciosamente (aconteceu de verdade: "RACHANDO"
-    sumindo do final de "O mundo está rachando")."""
-    size = base_size
-    font = _load_font(size)
-    lines: list[str] = []
-    while True:
-        words = text.split()
-        lines = []
-        current = ""
-        for word in words:
-            trial = f"{current} {word}".strip()
-            if font.getlength(trial) <= max_width or not current:
-                current = trial
-            else:
-                lines.append(current)
-                current = word
-        if current:
-            lines.append(current)
-        if len(lines) <= 2 or size <= min_size:
-            return font, lines
-        size -= 8
-        font = _load_font(size)
 
 
 def _hex_to_rgb(hexcolor: str) -> tuple[int, int, int]:
@@ -145,6 +110,132 @@ def photo_scene_frame(url: str, width: int, height: int) -> bytes | None:
     return out.getvalue()
 
 
+HIGHLIGHT_YELLOW = (255, 214, 0)
+TEXT_BLOCK_RATIO = 0.56  # texto ocupa a metade esquerda; imagem/pessoa respira na direita
+TEXT_TILT_DEG = 3  # inclinação leve — bloco reto parece slide, torto parece "chamada"
+
+
+def _thumb_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Anton (condensada, pesada) é o visual das thumbnails que bombam hoje —
+    cabe palavra GRANDE em pouca largura. Cai pra fonte do sistema se sumir."""
+    if ANTON_FONT.exists():
+        return ImageFont.truetype(str(ANTON_FONT), size)
+    return _load_font(size)
+
+
+def _split_hook(text: str) -> tuple[list[list[str]], set[int]]:
+    """Quebra o gancho em 1-3 linhas curtas (estilo pôster empilhado) e
+    devolve quais palavras vão em amarelo. `*palavra*` marca destaque
+    explícito; sem marca, a última linha inteira fica em destaque."""
+    raw_words = text.upper().split()
+    # "R$ 2 MILHÕES" nunca quebra entre a moeda e o número
+    i = 0
+    while i < len(raw_words) - 1:
+        if raw_words[i].strip("*") in {"R$", "US$", "€", "$"}:
+            raw_words[i:i + 2] = [f"{raw_words[i]}\u00a0{raw_words[i + 1]}"]
+        i += 1
+    words, marked = [], set()
+    for i, w in enumerate(raw_words):
+        if w.startswith("*") or w.endswith("*"):
+            marked.add(i)
+        words.append(w.strip("*"))
+    words = [w for w in words if w] or ["?"]
+    n = len(words)
+    if n <= 2:
+        layout = [[w] for w in words] if n == 2 and sum(map(len, words)) > 9 else [words]
+    elif n == 3:
+        layout = [words[:1], words[1:]] if len(words[0]) >= len(" ".join(words[1:])) else [words[:2], words[2:]]
+    elif n == 4:
+        layout = [words[:2], words[2:]]
+    else:
+        per = -(-n // 3)
+        layout = [words[i:i + per] for i in range(0, n, per)]
+    if not marked:
+        last_start = n - len(layout[-1])
+        marked = set(range(last_start, n)) if len(layout) > 1 else {n - 1}
+    return layout, marked
+
+
+def _cover(img: Image.Image, width: int, height: int, anchor_x: float = 0.5) -> Image.Image:
+    ratio = img.width / img.height
+    new_w, new_h = (int(height * ratio), height) if ratio > width / height else (width, int(width / ratio))
+    img = img.resize((new_w, new_h), Image.LANCZOS)
+    left = int((new_w - width) * anchor_x)
+    top = (new_h - height) // 3  # rosto costuma ficar no terço de cima
+    return img.crop((left, top, left + width, top + height))
+
+
+def _background(photo: Image.Image) -> Image.Image:
+    """Foto paisagem: tela cheia, puxada pra direita (o lado esquerdo vai
+    ficar sob o texto). Retrato (foto oficial de político): fundo desfocado +
+    pessoa nítida colada no lado DIREITO, grande, com sombra — em vez de
+    centralizada atrás do texto como antes."""
+    W, H = THUMB_WIDTH, THUMB_HEIGHT
+    if photo.width / photo.height >= 1.2:
+        return _cover(photo, W, H, anchor_x=0.7)
+    bg = _cover(photo, W, H).filter(ImageFilter.GaussianBlur(28))
+    bg = ImageEnhance.Brightness(bg).enhance(0.45)
+    fg_h = int(H * 1.08)
+    fg_w = int(fg_h * photo.width / photo.height)
+    fg = photo.resize((fg_w, fg_h), Image.LANCZOS)
+    x = W - fg_w - 30
+    shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(shadow).rectangle([x - 18, 0, x + fg_w + 18, H], fill=(0, 0, 0, 170))
+    bg = bg.convert("RGBA")
+    bg.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(22)))
+    bg = bg.convert("RGB")
+    bg.paste(fg, (x, H - fg_h + int(H * 0.04)))
+    return bg
+
+
+def _render_text_block(hook_text: str, max_w: int, max_h: int) -> Image.Image:
+    """Cada linha é esticada pra preencher a largura do bloco (linhas de
+    tamanhos diferentes = cara de capa de revista/thumbnail profissional),
+    com contorno preto + sombra dura deslocada."""
+    layout, marked = _split_hook(hook_text)
+    stroke, gap = 7, 6
+    rendered: list[tuple[list[tuple[str, bool]], ImageFont.FreeTypeFont | ImageFont.ImageFont]] = []
+    idx = 0
+    for line in layout:
+        parts = [(w, i in marked) for i, w in enumerate(line, start=idx)]
+        idx += len(line)
+        text = " ".join(line)
+        size = 210  # teto: palavra curta sozinha na linha não vira um muro
+        font = _thumb_font(size)
+        while size > 60 and font.getlength(text) + 2 * stroke > max_w:
+            size -= 6
+            font = _thumb_font(size)
+        rendered.append((parts, font))
+
+    def heights(items):
+        return [f.getbbox("ÁG", stroke_width=stroke)[3] - f.getbbox("ÁG", stroke_width=stroke)[1] for _, f in items]
+
+    total = sum(heights(rendered)) + gap * (len(rendered) - 1)
+    if total > max_h:  # linha curta ("É") estourando altura — encolhe tudo proporcional
+        scale = max_h / total
+        rendered = [(p, _thumb_font(max(40, int(f.size * scale)))) for p, f in rendered]
+        total = sum(heights(rendered)) + gap * (len(rendered) - 1)
+
+    shadow_off = 9
+    block = Image.new("RGBA", (max_w + 40, total + 40), (0, 0, 0, 0))
+    shadow = Image.new("RGBA", block.size, (0, 0, 0, 0))
+    draw, sdraw = ImageDraw.Draw(block), ImageDraw.Draw(shadow)
+    y = 10
+    for (parts, font), h in zip(rendered, heights(rendered)):
+        top_off = font.getbbox("ÁG", stroke_width=stroke)[1]
+        x = 10 + stroke
+        for word, hl in parts:
+            fill = HIGHLIGHT_YELLOW if hl else (255, 255, 255)
+            sdraw.text((x + shadow_off, y - top_off + shadow_off), word, font=font, fill=(0, 0, 0, 200),
+                       stroke_width=stroke, stroke_fill=(0, 0, 0, 200))
+            draw.text((x, y - top_off), word, font=font, fill=fill, stroke_width=stroke, stroke_fill="black")
+            x += font.getlength(word + " ")
+        y += h + gap
+    shadow = shadow.filter(ImageFilter.GaussianBlur(3))
+    shadow.alpha_composite(block)
+    return shadow
+
+
 def make_thumbnail(
     prompt: str,
     hook_text: str,
@@ -152,67 +243,50 @@ def make_thumbnail(
     accent: str = "#ffffff",
     real_photo_url: str | None = None,
 ) -> Path:
-    """`hook_text` deve ser curto (2-4 palavras) — texto longo quebrado em
-    3 linhas é exatamente o que faz uma thumbnail parecer amadora.
-    `real_photo_url` (foto OFICIAL de deputado/senador/magistrado, ver
-    src/politica_data.py) usa a foto de verdade da pessoa em vez de pedir
-    pra IA "inventar" o rosto dela — mais preciso e evita o risco de gerar
-    uma cara errada atribuída a alguém real."""
+    """`hook_text` deve ser curto (2-4 palavras); `*palavra*` marca o que
+    vai em amarelo. `real_photo_url` (foto OFICIAL de deputado/senador/
+    magistrado, ver src/politica_data.py, ou foto da notícia no Botafogo)
+    usa a foto de verdade em vez de pedir pra IA "inventar" o rosto.
+
+    Layout "thumbnail de 2026": texto gigante em fonte condensada no lado
+    esquerdo (empilhado, inclinado, palavra-chave em amarelo, sombra dura),
+    imagem/pessoa em destaque no lado direito, cor bem saturada e borda
+    na cor do canal."""
     img = None
     if real_photo_url:
         photo = _fetch_real_photo(real_photo_url)
         if photo:
-            img = _compose_person_photo(photo, THUMB_WIDTH, THUMB_HEIGHT)
-
+            img = _background(photo)
     if img is None:
         raw = generate_image(prompt, width=THUMB_WIDTH, height=THUMB_HEIGHT)
-        img = Image.open(io.BytesIO(raw)).convert("RGB").resize((THUMB_WIDTH, THUMB_HEIGHT))
+        img = _background(Image.open(io.BytesIO(raw)).convert("RGB"))
 
-    # mais contraste/saturação = imagem "pop" mais na lista de vídeos —
-    # thumbnail boa quase sempre tem cor mais viva que uma foto crua.
-    img = ImageEnhance.Contrast(img).enhance(1.15)
-    img = ImageEnhance.Color(img).enhance(1.35)
-    img = ImageEnhance.Brightness(img).enhance(1.02)
+    img = ImageEnhance.Contrast(img).enhance(1.2)
+    img = ImageEnhance.Color(img).enhance(1.45)
+    img = img.filter(ImageFilter.UnsharpMask(radius=2, percent=120, threshold=3))
     img = img.convert("RGBA")
 
-    accent_rgb = _hex_to_rgb(accent)
+    # escurece só o lado do texto (gradiente horizontal) — o resto da imagem
+    # fica viva, em vez de um véu escuro no rodapé inteiro.
+    W, H = THUMB_WIDTH, THUMB_HEIGHT
+    grad = Image.new("L", (W, 1))
+    fade_w = int(W * 0.72)
+    for x in range(W):
+        grad.putpixel((x, 0), int(215 * max(0.0, 1 - x / fade_w) ** 1.3))
+    shade = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    shade.putalpha(grad.resize((W, H)))
+    img.alpha_composite(shade)
 
-    # gradiente escuro nos últimos GRADIENT_RATIO da altura, por trás do
-    # texto — contorno preto já garante contraste sozinho, isso é reforço
-    # extra pra imagem muito clara (ex.: céu, neve) não "comer" o contorno.
-    gradient_h = int(THUMB_HEIGHT * GRADIENT_RATIO)
-    gradient_y0 = THUMB_HEIGHT - gradient_h
-    gradient = Image.new("RGBA", (THUMB_WIDTH, gradient_h), (0, 0, 0, 0))
-    grad_draw = ImageDraw.Draw(gradient)
-    for row in range(gradient_h):
-        alpha = int(150 * (row / gradient_h))
-        grad_draw.line([(0, row), (THUMB_WIDTH, row)], fill=(0, 0, 0, alpha))
-    img.paste(gradient, (0, gradient_y0), gradient)
+    block_w = int(W * TEXT_BLOCK_RATIO)
+    block = _render_text_block(hook_text, block_w, int(H * 0.78))
+    block = block.rotate(TEXT_TILT_DEG, resample=Image.BICUBIC, expand=True)
+    bx = 26
+    by = max(20, (H - block.height) // 2)
+    img.alpha_composite(block, (bx, by))
 
+    # borda na cor do canal (identidade visual em toda a lista de vídeos)
     draw = ImageDraw.Draw(img)
-
-    # texto direto na imagem (tela cheia, sem faixa nem moldura comendo
-    # espaço) — contorno preto grosso funciona em cima de qualquer fundo,
-    # é a técnica padrão de thumbnail que realmente bomba.
-    font, lines = _fit_hook_text(hook_text.upper(), max_width=THUMB_WIDTH - 80)
-    ascent, descent = font.getmetrics()
-    line_height = ascent + descent + 12
-    total_height = line_height * len(lines)
-    y = THUMB_HEIGHT - 40 - total_height
-
-    for line in lines:
-        bbox = draw.textbbox((0, 0), line, font=font, stroke_width=STROKE_WIDTH)
-        text_w = bbox[2] - bbox[0]
-        x = (THUMB_WIDTH - text_w) / 2
-        draw.text(
-            (x, y), line, font=font, fill="white",
-            stroke_width=STROKE_WIDTH, stroke_fill="black",
-        )
-        y += line_height
-
-    # barrinha fina na cor do canal no topo — identidade visual discreta,
-    # sem roubar espaço da imagem como a moldura antiga fazia.
-    draw.rectangle([0, 0, THUMB_WIDTH, 10], fill=accent_rgb)
+    draw.rectangle([0, 0, W - 1, H - 1], outline=_hex_to_rgb(accent) + (255,), width=12)
 
     img = img.convert("RGB")
     output_path.parent.mkdir(parents=True, exist_ok=True)
