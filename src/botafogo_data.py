@@ -102,15 +102,32 @@ def _all_events() -> list[dict]:
         for ev in data["events"]:
             comp = (ev.get("competitions") or [{}])[0]
             status = comp.get("status", {}).get("type", {})
+            lados = {c.get("homeAway"): (c.get("team") or {}).get("displayName") for c in comp.get("competitors") or []}
             events.append({
                 "id": ev.get("id"),
                 "date": ev.get("date"),
                 "name": ev.get("name"),
+                "home": lados.get("home"),
+                "away": lados.get("away"),
                 "completed": bool(status.get("completed")),
                 "liga_slug": liga_slug,
                 "liga_nome": liga_nome,
             })
     return events
+
+
+def _mando(home: str | None, away: str | None, venue: str | None = None) -> str | None:
+    """Frase pronta de quem joga em casa — só "Coritiba x Botafogo" + "Couto
+    Pereira" virou "o Coritiba visita o Botafogo no Couto Pereira" (job 178,
+    barrado na revisão): o LLM não sabe que o primeiro nome é o mandante."""
+    if not home or not away:
+        return None
+    onde = f" ({venue})" if venue else ""
+    if "botafogo" in home.lower():
+        return f"Botafogo é o MANDANTE: joga em casa{onde}; o {away} é o visitante"
+    if "botafogo" in away.lower():
+        return f"Botafogo é o VISITANTE: joga fora, na casa do {home}{onde}"
+    return None
 
 
 def _agenda() -> dict:
@@ -132,6 +149,7 @@ def _agenda() -> dict:
             if quando >= agora:
                 proximos.append({
                     "jogo": f"{m['home']['name']} x {m['away']['name']}",
+                    "mando": _mando(m["home"]["name"], m["away"]["name"], m.get("venue")),
                     "competicao": m.get("competition"),
                     "data": quando.astimezone(brt).strftime("%d/%m/%Y às %Hh%M"),
                     "local": m.get("venue"),
@@ -142,8 +160,10 @@ def _agenda() -> dict:
         for e in sorted((e for e in _all_events() if not e["completed"] and e["date"]), key=lambda e: e["date"]):
             quando = datetime.fromisoformat(e["date"].replace("Z", "+00:00"))
             if quando >= agora:
+                jogo = f"{e['home']} x {e['away']}" if e.get("home") and e.get("away") else e["name"]
                 proximos.append({
-                    "jogo": e["name"],
+                    "jogo": jogo,
+                    "mando": _mando(e.get("home"), e.get("away")),
                     "competicao": LEAGUES_NOME.get(e["liga_nome"], e["liga_nome"]),
                     "data": quando.astimezone(brt).strftime("%d/%m/%Y às %Hh%M"),
                 })
@@ -297,6 +317,9 @@ def build_preview_facts(event: dict, summary: dict | None) -> dict:
     venue = game_info.get("venue", {}).get("fullName")
     if venue:
         facts["local"] = venue
+    mando = _mando(event.get("home"), event.get("away"), venue)
+    if mando:
+        facts["mando"] = mando
 
     if event["liga_slug"] == "bra.1":
         situacao = _standings_line()

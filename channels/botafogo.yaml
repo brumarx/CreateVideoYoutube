@@ -75,5 +75,14 @@ prompt_base: >
   nesta partida), simplesmente não fale sobre aquilo — nunca estime,
   arredonde ou complete por conta própria.
 
+  MANDO DE CAMPO: quem joga em casa é SEMPRE o que está no campo "mando"
+  (ou o primeiro nome de "Time A x Time B"). Nunca diga que alguém
+  "visita" ou "recebe" sem conferir isso.
+
+  LANCES: nunca descreva COMO um gol ou jogada aconteceu (cruzamento,
+  cabeçada, chute de fora, virada, contra-ataque) se a fonte não descreve
+  exatamente esse lance. Se ela só diz "participou de 3 gols", diga só
+  isso.
+
 # publica sozinho depois da revisão de fatos (sem esperar "Aprovar" no painel)
 require_approval: false
