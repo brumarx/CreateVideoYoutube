@@ -479,6 +479,8 @@ IDENTITY_TEXT_FIELDS = (
     ("channel_title", "Nome do canal (usado na playlist)"),
     ("youtube_handle", "@handle no YouTube (link de inscrição)"),
     ("watermark", "Marca d'água gravada no vídeo"),
+    ("website", "Site do canal (vai na descrição, comentário e fim do vídeo)"),
+    ("website_cta", "Texto do link do site"),
     ("niche", "Nicho (usado pra gerar temas e roteiro)"),
     ("hashtags", "Hashtags (separadas por espaço, 3-5)"),
     ("language", "Idioma"),

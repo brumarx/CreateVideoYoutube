@@ -353,7 +353,12 @@ def run(
         # renderização sem precisar de tratamento especial.
         original_scene_count = len(script["scenes"])
         script["scenes"].append({
-            "narration": f"Se esse vídeo te ajudou, deixa o like e se inscreve no {channel.channel_title} pra não perder o próximo.",
+            "narration": (
+                f"As notícias completas, com todos os detalhes, estão no site "
+                f"{channel.website.split('//')[-1]}. Deixa o like e se inscreve no canal pra não perder o próximo."
+                if channel.website else
+                f"Se esse vídeo te ajudou, deixa o like e se inscreve no {channel.channel_title} pra não perder o próximo."
+            ),
             "image_prompt": (
                 "Close-up of a hand giving a thumbs up gesture, warm natural lighting, "
                 "genuine happy mood, no text, no words, no letters, no numbers, no logos, "
@@ -510,6 +515,10 @@ def run(
         log.info("[%s] thumbnail pronta: %s", job_id, thumb_path)
 
         description = script["description"]
+        if channel.website:
+            # 1ª linha = o que aparece antes do "...mais" — é onde o link
+            # pro site próprio do canal realmente é clicado
+            description = f"{channel.website_cta}: {channel.website}\n\n{description}"
         if long_form:
             # timestamps calculados a partir da duração real de cada narração
             # (não estimados) — só faz sentido no documentário, o curto é curto
@@ -589,7 +598,8 @@ def run(
             "tags": script["tags"],
             "publish_at": publish_at,
             # comentário com pergunta postado pelo canal logo depois do upload
-            "comment": engagement_question(script["title"], script["scenes"][:original_scene_count]),
+            "comment": engagement_question(script["title"], script["scenes"][:original_scene_count])
+            + (f"\n\n{channel.website_cta}: {channel.website}" if channel.website else ""),
         }
         (work_dir / UPLOAD_META_FILE).write_text(json.dumps(upload_meta, ensure_ascii=False, indent=2))
 

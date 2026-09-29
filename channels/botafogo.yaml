@@ -1,9 +1,11 @@
 niche: "análise tática e estatística dos jogos do Botafogo (formação, posse de bola, desempenho de jogadores) e notícias diárias do clube, com paixão de torcedor"
-watermark: "@AnaliseDoFogao"
+watermark: "botafogo.win"
 accent: "#e5e5e5"
 hashtags: ["#Botafogo", "#Fogao", "#EstrelaSolitaria"]
-youtube_handle: "@AnalisedoFogao"
-channel_title: "Análise Alvinegra"
+youtube_handle: "@botafogowin"
+channel_title: "Botafogo.WIN"
+website: "https://botafogo.win"
+website_cta: "📰 Notícias completas do Fogão, em tempo real"
 language: "pt-BR"
 tts_voice_weights:
   pt-BR-AntonioNeural: 100
