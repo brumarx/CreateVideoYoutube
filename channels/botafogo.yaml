@@ -8,9 +8,9 @@ website: "https://botafogo.win"
 website_cta: "📰 Notícias completas do Fogão, em tempo real"
 language: "pt-BR"
 tts_voice_weights:
-  pt-BR-AntonioNeural: 100
-  pt-BR-FranciscaNeural: 0
-  pt-BR-ThalitaMultilingualNeural: 0
+  pt-BR-AntonioNeural: 33
+  pt-BR-FranciscaNeural: 33
+  pt-BR-ThalitaMultilingualNeural: 33
 scenes_per_video: 6
 upload_privacy: "public"
 uploads_per_day: 1
