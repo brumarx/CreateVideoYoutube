@@ -158,20 +158,31 @@ def top_single_expenses(ano: int | None = None, limit: int = 5, offset: int = 0)
 
 def top_patrimonio(ano: int = 2022, limit: int = 5, offset: int = 0) -> list[dict]:
     """Maiores patrimônios declarados ao TSE (com filtro de sanidade contra
-    erro de digitação óbvio na declaração original)."""
+    erro de digitação óbvio na declaração original). Soma os bens de cada
+    candidatura em `bens_candidatos` — a tabela `patrimonio` NÃO serve: não
+    bate com o TSE nem em reais nem em centavos (Marcelo Rangel declarou
+    R$1,46 mi em 2022 e ela dizia R$259,9 mi; job 174 barrado na revisão)."""
     with _connect() as conn:
         rows = conn.execute(
             """
-            SELECT DISTINCT p.nome, pat.valor
-            FROM patrimonio pat
-            JOIN politicos p ON p.id = pat.politico_id
-            WHERE pat.ano = ? AND pat.valor < ?
-            ORDER BY pat.valor DESC
+            SELECT c.nm_candidato, c.ds_cargo, c.sg_partido, c.sg_uf, SUM(b.vr_bem) AS total
+            FROM bens_candidatos b
+            JOIN candidatos c ON c.sq_candidato = b.sq_candidato
+            WHERE b.ano_eleicao = ?
+            GROUP BY b.sq_candidato
+            HAVING total < ?
+            ORDER BY total DESC
             LIMIT ? OFFSET ?
             """,
-            (ano, PATRIMONIO_SANITY_CAP, limit, offset),
+            (str(ano), PATRIMONIO_SANITY_CAP, limit, offset),
         ).fetchall()
-    return [{"nome": r[0], "patrimonio_declarado": round(r[1], 2), "ano": ano} for r in rows]
+    return [
+        {
+            "posicao_no_ranking": offset + i + 1, "nome": r[0], "cargo_disputado": r[1],
+            "partido": r[2], "uf": r[3], "patrimonio_declarado": round(r[4], 2), "ano": ano,
+        }
+        for i, r in enumerate(rows)
+    ]
 
 
 def top_score_politico(ano: int | None = None, limit: int = 5, offset: int = 0) -> list[dict]:
