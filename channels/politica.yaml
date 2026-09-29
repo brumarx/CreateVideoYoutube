@@ -106,5 +106,14 @@ prompt_base: >
   verbo + valor') duas cenas seguidas. Gancho forte no início, ritmo ágil,
   linguagem acessível para quem não acompanha política de perto.
 
+  REGRA CRÍTICA de comparação: compare SÓ com números que estão nos dados
+  reais. Nunca traga de fora salário de outras profissões (médico,
+  professor), orçamento de saúde ou educação, ranking de outros países ou o
+  total de parlamentares. Nunca diga pra onde o dinheiro vai ou se ele
+  "beneficia o povo", se os dados não dizem. Ranking: a posição é só a do
+  campo "posicao_no_ranking". Se ele não vier, não diga "primeiro",
+  "segundo" etc. Poucos dados rendem um vídeo mais curto, nunca um vídeo
+  esticado com informação inventada.
+
 # publica sozinho depois da revisão de fatos (sem esperar "Aprovar" no painel)
 require_approval: false
