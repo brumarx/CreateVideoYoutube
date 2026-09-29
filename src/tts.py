@@ -36,20 +36,55 @@ PRONUNCIATIONS = {
     "Textor": "Técstor",  # John Textor (SAF do Botafogo): TÉX-tor, não tex-TÔR
     "FogãoNET": "Fogãonéti",  # site FogãoNET: a voz soletrava "Fogão N-E-T"
     "Botafogo.WIN": "botafogo.win",  # maiúsculo a voz soletra "dáblio-i-ene"
+    "SAF": "Sáfi",  # "a SAF" se fala como palavra, não "ésse-á-éfe"
+    "UOL": "Uól",
+    "ge": "Gê-É",  # site ge (Globo Esporte): sozinho a voz lê "jê"
 }
 _PRON_RE = re.compile(r"\b(" + "|".join(map(re.escape, PRONUNCIATIONS)) + r")\b", re.IGNORECASE)
 _SPELLING_BACK = {v.lower(): k for k, v in PRONUNCIATIONS.items()}
 
+# PALAVRA INTEIRA EM MAIÚSCULAS (5+ letras) a voz costuma soletrar: nome de
+# veículo ("O GLOBO", "LANCE!", "NETVASCO") ou ênfase do roteiro ("QUE SE
+# VIREM"). Vira Title Case só na síntese. Sigla de 2-4 letras (CBF, STF,
+# ESPN) fica como está — soletrar é o certo pra elas; as de 5+ que também
+# se soletram entram na exceção.
+_CAPS_WORD = re.compile(r"\b[A-ZÀ-Ý]{2,}\b")
+_SPELLED_ACRONYMS = {"BNDES", "HTTPS", "CNBB", "OCDE"}
+# palavra comum curta em frase de ênfase ("QUE SE VIREM", "ISSO É REAL")
+_SHORT_WORDS = {
+    "QUE", "SE", "NÃO", "VAI", "ELE", "ELA", "ISSO", "ESSE", "ESSA", "ESTÁ", "COMO", "MAIS", "TUDO",
+    "NADA", "FOI", "SÓ", "PRA", "UM", "UMA", "DE", "DO", "DA", "NO", "NA", "EM", "OS", "AS", "SIM",
+    "JÁ", "AGORA", "BOM", "MAU", "FIM", "VEM", "SEM", "COM", "POR", "QUEM", "ONDE", "REAL", "VIU",
+}
 
-def _for_speech(text: str) -> str:
-    return _PRON_RE.sub(lambda m: PRONUNCIATIONS[next(k for k in PRONUNCIATIONS if k.lower() == m[1].lower())], text)
+
+def _for_speech(text: str) -> tuple[str, list[tuple[str, str]]]:
+    """Texto pra síntese + a lista, em ordem, de (palavra falada, original)
+    das palavras em maiúsculas trocadas — a legenda karaokê devolve a
+    grafia original na mesma ordem, sem tocar num "lance" comum só porque
+    o roteiro também citou o jornal "LANCE!"."""
+    trocas: list[tuple[str, str]] = []
+
+    def caps(m: re.Match) -> str:
+        word = m[0]
+        if word in _SPELLED_ACRONYMS or (len(word) < 5 and word not in _SHORT_WORDS):
+            return word  # sigla (CBF, STF, ESPN): soletrar é o certo
+        trocas.append((word.capitalize().lower(), word))
+        return word.capitalize()
+
+    text = _PRON_RE.sub(lambda m: PRONUNCIATIONS[next(k for k in PRONUNCIATIONS if k.lower() == m[1].lower())], text)
+    return _CAPS_WORD.sub(caps, text), trocas
 
 
-def _restore_spelling(word_boundaries: list[dict]) -> list[dict]:
+def _restore_spelling(word_boundaries: list[dict], trocas: list[tuple[str, str]] | None = None) -> list[dict]:
+    pendentes = list(trocas or [])
     for w in word_boundaries:
-        original = _SPELLING_BACK.get(w["text"].lower().strip(".,;:!?"))
+        core = w["text"].strip(".,;:!?")
+        original = _SPELLING_BACK.get(core.lower())
+        if not original and pendentes and core.lower() == pendentes[0][0]:
+            original = pendentes.pop(0)[1]
         if original:
-            w["text"] = w["text"].replace(w["text"].strip(".,;:!?"), original)
+            w["text"] = w["text"].replace(core, original)
     return word_boundaries
 
 
@@ -171,12 +206,12 @@ def narrate(text: str, output_path: Path, voice: str = DEFAULT_VOICE) -> tuple[P
     se o serviço não mandou WordBoundary por algum motivo; quem chamar deve
     cair pra um fallback nesse caso, nunca assumir que sempre vem preenchida)."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    text = _for_speech(text)
+    text, spelling_back = _for_speech(text)
     if voice not in EDGE_VOICES:
         # voz só-Azure
         if AZURE_SPEECH_KEYS:
             try:
-                return output_path, _restore_spelling(_synthesize_azure(text, output_path, voice))
+                return output_path, _restore_spelling(_synthesize_azure(text, output_path, voice), spelling_back)
             except Exception as exc:  # noqa: BLE001 — qualquer falha da Azure cai pro grátis
                 log.warning("azure tts indisponível (%s) — usando edge-tts", exc)
         else:
@@ -186,7 +221,7 @@ def narrate(text: str, output_path: Path, voice: str = DEFAULT_VOICE) -> tuple[P
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
             word_boundaries = asyncio.run(_synthesize(text, output_path, voice, metadata_path))
-            return output_path, _restore_spelling(word_boundaries)
+            return output_path, _restore_spelling(word_boundaries, spelling_back)
         except edge_tts.exceptions.NoAudioReceived:
             if attempt == MAX_ATTEMPTS:
                 raise
