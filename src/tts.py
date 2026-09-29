@@ -76,7 +76,25 @@ def _for_speech(text: str) -> tuple[str, list[tuple[str, str]]]:
     return _CAPS_WORD.sub(caps, text), trocas
 
 
+def _join_domains(word_boundaries: list[dict]) -> list[dict]:
+    """A voz lê "botafogo.win" como 3 palavras (botafogo / . / win) — a
+    legenda mostrava o ponto solto; junta de volta numa palavra só."""
+    out: list[dict] = []
+    i = 0
+    while i < len(word_boundaries):
+        w = word_boundaries[i]
+        if i + 2 < len(word_boundaries) and word_boundaries[i + 1]["text"] == "." and word_boundaries[i + 2]["text"].lower() in {"win", "com", "br", "org"}:
+            nxt = word_boundaries[i + 2]
+            out.append({**w, "text": f"{w['text']}.{nxt['text']}", "end": nxt.get("end", w.get("end"))})
+            i += 3
+            continue
+        out.append(w)
+        i += 1
+    return out
+
+
 def _restore_spelling(word_boundaries: list[dict], trocas: list[tuple[str, str]] | None = None) -> list[dict]:
+    word_boundaries = _join_domains(word_boundaries)
     pendentes = list(trocas or [])
     for w in word_boundaries:
         core = w["text"].strip(".,;:!?")
