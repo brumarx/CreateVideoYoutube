@@ -524,6 +524,25 @@ _OUTRO_BOTAFOGO = re.compile(
 _OUTRO_BOTAFOGO_FONTES = ("futebolinterior.com.br", "opopular.com.br")
 
 
+_VEICULO_DOMINIO = {
+    "odia.ig.com.br": "O Dia", "lance.com.br": "Lance", "itatiaia.com.br": "Rádio Itatiaia",
+    "flamengo.com.br": "site do Flamengo", "jornalcruzeiro.com.br": "Jornal Cruzeiro", "fluminense.com.br": "site do Fluminense",
+}
+
+
+def _nome_veiculo(nome: str | None) -> str:
+    """Nome falável do veículo: o agregador do portal manda "LANCE! (via
+    Google Notícias)", "ge — Botafogo", "odia.ig.com.br", "John Textor
+    (@Textor44) no X" — lido em voz alta isso vira "via Google Notícias",
+    endereço soletrado e arroba no meio da narração."""
+    nome = re.sub(r"\s*\(via Google Not[ií]cias\)\s*$", "", (nome or "").strip())
+    nome = re.sub(r"\s+[—–-]\s+.*$", "", nome)
+    nome = re.sub(r"^(.+?)\s*\(@\w+\)\s+no X$", r"\1, no X", nome)
+    if re.fullmatch(r"[\w-]+(\.[\w-]+)*\.(com|org|net)(\.br)?", nome, re.IGNORECASE):
+        nome = _VEICULO_DOMINIO.get(nome.lower(), nome.split(".")[0].capitalize())
+    return nome or "Portal Botafogo"
+
+
 def _outro_botafogo(art: dict) -> bool:
     texto = art.get("title") or ""  # resumo cita "Botafogo-SP" de passagem (adversário)
     fonte = f"{art.get('source_url') or ''} {art.get('source_name') or ''}".lower()
@@ -585,7 +604,7 @@ def portal_news_task(per_video: int = PORTAL_NEWS_PER_VIDEO) -> dict | None:
                 texto = _story_text(detail.get("body_html") or "")
             except Exception as exc:  # noqa: BLE001 — fica só com o resumo
                 log.warning("texto da matéria %s indisponível: %s", art["slug"], exc)
-        veiculo = art.get("source_name") or "Portal Botafogo"
+        veiculo = _nome_veiculo(art.get("source_name"))
         noticias.append({
             "titulo": art["title"],
             "resumo": art.get("excerpt"),
