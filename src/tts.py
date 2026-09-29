@@ -38,7 +38,7 @@ PRONUNCIATIONS = {
     "Botafogo.WIN": "botafogo.win",  # maiúsculo a voz soletra "dáblio-i-ene"
     "SAF": "Sáfi",  # "a SAF" se fala como palavra, não "ésse-á-éfe"
     "UOL": "Uól",
-    "ge": "Gê-É",  # site ge (Globo Esporte): sozinho a voz lê "jê"
+    "ge": "GE",  # site ge (Globo Esporte): minúsculo a voz lê "jê"; sigla ela soletra "gê-é"
 }
 _PRON_RE = re.compile(r"\b(" + "|".join(map(re.escape, PRONUNCIATIONS)) + r")\b", re.IGNORECASE)
 _SPELLING_BACK = {v.lower(): k for k, v in PRONUNCIATIONS.items()}
