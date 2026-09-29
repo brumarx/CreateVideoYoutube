@@ -14,7 +14,7 @@ import logging
 from pathlib import Path
 
 import httpx
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 from .visuals import generate_image
 
@@ -188,6 +188,77 @@ def _background(photo: Image.Image) -> Image.Image:
     return bg
 
 
+_REMBG_SESSIONS: list | None = None
+
+
+def _subject_mask(photo: Image.Image) -> Image.Image | None:
+    """Máscara do sujeito (pessoa/grupo/objeto principal) via rembg. União
+    de 2 modelos: u2net pega cabelo/bordas finas mas perde roupa escura
+    (terno de político sumia), isnet pega o corpo inteiro mas come cabelo
+    crespo — juntos cobrem um o buraco do outro. ~15s no Raspberry.
+    None se rembg não estiver instalado ou falhar."""
+    global _REMBG_SESSIONS
+    try:
+        from rembg import new_session, remove
+
+        if _REMBG_SESSIONS is None:
+            _REMBG_SESSIONS = [new_session("u2net"), new_session("isnet-general-use")]
+        masks = [remove(photo, session=s, only_mask=True).convert("L") for s in _REMBG_SESSIONS]
+    except Exception as exc:  # noqa: BLE001 — recorte é bônus, layout sem ele continua bom
+        log.warning("recorte do sujeito indisponível: %s", exc)
+        return None
+    mask = masks[0]
+    for m in masks[1:]:
+        mask = ImageChops.lighter(mask, m)
+    return mask.point(lambda v: 255 if v > 110 else int(v * 255 / 110))
+
+
+def _cutout_composite(photo: Image.Image, accent_rgb: tuple[int, int, int]) -> Image.Image | None:
+    """Estilo "figurinha": sujeito recortado, com contorno branco e brilho
+    na cor do canal, grande no lado direito, sobre a própria foto desfocada
+    e escurecida. None (cai pro layout de foto inteira) quando o recorte não
+    acha um sujeito claro — paisagem, cenário, recorte que pegou quase tudo."""
+    W, H = THUMB_WIDTH, THUMB_HEIGHT
+    work = photo.copy()
+    work.thumbnail((1024, 1024), Image.LANCZOS)
+    mask = _subject_mask(work)
+    if mask is None:
+        return None
+    bbox = mask.point(lambda v: 255 if v > 128 else 0).getbbox()
+    if not bbox:
+        return None
+    coverage = sum(mask.point(lambda v: 1 if v > 128 else 0).getdata()) / (mask.width * mask.height)
+    wide = (bbox[2] - bbox[0]) > (bbox[3] - bbox[1]) * 1.3  # grupo abraçado: recortado fica miúdo
+    if wide or not 0.05 <= coverage <= 0.75 or (bbox[3] - bbox[1]) < work.height * 0.4:
+        log.info("recorte descartado (cobertura %.2f, bbox %s) — foto inteira", coverage, bbox)
+        return None
+
+    subject = work.convert("RGBA")
+    subject.putalpha(mask)
+    subject = subject.crop(bbox)
+    scale = min(H * 0.97 / subject.height, W * 0.6 / subject.width)
+    subject = subject.resize((int(subject.width * scale), int(subject.height * scale)), Image.LANCZOS)
+    alpha = subject.getchannel("A")
+
+    pad = 60
+    canvas_alpha = Image.new("L", (subject.width + 2 * pad, subject.height + 2 * pad), 0)
+    canvas_alpha.paste(alpha, (pad, pad))
+    outline = canvas_alpha.filter(ImageFilter.MaxFilter(15))
+    glow = canvas_alpha.filter(ImageFilter.MaxFilter(21)).filter(ImageFilter.GaussianBlur(28))
+
+    bg = _cover(photo, W, H).filter(ImageFilter.GaussianBlur(22))
+    bg = ImageEnhance.Brightness(bg).enhance(0.5).convert("RGBA")
+    x = W - subject.width - 40 - pad
+    # sujeito cortado na borda de baixo da foto (corpo continua) encosta no
+    # rodapé; sujeito inteiro (objeto, pessoa de corpo todo) fica centralizado
+    touches_bottom = bbox[3] >= work.height - 4
+    y = (H - subject.height - pad + 10) if touches_bottom else (H - subject.height) // 2 - pad
+    bg.paste(Image.new("RGBA", canvas_alpha.size, accent_rgb + (255,)), (x, y), glow.point(lambda v: int(v * 0.85)))
+    bg.paste(Image.new("RGBA", canvas_alpha.size, (255, 255, 255, 255)), (x, y), outline)
+    bg.alpha_composite(subject, (x + pad, y + pad))
+    return bg.convert("RGB")
+
+
 def _render_text_block(hook_text: str, max_w: int, max_h: int) -> Image.Image:
     """Cada linha é esticada pra preencher a largura do bloco (linhas de
     tamanhos diferentes = cara de capa de revista/thumbnail profissional),
@@ -252,14 +323,11 @@ def make_thumbnail(
     esquerdo (empilhado, inclinado, palavra-chave em amarelo, sombra dura),
     imagem/pessoa em destaque no lado direito, cor bem saturada e borda
     na cor do canal."""
-    img = None
-    if real_photo_url:
-        photo = _fetch_real_photo(real_photo_url)
-        if photo:
-            img = _background(photo)
-    if img is None:
+    photo = _fetch_real_photo(real_photo_url) if real_photo_url else None
+    if photo is None:
         raw = generate_image(prompt, width=THUMB_WIDTH, height=THUMB_HEIGHT)
-        img = _background(Image.open(io.BytesIO(raw)).convert("RGB"))
+        photo = Image.open(io.BytesIO(raw)).convert("RGB")
+    img = _cutout_composite(photo, _hex_to_rgb(accent)) or _background(photo)
 
     img = ImageEnhance.Contrast(img).enhance(1.2)
     img = ImageEnhance.Color(img).enhance(1.45)
