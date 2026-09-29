@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 
 import httpx
@@ -395,7 +396,6 @@ def _story_text(html: str) -> str:
     """Texto corrido da matéria — tira tags (<video1>, <alsosee>, links) e
     corta no limite, sem quebrar palavra."""
     import html as html_lib
-    import re
 
     text = re.sub(r"<[^>]+>", " ", html or "")
     text = re.sub(r"\s+", " ", html_lib.unescape(text)).strip()
@@ -417,7 +417,6 @@ def _photo_is_fresh(url: str, published) -> bool:
     """Data da foto vem do caminho da URL na CDN da ESPN
     (`/photo/2026/0925/...`, `/common/2026/0919/...`). Sem data legível,
     descarta — melhor cair pra outra imagem do que arriscar foto antiga."""
-    import re
     from datetime import datetime, timezone
 
     m = re.search(r"/(20\d\d)/(\d\d)(\d\d)/", url)
@@ -490,7 +489,6 @@ def news_task() -> dict | None:
 
 
 def _title_words(title: str) -> set[str]:
-    import re
 
     return {w for w in re.findall(r"\w+", title.lower()) if len(w) > 3}
 
@@ -508,12 +506,29 @@ def _portal_photo_ok(url: str, published) -> bool:
     """Mesma regra da ESPN (foto de arquivo engana o torcedor), só que a CDN
     dos veículos agregados costuma ter só ano/mês no caminho
     (`/uploads/2026/09/...`) — aí aceita se for o mesmo mês da matéria."""
-    import re
 
     if _photo_is_fresh(url, published):
         return True
     m = re.search(r"/(20\d\d)/(\d\d)/", url)
     return bool(m) and (int(m[1]), int(m[2])) == (published.year, published.month)
+
+
+# outros "Botafogo" que o agregador do portal pega por palavra-chave: o
+# Botafogo-SP (Ribeirão Preto, "Pantera", cobertura do Futebol Interior),
+# o Botafogo-PB e o córrego Botafogo de Goiânia (O Popular) — já saíram no
+# vídeo do Fogão como se fossem notícia do clube.
+_OUTRO_BOTAFOGO = re.compile(
+    r"botafogo ?(-|\()(sp|pb)\b|ribeir[aã]o preto|pantera|c[oó]rrego|goi[aâ]nia|jo[aã]o pessoa|belo jardim",
+    re.IGNORECASE,
+)
+_OUTRO_BOTAFOGO_FONTES = ("futebolinterior.com.br", "opopular.com.br")
+
+
+def _outro_botafogo(art: dict) -> bool:
+    texto = art.get("title") or ""  # resumo cita "Botafogo-SP" de passagem (adversário)
+    fonte = f"{art.get('source_url') or ''} {art.get('source_name') or ''}".lower()
+    return bool(_OUTRO_BOTAFOGO.search(texto)) or any(f in fonte or f.split(".")[0] in fonte.replace(" ", "")
+                                                      for f in _OUTRO_BOTAFOGO_FONTES)
 
 
 def portal_news_task(per_video: int = PORTAL_NEWS_PER_VIDEO) -> dict | None:
@@ -544,6 +559,9 @@ def portal_news_task(per_video: int = PORTAL_NEWS_PER_VIDEO) -> dict | None:
         title = (art.get("title") or "").strip()
         # post de live/vídeo de canal (ex.: "LIVE DO SETOR") não é notícia
         if not published or str(art["id"]) in used or len(title) < 25 or "live" in title.lower().split():
+            continue
+        if _outro_botafogo(art):
+            log.info("portal: pulando notícia de outro Botafogo: %s", title)
             continue
         if datetime.fromisoformat(published.replace("Z", "+00:00")) < limite:
             continue
