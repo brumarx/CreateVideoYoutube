@@ -116,6 +116,12 @@ class ChannelConfig:
     # vídeo sobe privado e só vira público quando alguém clica "Aprovar" no
     # painel (web/app.py) — última barreira contra roteiro errado no ar.
     require_approval: bool
+    # site próprio do canal (ex.: "https://botafogo.win") — vira a 1ª linha
+    # da descrição, o fim do comentário fixado e o CTA falado no fim do
+    # vídeo, pra levar a audiência pra lá. Vazio = canal sem site.
+    website: str
+    # texto que acompanha o link no topo da descrição
+    website_cta: str
 
     @staticmethod
     def load(name: str) -> "ChannelConfig":
@@ -151,4 +157,6 @@ class ChannelConfig:
             viral_queries=data.get("viral_queries", []),
             viral_share=data.get("viral_share", 0.5),
             require_approval=data.get("require_approval", True),
+            website=data.get("website", ""),
+            website_cta=data.get("website_cta", "🌐 Site"),
         )
