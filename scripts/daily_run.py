@@ -21,14 +21,18 @@ transparência.
 from __future__ import annotations
 
 import logging
+import sqlite3
 import subprocess
 import sys
+from contextlib import closing
 from pathlib import Path
 
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+from src.orchestrator import DB_PATH, update  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("daily_run")
@@ -38,22 +42,64 @@ log = logging.getLogger("daily_run")
 EXIT_SCRIPT_REJECTED = 3
 
 
-def _run_pipeline(channel_name: str, extra: list[str], label: str) -> None:
-    """Roda o pipeline; roteiro reprovado na revisão de fatos ganha UMA nova
-    tentativa (tema/notícia/dado já usado fica marcado, então sai outro) —
-    melhor um vídeo certo do que o dia perdido. Qualquer outra falha não é
-    repetida aqui (upload falho é do retry_uploads, sem vídeo duplicado)."""
-    cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name, *extra]
-    for attempt in (1, 2):
-        log.info("[%s] %s (tentativa %d)", channel_name, label, attempt)
+# Tentativas por vídeo. Cada uma pega outro tema/notícia/dado (o usado fica
+# marcado). Antes era só 1 repetição, e só pra roteiro reprovado: o politica
+# passou 27-30/09 sem vídeo, e falha passageira (TTS "No audio was received",
+# Pollinations fora, JSON malformado do LLM) perdia o dia direto.
+MAX_ATTEMPTS = 4
+
+
+def _last_job(channel_name: str, after_id: int):
+    """Job criado por esta tentativa (id maior que o último antes dela)."""
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        return conn.execute(
+            "SELECT id, status, video_path FROM jobs WHERE channel = ? AND id > ? ORDER BY id DESC LIMIT 1",
+            (channel_name, after_id),
+        ).fetchone()
+
+
+def _max_job_id() -> int:
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        return conn.execute("SELECT COALESCE(MAX(id), 0) FROM jobs").fetchone()[0]
+
+
+def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_short: bool = False) -> None:
+    """Roda o pipeline até MAX_ATTEMPTS vezes — melhor um vídeo certo do que
+    o dia perdido. Repete roteiro reprovado na revisão de fatos e qualquer
+    falha ANTES do render; falha depois do render (upload: token, rede, cota)
+    NÃO repete — é do retry_uploads, que reenvia o mesmo vídeo sem duplicar.
+    A tentativa que falhou e foi substituída vira status "retried" (erro
+    guardado), pra "failed" no painel ser só vídeo perdido de verdade.
+    fallback_short: canal no formato longo tenta a última vez no curto (no
+    politica, o curto usa sempre dado real do banco — o que mais passa na
+    revisão)."""
+    base_cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name, *extra]
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        cmd = base_cmd
+        if fallback_short and attempt == MAX_ATTEMPTS:
+            cmd = [*base_cmd, "--no-long"]
+            log.warning("[%s] %s: última tentativa no formato curto", channel_name, label)
+        log.info("[%s] %s (tentativa %d/%d)", channel_name, label, attempt, MAX_ATTEMPTS)
+        before = _max_job_id()
         rc = subprocess.run(cmd, cwd=ROOT).returncode
         if rc == 0:
             return
-        if rc != EXIT_SCRIPT_REJECTED:
-            log.error("[%s] %s falhou (exit %d) — seguindo pros próximos", channel_name, label, rc)
+        job = _last_job(channel_name, before)
+        if job is None:
+            # nem criou job: erro de configuração, repetir não resolve
+            log.error("[%s] %s falhou (exit %d) sem criar job — seguindo pros próximos", channel_name, label, rc)
             return
-        log.warning("[%s] %s: roteiro reprovado na revisão de fatos", channel_name, label)
-    log.error("[%s] %s: reprovado 2x — sem vídeo hoje", channel_name, label)
+        job_id, status, video_path = job
+        if video_path:
+            log.error("[%s] %s: vídeo %d renderizado mas não publicado — fica pro retry_uploads", channel_name, label, job_id)
+            return
+        motivo = "roteiro reprovado na revisão de fatos" if rc == EXIT_SCRIPT_REJECTED else f"falhou antes do render (exit {rc})"
+        if attempt == MAX_ATTEMPTS:
+            log.error("[%s] %s: %s — %d tentativas, sem vídeo hoje", channel_name, label, motivo, MAX_ATTEMPTS)
+            return
+        log.warning("[%s] %s: %s (job %d) — tentando de novo", channel_name, label, motivo, job_id)
+        if status == "failed":
+            update(job_id, status="retried")
 
 
 def run_channel(channel_name: str, cfg: dict) -> None:
@@ -78,7 +124,10 @@ def run_channel(channel_name: str, cfg: dict) -> None:
         # não duplica a decisão aqui pra nunca dessincronizar da UI).
         # sem --topic: run_pipeline.py escolhe sozinho da fila única (ou
         # fato real, pro politica no formato curto).
-        _run_pipeline(channel_name, [], f"upload {i + 1}/{uploads_per_day} ({daily_format})")
+        _run_pipeline(
+            channel_name, [], f"upload {i + 1}/{uploads_per_day} ({daily_format})",
+            fallback_short=daily_format == "long",
+        )
 
 
 def main() -> None:
