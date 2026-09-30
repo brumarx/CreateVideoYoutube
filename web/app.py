@@ -63,7 +63,7 @@ TEMPLATE = """
   a { color: #6ea8ff; }
   .status-uploaded { color: #5fd685; }
   .status-awaiting_approval { color: #e0a94f; }
-  .status-rejected { color: #7d838c; }
+  .status-rejected, .status-retried { color: #7d838c; }
   .status-failed, .status-error { color: #e05f5f; }
   .flash { background: #16351f; color: #5fd685; padding: 10px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 13px; }
   .durations { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
