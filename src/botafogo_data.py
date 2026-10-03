@@ -571,7 +571,9 @@ def _portal_photo_ok(url: str, published) -> bool:
     (live/vídeo de canal, cheia de texto) nunca entra."""
     from datetime import datetime, timezone
 
-    if "ytimg.com" in url:
+    # thumb do YouTube e print de tela (programa de TV com logo/tarja de
+    # outra emissora — job 239 saiu com um print do SBT) nunca entram
+    if "ytimg.com" in url or re.search(r"captura|screenshot|screen-shot|print-?de-?tela", url, re.IGNORECASE):
         return False
     if _photo_is_fresh(url, published):
         return True
