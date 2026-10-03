@@ -59,6 +59,11 @@ topics:
   - "7 mistérios não resolvidos do Brasil que vão te deixar sem dormir"
   - "7 mistérios reais e perturbadores da Coreia do Sul que continuam sem resposta"
   - "A verdade aterrorizante por trás dos últimos dias de Grizzly Man"
+  - "6 casos reais em que desenhos de crianças ajudaram a solucionar crimes no Brasil"
+  - "7 mistérios não resolvidos do Velho Oeste que continuam sem resposta"
+  - "Helicópteros de ataque ilegais descobertos no Brasil: casos reais, como foram encontrados e o que aconteceu com eles."
+  - "7 casos reais e perturbadores registrados em câmeras de segurança pelo mundo que continuam sem solução"
+  - "7 descobertas arqueológicas em rios e lagos do mundo que a ciência ainda não consegue explicar"
 prompt_base: >
   Escreva um roteiro envolvente no estilo de canais de curiosidades/histórias
   do YouTube (tipo Reddit stories / fatos incríveis). O ângulo deste canal é
@@ -67,6 +72,15 @@ prompt_base: >
   genéricos que parece com centenas de outros vídeos iguais. Comece com um
   gancho forte nos primeiros 5 segundos. Tom curioso, ritmo ágil, frases
   curtas fáceis de narrar em voz alta.
+
+  FATOS REAIS: todo caso, descoberta, objeto ou mistério tem que ser REAL e
+  documentado, citado pelo NOME PRÓPRIO (ex.: "o Mecanismo de Anticítera",
+  "Pavlopetri, na Grécia", "o caso Dyatlov") com lugar e ano corretos.
+  Nunca invente caso genérico com cara de real ("em 1980 mergulhadores
+  encontraram uma cidade...", "um homem em Tóquio...") — a revisão de fatos
+  reprova e o vídeo não sai. Se o título promete N itens, entregue
+  exatamente N; sem N casos reais que você conheça bem, entregue menos e
+  não prometa N.
 
 # publica sozinho depois da revisão de fatos (sem esperar "Aprovar" no painel)
 require_approval: false
