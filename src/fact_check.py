@@ -71,6 +71,8 @@ abaixo ANTES de ele virar vídeo. Aponte SÓ problemas concretos destes tipos:
   (idade, aparência, desempenho — "aguardando a aposentadoria compulsória",
   "esse eu não lembro quem é", "voltou por saudade das churrascarias"),
   MESMO que a fonte faça isso (coluna irônica copiada vira voz do canal).
+  Só conta o que está escrito no ROTEIRO — deboche que aparece só nas
+  FONTES e o roteiro não repetiu NÃO é problema.
 - "acusacao_sem_base": acusa pessoa ou instituição identificável de
   irregularidade, desvio ou crime sem dado concreto nas FONTES.
 - "data_desatualizada": trata como ATUAL/RECENTE um ano, versão ou fato
