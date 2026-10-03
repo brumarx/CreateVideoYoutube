@@ -121,24 +121,14 @@ def _news_photo_for_scene(narration: str, facts: dict | None, photos: list[dict]
 
 
 def _sized_for_facts(facts: dict, scenes: int | None, min_minutes: float, max_minutes: float) -> tuple[int | None, float, float]:
-    """Vídeo do tamanho dos dados: o longo do politica pedia 24 cenas e
-    4-5 min a partir de 5 linhas do banco — pra encher, o roteirista somava
-    valores, comparava com salário mínimo/loteria/médico e chamava de
-    "corrupção", e a revisão reprovava (1 vídeo publicado em 5 dias)."""
-    n = len(facts.get("dados") or [])
+    """Vídeo do tamanho dos dados, em qualquer canal com dados reais (lista
+    do banco, notícias): 24 cenas e 4-5 min a partir de 5 linhas obrigavam
+    o roteirista a inventar (somas, comparações de fora, "corrupção") ou a
+    repetir metade do vídeo (job 222) — e a revisão reprovava."""
+    n = len(facts.get("dados") or facts.get("noticias") or [])
     if not n or scenes is None:
         return scenes, min_minutes, max_minutes
-    return min(scenes, 2 * n + 2), min(min_minutes, 1.5), min(max_minutes, 3)
-
-
-def _clip_still(path: Path) -> bytes | None:
-    """Frame limpo (sem legenda) do clipe aprovado — reserva pra repetir se
-    uma cena seguinte ficar sem imagem."""
-    out = subprocess.run(
-        ["ffmpeg", "-v", "error", "-ss", "1", "-i", str(path), "-frames:v", "1", "-f", "image2", "-c:v", "png", "pipe:1"],
-        capture_output=True, check=False,
-    ).stdout
-    return out or None
+    return min(scenes, 2 * n + 2), min(min_minutes, max(1.5, 0.35 * n)), min(max_minutes, max(3.0, 0.6 * n))
 
 
 _SENT_SPLIT = re.compile(r"(?<=[.!?])\s+")
@@ -309,15 +299,8 @@ def run(
     scenes = channel.long_form_scenes if long_form else list_count
     min_minutes = channel.long_min_minutes if long_form else channel.short_min_minutes
     max_minutes = channel.long_max_minutes if long_form else channel.short_max_minutes
-    if long_form and channel_name == "politica" and facts:
+    if long_form and facts:
         scenes, min_minutes, max_minutes = _sized_for_facts(facts, scenes, min_minutes, max_minutes)
-    if long_form and facts and facts.get("tipo") == "noticias" and scenes:
-        # dia de notícias do Botafogo: ~40s por notícia. Com 3 notícias e
-        # meta fixa de 4 min, o roteiro repetia metade do vídeo (job 222).
-        n = len(facts.get("noticias") or [])
-        if n:
-            scenes = min(scenes, 3 * n + 2)
-            min_minutes = min(min_minutes, max(1.5, 0.6 * n))
 
     job_id = enqueue(channel_name, topic)
     work_dir = Path(__file__).resolve().parent.parent / "output" / f"job_{job_id}"
@@ -478,8 +461,8 @@ def run(
             # aceita (o filtro de outro esporte/clube do stock_media segue).
             def in_context(image: bytes, _narration: str = scene["narration"]) -> bool | None:
                 verdict = matches_scene(image, _narration, visual_context)
-                if verdict is None and channel_name == "botafogo":
-                    return False  # futebol sem checagem = risco de outro clube/esporte
+                if verdict is None and channel.strict_visual:
+                    return False  # canal estrito sem checagem = risco de clube/esporte errado
                 return verdict
             scene_durations.append(_ffprobe_duration(audio_path))
 
@@ -520,7 +503,7 @@ def run(
             news_frame = None
             if news_photos and i < original_scene_count:
                 photo = _news_photo_for_scene(scene["narration"], facts, news_photos) or last_news_photo
-                if photo is None and channel_name == "botafogo":
+                if photo is None:
                     # abertura antes de qualquer notícia casar: foto da 1ª
                     # notícia (o gancho é ela) em vez de clipe de banco, que
                     # pra futebol só tem clube estrangeiro
@@ -625,7 +608,7 @@ def run(
             [s["narration"] for s in script["scenes"]], scene_videos, visual_context,
             # futebol com clipe de banco/IA precisa de olho; vídeo só com
             # foto das matérias (do próprio assunto) dispensa
-            strict_visual=channel_name == "botafogo" and any(src in ("banco", "ia") for src in scene_sources),
+            strict_visual=channel.strict_visual and any(src in ("banco", "ia") for src in scene_sources),
         )
         if qa_problems:
             for p in qa_problems:

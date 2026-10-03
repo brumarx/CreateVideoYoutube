@@ -122,6 +122,10 @@ class ChannelConfig:
     website: str
     # texto que acompanha o link no topo da descrição
     website_cta: str
+    # canal onde imagem errada é grave (futebol: outro clube, futebol
+    # americano): sem modelo de visão disponível, clipe de banco e imagem de
+    # IA não entram, e a revisão final só aprova com a parte visual feita.
+    strict_visual: bool = False
 
     @staticmethod
     def load(name: str) -> "ChannelConfig":
@@ -158,5 +162,6 @@ class ChannelConfig:
             viral_share=data.get("viral_share", 0.5),
             require_approval=data.get("require_approval", True),
             website=data.get("website", ""),
+            strict_visual=bool(data.get("strict_visual", False)),
             website_cta=data.get("website_cta", "🌐 Site"),
         )
