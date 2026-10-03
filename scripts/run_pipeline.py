@@ -120,6 +120,31 @@ def _news_photo_for_scene(narration: str, facts: dict | None, photos: list[dict]
     return next((f for f in photos if f.get("noticia") == melhor), None)
 
 
+# teto do texto das fontes no pedido do roteiro: 8 matérias inteiras deram
+# ~11 mil tokens e o Groq (limite de 8 mil/min, um dos poucos modelos fortes
+# com cota sobrando) recusava — a cascata caía em modelo fraco que copiava a
+# fonte palavra por palavra (03/10, 8 tentativas reprovadas)
+FACTS_TEXT_BUDGET = 7000
+
+
+def _fit_facts(facts: dict, budget: int = FACTS_TEXT_BUDGET) -> dict:
+    """Corta os campos de texto longo das fontes (matéria inteira) pra somar
+    no máximo `budget` caracteres, dividido igualmente — título e resumo
+    ficam inteiros. Vale pra qualquer canal com fontes em texto."""
+    items = facts.get("noticias") or []
+    textos = [n for n in items if isinstance(n, dict) and len(str(n.get("texto") or "")) > 0]
+    total = sum(len(n["texto"]) for n in textos)
+    if total <= budget:
+        return facts
+    cap = max(budget // max(len(textos), 1), 300)
+    trimmed = [
+        {**n, "texto": (n["texto"][:cap].rsplit(" ", 1)[0] + "…") if len(str(n.get("texto") or "")) > cap else n.get("texto")}
+        if isinstance(n, dict) else n
+        for n in items
+    ]
+    return {**facts, "noticias": trimmed}
+
+
 def _sized_for_facts(facts: dict, scenes: int | None, min_minutes: float, max_minutes: float) -> tuple[int | None, float, float]:
     """Vídeo do tamanho dos dados, em qualquer canal com dados reais (lista
     do banco, notícias): 24 cenas e 4-5 min a partir de 5 linhas obrigavam
@@ -301,6 +326,8 @@ def run(
     max_minutes = channel.long_max_minutes if long_form else channel.short_max_minutes
     if long_form and facts:
         scenes, min_minutes, max_minutes = _sized_for_facts(facts, scenes, min_minutes, max_minutes)
+    if facts:
+        facts = _fit_facts(facts)
 
     job_id = enqueue(channel_name, topic)
     work_dir = Path(__file__).resolve().parent.parent / "output" / f"job_{job_id}"
