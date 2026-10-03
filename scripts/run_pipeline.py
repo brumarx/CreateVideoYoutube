@@ -503,6 +503,7 @@ def run(
         scene_durations = []
         last_news_photo: dict | None = None
         photo_streak = 0  # cenas seguidas herdando a foto da notícia anterior
+        same_photo_run = 0  # cenas seguidas com a MESMA foto de notícia
         last_still: bytes | None = None  # último visual aprovado (reserva se a IA de imagem cair)
         scene_sources: list[str] = []  # de onde veio o visual de cada cena (revisão final usa)
         for i, scene in enumerate(script["scenes"]):
@@ -580,11 +581,17 @@ def run(
                     # notícia (o gancho é ela) em vez de clipe de banco, que
                     # pra futebol só tem clube estrangeiro
                     photo = news_photos[0]
+                if photo is not None and photo is last_news_photo and same_photo_run >= 2 and stock_query:
+                    # mesma foto já em 2 cenas seguidas e a cena tem busca
+                    # própria: alterna com o banco (job 251: a foto da matéria
+                    # principal casava com 11 de 15 cenas e a revisão reprovou)
+                    photo = None
                 if photo:
                     frame = photo_scene_frame(photo["url"], width, height)
                     # foto da PRÓPRIA matéria: só sai se a visão disser que não
                     # combina (indisponível não bloqueia — é do assunto por construção)
                     if frame is not None and matches_scene(frame, scene["narration"], visual_context) is not False:
+                        same_photo_run = same_photo_run + 1 if photo is last_news_photo else 1
                         last_news_photo = photo
                         news_frame = frame
 
@@ -631,8 +638,10 @@ def run(
                 image_path = work_dir / f"scene_{i}.png"
                 image_path.write_bytes(image_bytes)
                 last_still = image_bytes
+                same_photo_run = 0
             else:
                 last_still = _clip_still(stock_clip_path) or last_still
+                same_photo_run = 0
                 scene_sources.append("banco")
 
             # i < original_scene_count: a cena de CTA (adicionada por código,
