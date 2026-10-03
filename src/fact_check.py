@@ -231,9 +231,17 @@ def review_script(
         # sem fonte não existe "fora da fonte"
         raw_problems = [p for p in raw_problems if p["tipo"] != "fora_da_fonte"]
 
+    narration_words = set(re.findall(r"\w+", " ".join(sc.get("narration", "") for sc in script.get("scenes", [])).lower()))
     problems = []
     for p in raw_problems:
         term = str(p.get("termo", "")).strip()
+        if p["tipo"] == "deboche":
+            # modelo fraco acusava deboche que estava só na FONTE (job 253 e
+            # 255): só vale se as palavras do trecho acusado estão na narração
+            words = {w for w in re.findall(r"\w+", term.lower()) if len(w) > 3}
+            if words and len(words & narration_words) / len(words) < 0.6:
+                log.info("deboche apontado não está no roteiro (%r) — ignorado", term)
+                continue
         if p["tipo"] in _SEARCHABLE and term and not (facts or web_facts) and _confirmed_online(term, strict=p["tipo"] != "ferramenta_inexistente"):
             log.info("revisor não conhecia %r, mas a busca confirmou — ok", term)
             continue
