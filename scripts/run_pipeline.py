@@ -573,7 +573,11 @@ def run(
             # foto dela. Antes caía no banco de vídeos, que pra futebol só
             # tem clube estrangeiro (Barcelona, Beşiktaş, Wolfsburg).
             news_frame = None
-            if news_photos and i < original_scene_count:
+            if i >= original_scene_count:
+                # cena de CTA (like/inscrição): cartão fixo do canal — a busca
+                # "thumbs up" no banco trouxe um polegar PRA BAIXO (job 259)
+                news_frame = title_card(channel.channel_title, width, height, channel.accent)
+            elif news_photos:
                 photo = _news_photo_for_scene(scene["narration"], facts, news_photos)
                 if photo is not None:
                     photo_streak = 0
