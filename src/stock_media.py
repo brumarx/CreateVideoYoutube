@@ -75,19 +75,50 @@ def _relevance_score(query: str, descriptive_text: str) -> int:
     return len(query_words & text_words)
 
 
-def _pick_best_candidate(query: str, items: list[dict], kind: str, describe) -> dict:
-    """Escolhe entre os candidatos (até 5, ordem original do Pexels, sempre
+# "football" no Pexels é futebol AMERICANO (capacete, NFL) — visto de verdade
+# num vídeo de futebol. Sem "american" na frente, vira "soccer".
+_FOOTBALL = re.compile(r"\b(?<!american )football\b", re.IGNORECASE)
+
+# candidato cujo slug/alt cita outro esporte ou um clube/patrocínio
+# identificável — num vídeo do Botafogo apareceu escudo do Barcelona,
+# camisa do Beşiktaş (Beko) e o estádio do Wolfsburg.
+_OFF_TOPIC = re.compile(
+    r"american|nfl|rugby|helmet|quarterback|touchdown|baseball|basketball|hockey|cricket|"
+    r"barcelona|barca|real-madrid|atletico-madrid|chelsea|arsenal|liverpool|manchester|juventus|ac-milan|"
+    r"inter-milan|psg|paris-saint|bayern|dortmund|wolfsburg|besiktas|galatasaray|fenerbahce|ajax|benfica|"
+    r"fc-porto|flamengo|corinthians|palmeiras|santos-fc|gremio|boca-juniors|river-plate|messi|ronaldo|"
+    r"neymar|beko|jersey|crest|badge|emblem",
+    re.IGNORECASE,
+)
+# o filtro acima só vale pra busca de esporte — "badge" de polícia ou
+# "american flag" num vídeo de política/curiosidade são legítimos
+_SPORTS_QUERY = re.compile(r"soccer|football|stadium|goal|ball|fans|team|player|match|jersey|shield|crest|coach|referee", re.IGNORECASE)
+
+
+def _normalize_query(query: str) -> str:
+    return _FOOTBALL.sub("soccer", query)
+
+
+def _pick_best_candidate(query: str, items: list[dict], kind: str, describe) -> dict | None:
+    """Escolhe entre os candidatos (até 15, ordem original do Pexels, sempre
     não-vazia — quem chama já garantiu isso) combinando relevância (quantas
     palavras da busca aparecem na descrição do candidato) com "não usado
     recentemente" — nunca falha por causa disso: se todos já saíram
     recentemente, usa o de melhor pontuação mesmo assim, em vez de desistir
     do vídeo real."""
     recent = set(_load_recent().get(kind, []))
+    if _SPORTS_QUERY.search(query):
+        items = [i for i in items if not _OFF_TOPIC.search(describe(i) or "")]
+    if not items:
+        return None
 
-    def score(item: dict) -> tuple[int, int]:
+    def score(item: dict) -> tuple[int, int, int]:
+        # inédito vem ANTES de relevância: com relevância na frente, a mesma
+        # busca devolvia o mesmo clipe 7 vezes no mesmo vídeo (estádio do
+        # Wolfsburg). Relevância > 0 ainda é exigida antes de tudo.
         item_id = str(item.get("id"))
         relevance = _relevance_score(query, describe(item))
-        return (relevance, 0 if item_id not in recent else -1)
+        return (min(relevance, 1), 0 if item_id not in recent else -1, relevance)
 
     return max(items, key=score)
 
@@ -120,6 +151,7 @@ def search_stock_clip(query: str, width: int, height: int) -> Path | None:
     nunca levanta exceção."""
     if not PEXELS_API_KEYS or not query:
         return None
+    query = _normalize_query(query)
 
     orientation = "portrait" if height > width else "landscape"
     rotator = _rotator_for(PEXELS_API_KEYS)
@@ -129,7 +161,7 @@ def search_stock_clip(query: str, width: int, height: int) -> Path | None:
             resp = httpx.get(
                 VIDEO_SEARCH_URL,
                 headers={"Authorization": api_key},
-                params={"query": query, "orientation": orientation, "per_page": 5, "size": "medium"},
+                params={"query": query, "orientation": orientation, "per_page": 15, "size": "medium"},
                 timeout=20,
             )
             if resp.status_code in (401, 403):
@@ -146,6 +178,9 @@ def search_stock_clip(query: str, width: int, height: int) -> Path | None:
             return None
 
         chosen = _pick_best_candidate(query, videos, "video", lambda v: v.get("url", ""))
+        if chosen is None:
+            log.info("pexels: só clipe fora do tema (outro esporte/clube) pra %r", query)
+            return None
         picked = _pick_best_file(chosen, width, height)
         if not picked or not picked.get("link"):
             return None
@@ -176,6 +211,7 @@ def search_stock_photo(query: str, width: int, height: int) -> bytes | None:
     histórica) — devolve None nos mesmos casos de search_stock_clip."""
     if not PEXELS_API_KEYS or not query:
         return None
+    query = _normalize_query(query)
 
     orientation = "portrait" if height > width else "landscape"
     rotator = _rotator_for(PEXELS_API_KEYS)
@@ -185,7 +221,7 @@ def search_stock_photo(query: str, width: int, height: int) -> bytes | None:
             resp = httpx.get(
                 PHOTO_SEARCH_URL,
                 headers={"Authorization": api_key},
-                params={"query": query, "orientation": orientation, "per_page": 5},
+                params={"query": query, "orientation": orientation, "per_page": 15},
                 timeout=20,
             )
             if resp.status_code in (401, 403):
@@ -202,6 +238,9 @@ def search_stock_photo(query: str, width: int, height: int) -> bytes | None:
             return None
 
         chosen = _pick_best_candidate(query, photos, "photo", lambda p: p.get("alt", ""))
+        if chosen is None:
+            log.info("pexels: só foto fora do tema (outro esporte/clube) pra %r", query)
+            return None
         src = chosen.get("src", {})
         url = src.get("large2x") or src.get("original") or src.get("large")
         if not url:

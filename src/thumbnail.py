@@ -313,6 +313,7 @@ def make_thumbnail(
     output_path: Path,
     accent: str = "#ffffff",
     real_photo_url: str | None = None,
+    fallback_frame: Path | None = None,
 ) -> Path:
     """`hook_text` deve ser curto (2-4 palavras); `*palavra*` marca o que
     vai em amarelo. `real_photo_url` (foto OFICIAL de deputado/senador/
@@ -325,8 +326,16 @@ def make_thumbnail(
     na cor do canal."""
     photo = _fetch_real_photo(real_photo_url) if real_photo_url else None
     if photo is None:
-        raw = generate_image(prompt, width=THUMB_WIDTH, height=THUMB_HEIGHT)
-        photo = Image.open(io.BytesIO(raw)).convert("RGB")
+        try:
+            raw = generate_image(prompt, width=THUMB_WIDTH, height=THUMB_HEIGHT)
+            photo = Image.open(io.BytesIO(raw)).convert("RGB")
+        except Exception:
+            # Pollinations fora (402/500) derrubava o job DEPOIS do vídeo
+            # pronto — em 03/10 os 3 vídeos do dia morreram aqui. Um frame
+            # do próprio vídeo é melhor que nenhum vídeo publicado.
+            if fallback_frame is None or not fallback_frame.exists():
+                raise
+            photo = Image.open(fallback_frame).convert("RGB")
     img = _cutout_composite(photo, _hex_to_rgb(accent)) or _background(photo)
 
     img = ImageEnhance.Contrast(img).enhance(1.2)

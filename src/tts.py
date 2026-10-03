@@ -73,7 +73,19 @@ def _for_speech(text: str) -> tuple[str, list[tuple[str, str]]]:
         return word.capitalize()
 
     text = _PRON_RE.sub(lambda m: PRONUNCIATIONS[next(k for k in PRONUNCIATIONS if k.lower() == m[1].lower())], text)
+    text = _versus(text)
     return _CAPS_WORD.sub(caps, text), trocas
+
+
+# "Botafogo x Vasco" a voz lia "Botafogo xis Vasco"; placar "2 x 1" vira
+# "2 a 1" (como o narrador fala), confronto vira "contra".
+_PLACAR_X = re.compile(r"\b(\d+)\s*[xX×]\s*(\d+)\b")
+# só entre nomes próprios ("Botafogo x Vasco"), não "eixo x do gráfico"
+_CONFRONTO_X = re.compile(r"\b([A-ZÀ-Ý][\w-]*)\s+[xX×]\s+(?=[A-ZÀ-Ý])")
+
+
+def _versus(text: str) -> str:
+    return _CONFRONTO_X.sub(r"\1 contra ", _PLACAR_X.sub(r"\1 a \2", text))
 
 
 def _join_domains(word_boundaries: list[dict]) -> list[dict]:
