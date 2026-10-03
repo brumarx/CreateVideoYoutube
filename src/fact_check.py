@@ -60,10 +60,11 @@ abaixo ANTES de ele virar vídeo. Aponte SÓ problemas concretos destes tipos:
   mas as FONTES não trazem esse dado.
 - "acusacao_sem_base": acusa pessoa ou instituição identificável de
   irregularidade, desvio ou crime sem dado concreto nas FONTES.
-- "data_desatualizada": trata como atual/recente um ano, versão ou fato
-  que já é passado (ex.: "em 2024", "este ano de 2025", "o lançamento mais
+- "data_desatualizada": trata como ATUAL/RECENTE um ano, versão ou fato
+  que já é passado (ex.: "este ano de 2025", "neste 2024", "o lançamento mais
   recente é X" quando já existe coisa mais nova), ou chama de "novidade" algo
-  antigo. HOJE É {today}.
+  antigo. Citar o ano de um acontecimento passado como passado ("em 2024,
+  uma câmera registrou...") está CERTO e NÃO é problema. HOJE É {today}.
 - "titulo_enganoso": o título promete algo que o roteiro não entrega (ex.:
   promete "5 gastos revelados pelos dados" e não mostra dado nenhum), ou
   distorce a fonte (ex.: "a saída de Fulano" quando a fonte diz que ele já

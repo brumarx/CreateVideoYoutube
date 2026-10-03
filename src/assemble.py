@@ -182,6 +182,17 @@ def _caption_filter(narration: str, duration: float, width: int, height: int) ->
     return "".join(parts)
 
 
+def _estimated_word_times(text: str, duration: float) -> list[dict]:
+    words = text.split()
+    total = sum(len(w) + 2 for w in words) or 1
+    out, t = [], 0.0
+    for w in words:
+        dur = duration * (len(w) + 2) / total
+        out.append({"text": w, "start": t, "end": t + dur})
+        t += dur
+    return out
+
+
 def _ass_time(seconds: float) -> str:
     seconds = max(seconds, 0.0)
     h = int(seconds // 3600)
@@ -465,6 +476,16 @@ def _overlay_filter_suffix(
     vídeo real (src/stock_media.py) — legenda, selo de lista e marca
     d'água não dependem de como o vídeo de fundo foi gerado."""
     suffix = COLOR_GRADE_SUFFIX
+    # padrão único da casa em TODOS os canais (legenda, selo, número de
+    # lista, barra): antes cada canal usava o próprio accent e o Botafogo
+    # (#e5e5e5) parecia "sem cor" do lado dos outros
+    accent = CAPTION_HIGHLIGHT
+    if not word_boundaries and caption and ass_path is not None:
+        # sem tempo real de palavra (edge-tts não mandou WordBoundary):
+        # estima o tempo de cada palavra pelo tamanho dela e usa a MESMA
+        # legenda karaokê — o fallback antigo (drawtext) saía todo branco,
+        # sem destaque, diferente do resto
+        word_boundaries = _estimated_word_times(caption, duration)
     if list_number is not None:
         suffix += _list_number_filter(list_number, height, accent)
     if stat_overlay:

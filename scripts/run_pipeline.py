@@ -37,6 +37,7 @@ from src.stock_media import search_stock_clip, search_stock_photo
 from src.thumbnail import make_thumbnail, photo_scene_frame
 from src.topics import pick_topic
 from src.tts import narrate
+from src.visual_check import matches_scene
 from src.upload import UPLOAD_META_FILE, after_upload_status, post_comment, top_channel_videos, upload_video
 from src.visuals import generate_image
 
@@ -127,6 +128,16 @@ def _sized_for_facts(facts: dict, scenes: int | None, min_minutes: float, max_mi
     if not n or scenes is None:
         return scenes, min_minutes, max_minutes
     return min(scenes, 2 * n + 2), min(min_minutes, 1.5), min(max_minutes, 3)
+
+
+def _clip_still(path: Path) -> bytes | None:
+    """Frame limpo (sem legenda) do clipe aprovado — reserva pra repetir se
+    uma cena seguinte ficar sem imagem."""
+    out = subprocess.run(
+        ["ffmpeg", "-v", "error", "-ss", "1", "-i", str(path), "-frames:v", "1", "-f", "image2", "-c:v", "png", "pipe:1"],
+        capture_output=True, check=False,
+    ).stdout
+    return out or None
 
 
 def _chapter_starts(n: int) -> list[int]:
@@ -394,13 +405,23 @@ def run(
                 if idx > 0:
                     chapter_banners[idx] = {"index": n_part, "total": len(starts)}
 
+        visual_context = f"Canal: {channel.channel_title} — {channel.niche}.\nTema do vídeo: {topic}."
         scene_videos = []
         scene_durations = []
         last_news_photo: dict | None = None
+        last_still: bytes | None = None  # último visual aprovado (reserva se a IA de imagem cair)
         for i, scene in enumerate(script["scenes"]):
             log.info("[%s] cena %d/%d", job_id, i + 1, len(script["scenes"]))
             audio_path = work_dir / f"scene_{i}.mp3"
             _, word_boundaries = narrate(scene["narration"], audio_path, voice=tts_voice)
+
+            # toda imagem/clipe real passa por um modelo de visão antes de
+            # entrar: tem que combinar com o que ESTA cena narra (vídeos de
+            # 03/10: escudo do Barcelona, futebol americano, camisa do
+            # Beşiktaş num vídeo do Botafogo). None = checagem fora do ar:
+            # aceita (o filtro de outro esporte/clube do stock_media segue).
+            def in_context(image: bytes, _narration: str = scene["narration"]) -> bool | None:
+                return matches_scene(image, _narration, visual_context)
             scene_durations.append(_ffprobe_duration(audio_path))
 
             # Cascata de conteúdo visual, do mais vivo/crível pro último recurso:
@@ -441,25 +462,41 @@ def run(
             if news_photos and i < original_scene_count:
                 photo = _news_photo_for_scene(scene["narration"], facts, news_photos) or last_news_photo
                 if photo:
-                    last_news_photo = photo
-                    news_frame = photo_scene_frame(photo["url"], width, height)
+                    frame = photo_scene_frame(photo["url"], width, height)
+                    if frame is not None and in_context(frame) is not False:
+                        last_news_photo = photo
+                        news_frame = frame
 
             stock_clip_path = None
             if news_frame is None and stock_query:
-                stock_clip_path = search_stock_clip(stock_query, width, height)
+                stock_clip_path = search_stock_clip(stock_query, width, height, check=in_context)
 
             image_path = None
             if news_frame is not None:
                 image_path = work_dir / f"scene_{i}.png"
                 image_path.write_bytes(news_frame)
+                last_still = news_frame
             elif stock_clip_path is None:
-                image_bytes = search_stock_photo(stock_query, width, height) if stock_query else None
+                image_bytes = search_stock_photo(stock_query, width, height, check=in_context) if stock_query else None
                 if image_bytes is None:
-                    # pede a imagem já no formato final do vídeo — pedir quadrado
-                    # e esticar depois no ffmpeg distorcia e borrava tudo
-                    image_bytes = generate_image(scene["image_prompt"], width=width, height=height)
+                    # imagem de IA sai do prompt da PRÓPRIA cena — no contexto
+                    # por construção. Pede já no formato final do vídeo (pedir
+                    # quadrado e esticar no ffmpeg distorcia e borrava tudo).
+                    try:
+                        image_bytes = generate_image(scene["image_prompt"], width=width, height=height)
+                    except Exception:
+                        # IA de imagem fora (Pollinations 402/500): repete o
+                        # último visual JÁ APROVADO do vídeo em vez de derrubar
+                        # o job ou pôr imagem sem checagem
+                        if last_still is None:
+                            raise
+                        log.warning("[%s] cena %d sem imagem no contexto — repetindo a anterior", job_id, i + 1)
+                        image_bytes = last_still
                 image_path = work_dir / f"scene_{i}.png"
                 image_path.write_bytes(image_bytes)
+                last_still = image_bytes
+            else:
+                last_still = _clip_still(stock_clip_path) or last_still
 
             # i < original_scene_count: a cena de CTA (adicionada por código,
             # depois das da LLM) nunca é uma das cenas numeradas da lista.

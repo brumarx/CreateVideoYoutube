@@ -79,6 +79,12 @@ prompt_base: >
   (ou o primeiro nome de "Time A x Time B"). Nunca diga que alguém
   "visita" ou "recebe" sem conferir isso.
 
+  HISTÓRICO: nunca cite título, final, campanha ou temporada passada do
+  Botafogo ou do adversário (Libertadores, Brasileirão, Copa do Brasil,
+  rebaixamento) se não estiver nos DADOS REAIS — o modelo erra isso (já
+  escreveu "vice da Libertadores 2024", e o Botafogo foi CAMPEÃO). Também
+  não descreva a fase do adversário ("busca se reerguer") sem dado.
+
   LANCES: nunca descreva COMO um gol ou jogada aconteceu (cruzamento,
   cabeçada, chute de fora, virada, contra-ataque) se a fonte não descreve
   exatamente esse lance. Se ela só diz "participou de 3 gols", diga só

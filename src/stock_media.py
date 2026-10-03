@@ -20,11 +20,13 @@ import logging
 import re
 import tempfile
 from pathlib import Path
+from typing import Callable
 
 import httpx
 
 from .config import PEXELS_API_KEYS
 from .providers import _rotator_for
+from .visual_check import frames_from_clip
 
 log = logging.getLogger("stock_media")
 
@@ -99,18 +101,13 @@ def _normalize_query(query: str) -> str:
     return _FOOTBALL.sub("soccer", query)
 
 
-def _pick_best_candidate(query: str, items: list[dict], kind: str, describe) -> dict | None:
-    """Escolhe entre os candidatos (até 15, ordem original do Pexels, sempre
-    não-vazia — quem chama já garantiu isso) combinando relevância (quantas
-    palavras da busca aparecem na descrição do candidato) com "não usado
-    recentemente" — nunca falha por causa disso: se todos já saíram
-    recentemente, usa o de melhor pontuação mesmo assim, em vez de desistir
-    do vídeo real."""
+def _rank_candidates(query: str, items: list[dict], kind: str, describe) -> list[dict]:
+    """Candidatos em ordem de preferência (relevância > 0, inédito, mais
+    relevante), sem os de outro esporte/clube numa busca de esporte. Lista
+    vazia se só sobrou candidato fora do tema."""
     recent = set(_load_recent().get(kind, []))
     if _SPORTS_QUERY.search(query):
         items = [i for i in items if not _OFF_TOPIC.search(describe(i) or "")]
-    if not items:
-        return None
 
     def score(item: dict) -> tuple[int, int, int]:
         # inédito vem ANTES de relevância: com relevância na frente, a mesma
@@ -120,7 +117,11 @@ def _pick_best_candidate(query: str, items: list[dict], kind: str, describe) -> 
         relevance = _relevance_score(query, describe(item))
         return (min(relevance, 1), 0 if item_id not in recent else -1, relevance)
 
-    return max(items, key=score)
+    return sorted(items, key=score, reverse=True)
+
+
+# quantos candidatos a checagem visual olha antes de desistir da busca
+MAX_VISUAL_TRIES = 4
 
 
 def _pick_best_file(video: dict, width: int, height: int) -> dict | None:
@@ -143,7 +144,7 @@ def _pick_best_file(video: dict, width: int, height: int) -> dict | None:
     return min(files, key=score)
 
 
-def search_stock_clip(query: str, width: int, height: int) -> Path | None:
+def search_stock_clip(query: str, width: int, height: int, check: Callable[[bytes], bool | None] | None = None) -> Path | None:
     """Busca um clipe real que combine com `query` (2-4 palavras em
     inglês, ver script_gen.py -> stock_query) e devolve o caminho local do
     arquivo baixado — ou None (sem chave configurada, sem resultado, ou
@@ -177,32 +178,35 @@ def search_stock_clip(query: str, width: int, height: int) -> Path | None:
             log.info("pexels sem resultado pra: %r", query)
             return None
 
-        chosen = _pick_best_candidate(query, videos, "video", lambda v: v.get("url", ""))
-        if chosen is None:
-            log.info("pexels: só clipe fora do tema (outro esporte/clube) pra %r", query)
-            return None
-        picked = _pick_best_file(chosen, width, height)
-        if not picked or not picked.get("link"):
-            return None
-
-        try:
-            video_resp = httpx.get(picked["link"], timeout=60, follow_redirects=True)
-            video_resp.raise_for_status()
-        except Exception as exc:
-            log.warning("download do clipe pexels falhou (%r): %s", query, exc)
-            return None
-
-        tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
-        tmp.write(video_resp.content)
-        tmp.close()
-        _mark_recent("video", str(chosen.get("id")))
-        log.info("clipe real encontrado pra %r (%sx%s)", query, picked.get("width"), picked.get("height"))
-        return Path(tmp.name)
+        for chosen in _rank_candidates(query, videos, "video", lambda v: v.get("url", ""))[:MAX_VISUAL_TRIES]:
+            picked = _pick_best_file(chosen, width, height)
+            if not picked or not picked.get("link"):
+                continue
+            try:
+                video_resp = httpx.get(picked["link"], timeout=60, follow_redirects=True)
+                video_resp.raise_for_status()
+            except Exception as exc:
+                log.warning("download do clipe pexels falhou (%r): %s", query, exc)
+                continue
+            tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+            tmp.write(video_resp.content)
+            tmp.close()
+            path = Path(tmp.name)
+            if check is not None:
+                frames = frames_from_clip(path)
+                if frames is None or check(frames) is False:
+                    path.unlink(missing_ok=True)
+                    continue
+            _mark_recent("video", str(chosen.get("id")))
+            log.info("clipe real encontrado pra %r (%sx%s)", query, picked.get("width"), picked.get("height"))
+            return path
+        log.info("pexels: nenhum clipe no contexto da cena pra %r", query)
+        return None
 
     return None
 
 
-def search_stock_photo(query: str, width: int, height: int) -> bytes | None:
+def search_stock_photo(query: str, width: int, height: int, check: Callable[[bytes], bool | None] | None = None) -> bytes | None:
     """Busca uma FOTO real que combine com `query` e devolve os bytes da
     imagem — mesma interface de src.visuals.generate_image, pra ser
     intercambiável no lugar dela. Meio-termo da cascata: mais crível que
@@ -237,24 +241,23 @@ def search_stock_photo(query: str, width: int, height: int) -> bytes | None:
             log.info("pexels sem foto pra: %r", query)
             return None
 
-        chosen = _pick_best_candidate(query, photos, "photo", lambda p: p.get("alt", ""))
-        if chosen is None:
-            log.info("pexels: só foto fora do tema (outro esporte/clube) pra %r", query)
-            return None
-        src = chosen.get("src", {})
-        url = src.get("large2x") or src.get("original") or src.get("large")
-        if not url:
-            return None
-
-        try:
-            photo_resp = httpx.get(url, timeout=30, follow_redirects=True)
-            photo_resp.raise_for_status()
-        except Exception as exc:
-            log.warning("download da foto pexels falhou (%r): %s", query, exc)
-            return None
-
-        _mark_recent("photo", str(chosen.get("id")))
-        log.info("foto real encontrada pra %r", query)
-        return photo_resp.content
+        for chosen in _rank_candidates(query, photos, "photo", lambda p: p.get("alt", ""))[:MAX_VISUAL_TRIES]:
+            src = chosen.get("src", {})
+            url = src.get("large2x") or src.get("original") or src.get("large")
+            if not url:
+                continue
+            try:
+                photo_resp = httpx.get(url, timeout=30, follow_redirects=True)
+                photo_resp.raise_for_status()
+            except Exception as exc:
+                log.warning("download da foto pexels falhou (%r): %s", query, exc)
+                continue
+            if check is not None and check(photo_resp.content) is False:
+                continue
+            _mark_recent("photo", str(chosen.get("id")))
+            log.info("foto real encontrada pra %r", query)
+            return photo_resp.content
+        log.info("pexels: nenhuma foto no contexto da cena pra %r", query)
+        return None
 
     return None
