@@ -87,12 +87,79 @@ def frames_from_clip(path: Path) -> bytes | None:
         return None
 
 
-def matches_scene(image: bytes, narration: str, context: str) -> bool | None:
+def _gemini(prompt: str, jpeg: bytes) -> str | None:
     keys = LLMKeys().gemini
-    if not keys or not image:
+    if not keys:
+        return None
+    body = {
+        "contents": [{"parts": [{"text": prompt}, {"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(jpeg).decode()}}]}],
+        "generationConfig": {"temperature": 0},
+    }
+    rotator = _rotator_for(keys)
+    for model in _MODELS:
+        for key in rotator.order():
+            try:
+                resp = httpx.post(_URL.format(model=model), params={"key": key}, json=body, timeout=120)
+                if resp.status_code in (401, 403):
+                    rotator.ban(key)
+                    continue
+                if resp.status_code == 200:
+                    return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+            except Exception as exc:  # noqa: BLE001
+                log.warning("visão gemini (%s) falhou: %s", model, exc)
+    return None
+
+
+# reserva quando a cota grátis do Gemini acaba (aconteceu em 03/10 à tarde,
+# as 3 chaves com 429 — a checagem visual ficou desligada e passou vídeo
+# com notícia do BAIRRO Botafogo e a mesma imagem em 9 de 16 cenas)
+_OPENAI_COMPAT_VISION = [
+    ("mistral", "https://api.mistral.ai/v1/chat/completions", ["mistral-small-latest"]),
+    ("openrouter", "https://openrouter.ai/api/v1/chat/completions", ["google/gemma-4-31b-it:free", "qwen/qwen3.8-27b:free"]),
+]
+
+
+def _openai_compat(prompt: str, jpeg: bytes) -> str | None:
+    llm = LLMKeys()
+    data_url = "data:image/jpeg;base64," + base64.b64encode(jpeg).decode()
+    for provider, url, models in _OPENAI_COMPAT_VISION:
+        keys = getattr(llm, provider)
+        if not keys:
+            continue
+        rotator = _rotator_for(keys)
+        for model in models:
+            for key in rotator.order():
+                try:
+                    resp = httpx.post(url, headers={"Authorization": f"Bearer {key}"}, timeout=120, json={
+                        "model": model, "temperature": 0,
+                        "messages": [{"role": "user", "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": data_url}},
+                        ]}],
+                    })
+                    if resp.status_code in (401, 403):
+                        rotator.ban(key)
+                        continue
+                    if resp.status_code == 200:
+                        content = resp.json()["choices"][0]["message"]["content"]
+                        if content:
+                            return content
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("visão %s (%s) falhou: %s", provider, model, exc)
+    return None
+
+
+def ask_vision(prompt: str, jpeg: bytes) -> str | None:
+    """Resposta de texto de um modelo com visão: Gemini, depois Mistral,
+    depois OpenRouter grátis. None se nenhum respondeu."""
+    return _gemini(prompt, jpeg) or _openai_compat(prompt, jpeg)
+
+
+def matches_scene(image: bytes, narration: str, context: str) -> bool | None:
+    if not image:
         return None
     try:
-        data = base64.b64encode(_jpeg(Image.open(io.BytesIO(image)))).decode()
+        jpeg = _jpeg(Image.open(io.BytesIO(image)))
     except Exception:  # noqa: BLE001 — imagem ilegível: não usa
         return False
     prompt = (
@@ -102,29 +169,17 @@ def matches_scene(image: bytes, narration: str, context: str) -> bool | None:
         f"sem sair do contexto?\n{_RULES}\n\n"
         'Responda SÓ JSON: {"ok": true ou false, "motivo": "1 frase"}'
     )
-    body = {
-        "contents": [{"parts": [{"text": prompt}, {"inline_data": {"mime_type": "image/jpeg", "data": data}}]}],
-        "generationConfig": {"temperature": 0},
-    }
-    rotator = _rotator_for(keys)
-    for model in _MODELS:
-        for key in rotator.order():
-            try:
-                resp = httpx.post(_URL.format(model=model), params={"key": key}, json=body, timeout=60)
-                if resp.status_code in (401, 403):
-                    rotator.ban(key)
-                    continue
-                if resp.status_code != 200:
-                    continue  # 429/503: próxima chave/modelo
-                text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-                m = re.search(r"\{.*\}", text, re.DOTALL)
-                verdict = json.loads(m.group(0)) if m else {}
-            except Exception as exc:  # noqa: BLE001
-                log.warning("checagem visual (%s) falhou: %s", model, exc)
-                continue
-            if isinstance(verdict.get("ok"), bool):
-                if not verdict["ok"]:
-                    log.info("imagem fora de contexto: %s", verdict.get("motivo"))
-                return verdict["ok"]
-    log.warning("checagem visual indisponível (todas as chaves/modelos falharam)")
-    return None
+    text = ask_vision(prompt, jpeg)
+    if text is None:
+        log.warning("checagem visual indisponível (gemini, mistral e openrouter falharam)")
+        return None
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    try:
+        verdict = json.loads(m.group(0)) if m else {}
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(verdict.get("ok"), bool):
+        return None
+    if not verdict["ok"]:
+        log.info("imagem fora de contexto: %s", verdict.get("motivo"))
+    return verdict["ok"]

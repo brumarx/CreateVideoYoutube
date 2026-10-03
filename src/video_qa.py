@@ -13,7 +13,6 @@ a parte visual e loga.
 """
 from __future__ import annotations
 
-import base64
 import io
 import json
 import logging
@@ -21,12 +20,9 @@ import re
 import subprocess
 from pathlib import Path
 
-import httpx
 from PIL import Image, ImageDraw, ImageFont
 
-from .config import LLMKeys
-from .providers import _rotator_for
-from .visual_check import _MODELS, _RULES, _URL
+from .visual_check import _RULES, ask_vision
 
 log = logging.getLogger("video_qa")
 
@@ -109,9 +105,6 @@ def _sheet(frames: list[tuple[int, Image.Image]]) -> bytes:
 
 
 def _vision_batch(frames: list[tuple[int, Image.Image]], narrations: dict[int, str], context: str) -> list[dict] | None:
-    keys = LLMKeys().gemini
-    if not keys:
-        return None
     falas = "\n".join(f'Cena {n}: "{narrations[n]}"' for n, _ in frames)
     prompt = (
         f"Você revisa um vídeo do YouTube antes de publicar.\n{context}\n\n"
@@ -120,34 +113,18 @@ def _vision_batch(frames: list[tuple[int, Image.Image]], narrations: dict[int, s
         f"Para cada cena, o frame ilustra a narração sem sair do contexto?\n{_RULES}\n\n"
         'Responda SÓ JSON: {"cenas": [{"cena": numero, "ok": true ou false, "motivo": "1 frase"}]}'
     )
-    body = {
-        "contents": [{"parts": [
-            {"text": prompt},
-            {"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(_sheet(frames)).decode()}},
-        ]}],
-        "generationConfig": {"temperature": 0},
-    }
-    rotator = _rotator_for(keys)
-    for model in _MODELS:
-        for key in rotator.order():
-            try:
-                resp = httpx.post(_URL.format(model=model), params={"key": key}, json=body, timeout=120)
-                if resp.status_code in (401, 403):
-                    rotator.ban(key)
-                    continue
-                if resp.status_code != 200:
-                    continue
-                text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-                m = re.search(r"\{.*\}", text, re.DOTALL)
-                cenas = json.loads(m.group(0)).get("cenas") if m else None
-                if isinstance(cenas, list):
-                    return cenas
-            except Exception as exc:  # noqa: BLE001
-                log.warning("revisão visual (%s) falhou: %s", model, exc)
-    return None
+    text = ask_vision(prompt, _sheet(frames))
+    if text is None:
+        return None
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    try:
+        cenas = json.loads(m.group(0)).get("cenas") if m else None
+    except json.JSONDecodeError:
+        return None
+    return cenas if isinstance(cenas, list) else None
 
 
-def review_video(narrations: list[str], scene_videos: list[Path], context: str) -> list[str]:
+def review_video(narrations: list[str], scene_videos: list[Path], context: str, strict_visual: bool = False) -> list[str]:
     problems: list[str] = []
 
     dup = repeated_sentences(narrations)
@@ -164,6 +141,11 @@ def review_video(narrations: list[str], scene_videos: list[Path], context: str) 
     for start in range(0, len(numbered), _BATCH):
         verdicts = _vision_batch(numbered[start:start + _BATCH], by_num, context)
         if verdicts is None:
+            if strict_visual:
+                # canal de futebol: sem olhar as imagens, o risco de clube
+                # errado/outro esporte é alto demais pra subir no escuro
+                problems.append("revisão visual indisponível (nenhum modelo de visão respondeu)")
+                break
             log.warning("revisão visual indisponível pras cenas %d+ — seguindo sem ela", start + 1)
             continue
         for v in verdicts:

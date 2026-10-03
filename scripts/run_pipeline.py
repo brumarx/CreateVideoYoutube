@@ -418,6 +418,7 @@ def run(
         scene_durations = []
         last_news_photo: dict | None = None
         last_still: bytes | None = None  # último visual aprovado (reserva se a IA de imagem cair)
+        scene_sources: list[str] = []  # de onde veio o visual de cada cena (revisão final usa)
         for i, scene in enumerate(script["scenes"]):
             log.info("[%s] cena %d/%d", job_id, i + 1, len(script["scenes"]))
             audio_path = work_dir / f"scene_{i}.mp3"
@@ -429,7 +430,10 @@ def run(
             # Beşiktaş num vídeo do Botafogo). None = checagem fora do ar:
             # aceita (o filtro de outro esporte/clube do stock_media segue).
             def in_context(image: bytes, _narration: str = scene["narration"]) -> bool | None:
-                return matches_scene(image, _narration, visual_context)
+                verdict = matches_scene(image, _narration, visual_context)
+                if verdict is None and channel_name == "botafogo":
+                    return False  # futebol sem checagem = risco de outro clube/esporte
+                return verdict
             scene_durations.append(_ffprobe_duration(audio_path))
 
             # Cascata de conteúdo visual, do mais vivo/crível pro último recurso:
@@ -469,9 +473,16 @@ def run(
             news_frame = None
             if news_photos and i < original_scene_count:
                 photo = _news_photo_for_scene(scene["narration"], facts, news_photos) or last_news_photo
+                if photo is None and channel_name == "botafogo":
+                    # abertura antes de qualquer notícia casar: foto da 1ª
+                    # notícia (o gancho é ela) em vez de clipe de banco, que
+                    # pra futebol só tem clube estrangeiro
+                    photo = news_photos[0]
                 if photo:
                     frame = photo_scene_frame(photo["url"], width, height)
-                    if frame is not None and in_context(frame) is not False:
+                    # foto da PRÓPRIA matéria: só sai se a visão disser que não
+                    # combina (indisponível não bloqueia — é do assunto por construção)
+                    if frame is not None and matches_scene(frame, scene["narration"], visual_context) is not False:
                         last_news_photo = photo
                         news_frame = frame
 
@@ -484,6 +495,7 @@ def run(
                 image_path = work_dir / f"scene_{i}.png"
                 image_path.write_bytes(news_frame)
                 last_still = news_frame
+                scene_sources.append("noticia")
             elif stock_clip_path is None:
                 image_bytes = search_stock_photo(stock_query, width, height, check=in_context) if stock_query else None
                 if image_bytes is None:
@@ -507,11 +519,17 @@ def run(
                             raise
                         log.warning("[%s] cena %d sem imagem no contexto — repetindo a anterior", job_id, i + 1)
                         image_bytes = last_still
+                        scene_sources.append("repetida")
+                    else:
+                        scene_sources.append("ia")
+                else:
+                    scene_sources.append("banco")
                 image_path = work_dir / f"scene_{i}.png"
                 image_path.write_bytes(image_bytes)
                 last_still = image_bytes
             else:
                 last_still = _clip_still(stock_clip_path) or last_still
+                scene_sources.append("banco")
 
             # i < original_scene_count: a cena de CTA (adicionada por código,
             # depois das da LLM) nunca é uma das cenas numeradas da lista.
@@ -556,7 +574,12 @@ def run(
         # 03/10 foram 16 vídeos apagados do YouTube depois de publicados.
         # Reprovado: sem video_path (o retry_uploads nunca sobe) e exit 3
         # (o daily_run tenta outro tema).
-        qa_problems = review_video([s["narration"] for s in script["scenes"]], scene_videos, visual_context)
+        qa_problems = review_video(
+            [s["narration"] for s in script["scenes"]], scene_videos, visual_context,
+            # futebol com clipe de banco/IA precisa de olho; vídeo só com
+            # foto das matérias (do próprio assunto) dispensa
+            strict_visual=channel_name == "botafogo" and any(src in ("banco", "ia") for src in scene_sources),
+        )
         if qa_problems:
             for p in qa_problems:
                 log.warning("[%s] revisão do vídeo: %s", job_id, p)
