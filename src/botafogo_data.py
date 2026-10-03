@@ -427,6 +427,17 @@ def _story_text(html: str) -> str:
     return text
 
 
+# aviso de rodapé/chamada do site que o extrator deixa passar e a narração
+# lia em voz alta (job 229: "os comentários não representam a opinião do
+# jornal e são de responsabilidade do autor")
+_RODAPE = re.compile(
+    r"[^.!?]*(coment[aá]rios n[aã]o representam|responsabilidade (exclusiva )?d[oe]s? autor|leia (tamb[eé]m|mais)"
+    r"|siga o .{0,40} n[oa]s? (redes|instagram|x\b)|clique aqui|inscreva-se|assine (j[aá]|o)|receba as not[ií]cias"
+    r"|todos os direitos reservados)[^.!?]*[.!?]?",
+    re.IGNORECASE,
+)
+
+
 def _texto_da_fonte(url: str | None) -> str:
     """Texto da matéria original (sem menu/anúncio/rodapé, via trafilatura)
     pra notícia agregada que chega do portal só com o título. "" se não deu
@@ -441,6 +452,7 @@ def _texto_da_fonte(url: str | None) -> str:
         })
         resp.raise_for_status()
         texto = re.sub(r"\s+", " ", trafilatura.extract(resp.text) or "").strip()
+        texto = _RODAPE.sub("", texto).strip()
     except Exception as exc:  # noqa: BLE001 — site fora/bloqueando: pula a notícia
         log.warning("texto da fonte indisponível (%s): %s", url, exc)
         return ""
@@ -583,7 +595,9 @@ def _portal_photo_ok(url: str, published) -> bool:
 # o Botafogo-PB e o córrego Botafogo de Goiânia (O Popular) — já saíram no
 # vídeo do Fogão como se fossem notícia do clube.
 _OUTRO_BOTAFOGO = re.compile(
-    r"botafogo ?(-|\()(sp|pb)\b|ribeir[aã]o preto|pantera|c[oó]rrego|goi[aâ]nia|jo[aã]o pessoa|belo jardim",
+    r"botafogo ?(-|\()(sp|pb)\b|ribeir[aã]o preto|pantera|c[oó]rrego|goi[aâ]nia|jo[aã]o pessoa|belo jardim"
+    # o BAIRRO Botafogo (job 229: chuva, árvore caída na Rua São Clemente)
+    r"|\brua\b|bairro|chuva|alagamento|bols[oõ]es|[aá]rvore|tr[aâ]nsito|tiroteio|assalto|zona sul|praia de botafogo|enseada",
     re.IGNORECASE,
 )
 _OUTRO_BOTAFOGO_FONTES = ("futebolinterior.com.br", "opopular.com.br")
