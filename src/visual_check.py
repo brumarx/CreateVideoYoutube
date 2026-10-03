@@ -40,7 +40,10 @@ _RULES = """Responda NÃO (ok=false) se a imagem:
   que a cena cita (ex.: camisa do Barcelona num vídeo do Botafogo);
 - mostra pessoa/lugar/objeto específico que contradiz a narração, ou um
   assunto sem relação nenhuma com ela (ex.: papel em branco pra "escudo");
-- tem texto, logo ou marca em destaque que não tem a ver com a cena.
+- tem texto, logo ou marca em destaque que não tem a ver com a cena;
+- mostra um jogador/atleta em close, de uniforme com escudo (real ou
+  imitação) — num vídeo de notícia parece um jogador de verdade do clube
+  que não existe (imagem de IA de "jogador do Botafogo" é sempre NÃO).
 Imagem genérica mas coerente com o assunto e o clima da cena (estádio sem
 clube identificável, bola, torcida genérica, pessoa num escritório numa
 cena sobre trabalho) está OK."""
