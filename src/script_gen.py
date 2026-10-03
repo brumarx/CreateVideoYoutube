@@ -258,6 +258,19 @@ def _drop_repeated_scenes(script: dict) -> dict:
     return {**script, "scenes": kept}
 
 
+def _filler_phrase(script: dict, min_scenes: int = 4) -> str | None:
+    """Sequência de 4 palavras que aparece em `min_scenes`+ cenas — bordão de
+    enchimento ("isso mostra a importância", "o botafogo tem um"). Ignora
+    nome próprio repetido sozinho porque exige 4 palavras seguidas."""
+    count: dict[tuple[str, ...], int] = {}
+    for scene in script.get("scenes", []):
+        words = re.findall(r"\w+", scene.get("narration", "").lower())
+        for gram in {tuple(words[i:i + 4]) for i in range(len(words) - 3)}:
+            count[gram] = count.get(gram, 0) + 1
+    worst = max(count.items(), key=lambda kv: kv[1], default=(None, 0))
+    return " ".join(worst[0]) if worst[0] and worst[1] >= min_scenes else None
+
+
 def _is_parseable_script(raw: str, required: set[str]) -> bool:
     """Validador passado pra `complete()` — rejeita na hora qualquer
     resposta que não vira roteiro utilizável, pra cascata de provedores já
@@ -423,6 +436,14 @@ def generate_script(
                 raise ValueError(f"JSON do roteiro sem campos {missing}: {script}")
 
             script = _drop_repeated_scenes(script)
+            filler = _filler_phrase(script)
+            if filler:
+                # bordão em toda cena ("isso mostra a importância", job 239)
+                # = enchimento de modelo fraco: tenta de novo, pedindo pra não
+                log.warning("tentativa %d/3: bordão repetido (%r), tentando de novo", attempt + 1, filler)
+                messages = [messages[0], {"role": "user", "content": messages[1]["content"]
+                                          + f"\n\nNÃO use a expressão \"{filler}\" nem frases de enchimento sem fato novo."}]
+                continue
             word_count = sum(len(s.get("narration", "").split()) for s in script["scenes"])
             if min_total_words <= word_count <= max_words_ceiling:
                 return _sanitize_person_images(topic, script)

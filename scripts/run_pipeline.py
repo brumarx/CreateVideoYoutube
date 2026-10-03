@@ -447,6 +447,7 @@ def run(
         scene_videos = []
         scene_durations = []
         last_news_photo: dict | None = None
+        photo_streak = 0  # cenas seguidas herdando a foto da notícia anterior
         last_still: bytes | None = None  # último visual aprovado (reserva se a IA de imagem cair)
         scene_sources: list[str] = []  # de onde veio o visual de cada cena (revisão final usa)
         for i, scene in enumerate(script["scenes"]):
@@ -502,9 +503,18 @@ def run(
             # tem clube estrangeiro (Barcelona, Beşiktaş, Wolfsburg).
             news_frame = None
             if news_photos and i < original_scene_count:
-                photo = _news_photo_for_scene(scene["narration"], facts, news_photos) or last_news_photo
+                photo = _news_photo_for_scene(scene["narration"], facts, news_photos)
+                if photo is not None:
+                    photo_streak = 0
+                elif last_news_photo is not None and photo_streak < 2:
+                    # cena que continua a notícia anterior: no máximo 2 cenas
+                    # seguidas — a camisa de Flamengo/Flu da notícia das bets
+                    # ficou em 9 cenas, inclusive na agenda do Botafogo (job 239)
+                    photo = last_news_photo
+                    photo_streak += 1
                 if photo is None:
-                    # abertura antes de qualquer notícia casar: foto da 1ª
+                    # abertura antes de qualquer notícia casar (ou continuidade
+                    # esgotada): foto da 1ª
                     # notícia (o gancho é ela) em vez de clipe de banco, que
                     # pra futebol só tem clube estrangeiro
                     photo = news_photos[0]
