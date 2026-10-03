@@ -169,7 +169,7 @@ Gere um JSON com exatamente este formato:
   "tags": ["tag1", "tag2", "..."],
   "mood": "clima geral do vídeo pra escolher a música de fundo certa — exatamente um destes valores: 'tenso' (denúncia grave, algo errado/perigoso, suspense), 'animado' (conquista, vitória, dica animadora, virada positiva), 'melancolico' (derrota, perda, resultado triste/decepcionante), 'calmo' (reflexivo, sem tensão nem euforia), 'neutro' (explicativo/factual, sem carga emocional forte definida). Escolha 1 só, o que domina o vídeo como um todo, não cena a cena.",
   "scenes": [
-    {{"narration": "texto que o narrador vai falar nesta cena", "image_prompt": "prompt em inglês, só cenário/objetos/atmosfera — SEM texto, palavras, logos, botões ou UI", "stock_query": "3 a 5 palavras em inglês pra buscar filmagem REAL de banco de vídeo — tem que amarrar num detalhe CONCRETO desta cena específica (o lugar, o objeto, a ação, o tipo de situação), nunca só a categoria genérica do assunto. Exemplo ruim (genérico demais, serve pra qualquer cena do tema): 'soccer stadium', 'empty stadium'. Exemplo bom (amarra no que ESSA cena narra): se a narração fala de gol sofrido no fim do primeiro tempo, 'goalkeeper diving missed save' ou 'soccer net ball entering'; se fala de posse de bola dividida, 'midfield players contesting ball'. NUNCA inclua nome de pessoa real aqui (troque pela ação/objeto/situação sem nomear ninguém). NUNCA peça escudo, camisa, uniforme, logo ou bandeira de time (o banco só tem os de clubes estrangeiros — sai escudo do Barcelona num vídeo do Botafogo); futebol é sempre 'soccer', nunca 'football' (que no banco é futebol americano). Só faz sentido se o que a cena descreve existe filmado de verdade — se for algo abstrato/conceitual que só dá pra ilustrar (um conceito, um gráfico, uma situação boa demais específica da história), deixe null (nunca uma frase vaga tipo 'related to the story' ou 'symbolic shot' — isso não é busca de vídeo, é ausência de busca, então é null mesmo).", "impact_beat": "true APENAS na cena do momento mais chocante/decisivo de todo o vídeo (o gol, o número mais absurdo, a virada) — no máximo 1 cena `true` no roteiro inteiro; todas as outras, false ou omita.", "stat_overlay": "OPCIONAL, deixe null na grande maioria das cenas — só preencha quando ESTA cena citar, no texto da narração, 2 valores comparáveis específicos vindos de DADOS REAIS (ex.: posse de bola de cada time, % de aprovação, participação em votos) — formato exato: {{\"label\": \"o que está sendo comparado\", \"a_label\": \"nome do 1º\", \"a_value\": numero, \"b_label\": \"nome do 2º\", \"b_value\": numero, \"unit\": \"% se for porcentagem, senão a unidade por extenso (pontos, gols, finalizações)\"}}. NUNCA invente ou estime os valores — só use quando estiverem literalmente nos DADOS REAIS."}}
+    {{"narration": "texto que o narrador vai falar nesta cena", "image_prompt": "prompt em inglês, só cenário/objetos/atmosfera — SEM texto, palavras, logos, botões ou UI, e SEM jogador/atleta de uniforme ou escudo de time (vira jogador falso que parece real)", "stock_query": "3 a 5 palavras em inglês pra buscar filmagem REAL de banco de vídeo — tem que amarrar num detalhe CONCRETO desta cena específica (o lugar, o objeto, a ação, o tipo de situação), nunca só a categoria genérica do assunto. Exemplo ruim (genérico demais, serve pra qualquer cena do tema): 'soccer stadium', 'empty stadium'. Exemplo bom (amarra no que ESSA cena narra): se a narração fala de gol sofrido no fim do primeiro tempo, 'goalkeeper diving missed save' ou 'soccer net ball entering'; se fala de posse de bola dividida, 'midfield players contesting ball'. NUNCA inclua nome de pessoa real aqui (troque pela ação/objeto/situação sem nomear ninguém). NUNCA peça escudo, camisa, uniforme, logo ou bandeira de time (o banco só tem os de clubes estrangeiros — sai escudo do Barcelona num vídeo do Botafogo); futebol é sempre 'soccer', nunca 'football' (que no banco é futebol americano). Só faz sentido se o que a cena descreve existe filmado de verdade — se for algo abstrato/conceitual que só dá pra ilustrar (um conceito, um gráfico, uma situação boa demais específica da história), deixe null (nunca uma frase vaga tipo 'related to the story' ou 'symbolic shot' — isso não é busca de vídeo, é ausência de busca, então é null mesmo).", "impact_beat": "true APENAS na cena do momento mais chocante/decisivo de todo o vídeo (o gol, o número mais absurdo, a virada) — no máximo 1 cena `true` no roteiro inteiro; todas as outras, false ou omita.", "stat_overlay": "OPCIONAL, deixe null na grande maioria das cenas — só preencha quando ESTA cena citar, no texto da narração, 2 valores comparáveis específicos vindos de DADOS REAIS (ex.: posse de bola de cada time, % de aprovação, participação em votos) — formato exato: {{\"label\": \"o que está sendo comparado\", \"a_label\": \"nome do 1º\", \"a_value\": numero, \"b_label\": \"nome do 2º\", \"b_value\": numero, \"unit\": \"% se for porcentagem, senão a unidade por extenso (pontos, gols, finalizações)\"}}. NUNCA invente ou estime os valores — só use quando estiverem literalmente nos DADOS REAIS."}}
   ]
 }}
 
@@ -220,6 +220,32 @@ def _extract_json(raw: str) -> dict:
     if not match:
         raise ValueError(f"Resposta do LLM não contém JSON: {raw[:300]}")
     return json.loads(match.group(0))
+
+
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+
+def _norm_sentence(text: str) -> str:
+    return " ".join(re.findall(r"\w+", text.lower()))
+
+
+def _drop_repeated_scenes(script: dict) -> dict:
+    """Tira cena que repete frase de cena anterior. Com pouca notícia e meta
+    de 4 min, o modelo copiava a 1ª metade do roteiro na 2ª (job 222 do
+    Botafogo: os 3 jogos e a camisa da Mizuno narrados 2x, palavra por
+    palavra) — vídeo mais curto é melhor que vídeo repetido."""
+    seen: set[str] = set()
+    kept = []
+    for scene in script.get("scenes", []):
+        sentences = [_norm_sentence(x) for x in _SENTENCE_SPLIT.split(scene.get("narration", ""))]
+        sentences = [x for x in sentences if len(x.split()) >= 6]
+        repeated = sum(1 for x in sentences if x in seen)
+        if sentences and repeated / len(sentences) >= 0.5:
+            log.warning("cena repetida descartada: %s", scene.get("narration", "")[:80])
+            continue
+        seen.update(sentences)
+        kept.append(scene)
+    return {**script, "scenes": kept}
 
 
 def _is_parseable_script(raw: str, required: set[str]) -> bool:
@@ -386,6 +412,7 @@ def generate_script(
             if missing:
                 raise ValueError(f"JSON do roteiro sem campos {missing}: {script}")
 
+            script = _drop_repeated_scenes(script)
             word_count = sum(len(s.get("narration", "").split()) for s in script["scenes"])
             if min_total_words <= word_count <= max_words_ceiling:
                 return _sanitize_person_images(topic, script)

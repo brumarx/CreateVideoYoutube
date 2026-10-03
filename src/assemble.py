@@ -488,6 +488,14 @@ def _overlay_filter_suffix(
         word_boundaries = _estimated_word_times(caption, duration)
     if list_number is not None:
         suffix += _list_number_filter(list_number, height, accent)
+    # barra incompleta/torta do LLM (faltou b_value, valor em texto) derrubou
+    # o job 223 com KeyError — sem os 4 campos numéricos, a cena sai sem barra
+    try:
+        if stat_overlay:
+            float(stat_overlay["a_value"]), float(stat_overlay["b_value"])
+            str(stat_overlay["a_label"]), str(stat_overlay["b_label"])
+    except (KeyError, TypeError, ValueError):
+        stat_overlay = None
     if stat_overlay:
         suffix += _stat_bar_filter(stat_overlay, width, height, accent)
     if chapter_banner:

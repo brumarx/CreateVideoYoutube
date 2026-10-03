@@ -274,6 +274,13 @@ def run(
     max_minutes = channel.long_max_minutes if long_form else channel.short_max_minutes
     if long_form and channel_name == "politica" and facts:
         scenes, min_minutes, max_minutes = _sized_for_facts(facts, scenes, min_minutes, max_minutes)
+    if long_form and facts and facts.get("tipo") == "noticias" and scenes:
+        # dia de notícias do Botafogo: ~40s por notícia. Com 3 notícias e
+        # meta fixa de 4 min, o roteiro repetia metade do vídeo (job 222).
+        n = len(facts.get("noticias") or [])
+        if n:
+            scenes = min(scenes, 3 * n + 2)
+            min_minutes = min(min_minutes, max(1.5, 0.6 * n))
 
     job_id = enqueue(channel_name, topic)
     work_dir = Path(__file__).resolve().parent.parent / "output" / f"job_{job_id}"
@@ -484,6 +491,13 @@ def run(
                     # quadrado e esticar no ffmpeg distorcia e borrava tudo).
                     try:
                         image_bytes = generate_image(scene["image_prompt"], width=width, height=height)
+                        if in_context(image_bytes) is False:
+                            # IA também erra (jogador inventado de uniforme
+                            # com escudo falso, job 222): 2ª chance, depois
+                            # repete o último visual aprovado
+                            image_bytes = generate_image(scene["image_prompt"] + ", no people, no players, no uniforms", width=width, height=height)
+                            if in_context(image_bytes) is False:
+                                raise ValueError("imagem de IA fora de contexto")
                     except Exception:
                         # IA de imagem fora (Pollinations 402/500): repete o
                         # último visual JÁ APROVADO do vídeo em vez de derrubar
