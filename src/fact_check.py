@@ -29,7 +29,7 @@ log = logging.getLogger("fact_check")
 _TYPES = {
     "ferramenta_inexistente", "fato_nao_confirmado", "atribuicao_falsa",
     "acusacao_sem_base", "data_desatualizada", "titulo_enganoso", "fora_da_fonte",
-    "caso_generico",
+    "caso_generico", "deboche", "copia_da_fonte",
 }
 # tipos que dá pra confirmar com uma busca na internet (existe ou não
 # existe); os outros são problema de redação/atribuição e reprovam direto.
@@ -67,6 +67,10 @@ abaixo ANTES de ele virar vídeo. Aponte SÓ problemas concretos destes tipos:
   se confirma por busca: é invenção com cara de fato. (Exemplo hipotético
   claramente apresentado como hipotético — "imagine que...", "pense em
   alguém que..." — não é problema.)
+- "deboche": zomba, ridiculariza ou apelida pessoa real identificável
+  (idade, aparência, desempenho — "aguardando a aposentadoria compulsória",
+  "esse eu não lembro quem é", "voltou por saudade das churrascarias"),
+  MESMO que a fonte faça isso (coluna irônica copiada vira voz do canal).
 - "acusacao_sem_base": acusa pessoa ou instituição identificável de
   irregularidade, desvio ou crime sem dado concreto nas FONTES.
 - "data_desatualizada": trata como ATUAL/RECENTE um ano, versão ou fato
@@ -168,6 +172,36 @@ def _confirmed_online(term: str, strict: bool) -> bool:
     return False
 
 
+_COPY_NGRAM = 9  # 9 palavras seguidas iguais à fonte = trecho copiado
+
+
+def _ngrams(text: str, n: int = _COPY_NGRAM) -> set[tuple[str, ...]]:
+    words = re.findall(r"\w+", text.lower())
+    return {tuple(words[i:i + n]) for i in range(len(words) - n + 1)}
+
+
+def copied_from_source(script: dict, facts: dict | None, web_facts: list[dict] | None) -> list[dict]:
+    """Cenas cuja narração copia trecho longo da fonte palavra por palavra —
+    checagem por código, não depende do LLM (que com cota esgotada cai em
+    modelo fraco). Foi assim que uma coluna irônica debochando dos próprios
+    jogadores virou a voz do canal (job 237); copiar matéria também é risco
+    de direito autoral. Citação curta (< 9 palavras) passa."""
+    source = json.dumps(facts, ensure_ascii=False) if facts else ""
+    source += " ".join(f.get("trecho", "") for f in (web_facts or []))
+    if not source:
+        return []
+    src = _ngrams(source)
+    out = []
+    for i, scene in enumerate(script.get("scenes", [])):
+        grams = _ngrams(scene.get("narration", ""))
+        if grams and len(grams & src) / len(grams) > 0.4:
+            out.append({
+                "tipo": "copia_da_fonte", "termo": scene.get("narration", "")[:80],
+                "motivo": f"cena {i + 1} copia a fonte palavra por palavra — reescreva com a voz do canal",
+            })
+    return out
+
+
 def review_script(
     script: dict, topic: str, facts: dict | None = None, web_facts: list[dict] | None = None,
 ) -> list[dict] | None:
@@ -175,6 +209,9 @@ def review_script(
     internet ([] = aprovado), ou None se o revisor não conseguiu responder
     (quem chama decide — o pipeline segue, já que a aprovação manual no
     painel é a segunda barreira)."""
+    copied = copied_from_source(script, facts, web_facts)
+    if len(copied) >= 2:
+        return copied
     raw_problems: list[dict] | None = None
     try:
         raw = complete(
