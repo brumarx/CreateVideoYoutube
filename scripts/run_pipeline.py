@@ -37,6 +37,7 @@ from src.stock_media import search_stock_clip, search_stock_photo
 from src.thumbnail import make_thumbnail, photo_scene_frame
 from src.topics import pick_topic
 from src.tts import narrate
+from src.video_qa import review_video
 from src.visual_check import matches_scene
 from src.upload import UPLOAD_META_FILE, after_upload_status, post_comment, top_channel_videos, upload_video
 from src.visuals import generate_image
@@ -548,8 +549,20 @@ def run(
 
         final_video = work_dir / "final.mp4"
         _, music_attribution = add_background_music(raw_video, final_video, mood=script.get("mood"))
+        log.info("[%s] vídeo pronto: %s — revisando antes do upload", job_id, final_video)
+
+        # revisão do vídeo MONTADO antes de subir (src/video_qa.py): frase
+        # repetida, a mesma imagem no vídeo todo, cena fora de contexto. Em
+        # 03/10 foram 16 vídeos apagados do YouTube depois de publicados.
+        # Reprovado: sem video_path (o retry_uploads nunca sobe) e exit 3
+        # (o daily_run tenta outro tema).
+        qa_problems = review_video([s["narration"] for s in script["scenes"]], scene_videos, visual_context)
+        if qa_problems:
+            for p in qa_problems:
+                log.warning("[%s] revisão do vídeo: %s", job_id, p)
+            raise ScriptRejected("vídeo reprovado na revisão antes do upload: " + "; ".join(qa_problems))
         update(job_id, status="rendered", video_path=str(final_video))
-        log.info("[%s] vídeo pronto: %s", job_id, final_video)
+        log.info("[%s] revisão do vídeo aprovada", job_id)
 
         # campos dedicados de thumbnail (LLM às vezes esquece com modelo fraco
         # da cascata) — cai pro título/cena 1 se faltar, nunca quebra o vídeo

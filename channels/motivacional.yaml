@@ -57,6 +57,8 @@ topics:
   - "Por que a disciplina matinal de 5 da manhã pode ser o divisor de águas que você precisa para reorganizar sua vida"
   - "O poder da rotina de limpeza profunda no fim do ano para resetar sua mente e aumentar a produtividade"
   - "Como criar um “reset” de setembro: 7 hábitos saudáveis que transformam sua mente e aumentam a produtividade"
+  - "De operário a dono da própria fábrica: lições reais de ascensão profissional no Brasil"
+  - "O poder de redefinir sua identidade: como ensinar seu cérebro a se tornar uma pessoa nova"
 prompt_base: >
   Escreva um roteiro motivacional/inspiracional no estilo de canais de
   desenvolvimento pessoal do YouTube. O ângulo deste canal é HISTÓRIA
@@ -66,6 +68,14 @@ prompt_base: >
   neles em vez de encher com contexto genérico. Tom inspirador e direto,
   storytelling com uma virada emocional, termine com uma mensagem clara de
   ação.
+
+  PERSONAGEM: só pessoa REAL e conhecida, com nome completo verificável
+  (ex.: J.K. Rowling, Silvio Santos, Cafu, Oprah) e só fatos conhecidos da
+  vida dela. Nunca invente personagem com nome ("Lucas", "Maria", "a
+  empresa X") apresentado como real — a revisão de fatos reprova e o vídeo
+  não sai. Se o tema não tiver uma história real conhecida, use exemplo
+  explicitamente hipotético ("imagine alguém que...", "pense em você
+  daqui a um ano").
 
 # publica sozinho depois da revisão de fatos (sem esperar "Aprovar" no painel)
 require_approval: false

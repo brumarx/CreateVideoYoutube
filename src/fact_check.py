@@ -29,6 +29,7 @@ log = logging.getLogger("fact_check")
 _TYPES = {
     "ferramenta_inexistente", "fato_nao_confirmado", "atribuicao_falsa",
     "acusacao_sem_base", "data_desatualizada", "titulo_enganoso", "fora_da_fonte",
+    "caso_generico",
 }
 # tipos que dá pra confirmar com uma busca na internet (existe ou não
 # existe); os outros são problema de redação/atribuição e reprovam direto.
@@ -58,6 +59,14 @@ abaixo ANTES de ele virar vídeo. Aponte SÓ problemas concretos destes tipos:
 - "atribuicao_falsa": diz que algo foi "revelado", "mostrado" ou "está nos
   dados" de uma fonte (Portal da Transparência, TSE, dados oficiais etc.)
   mas as FONTES não trazem esse dado.
+- "caso_generico": acontecimento, descoberta, crime ou história apresentado
+  como REAL sem um nome próprio verificável (nome do sítio arqueológico, da
+  pessoa, do navio, do caso famoso) — ex.: "em 1980 mergulhadores
+  encontraram uma cidade no Mar Vermelho", "um homem em Tóquio acenou pra
+  câmera", "a empresa X em 2022", "Lucas decidiu mudar de vida". Isso NÃO
+  se confirma por busca: é invenção com cara de fato. (Exemplo hipotético
+  claramente apresentado como hipotético — "imagine que...", "pense em
+  alguém que..." — não é problema.)
 - "acusacao_sem_base": acusa pessoa ou instituição identificável de
   irregularidade, desvio ou crime sem dado concreto nas FONTES.
 - "data_desatualizada": trata como ATUAL/RECENTE um ano, versão ou fato
@@ -66,7 +75,8 @@ abaixo ANTES de ele virar vídeo. Aponte SÓ problemas concretos destes tipos:
   antigo. Citar o ano de um acontecimento passado como passado ("em 2024,
   uma câmera registrou...") está CERTO e NÃO é problema. HOJE É {today}.
 - "titulo_enganoso": o título promete algo que o roteiro não entrega (ex.:
-  promete "5 gastos revelados pelos dados" e não mostra dado nenhum), ou
+  promete "5 gastos revelados pelos dados" e não mostra dado nenhum, ou
+  promete "7 descobertas" e o roteiro traz 3), ou
   distorce a fonte (ex.: "a saída de Fulano" quando a fonte diz que ele já
   era ex-jogador).
 - "fora_da_fonte" (SÓ quando há FONTES abaixo): qualquer afirmação, consequência,
