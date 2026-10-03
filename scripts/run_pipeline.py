@@ -118,6 +118,17 @@ def _news_photo_for_scene(narration: str, facts: dict | None, photos: list[dict]
     return next((f for f in photos if f.get("noticia") == melhor), None)
 
 
+def _sized_for_facts(facts: dict, scenes: int | None, min_minutes: float, max_minutes: float) -> tuple[int | None, float, float]:
+    """Vídeo do tamanho dos dados: o longo do politica pedia 24 cenas e
+    4-5 min a partir de 5 linhas do banco — pra encher, o roteirista somava
+    valores, comparava com salário mínimo/loteria/médico e chamava de
+    "corrupção", e a revisão reprovava (1 vídeo publicado em 5 dias)."""
+    n = len(facts.get("dados") or [])
+    if not n or scenes is None:
+        return scenes, min_minutes, max_minutes
+    return min(scenes, 2 * n + 2), min(min_minutes, 1.5), min(max_minutes, 3)
+
+
 def _chapter_starts(n: int) -> list[int]:
     """Índice da cena que abre cada capítulo — o mesmo agrupamento serve pros
     timestamps da descrição e pro selo "Parte X de Y" na tela."""
@@ -250,6 +261,8 @@ def run(
     scenes = channel.long_form_scenes if long_form else list_count
     min_minutes = channel.long_min_minutes if long_form else channel.short_min_minutes
     max_minutes = channel.long_max_minutes if long_form else channel.short_max_minutes
+    if long_form and channel_name == "politica" and facts:
+        scenes, min_minutes, max_minutes = _sized_for_facts(facts, scenes, min_minutes, max_minutes)
 
     job_id = enqueue(channel_name, topic)
     work_dir = Path(__file__).resolve().parent.parent / "output" / f"job_{job_id}"
@@ -312,6 +325,7 @@ def run(
                     facts = random_fact_set()
                     topic = facts["tema"]
                     web_facts = None
+                    scenes, min_minutes, max_minutes = _sized_for_facts(facts, scenes, min_minutes, max_minutes)
                     log.warning("[%s] tema reprovado — trocando por dado real do banco: %s", job_id, topic)
                     update(job_id, topic=topic)
                     script = generate_script(

@@ -71,7 +71,11 @@ def _save(state: dict) -> None:
 _MIN_TOPIC_LEN = 12
 # Sinais de que o LLM vazou raciocínio interno ou markdown em vez de
 # responder só com o tema — mesmo depois do provider já tentar limpar isso.
-_GARBAGE_RE = re.compile(r"<think|</think|^```|^\{|^\[", re.IGNORECASE)
+# Também (03/10, entraram na lista do politica): "16 | 17 (o que o Brasil
+# acabou de lançar)", "É DIO! Ajusta essa situação...", "TEMA sobre o
+# sistema de cheques ... para fazer 2]" — barra vertical, exclamação,
+# colchete e "TEMA" no começo nunca aparecem num tema de verdade.
+_GARBAGE_RE = re.compile(r"<think|</think|^```|^\{|^\[|\||!|\[|\]|^tema\b", re.IGNORECASE)
 # Conversa em vez de tema (visto: "Claro, estou aqui para ajudar com ideias
 # de vídeos... Aqui estão alguns temas:").
 _CHATTER_RE = re.compile(
