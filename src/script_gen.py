@@ -230,21 +230,25 @@ def _norm_sentence(text: str) -> str:
 
 
 def _drop_repeated_scenes(script: dict) -> dict:
-    """Tira cena que repete frase de cena anterior. Com pouca notícia e meta
-    de 4 min, o modelo copiava a 1ª metade do roteiro na 2ª (job 222 do
-    Botafogo: os 3 jogos e a camisa da Mizuno narrados 2x, palavra por
-    palavra) — vídeo mais curto é melhor que vídeo repetido."""
+    """Tira frase que repete frase de cena anterior (e a cena que ficar
+    vazia). Com pouca notícia e meta de minutos, o modelo copiava a 1ª
+    metade do roteiro na 2ª (job 222) ou fechava recapitulando a tabela
+    palavra por palavra (job 236, reprovado na revisão final por isso) —
+    vídeo mais curto é melhor que vídeo repetido."""
     seen: set[str] = set()
     kept = []
     for scene in script.get("scenes", []):
-        sentences = [_norm_sentence(x) for x in _SENTENCE_SPLIT.split(scene.get("narration", ""))]
-        sentences = [x for x in sentences if len(x.split()) >= 6]
-        repeated = sum(1 for x in sentences if x in seen)
-        if sentences and repeated / len(sentences) >= 0.5:
-            log.warning("cena repetida descartada: %s", scene.get("narration", "")[:80])
-            continue
-        seen.update(sentences)
-        kept.append(scene)
+        out = []
+        for sentence in _SENTENCE_SPLIT.split(scene.get("narration", "")):
+            key = _norm_sentence(sentence)
+            if len(key.split()) >= 6 and key in seen:
+                log.warning("frase repetida cortada: %s", sentence[:80])
+                continue
+            seen.add(key)
+            out.append(sentence)
+        narration = " ".join(out).strip()
+        if len(narration.split()) >= 4:
+            kept.append({**scene, "narration": narration})
     return {**script, "scenes": kept}
 
 
