@@ -1,6 +1,8 @@
 niche: "análise tática e estatística dos jogos do Botafogo (formação, posse de bola, desempenho de jogadores) e notícias diárias do clube, com paixão de torcedor"
 watermark: "botafogo.win"
 accent: "#e5e5e5"
+# imagem errada aqui é grave (outro clube, futebol americano) — ver src/config.py
+strict_visual: true
 hashtags: ["#Botafogo", "#Fogao", "#EstrelaSolitaria"]
 youtube_handle: "@botafogowin"
 channel_title: "Botafogo WIN"

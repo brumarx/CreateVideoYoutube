@@ -194,7 +194,10 @@ def search_stock_clip(query: str, width: int, height: int, check: Callable[[byte
             path = Path(tmp.name)
             if check is not None:
                 frames = frames_from_clip(path)
-                if frames is None or check(frames) is False:
+                verdict = check(frames) if frames is not None else False
+                # sem visão disponível, busca de esporte não entra às cegas
+                # (é onde vinha outro clube e futebol americano) — qualquer canal
+                if verdict is False or (verdict is None and _SPORTS_QUERY.search(query)):
                     path.unlink(missing_ok=True)
                     continue
             _mark_recent("video", str(chosen.get("id")))
@@ -252,8 +255,10 @@ def search_stock_photo(query: str, width: int, height: int, check: Callable[[byt
             except Exception as exc:
                 log.warning("download da foto pexels falhou (%r): %s", query, exc)
                 continue
-            if check is not None and check(photo_resp.content) is False:
-                continue
+            if check is not None:
+                verdict = check(photo_resp.content)
+                if verdict is False or (verdict is None and _SPORTS_QUERY.search(query)):
+                    continue
             _mark_recent("photo", str(chosen.get("id")))
             log.info("foto real encontrada pra %r", query)
             return photo_resp.content
