@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import shutil
 import subprocess
 import unicodedata
@@ -28,6 +29,7 @@ MUSIC_VOLUME_DB = -23  # bem baixo — não pode competir com a narração
 SFX_DIR = Path(__file__).resolve().parent.parent / "assets" / "sfx"
 
 WATERMARK_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+CAPTION_HIGHLIGHT = "#ffd400"  # palavra falada na legenda karaokê, igual em todo canal
 # Nome da família pro fontconfig (usado pelo libass no filtro `ass`) — é
 # diferente do caminho do arquivo usado pelo `drawtext` (fontfile=), que
 # não passa pelo fontconfig. Conferido com `fc-list`: o arquivo
@@ -84,28 +86,24 @@ CHAPTER_BANNER_FADE = 0.4
 
 
 def _chapter_banner_filter(banner: dict, width: int, height: int, accent: str) -> str:
-    """`banner` = {"index": 3, "total": 7, "label": "..."} — cartão no canto
-    superior esquerdo com "PARTE 3 DE 7" na cor do canal e o título do
-    capítulo embaixo, entrando e saindo com fade."""
+    """`banner` = {"index": 3, "total": 7, ...} — selo "PARTE 3 DE 7" no canto
+    superior esquerdo, na cor do canal, entrando e saindo com fade. Antes
+    vinha também um "título" embaixo, que eram as 6 primeiras palavras da
+    narração cortadas no meio ("A pessoa caminha normalmente, mas a") —
+    parecia uma segunda legenda quebrada; saiu."""
     end = CHAPTER_BANNER_SECONDS
     fade = CHAPTER_BANNER_FADE
     alpha = f"if(lt(t,{fade}),t/{fade},if(lt(t,{end - fade}),1,max(0,({end}-t)/{fade})))"
     enable = f"lt(t,{end})"
-    small = max(height // 30, 18)
-    big = max(height // 20, 24)
-    margin = small * 2
+    size = max(height // 24, 20)
+    margin = size * 2
     hexcolor = accent.lstrip("#")
     kicker = _escape_drawtext(f"PARTE {banner['index']} DE {banner['total']}")
-    label = _escape_drawtext(banner["label"])
     return (
         f",drawtext=fontfile='{WATERMARK_FONT}':text='{kicker}':expansion=none:"
-        f"fontsize={small}:fontcolor=0x{hexcolor}:alpha='{alpha}':enable='{enable}':"
-        f"box=1:boxcolor=black@0.6:boxborderw={small // 2}:"
+        f"fontsize={size}:fontcolor=0x{hexcolor}:alpha='{alpha}':enable='{enable}':"
+        f"box=1:boxcolor=black@0.6:boxborderw={size // 2}:"
         f"x={margin}:y={margin}"
-        f",drawtext=fontfile='{WATERMARK_FONT}':text='{label}':expansion=none:"
-        f"fontsize={big}:fontcolor=white:alpha='{alpha}':enable='{enable}':"
-        f"box=1:boxcolor=black@0.6:boxborderw={big // 3}:"
-        f"x={margin}:y={margin + small + small // 2 + big // 3}"
     )
 
 
@@ -234,9 +232,12 @@ def _build_ass_captions(
     margin_v = int(height * 0.08)
     font = ImageFont.truetype(WATERMARK_FONT, font_size)
     max_width = width * 0.82
-    accent_hex = accent.lstrip("#")
+    # mesma cor de destaque em TODOS os canais (antes era o accent de cada
+    # um: roxo, laranja, verde... e no Botafogo, #e5e5e5, o destaque sumia
+    # no branco) — legenda é padrão da casa, o accent fica pros selos.
+    accent_hex = CAPTION_HIGHLIGHT.lstrip("#")
     # ASS é &HAABBGGRR (alpha invertido: 00 = opaco, FF = transparente) —
-    # troca a ordem RRGGBB -> BBGGRR do hex do canal.
+    # troca a ordem RRGGBB -> BBGGRR do hex.
     accent_bgr = accent_hex[4:6] + accent_hex[2:4] + accent_hex[0:2]
 
     header = f"""[Script Info]
@@ -259,7 +260,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         for idx, w in enumerate(group):
             dur = (group[idx + 1]["start"] - w["start"]) if idx + 1 < len(group) else (w["end"] - w["start"])
             centis = max(round(dur * 100), 1)
-            text += f"{{\\k{centis}}}{_escape_ass_text(_strip_accents(w['text'].upper()))} "
+            # libass desenha acento certinho (o bug que obriga _strip_accents
+            # é só do drawtext) — "NÃO", "ESTÁDIO", não "NAO", "ESTADIO"
+            text += f"{{\\k{centis}}}{_escape_ass_text(w['text'].upper())} "
         lines.append(f"Dialogue: 0,{_ass_time(start)},{_ass_time(end)},Karaoke,,0,0,0,,{text.strip()}\n")
 
     output_path.write_text("".join(lines), encoding="utf-8")
@@ -390,12 +393,20 @@ def _stat_bar_filter(overlay: dict, width: int, height: int, accent: str) -> str
     label_gap = label_font // 4  # espaço entre o texto do rótulo e a barra dele
     row_gap = bar_h // 2  # espaço entre o fim de uma barra e o rótulo da próxima
     row_height = label_font + label_gap + bar_h + row_gap
-    y0 = int(height * 0.12)
+    y0 = int(height * 0.2)  # abaixo do selo "PARTE X DE Y" (canto superior)
+
+    # "%" só quando o valor É percentual — pontos na tabela saíam como
+    # "Botafogo 35% / Vasco 31%". Sem unidade, a barra é relativa ao maior.
+    unit = str(overlay.get("unit") or "").strip()
+    # roteiro sem "unit" (modelo fraco ignora campo): deduz pelo rótulo
+    is_pct = unit == "%" or (not unit and bool(re.search(r"posse|%|porcent|percent|aprova", str(overlay.get("label") or ""), re.I)))
+    scale = 100.0 if is_pct else max(float(overlay["a_value"]), float(overlay["b_value"]), 1e-9)
 
     def bar_and_label(label_y: int, label: str, value: float, color_hex: str) -> str:
         bar_y = label_y + label_font + label_gap
-        target_w = max(int(bar_w * (value / 100)), 1)
-        text = _escape_drawtext(f"{label} {value:.0f}%")
+        target_w = max(int(bar_w * min(float(value) / scale, 1.0)), 1)
+        number = f"{float(value):.0f}" if float(value).is_integer() or is_pct else f"{float(value):.1f}".replace(".", ",")
+        text = _escape_drawtext(f"{label} {number}%" if is_pct else f"{label} {number} {unit}".rstrip())
         # expansion=none é obrigatório aqui — o rótulo sempre tem um '%'
         # (percentual), e o parser de expansão do drawtext (%{...}) trata
         # um '%' sozinho como início de sintaxe quebrada ("Stray % near")

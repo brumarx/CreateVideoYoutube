@@ -550,14 +550,32 @@ def _is_duplicate(title: str, chosen: list[dict]) -> bool:
 
 
 def _portal_photo_ok(url: str, published) -> bool:
-    """Mesma regra da ESPN (foto de arquivo engana o torcedor), só que a CDN
-    dos veículos agregados costuma ter só ano/mês no caminho
-    (`/uploads/2026/09/...`) — aí aceita se for o mesmo mês da matéria."""
+    """Mesma regra da ESPN (foto de arquivo engana o torcedor) pra quando a
+    URL TEM data: `/uploads/2026/09/...` vale no mesmo mês da matéria,
+    `20261002-153711.jpg` (netvasco) vale até 7 dias antes. Sem data
+    nenhuma na URL (ge, O Globo, Terra mudam o caminho) a capa é da própria
+    matéria e entra — antes era descartada, e o vídeo caía em clipe de
+    banco com estádio e camisa de clube estrangeiro. Thumb do YouTube
+    (live/vídeo de canal, cheia de texto) nunca entra."""
+    from datetime import datetime, timezone
 
+    if "ytimg.com" in url:
+        return False
     if _photo_is_fresh(url, published):
         return True
     m = re.search(r"/(20\d\d)/(\d\d)/", url)
-    return bool(m) and (int(m[1]), int(m[2])) == (published.year, published.month)
+    if m:
+        return (int(m[1]), int(m[2])) == (published.year, published.month)
+    m = re.search(r"(?<!\d)(20\d\d)(\d\d)(\d\d)(?!\d)", url)
+    if m:
+        try:
+            photo_day = datetime(int(m[1]), int(m[2]), int(m[3]), tzinfo=timezone.utc)
+        except ValueError:
+            return False
+        return 0 <= (published - photo_day).days <= 7
+    if re.search(r"/(20\d\d)/(\d{4})/", url):
+        return False  # padrão da ESPN com data velha (já reprovado acima)
+    return True
 
 
 # outros "Botafogo" que o agregador do portal pega por palavra-chave: o

@@ -23,6 +23,7 @@ import random
 import re
 import shutil
 import sys
+import subprocess
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -377,13 +378,11 @@ def run(
             starts = [idx for idx in _chapter_starts(len(script["scenes"])) if idx < original_scene_count]
             for n_part, idx in enumerate(starts, start=1):
                 if idx > 0:
-                    chapter_banners[idx] = {
-                        "index": n_part, "total": len(starts),
-                        "label": _chapter_label(script["scenes"][idx]["narration"]),
-                    }
+                    chapter_banners[idx] = {"index": n_part, "total": len(starts)}
 
         scene_videos = []
         scene_durations = []
+        last_news_photo: dict | None = None
         for i, scene in enumerate(script["scenes"]):
             log.info("[%s] cena %d/%d", job_id, i + 1, len(script["scenes"]))
             audio_path = work_dir / f"scene_{i}.mp3"
@@ -420,10 +419,15 @@ def run(
 
             # notícia do Botafogo: foto real da matéria, em rodízio entre as
             # cenas (a de CTA no fim segue a cascata normal)
+            # Cena sem palavra própria da notícia quase sempre CONTINUA a da
+            # cena anterior ("O comunicado termina com...") — fica com a
+            # foto dela. Antes caía no banco de vídeos, que pra futebol só
+            # tem clube estrangeiro (Barcelona, Beşiktaş, Wolfsburg).
             news_frame = None
             if news_photos and i < original_scene_count:
-                photo = _news_photo_for_scene(scene["narration"], facts, news_photos)
+                photo = _news_photo_for_scene(scene["narration"], facts, news_photos) or last_news_photo
                 if photo:
+                    last_news_photo = photo
                     news_frame = photo_scene_frame(photo["url"], width, height)
 
             stock_clip_path = None
@@ -510,7 +514,19 @@ def run(
             real_photo_url = foto_pessoa_conhecida(topic)
             if real_photo_url:
                 log.info("[%s] foto oficial encontrada no banco pra pessoa citada no tema", job_id)
-        make_thumbnail(thumb_prompt, thumb_text, thumb_path, accent=channel.accent, real_photo_url=real_photo_url)
+        # frame do próprio vídeo como reserva se a IA de imagem estiver fora
+        # (cena de impacto, senão a do meio do gancho)
+        frame_scene = next((k for k, sc in enumerate(script["scenes"]) if sc.get("impact_beat")), 0)
+        fallback_frame = work_dir / "thumb_fallback.jpg"
+        subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", "-ss", "1.5", "-i", str(scene_videos[frame_scene]),
+             "-vf", "crop=iw:ih*0.78:0:0", "-frames:v", "1", str(fallback_frame)],  # sem a faixa da legenda
+            check=False,
+        )
+        make_thumbnail(
+            thumb_prompt, thumb_text, thumb_path, accent=channel.accent, real_photo_url=real_photo_url,
+            fallback_frame=fallback_frame,
+        )
         update(job_id, thumbnail_path=str(thumb_path))
         log.info("[%s] thumbnail pronta: %s", job_id, thumb_path)
 
