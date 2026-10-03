@@ -238,6 +238,7 @@ def run(
     fact_label: str | None = None,
     botafogo_task: str | None = None,
     script_file: str | None = None,
+    facts_file: str | None = None,
 ) -> None:
     channel = ChannelConfig.load(channel_name)
     # guardado ANTES de qualquer auto-preenchimento abaixo — só um tema
@@ -270,7 +271,14 @@ def run(
     # no longo, só usa quando fact_label foi passado explicitamente (senão
     # segue o design original: tema genérico de "como o sistema funciona",
     # sem grounding de um fato só pra sustentar 15-20min).
-    if channel_name == "politica" and (not long_form or fact_label):
+    if facts_file:
+        # dados reais prontos em arquivo (mesmo formato do banco: {"tema",
+        # "dados"} ou {"noticias"}) — o roteiro e a revisão usam exatamente
+        # estes dados (ex.: roteiro escrito à mão com --script-file)
+        facts = json.loads(Path(facts_file).read_text())
+        if topic is None:
+            topic = facts.get("tema") or facts.get("titulo")
+    elif channel_name == "politica" and (not long_form or fact_label):
         from src.politica_data import pick_fact_set, random_fact_set
 
         # --fact-label força um tema específico (teste manual/painel) em vez
@@ -876,6 +884,7 @@ def main() -> None:
         "--botafogo-task", choices=["jogo", "portal"], default=None,
         help="só canal 'botafogo': 'jogo' = prévia/pós-jogo; 'portal' = vídeo diário do botafogo.win",
     )
+    parser.add_argument("--facts-file", default=None, help="JSON com os dados reais do vídeo ({tema, dados} ou {noticias}) em vez de buscar/sortear")
     parser.add_argument("--script-file", default=None, help="JSON de roteiro pronto (mesmo formato do gerado) — pula a geração, mantém todas as revisões")
     parser.add_argument("--fact-label", default=None, help="só canal 'politica' no curto: força um tema específico de src.politica_data.FACT_FETCHERS em vez de sortear")
     args = parser.parse_args()
@@ -884,6 +893,7 @@ def main() -> None:
         run(
             args.channel, args.topic, args.dry_run, args.publish_at, long_form=args.long,
             fact_label=args.fact_label, botafogo_task=args.botafogo_task, script_file=args.script_file,
+            facts_file=args.facts_file,
         )
     except ScriptRejected:
         sys.exit(EXIT_SCRIPT_REJECTED)
