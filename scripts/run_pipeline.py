@@ -34,7 +34,7 @@ from src.fact_check import BLOCKING_TYPES, feedback_for_rewrite, review_script
 from src.orchestrator import enqueue, update
 from src.script_gen import engagement_question, generate_script
 from src.stock_media import search_stock_clip, search_stock_photo
-from src.thumbnail import make_thumbnail, photo_scene_frame
+from src.thumbnail import make_thumbnail, photo_scene_frame, title_card
 from src.topics import pick_topic
 from src.tts import narrate
 from src.video_qa import review_video
@@ -556,9 +556,11 @@ def run(
                         # último visual JÁ APROVADO do vídeo em vez de derrubar
                         # o job ou pôr imagem sem checagem
                         if last_still is None:
-                            raise
-                        log.warning("[%s] cena %d sem imagem no contexto — repetindo a anterior", job_id, i + 1)
-                        image_bytes = last_still
+                            log.warning("[%s] cena %d sem nenhum visual aprovado — cartão do canal", job_id, i + 1)
+                            image_bytes = title_card(channel.channel_title, width, height, channel.accent)
+                        else:
+                            log.warning("[%s] cena %d sem imagem no contexto — repetindo a anterior", job_id, i + 1)
+                            image_bytes = last_still
                         scene_sources.append("repetida")
                     else:
                         scene_sources.append("ia")
