@@ -141,6 +141,42 @@ def _clip_still(path: Path) -> bytes | None:
     return out or None
 
 
+_SENT_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+
+def _cut_flagged_sentences(script: dict, problems: list[dict], max_cuts: int = 3) -> dict | None:
+    """Roteiro sem as frases que a revisão apontou (cada `termo` é a
+    afirmação curta do revisor — acha a frase que tem a maioria das palavras
+    dele). None se não achou alguma, ou se precisaria cortar mais que
+    `max_cuts` frases (aí o roteiro está ruim mesmo, não é uma frase solta)."""
+    def words(text: str) -> set[str]:
+        return {w for w in re.findall(r"\w+", text.lower()) if len(w) > 3}
+
+    scenes = [_SENT_SPLIT.split(sc.get("narration", "")) for sc in script["scenes"]]
+    to_cut: set[tuple[int, int]] = set()
+    for p in problems:
+        term = words(str(p.get("termo", "")))
+        if not term:
+            return None
+        best, best_score = None, 0.0
+        for si, sentences in enumerate(scenes):
+            for ji, sentence in enumerate(sentences):
+                score = len(term & words(sentence)) / len(term)
+                if score > best_score:
+                    best, best_score = (si, ji), score
+        if best is None or best_score < 0.6:
+            return None
+        to_cut.add(best)
+    if len(to_cut) > max_cuts:
+        return None
+    new_scenes = []
+    for si, sentences in enumerate(scenes):
+        kept = " ".join(x for ji, x in enumerate(sentences) if (si, ji) not in to_cut).strip()
+        if kept:
+            new_scenes.append({**script["scenes"][si], "narration": kept})
+    return {**script, "scenes": new_scenes}
+
+
 def _chapter_starts(n: int) -> list[int]:
     """Índice da cena que abre cada capítulo — o mesmo agrupamento serve pros
     timestamps da descrição e pro selo "Parte X de Y" na tela."""
@@ -335,6 +371,17 @@ def run(
                 if not any(p.get("tipo") in BLOCKING_TYPES for p in problems):
                     log.warning("[%s] só sobraram ressalvas leves da revisão — segue pra aprovação", job_id)
                     break
+                # sobrou 1-3 frase(s) apontada(s) depois das reescritas (visto
+                # no Botafogo: roteiro inteiro descartado por "zona de
+                # classificação"): corta só essas frases e revisa de novo —
+                # aprovado só se a 2ª revisão vier limpa
+                cut = _cut_flagged_sentences(script, problems)
+                if cut is not None:
+                    recheck = review_script(cut, topic, facts, web_facts)
+                    if recheck == []:
+                        log.warning("[%s] frases reprovadas cortadas do roteiro — aprovado na 2ª revisão", job_id)
+                        script = cut
+                        break
                 if channel_name == "politica" and facts is None and not user_provided_topic:
                     # tema da fila/viral sem dado que sustente: em vez de
                     # passar o dia sem vídeo, troca por um fato REAL do banco
