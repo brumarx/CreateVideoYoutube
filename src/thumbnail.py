@@ -110,6 +110,25 @@ def photo_scene_frame(url: str, width: int, height: int) -> bytes | None:
     return out.getvalue()
 
 
+def title_card(label: str, width: int, height: int, accent: str = "#ffffff") -> bytes:
+    """Último recurso de visual de cena: fundo escuro com leve gradiente na
+    cor do canal e o nome dele — nunca sai do contexto. Só entra quando
+    nada foi aprovado (sem foto da matéria, banco/IA recusados ou fora do
+    ar) e não há visual anterior pra repetir (job 242 quebrou assim)."""
+    r, g, b = _hex_to_rgb(accent)
+    img = Image.new("RGB", (width, height), (12, 12, 14))
+    glow = Image.new("RGB", (width, height), (r // 4, g // 4, b // 4))
+    mask = Image.radial_gradient("L").resize((width, height)).point(lambda v: 255 - v)
+    img = Image.composite(glow, img, mask)
+    draw = ImageDraw.Draw(img)
+    font = _thumb_font(max(height // 9, 32))
+    w = draw.textlength(label, font=font)
+    draw.text(((width - w) / 2, height * 0.42), label, font=font, fill=(235, 235, 235))
+    out = io.BytesIO()
+    img.save(out, format="PNG")
+    return out.getvalue()
+
+
 HIGHLIGHT_YELLOW = (255, 214, 0)
 TEXT_BLOCK_RATIO = 0.56  # texto ocupa a metade esquerda; imagem/pessoa respira na direita
 TEXT_TILT_DEG = 3  # inclinação leve — bloco reto parece slide, torto parece "chamada"
