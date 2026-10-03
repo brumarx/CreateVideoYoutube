@@ -192,6 +192,16 @@ def _cut_flagged_sentences(script: dict, problems: list[dict], max_cuts: int = 3
     return {**script, "scenes": new_scenes}
 
 
+def _clip_still(path: Path) -> bytes | None:
+    """Frame limpo (sem legenda) do clipe aprovado — reserva pra repetir se
+    uma cena seguinte ficar sem imagem."""
+    out = subprocess.run(
+        ["ffmpeg", "-v", "error", "-ss", "1", "-i", str(path), "-frames:v", "1", "-f", "image2", "-c:v", "png", "pipe:1"],
+        capture_output=True, check=False,
+    ).stdout
+    return out or None
+
+
 def _chapter_starts(n: int) -> list[int]:
     """Índice da cena que abre cada capítulo — o mesmo agrupamento serve pros
     timestamps da descrição e pro selo "Parte X de Y" na tela."""
