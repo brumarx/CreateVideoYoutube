@@ -227,6 +227,7 @@ def run(
     long_form: bool | None = None,
     fact_label: str | None = None,
     botafogo_task: str | None = None,
+    script_file: str | None = None,
 ) -> None:
     channel = ChannelConfig.load(channel_name)
     # guardado ANTES de qualquer auto-preenchimento abaixo — só um tema
@@ -356,9 +357,17 @@ def run(
                 log.info("[%s] tema digitado sem busca na internet (sem chave configurada ou sem resultado)", job_id)
 
         log.info("[%s] gerando roteiro (%s) para: %s (voz: %s)", job_id, "longo" if long_form else "curto", topic, tts_voice)
-        script = generate_script(
-            channel, topic, facts, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes, web_facts=web_facts,
-        )
+        if script_file:
+            # roteiro escrito à mão (ex.: quando só sobra modelo fraco que copia
+            # a fonte) — passa pelas MESMAS revisões; reprovado não é reescrito
+            from src.script_gen import _drop_repeated_scenes
+
+            script = _drop_repeated_scenes(json.loads(Path(script_file).read_text()))
+            log.info("[%s] roteiro do arquivo %s (%d cenas)", job_id, script_file, len(script["scenes"]))
+        else:
+            script = generate_script(
+                channel, topic, facts, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes, web_facts=web_facts,
+            )
         # revisão de fatos ANTES de gastar TTS/render (ver src/fact_check.py):
         # reprovado, reescreve com o feedback do revisor; se continuar
         # reprovado, o vídeo não sai — melhor um dia sem vídeo do que um
@@ -377,6 +386,15 @@ def run(
                 "[%s] revisão de fatos reprovou (tentativa %d): %s", job_id, attempt + 1,
                 "; ".join(f"{p.get('tipo')}: {p.get('termo')}" for p in problems),
             )
+            if script_file:
+                cut = _cut_flagged_sentences(script, problems)
+                if cut is not None and review_script(cut, topic, facts, web_facts) == []:
+                    script = cut
+                    break
+                raise ScriptRejected(
+                    "roteiro do arquivo reprovado na revisão de fatos: "
+                    + "; ".join(f"{p.get('termo')} ({p.get('motivo')})" for p in problems)
+                )
             if attempt == FACT_CHECK_REWRITES:
                 if not any(p.get("tipo") in BLOCKING_TYPES for p in problems):
                     log.warning("[%s] só sobraram ressalvas leves da revisão — segue pra aprovação", job_id)
@@ -488,9 +506,16 @@ def run(
             # Beşiktaş num vídeo do Botafogo). None = checagem fora do ar:
             # aceita (o filtro de outro esporte/clube do stock_media segue).
             def in_context(image: bytes, _narration: str = scene["narration"]) -> bool | None:
+                # sem visão (None): o banco já barra busca de ESPORTE sozinho
+                # (src/stock_media.py) e deixa passar imagem neutra (contrato,
+                # calendário, tribunal) — sem isso, canal estrito sem visão
+                # repetia a mesma foto em 12 de 15 cenas (job 249)
+                return matches_scene(image, _narration, visual_context)
+
+            def ai_in_context(image: bytes, _narration: str = scene["narration"]) -> bool | None:
                 verdict = matches_scene(image, _narration, visual_context)
                 if verdict is None and channel.strict_visual:
-                    return False  # canal estrito sem checagem = risco de clube/esporte errado
+                    return False  # IA sem checagem pode inventar jogador/escudo
                 return verdict
             scene_durations.append(_ffprobe_duration(audio_path))
 
@@ -539,9 +564,9 @@ def run(
                     # ficou em 9 cenas, inclusive na agenda do Botafogo (job 239)
                     photo = last_news_photo
                     photo_streak += 1
-                if photo is None:
+                if photo is None and not stock_query:
                     # abertura antes de qualquer notícia casar (ou continuidade
-                    # esgotada): foto da 1ª
+                    # esgotada), sem busca própria da cena: foto da 1ª
                     # notícia (o gancho é ela) em vez de clipe de banco, que
                     # pra futebol só tem clube estrangeiro
                     photo = news_photos[0]
@@ -571,12 +596,12 @@ def run(
                     # quadrado e esticar no ffmpeg distorcia e borrava tudo).
                     try:
                         image_bytes = generate_image(scene["image_prompt"], width=width, height=height)
-                        if in_context(image_bytes) is False:
+                        if ai_in_context(image_bytes) is False:
                             # IA também erra (jogador inventado de uniforme
                             # com escudo falso, job 222): 2ª chance, depois
                             # repete o último visual aprovado
                             image_bytes = generate_image(scene["image_prompt"] + ", no people, no players, no uniforms", width=width, height=height)
-                            if in_context(image_bytes) is False:
+                            if ai_in_context(image_bytes) is False:
                                 raise ValueError("imagem de IA fora de contexto")
                     except Exception:
                         # IA de imagem fora (Pollinations 402/500): repete o
@@ -647,7 +672,7 @@ def run(
             [s["narration"] for s in script["scenes"]], scene_videos, visual_context,
             # futebol com clipe de banco/IA precisa de olho; vídeo só com
             # foto das matérias (do próprio assunto) dispensa
-            strict_visual=channel.strict_visual and any(src in ("banco", "ia") for src in scene_sources),
+            strict_visual=channel.strict_visual and "ia" in scene_sources,
         )
         if qa_problems:
             for p in qa_problems:
@@ -832,13 +857,14 @@ def main() -> None:
         "--botafogo-task", choices=["jogo", "portal"], default=None,
         help="só canal 'botafogo': 'jogo' = prévia/pós-jogo; 'portal' = vídeo diário do botafogo.win",
     )
+    parser.add_argument("--script-file", default=None, help="JSON de roteiro pronto (mesmo formato do gerado) — pula a geração, mantém todas as revisões")
     parser.add_argument("--fact-label", default=None, help="só canal 'politica' no curto: força um tema específico de src.politica_data.FACT_FETCHERS em vez de sortear")
     args = parser.parse_args()
 
     try:
         run(
             args.channel, args.topic, args.dry_run, args.publish_at, long_form=args.long,
-            fact_label=args.fact_label, botafogo_task=args.botafogo_task,
+            fact_label=args.fact_label, botafogo_task=args.botafogo_task, script_file=args.script_file,
         )
     except ScriptRejected:
         sys.exit(EXIT_SCRIPT_REJECTED)
