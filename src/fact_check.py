@@ -66,7 +66,9 @@ abaixo ANTES de ele virar vídeo. Aponte SÓ problemas concretos destes tipos:
   câmera", "a empresa X em 2022", "Lucas decidiu mudar de vida". Isso NÃO
   se confirma por busca: é invenção com cara de fato. (Exemplo hipotético
   claramente apresentado como hipotético — "imagine que...", "pense em
-  alguém que..." — não é problema.)
+  alguém que..." — não é problema. Afirmação geral sobre costume,
+  comportamento ou sensação — "o bar vira refúgio", "no bar todo mundo fica
+  igual" — também NÃO é caso: caso é um acontecimento com quem/quando/onde.)
 - "deboche": zomba, ridiculariza ou apelida pessoa real identificável
   (idade, aparência, desempenho — "aguardando a aposentadoria compulsória",
   "esse eu não lembro quem é", "voltou por saudade das churrascarias"),
@@ -85,13 +87,7 @@ abaixo ANTES de ele virar vídeo. Aponte SÓ problemas concretos destes tipos:
   promete "7 descobertas" e o roteiro traz 3), ou
   distorce a fonte (ex.: "a saída de Fulano" quando a fonte diz que ele já
   era ex-jogador).
-- "fora_da_fonte" (SÓ quando há FONTES abaixo): qualquer afirmação, consequência,
-  interpretação ou relação que as FONTES não dizem. Confira frase por frase.
-  Casos típicos: jogador "emprestado pelo clube X" joga em OUTRO clube — dizer
-  que a lesão/fase dele afeta o time X agora é fora_da_fonte; "ex-X" já saiu
-  antes — tratar como saída de agora é fora_da_fonte; "negocia/pode/avalia"
-  narrado como fato consumado; causa ou impacto que a matéria não cita.
-
+{_fora_da_fonte_strict if facts else _fora_da_fonte_web if web_facts else ""}
 Opinião, tom, estilo e afirmações genéricas e verdadeiras NÃO são problema.
 Não invente problema: se o roteiro está ok, devolva lista vazia.
 
@@ -104,7 +100,7 @@ FONTES:
 ROTEIRO:
 {narration}
 
-{_checagem_instr if (facts or web_facts) else ""}Responda SÓ com JSON, neste formato exato:
+{_checagem_instr if facts else _checagem_web_instr if web_facts else ""}Responda SÓ com JSON, neste formato exato:
 {{{_checagem_campo if (facts or web_facts) else ""}"problemas": [{{"tipo": "...", "termo": "nome ou afirmação curta (até 8 palavras)", "motivo": "por que é problema, 1 frase"}}]}}"""
 
 
@@ -120,6 +116,33 @@ sustentado por "ex-goleiro"; "terá de ajustar o elenco" NÃO é sustentado por
 "emprestado a outro clube"). Sem trecho que sustente, "trecho": null.
 Opinião/emoção de torcedor e chamadas ("deixa nos comentários") não entram.
 
+"""
+# Tema digitado ancorado em busca na internet (curiosidade, crônica, viral):
+# os trechos são APOIO, não a fonte única do vídeo — exigir trecho literal de
+# toda frase reprovava até descrição e opinião ("iluminação baixa", "o bar vira
+# refúgio": job 275, 3 de 3 reprovadas). Aqui só fato específico precisa de
+# trecho; conhecimento geral verdadeiro segue a regra do fato_nao_confirmado.
+_checagem_web_instr = """ANTES dos problemas, faça a CHECAGEM só dos FATOS ESPECÍFICOS do TÍTULO e
+do ROTEIRO: números, porcentagens, datas, nomes de pessoas, lugares, estudos,
+pesquisas e eventos, e declarações atribuídas a alguém. Pra cada um, copie o
+trecho LITERAL das FONTES que o sustenta; sem trecho, "trecho": null — MAS se
+for conhecimento geral amplamente conhecido e verdadeiro (ex.: "a ocitocina
+está ligada a vínculo social", "a Grécia Antiga tinha simpósios"), copie
+"conhecimento geral" no trecho. Descrição de ambiente, opinião, sensação,
+conselho, comparação e frase de efeito NÃO entram na checagem.
+
+"""
+_fora_da_fonte_strict = """- "fora_da_fonte": qualquer afirmação, consequência,
+  interpretação ou relação que as FONTES não dizem. Confira frase por frase.
+  Casos típicos: jogador "emprestado pelo clube X" joga em OUTRO clube — dizer
+  que a lesão/fase dele afeta o time X agora é fora_da_fonte; "ex-X" já saiu
+  antes — tratar como saída de agora é fora_da_fonte; "negocia/pode/avalia"
+  narrado como fato consumado; causa ou impacto que a matéria não cita.
+"""
+_fora_da_fonte_web = """- "fora_da_fonte": fato ESPECÍFICO (número, data, nome, estudo, evento,
+  declaração) que as FONTES não trazem e que não é conhecimento geral
+  verdadeiro. Descrição, opinião, sensação e frase de efeito NÃO são
+  fora_da_fonte.
 """
 _checagem_campo = '"checagem": [{"afirmacao": "...", "trecho": "trecho literal da fonte ou null"}], '
 
