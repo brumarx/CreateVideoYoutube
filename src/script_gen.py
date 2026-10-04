@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from datetime import date
 
@@ -258,17 +259,30 @@ def _drop_repeated_scenes(script: dict) -> dict:
     return {**script, "scenes": kept}
 
 
-def _filler_phrase(script: dict, min_scenes: int = 4) -> str | None:
-    """Sequência de 4 palavras que aparece em `min_scenes`+ cenas — bordão de
-    enchimento ("isso mostra a importância", "o botafogo tem um"). Ignora
-    nome próprio repetido sozinho porque exige 4 palavras seguidas."""
+def _filler_phrase(script: dict, topic: str = "", min_scenes: int = 4, min_ratio: float = 0.3) -> str | None:
+    """Sequência de 4 palavras que aparece em várias cenas — bordão de
+    enchimento ("isso mostra a importância", "o desempenho do elenco").
+    Ignora nome próprio repetido sozinho porque exige 4 palavras seguidas.
+    O limite cresce com o roteiro (30% das cenas, mínimo 4): num longo de 15-30
+    cenas, 4 repetições é normal. Expressão feita só de termos do tema ("jogo
+    contra o vasco", "emendas parlamentares em 2023") não é enchimento — falsos
+    positivos assim derrubaram 4 jobs em 2026-10-04."""
+    scenes = script.get("scenes", [])
+    threshold = max(min_scenes, math.ceil(len(scenes) * min_ratio))
+    topic_words = set(re.findall(r"\w+", topic.lower()))
     count: dict[tuple[str, ...], int] = {}
-    for scene in script.get("scenes", []):
+    for scene in scenes:
         words = re.findall(r"\w+", scene.get("narration", "").lower())
         for gram in {tuple(words[i:i + 4]) for i in range(len(words) - 3)}:
             count[gram] = count.get(gram, 0) + 1
-    worst = max(count.items(), key=lambda kv: kv[1], default=(None, 0))
-    return " ".join(worst[0]) if worst[0] and worst[1] >= min_scenes else None
+    for gram, n in sorted(count.items(), key=lambda kv: kv[1], reverse=True):
+        if n < threshold:
+            break
+        content = [w for w in gram if len(w) > 3 or w.isdigit()]
+        if content and all(w in topic_words for w in content):
+            continue
+        return " ".join(gram)
+    return None
 
 
 def _is_parseable_script(raw: str, required: set[str]) -> bool:
@@ -424,6 +438,7 @@ def generate_script(
     last_error: Exception | None = None
     best_script: dict | None = None
     best_distance = float("inf")
+    filler_fallback: dict | None = None
     for attempt in range(3):
         try:
             # `validate` já garante que `raw` é JSON parseável com os campos
@@ -436,10 +451,14 @@ def generate_script(
                 raise ValueError(f"JSON do roteiro sem campos {missing}: {script}")
 
             script = _drop_repeated_scenes(script)
-            filler = _filler_phrase(script)
+            filler = _filler_phrase(script, topic)
             if filler:
                 # bordão em toda cena ("isso mostra a importância", job 239)
-                # = enchimento de modelo fraco: tenta de novo, pedindo pra não
+                # = enchimento de modelo fraco: tenta de novo, pedindo pra não.
+                # Guarda o roteiro: bordão é defeito de estilo, não de fato —
+                # melhor publicá-lo do que perder o dia (revisões seguem valendo)
+                filler_fallback = script
+                last_error = ValueError(f"bordão repetido ({filler!r})")
                 log.warning("tentativa %d/3: bordão repetido (%r), tentando de novo", attempt + 1, filler)
                 messages = [messages[0], {"role": "user", "content": messages[1]["content"]
                                           + f"\n\nNÃO use a expressão \"{filler}\" nem frases de enchimento sem fato novo."}]
@@ -468,6 +487,9 @@ def generate_script(
             min_total_words, max_words_ceiling,
         )
         return _sanitize_person_images(topic, best_script)
+    if filler_fallback is not None:
+        log.warning("3 tentativas com bordão repetido — usando a última mesmo assim")
+        return _sanitize_person_images(topic, filler_fallback)
 
     raise ValueError(f"LLM não devolveu roteiro válido após 3 tentativas: {last_error}")
 
