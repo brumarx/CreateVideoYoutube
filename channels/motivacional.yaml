@@ -4,6 +4,7 @@ accent: "#ff9248"
 hashtags: ["#Motivacional", "#DesenvolvimentoPessoal", "#AnguloInterno"]
 youtube_handle: "@angulointerno"
 channel_title: "Ângulo Interno"
+greeting: "Fala, pessoal!"
 language: "pt-BR"
 tts_voice_weights:
   pt-BR-AntonioNeural: 33

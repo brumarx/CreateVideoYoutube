@@ -126,6 +126,10 @@ class ChannelConfig:
     # americano): sem modelo de visão disponível, clipe de banco e imagem de
     # IA não entram, e a revisão final só aprova com a parte visual feita.
     strict_visual: bool = False
+    # bordão de entrada falado no começo de todo vídeo ("Fala, alvinegros!")
+    # — inserido por CÓDIGO antes da 1ª cena, nunca pelo LLM (que é
+    # proibido de abrir com saudação). Vazio = sem bordão.
+    greeting: str = ""
 
     @staticmethod
     def load(name: str) -> "ChannelConfig":
@@ -164,4 +168,5 @@ class ChannelConfig:
             website=data.get("website", ""),
             strict_visual=bool(data.get("strict_visual", False)),
             website_cta=data.get("website_cta", "🌐 Site"),
+            greeting=data.get("greeting", ""),
         )

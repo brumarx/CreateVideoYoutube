@@ -473,6 +473,12 @@ def run(
             )
         update(job_id, status="scripted")
 
+        # bordão de entrada do canal — por código, igual ao CTA abaixo, pra
+        # sair sempre igual; o gancho do LLM vem logo depois.
+        if channel.greeting and script["scenes"]:
+            first = script["scenes"][0]
+            first["narration"] = f"{channel.greeting} {first['narration']}"
+
         # CTA falado (like + se inscrever) — gerado por CÓDIGO, nunca pelo LLM,
         # pra nunca faltar. Antes só existia um link na descrição, que quase
         # ninguém lê assistindo; pedido em voz alta no fim converte muito mais.

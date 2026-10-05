@@ -4,6 +4,7 @@ accent: "#34d399"
 hashtags: ["#IA", "#Tutorial", "#AprendervIA"]
 youtube_handle: "@aprendervia"
 channel_title: "Aprender vIA"
+greeting: "Fala, galera do Aprender vIA!"
 language: "pt-BR"
 tts_voice_weights:
   pt-BR-AntonioNeural: 50
