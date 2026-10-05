@@ -7,6 +7,7 @@ hashtags: ["#Botafogo", "#Fogao", "#EstrelaSolitaria"]
 youtube_handle: "@botafogowin"
 channel_title: "Botafogo WIN"
 website: "https://botafogo.win"
+greeting: "Fala, alvinegros!"
 website_cta: "📰 Notícias completas do Fogão, em tempo real"
 language: "pt-BR"
 tts_voice_weights:
@@ -71,7 +72,9 @@ prompt_base: >
   de fatos reprova e o vídeo não sai. Pergunta retórica pode; afirmar
   impacto, não. Jogo de base (Sub-20, Sub-17) ou feminino nunca vira jogo
   do time principal. Quando
-  vier "veiculo", atribua a informação a ele ("segundo o ge…"). Notícia que
+  vier "veiculo", NÃO cite o veículo na narração (nada de "segundo o ge…",
+  "de acordo com o Lance") — conte a notícia direto; a fonte já vai na
+  descrição. Notícia que
   só tem título e resumo rende pouco — não estique inventando detalhe, só
   comente o que está ali. Cite só o que está no título/resumo/texto — se ela diz que
   algo "pode" acontecer, fale como possibilidade, nunca como fato
