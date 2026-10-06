@@ -121,8 +121,15 @@ def title_card(label: str, width: int, height: int, accent: str = "#ffffff") -> 
     mask = Image.radial_gradient("L").resize((width, height)).point(lambda v: 255 - v)
     img = Image.composite(glow, img, mask)
     draw = ImageDraw.Draw(img)
-    font = _thumb_font(max(height // 9, 32))
+    size = max(height // 9, 32)
+    font = _thumb_font(size)
     w = draw.textlength(label, font=font)
+    # altura/9 no vertical (1080x1920) estoura a largura: "Fractal Curioso"
+    # saía cortado nas bordas (Short ZEEU6fhq0KY)
+    while w > width * 0.86 and size > 32:
+        size = int(size * 0.9)
+        font = _thumb_font(size)
+        w = draw.textlength(label, font=font)
     draw.text(((width - w) / 2, height * 0.42), label, font=font, fill=(235, 235, 235))
     out = io.BytesIO()
     img.save(out, format="PNG")
