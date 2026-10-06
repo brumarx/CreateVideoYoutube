@@ -478,6 +478,10 @@ def run(
                     novo = pick_topic(channel_name, channel.topics, channel.niche)
                     if long_form or not LIST_TOPIC_RE.match(novo):
                         topic, web_facts = novo, None
+                        if list_count:
+                            # tema novo não é lista: sem selo 7, 6, 5... de
+                            # contagem regressiva (job 295, Short do oceano)
+                            list_count = scenes = None
                         log.warning("[%s] tema reprovado — trocando por outro da fila: %s", job_id, topic)
                         update(job_id, topic=topic)
                         script = generate_script(

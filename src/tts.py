@@ -105,6 +105,32 @@ def _join_domains(word_boundaries: list[dict]) -> list[dict]:
     return out
 
 
+_TRAILING_PUNCT = re.compile(r"[.,;:!?…]+$")
+
+
+def _restore_punctuation(word_boundaries: list[dict], text: str) -> list[dict]:
+    """WordBoundary vem sem pontuação ("E aí curiosos existe") e a legenda
+    karaokê sai igual — pergunta sem "?" (Short ZEEU6fhq0KY). Devolve a
+    pontuação final de cada palavra casando, em ordem, com o texto falado."""
+    tokens = text.split()
+    cores = [t.strip("\"'“”‘’()[]«».,;:!?…").lower() for t in tokens]
+    pos = 0
+    for w in word_boundaries:
+        word = " ".join(w["text"].split()).lower()
+        if not word:
+            continue
+        n = len(word.split())  # "5.000 anos" chega como 1 palavra só
+        for j in range(pos, min(pos + 3, len(tokens) - n + 1)):  # palavra pode faltar/sobrar no meio
+            if " ".join(cores[j:j + n]) == word:
+                last = j + n - 1
+                m = _TRAILING_PUNCT.search(tokens[last].rstrip("\"'“”’)]»"))
+                if m and not _TRAILING_PUNCT.search(w["text"]):
+                    w["text"] += m.group(0)
+                pos = last + 1
+                break
+    return word_boundaries
+
+
 def _restore_spelling(word_boundaries: list[dict], trocas: list[tuple[str, str]] | None = None) -> list[dict]:
     word_boundaries = _join_domains(word_boundaries)
     pendentes = list(trocas or [])
@@ -241,7 +267,8 @@ def narrate(text: str, output_path: Path, voice: str = DEFAULT_VOICE) -> tuple[P
         # voz só-Azure
         if AZURE_SPEECH_KEYS:
             try:
-                return output_path, _restore_spelling(_synthesize_azure(text, output_path, voice), spelling_back)
+                words = _restore_punctuation(_synthesize_azure(text, output_path, voice), text)
+                return output_path, _restore_spelling(words, spelling_back)
             except Exception as exc:  # noqa: BLE001 — qualquer falha da Azure cai pro grátis
                 log.warning("azure tts indisponível (%s) — usando edge-tts", exc)
         else:
@@ -251,7 +278,7 @@ def narrate(text: str, output_path: Path, voice: str = DEFAULT_VOICE) -> tuple[P
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
             word_boundaries = asyncio.run(_synthesize(text, output_path, voice, metadata_path))
-            return output_path, _restore_spelling(word_boundaries, spelling_back)
+            return output_path, _restore_spelling(_restore_punctuation(word_boundaries, text), spelling_back)
         except edge_tts.exceptions.NoAudioReceived:
             if attempt == MAX_ATTEMPTS:
                 raise
