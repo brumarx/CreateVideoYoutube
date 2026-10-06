@@ -503,7 +503,15 @@ def generate_script(
             # `validate` já garante que `raw` é JSON parseável com os campos
             # obrigatórios — cascata inteira de provedores/modelos é
             # percorrida ANTES de aceitar qualquer coisa (ver providers.complete).
-            raw = complete(messages, max_tokens=max_tokens, validate=lambda r: _is_parseable_script(r, required))
+            from .topics import _SMALL_MODEL_RE  # import tardio: topics importa este módulo
+
+            # roteiro de modelo pequeno (cota dos grandes esgotada) saía
+            # colagem sem sentido das fontes (job 318) — sem modelo grande,
+            # melhor o dia sem vídeo
+            raw = complete(
+                messages, max_tokens=max_tokens, validate=lambda r: _is_parseable_script(r, required),
+                model_filter=lambda m: not _SMALL_MODEL_RE.search(m),
+            )
             script = _extract_json(raw)
             missing = required - script.keys()
             if missing:
