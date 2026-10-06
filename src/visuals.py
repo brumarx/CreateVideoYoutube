@@ -19,7 +19,7 @@ import httpx
 from PIL import Image, ImageFilter
 
 from .config import POLLINATIONS_API_KEYS
-from .providers import LLMKeys, _fetch_gemini_models, _rotator_for
+from .providers import _rotator_for
 
 log = logging.getLogger("visuals")
 
@@ -37,7 +37,7 @@ _RETRY_BACKOFF_SECONDS = 10
 # virou um gradiente azul liso) por estatística de pixel (densidade de
 # bordas, contraste) — não deu certo: uma foto de céu estrelado escuro (boa,
 # de propósito) e a imagem quebrada tinham assinaturas quase idênticas.
-# Em vez disso, pergunta pro Gemini (grátis, com visão) se a imagem tem
+# Em vez disso, pergunta pra um modelo com visão (grátis) se a imagem tem
 # conteúdo reconhecível — é mais lento mas confiável de verdade.
 _BLANK_CHECK_PROMPT = (
     "Responda só SIM ou NÃO. Esta imagem é quase em branco / um gradiente "
@@ -143,40 +143,18 @@ def _mime_type(data: bytes) -> str:
 
 
 def _is_blank(data: bytes) -> bool:
-    """Pergunta pro Gemini se a imagem parece quase em branco. Se não
-    houver chave configurada ou a chamada falhar, deixa passar (não bloqueia
-    o pipeline por causa de uma checagem opcional)."""
-    keys = LLMKeys().gemini
-    if not keys:
-        return False
+    """Pergunta pra um modelo com visão se a imagem parece quase em branco.
+    Usa a cascata inteira (Gemini, Mistral, Groq, Cloudflare): só Gemini
+    gastava 6 chamadas com 429 por imagem quando a cota acabava. Sem
+    resposta, deixa passar (checagem opcional, não bloqueia o pipeline)."""
+    from .visual_check import _jpeg, ask_vision
 
-    rotator = _rotator_for(keys)
-    image_b64 = base64.b64encode(data).decode()
-    for api_key in rotator.order():
-        models = _fetch_gemini_models(api_key)
-        for model in models:
-            url = (
-                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-            )
-            body = {
-                "contents": [{
-                    "parts": [
-                        {"text": _BLANK_CHECK_PROMPT},
-                        {"inline_data": {"mime_type": _mime_type(data), "data": image_b64}},
-                    ]
-                }]
-            }
-            try:
-                resp = httpx.post(url, json=body, timeout=30)
-                if resp.status_code != 200:
-                    log.warning("checagem de imagem (gemini/%s) -> HTTP %s", model, resp.status_code)
-                    continue
-                answer = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip().upper()
-                return answer.startswith("SIM")
-            except Exception as exc:
-                log.warning("checagem de imagem (gemini/%s) falhou: %s", model, exc)
-                continue
-    return False
+    try:
+        jpeg = _jpeg(Image.open(io.BytesIO(data)))
+    except Exception:  # noqa: BLE001 — imagem ilegível: quem chamou valida
+        return False
+    answer = ask_vision(_BLANK_CHECK_PROMPT, jpeg)
+    return bool(answer) and answer.strip().upper().startswith("SIM")
 
 
 _CF_FLUX_URL = "https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/black-forest-labs/flux-1-schnell"
@@ -200,7 +178,7 @@ def _try_cloudflare(prompt: str, seed: int) -> bytes | None:
         try:
             resp = httpx.post(
                 _CF_FLUX_URL.format(account=account), headers={"Authorization": f"Bearer {token}"},
-                json={"prompt": prompt[:2000], "steps": 4, "seed": seed % 2**31}, timeout=90,
+                json={"prompt": prompt[:2000], "steps": 4}, timeout=90,  # schnell não aceita seed
             )
             if resp.status_code in (401, 403):
                 rotator.ban(entry)
