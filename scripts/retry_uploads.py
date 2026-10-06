@@ -35,12 +35,12 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 log = logging.getLogger("retry_uploads")
 
 
-def _failed_jobs(channel: str | None) -> list[tuple[int, str, Path]]:
-    query = "SELECT id, channel, video_path FROM jobs WHERE status = 'failed' AND video_path IS NOT NULL"
-    params: tuple = ()
+def _failed_jobs(channel: str | None, status: str = "failed") -> list[tuple[int, str, Path]]:
+    query = "SELECT id, channel, video_path FROM jobs WHERE status = ? AND video_path IS NOT NULL"
+    params: tuple = (status,)
     if channel:
         query += " AND channel = ?"
-        params = (channel,)
+        params = (status, channel)
     with sqlite3.connect(DB_PATH) as conn:
         rows = conn.execute(query + " ORDER BY id", params).fetchall()
     jobs = []
@@ -54,12 +54,22 @@ def _failed_jobs(channel: str | None) -> list[tuple[int, str, Path]]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--channel", default=None)
+    parser.add_argument(
+        "--status", choices=["failed", "ready"], default="failed",
+        help="ready = vídeo renderizado com --no-upload (roteiro revisado antes) esperando a vez",
+    )
     args = parser.parse_args()
+    upload_pending(args.channel, args.status)
 
-    jobs = _failed_jobs(args.channel)
+
+def upload_pending(channel_filter: str | None, status: str = "failed", limit: int | None = None) -> int:
+    """Sobe os vídeos prontos (`failed` = upload que falhou; `ready` =
+    --no-upload). Devolve quantos subiram."""
+    jobs = _failed_jobs(channel_filter, status)[:limit]
     if not jobs:
-        log.info("nenhum vídeo pendente de reenvio")
-        return
+        log.info("nenhum vídeo pendente (%s)", status)
+        return 0
+    uploaded = 0
 
     dead_tokens: set[str] = set()
     for job_id, channel_name, video in jobs:
@@ -91,13 +101,15 @@ def main() -> None:
             log.error("[%s] reenvio falhou: %s", job_id, exc)
             continue
         update(job_id, status=after_upload_status(channel), youtube_video_id=video_id, error=None)
-        log.info("[%s] publicado no reenvio: https://youtu.be/%s", job_id, video_id)
+        log.info("[%s] publicado (%s): https://youtu.be/%s", job_id, status, video_id)
+        uploaded += 1
         if meta.get("comment"):
             try:
                 post_comment(channel, video_id, meta["comment"])
             except Exception as exc:  # noqa: BLE001 — engajamento é bônus
                 log.warning("[%s] não consegui comentar no vídeo: %s", job_id, exc)
         shutil.rmtree(work_dir, ignore_errors=True)
+    return uploaded
 
 
 if __name__ == "__main__":

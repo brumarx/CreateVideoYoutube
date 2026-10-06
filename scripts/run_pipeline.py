@@ -257,6 +257,8 @@ def run(
     botafogo_task: str | None = None,
     script_file: str | None = None,
     facts_file: str | None = None,
+    script_only: bool = False,
+    no_upload: bool = False,
 ) -> None:
     channel = ChannelConfig.load(channel_name)
     # guardado ANTES de qualquer auto-preenchimento abaixo — só um tema
@@ -294,6 +296,9 @@ def run(
         # "dados"} ou {"noticias"}) — o roteiro e a revisão usam exatamente
         # estes dados (ex.: roteiro escrito à mão com --script-file)
         facts = json.loads(Path(facts_file).read_text())
+        # gravado pelo --script-only: fotos e links das matérias do Botafogo
+        news_photos = facts.pop("_fotos", None) or []
+        news_sources = facts.pop("_fontes", None) or []
         if topic is None:
             topic = facts.get("tema") or facts.get("titulo")
     elif channel_name == "politica" and (not long_form or fact_label):
@@ -515,6 +520,26 @@ def run(
         update(job_id, status="scripted")
         # português revisado antes de narrar: a narração vira legenda na tela
         script = fix_script(script, channel.language)
+
+        if script_only:
+            # roteiro aprovado nas revisões, salvo pra uma pessoa (ou o Claude)
+            # ler ANTES de gastar 20-30 min renderizando; o comando de render
+            # reusa exatamente este roteiro e estes dados
+            (work_dir / "script.json").write_text(json.dumps(script, ensure_ascii=False, indent=2))
+            render = [
+                ".venv/bin/python", "scripts/run_pipeline.py", "--channel", channel_name,
+                "--topic", topic, "--script-file", str(work_dir / "script.json"),
+                "--long" if long_form else "--no-long", "--no-upload",
+            ]
+            if facts is not None:
+                (work_dir / "facts.json").write_text(json.dumps(
+                    {**facts, "_fotos": news_photos, "_fontes": news_sources}, ensure_ascii=False, indent=2,
+                ))
+                render += ["--facts-file", str(work_dir / "facts.json")]
+            (work_dir / "render_cmd.json").write_text(json.dumps(render, ensure_ascii=False))
+            update(job_id, status="script_ready")
+            log.info("[%s] --script-only: roteiro em %s", job_id, work_dir / "script.json")
+            return
 
         # bordão de entrada do canal — por código, igual ao CTA abaixo, pra
         # sair sempre igual; o gancho do LLM vem logo depois.
@@ -908,6 +933,13 @@ def run(
         }
         (work_dir / UPLOAD_META_FILE).write_text(json.dumps(upload_meta, ensure_ascii=False, indent=2))
 
+        if no_upload:
+            # pronto e revisado, sobe depois: o daily_run publica o "ready" do
+            # canal no lugar de gerar outro (cota de ~6 uploads/dia)
+            update(job_id, status="ready", video_path=str(final_video), thumbnail_path=str(thumb_path))
+            log.info("[%s] --no-upload: vídeo pronto em %s, sobe no próximo daily_run", job_id, final_video)
+            return
+
         video_id = upload_video(
             channel,
             final_video,
@@ -953,6 +985,8 @@ def main() -> None:
     )
     parser.add_argument("--facts-file", default=None, help="JSON com os dados reais do vídeo ({tema, dados} ou {noticias}) em vez de buscar/sortear")
     parser.add_argument("--script-file", default=None, help="JSON de roteiro pronto (mesmo formato do gerado) — pula a geração, mantém todas as revisões")
+    parser.add_argument("--script-only", action="store_true", help="para depois do roteiro aprovado nas revisões; salva script.json/facts.json e o comando de render")
+    parser.add_argument("--no-upload", action="store_true", help="renderiza e deixa 'ready' (com upload_meta) pro daily_run publicar")
     parser.add_argument("--fact-label", default=None, help="só canal 'politica' no curto: força um tema específico de src.politica_data.FACT_FETCHERS em vez de sortear")
     args = parser.parse_args()
 
@@ -960,7 +994,7 @@ def main() -> None:
         run(
             args.channel, args.topic, args.dry_run, args.publish_at, long_form=args.long,
             fact_label=args.fact_label, botafogo_task=args.botafogo_task, script_file=args.script_file,
-            facts_file=args.facts_file,
+            facts_file=args.facts_file, script_only=args.script_only, no_upload=args.no_upload,
         )
     except ScriptRejected:
         sys.exit(EXIT_SCRIPT_REJECTED)
