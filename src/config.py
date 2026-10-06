@@ -30,6 +30,9 @@ class LLMKeys:
     openrouter: list[str] = field(default_factory=lambda: _keys("OPENROUTER_API_KEYS"))
     mistral: list[str] = field(default_factory=lambda: _keys("MISTRAL_API_KEYS"))
     gemini: list[str] = field(default_factory=lambda: _keys("GEMINI_API_KEYS"))
+    # Cloudflare Workers AI grátis (10 mil neurons/dia por conta): cada item
+    # é "ACCOUNT_ID:API_TOKEN" — várias contas somam cota
+    cloudflare: list[str] = field(default_factory=lambda: _keys("CLOUDFLARE_AI_KEYS"))
 
 
 # Únicas 3 vozes pt-BR grátis do edge-tts (checado ao vivo via
@@ -38,6 +41,8 @@ FREE_TTS_VOICES = ("pt-BR-AntonioNeural", "pt-BR-FranciscaNeural", "pt-BR-Thalit
 
 POLLINATIONS_API_KEYS = _keys("POLLINATIONS_API_KEYS")
 PEXELS_API_KEYS = _keys("PEXELS_API_KEYS")
+PIXABAY_API_KEYS = _keys("PIXABAY_API_KEYS")  # 2º banco de vídeo/foto grátis
+CLOUDFLARE_AI_KEYS = _keys("CLOUDFLARE_AI_KEYS")
 TAVILY_API_KEYS = _keys("TAVILY_API_KEYS")
 # Azure AI Speech (vozes pt-BR extras, ver src/tts.py). Sem chave, voz da
 # Azure sorteada cai pro edge-tts grátis.

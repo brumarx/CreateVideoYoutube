@@ -179,7 +179,48 @@ def _is_blank(data: bytes) -> bool:
     return False
 
 
+_CF_FLUX_URL = "https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/black-forest-labs/flux-1-schnell"
+
+
+def _try_cloudflare(prompt: str, seed: int) -> bytes | None:
+    """FLUX schnell grátis no Cloudflare Workers AI (10 mil neurons/dia por
+    conta, ~50 por imagem). Sai quadrada 1024x1024; a cena recorta pro
+    formato do vídeo. Entrou quando o Pollinations passou a cobrar até o
+    endpoint anônimo (402 em 06/10)."""
+    from .config import CLOUDFLARE_AI_KEYS
+    from .providers import _rotator_for
+
+    if not CLOUDFLARE_AI_KEYS:
+        return None
+    rotator = _rotator_for(CLOUDFLARE_AI_KEYS)
+    for entry in rotator.order():
+        account, _, token = entry.partition(":")
+        if not token:
+            continue
+        try:
+            resp = httpx.post(
+                _CF_FLUX_URL.format(account=account), headers={"Authorization": f"Bearer {token}"},
+                json={"prompt": prompt[:2000], "steps": 4, "seed": seed % 2**31}, timeout=90,
+            )
+            if resp.status_code in (401, 403):
+                rotator.ban(entry)
+                continue
+            if resp.status_code == 200:
+                data = base64.b64decode(resp.json()["result"]["image"])
+                if _looks_like_image(data):
+                    log.info("imagem via cloudflare flux-1-schnell")
+                    return data
+            else:
+                log.warning("cloudflare flux -> HTTP %s: %s", resp.status_code, resp.text[:200])
+        except Exception as exc:  # noqa: BLE001
+            log.warning("cloudflare flux falhou: %s", exc)
+    return None
+
+
 def _fetch_once(prompt: str, width: int, height: int, seed: int) -> bytes | None:
+    data = _try_cloudflare(prompt, seed)
+    if data:
+        return data
     data = _try_keyed(prompt, width, height, seed)
     if data:
         return data
@@ -216,6 +257,6 @@ def generate_image(prompt: str, width: int = 1024, height: int = 1024, seed: int
         best = best or data
 
     if best is None:
-        raise RuntimeError("não foi possível gerar imagem após todas as tentativas (Pollinations indisponível)")
+        raise RuntimeError("não foi possível gerar imagem após todas as tentativas (Cloudflare e Pollinations indisponíveis)")
     log.warning("todas as tentativas saíram quase em branco — usando a última mesmo assim")
     return best

@@ -37,8 +37,34 @@ def search_topic_facts(query: str, max_results: int = 5) -> list[dict] | None:
     """Busca `query` na internet e devolve uma lista de
     {"titulo", "url", "trecho"} com fatos/trechos reais e a fonte de cada
     um — ou None (sem chave configurada, sem resultado, ou erro de rede).
-    Nunca levanta exceção; quem chamar decide o fallback."""
-    if not TAVILY_API_KEYS or not query:
+    Nunca levanta exceção; quem chamar decide o fallback. Tavily (1.000
+    buscas/mês por chave) primeiro; sem chave, sem cota ou sem resultado,
+    DuckDuckGo (grátis, sem chave)."""
+    if not query:
+        return None
+    return _tavily(query, max_results) or _duckduckgo(query, max_results)
+
+
+def _duckduckgo(query: str, max_results: int) -> list[dict] | None:
+    try:
+        from ddgs import DDGS
+
+        results = DDGS().text(query, region="br-pt", max_results=max_results * 2) or []
+    except Exception as exc:  # noqa: BLE001 — bloqueio/rede: sem fonte, quem chamou decide
+        log.warning("busca duckduckgo falhou (%r): %s", query, exc)
+        return None
+    facts = [
+        {"titulo": r.get("title", ""), "url": r.get("href", ""), "trecho": (r.get("body") or "")[:500]}
+        for r in results
+        if r.get("body") and not any(d in (r.get("href") or "") for d in EXCLUDED_DOMAINS)
+    ][:max_results]
+    if facts:
+        log.info("busca duckduckgo encontrada pra %r (%d resultados)", query, len(facts))
+    return facts or None
+
+
+def _tavily(query: str, max_results: int) -> list[dict] | None:
+    if not TAVILY_API_KEYS:
         return None
 
     rotator = _rotator_for(TAVILY_API_KEYS)

@@ -24,7 +24,7 @@ from typing import Callable
 
 import httpx
 
-from .config import PEXELS_API_KEYS
+from .config import PEXELS_API_KEYS, PIXABAY_API_KEYS
 from .providers import _rotator_for
 from .visual_check import frames_from_clip
 
@@ -145,6 +145,95 @@ def _pick_best_file(video: dict, width: int, height: int) -> dict | None:
 
 
 def search_stock_clip(query: str, width: int, height: int, check: Callable[[bytes], bool | None] | None = None) -> Path | None:
+    """Pexels e, sem nada no contexto, Pixabay (2º banco grátis)."""
+    return _pexels_clip(query, width, height, check) or _pixabay_clip(query, width, height, check)
+
+
+def search_stock_photo(query: str, width: int, height: int, check: Callable[[bytes], bool | None] | None = None) -> bytes | None:
+    """Pexels e, sem nada no contexto, Pixabay (2º banco grátis)."""
+    return _pexels_photo(query, width, height, check) or _pixabay_photo(query, width, height, check)
+
+
+PIXABAY_VIDEO_URL = "https://pixabay.com/api/videos/"
+PIXABAY_PHOTO_URL = "https://pixabay.com/api/"
+
+
+def _pixabay_hits(url: str, query: str, params: dict) -> list[dict]:
+    if not PIXABAY_API_KEYS or not query:
+        return []
+    rotator = _rotator_for(PIXABAY_API_KEYS)
+    for api_key in rotator.order():
+        try:
+            resp = httpx.get(url, params={"key": api_key, "q": _normalize_query(query)[:100], "per_page": 20,
+                                          "safesearch": "true", **params}, timeout=20)
+            if resp.status_code in (400, 401, 403) and "key" in resp.text.lower():
+                rotator.ban(api_key)
+                continue
+            resp.raise_for_status()
+            return resp.json().get("hits", [])
+        except Exception as exc:  # noqa: BLE001
+            log.warning("busca pixabay falhou (%r): %s", query, exc)
+    return []
+
+
+def _passes(check, content: bytes, query: str) -> bool:
+    if check is None:
+        return True
+    verdict = check(content)
+    return not (verdict is False or (verdict is None and _SPORTS_QUERY.search(query)))
+
+
+def _pixabay_clip(query: str, width: int, height: int, check) -> Path | None:
+    hits = _pixabay_hits(PIXABAY_VIDEO_URL, query, {})
+    want_portrait = height > width
+    for hit in _rank_candidates(query, hits, "pixabay_video", lambda h: h.get("tags", ""))[:MAX_VISUAL_TRIES]:
+        files = [f for f in (hit.get("videos") or {}).values() if f.get("url") and (f.get("height") or 0) >= MIN_CLIP_HEIGHT]
+        files = [f for f in files if ((f.get("height") or 0) > (f.get("width") or 0)) == want_portrait]
+        if not files:
+            continue
+        picked = min(files, key=lambda f: abs((f.get("height") or 0) - height))
+        try:
+            resp = httpx.get(picked["url"], timeout=60, follow_redirects=True)
+            resp.raise_for_status()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("download do clipe pixabay falhou (%r): %s", query, exc)
+            continue
+        tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+        tmp.write(resp.content)
+        tmp.close()
+        path = Path(tmp.name)
+        frames = frames_from_clip(path) if check is not None else b""
+        if check is not None and (frames is None or not _passes(check, frames, query)):
+            path.unlink(missing_ok=True)
+            continue
+        _mark_recent("pixabay_video", str(hit.get("id")))
+        log.info("clipe real (pixabay) encontrado pra %r (%sx%s)", query, picked.get("width"), picked.get("height"))
+        return path
+    return None
+
+
+def _pixabay_photo(query: str, width: int, height: int, check) -> bytes | None:
+    orientation = "vertical" if height > width else "horizontal"
+    hits = _pixabay_hits(PIXABAY_PHOTO_URL, query, {"image_type": "photo", "orientation": orientation})
+    for hit in _rank_candidates(query, hits, "pixabay_photo", lambda h: h.get("tags", ""))[:MAX_VISUAL_TRIES]:
+        url = hit.get("largeImageURL") or hit.get("webformatURL")
+        if not url:
+            continue
+        try:
+            resp = httpx.get(url, timeout=30, follow_redirects=True)
+            resp.raise_for_status()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("download da foto pixabay falhou (%r): %s", query, exc)
+            continue
+        if not _passes(check, resp.content, query):
+            continue
+        _mark_recent("pixabay_photo", str(hit.get("id")))
+        log.info("foto real (pixabay) encontrada pra %r", query)
+        return resp.content
+    return None
+
+
+def _pexels_clip(query: str, width: int, height: int, check: Callable[[bytes], bool | None] | None = None) -> Path | None:
     """Busca um clipe real que combine com `query` (2-4 palavras em
     inglês, ver script_gen.py -> stock_query) e devolve o caminho local do
     arquivo baixado — ou None (sem chave configurada, sem resultado, ou
@@ -209,7 +298,7 @@ def search_stock_clip(query: str, width: int, height: int, check: Callable[[byte
     return None
 
 
-def search_stock_photo(query: str, width: int, height: int, check: Callable[[bytes], bool | None] | None = None) -> bytes | None:
+def _pexels_photo(query: str, width: int, height: int, check: Callable[[bytes], bool | None] | None = None) -> bytes | None:
     """Busca uma FOTO real que combine com `query` e devolve os bytes da
     imagem — mesma interface de src.visuals.generate_image, pra ser
     intercambiável no lugar dela. Meio-termo da cascata: mais crível que
