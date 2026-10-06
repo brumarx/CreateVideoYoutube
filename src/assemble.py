@@ -26,6 +26,10 @@ VIDEO_HEIGHT = 1920
 
 MUSIC_DIR = Path(__file__).resolve().parent.parent / "assets" / "music"
 MUSIC_VOLUME_DB = -23  # bem baixo — não pode competir com a narração
+# volume final: padrão do YouTube. Ele só ABAIXA vídeo alto, nunca sobe o
+# baixo — os nossos saíam entre -23 e -27 LUFS (amix ainda cortava metade),
+# tocando ~10 dB abaixo de qualquer outro vídeo.
+LOUDNORM = "loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000"
 SFX_DIR = Path(__file__).resolve().parent.parent / "assets" / "sfx"
 
 WATERMARK_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
@@ -751,15 +755,20 @@ def add_background_music(
     usou música nenhuma), pra quem chamar colocar na descrição do vídeo —
     a licença exige isso."""
     tracks = sorted(music_dir.glob("*.mp3"))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     if not tracks:
-        return video_path, None
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(video_path), "-af", LOUDNORM,
+             "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", str(output_path)],
+            check=True, capture_output=True, text=True,
+        )
+        return output_path, None
 
     candidates = [t for t in tracks if TRACK_MOOD.get(t.name) == mood] if mood else []
     track = random.choice(candidates or tracks)
     attribution = TRACK_ATTRIBUTION.get(track.name)
     duration = _ffprobe_duration(video_path)
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
         [
             "ffmpeg", "-y",
@@ -767,7 +776,7 @@ def add_background_music(
             "-stream_loop", "-1", "-i", str(track),
             "-filter_complex",
             f"[1:a]volume={MUSIC_VOLUME_DB}dB,atrim=0:{duration}[music];"
-            "[0:a][music]amix=inputs=2:duration=first:dropout_transition=0[a]",
+            f"[0:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,{LOUDNORM}[a]",
             "-map", "0:v", "-map", "[a]",
             "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
             str(output_path),
