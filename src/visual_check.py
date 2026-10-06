@@ -43,7 +43,12 @@ _RULES = """Responda NÃO (ok=false) se a imagem:
 - tem texto, logo ou marca em destaque que não tem a ver com a cena;
 - mostra um jogador/atleta em close, de uniforme com escudo (real ou
   imitação) — num vídeo de notícia parece um jogador de verdade do clube
-  que não existe (imagem de IA de "jogador do Botafogo" é sempre NÃO).
+  que não existe (imagem de IA de "jogador do Botafogo" é sempre NÃO);
+- mostra dinheiro de outro país identificável (nota de dólar, euro) numa
+  cena sobre dinheiro brasileiro, reais ou gasto público do Brasil;
+- mostra o ROSTO de uma pessoa em destaque numa cena que cita uma pessoa
+  real pelo nome (político, jogador, técnico) — quem assiste acha que é
+  ela, e não é. Silhueta, mãos ou pessoa de costas estão OK.
 Imagem genérica mas coerente com o assunto e o clima da cena (estádio sem
 clube identificável, bola, torcida genérica, pessoa num escritório numa
 cena sobre trabalho) está OK."""

@@ -392,6 +392,25 @@ def render_scene(
     return output_path
 
 
+def _fmt_stat(value: float, unit: str) -> str:
+    """Valor da barra em português legível: "Adeimir 48105859,7 reais" saiu
+    assim num vídeo do politica (F7kCsdCbAzA) — vira "R$ 48,1 milhões"."""
+    money = bool(re.search(r"reais|r\$", unit, re.I))
+    for limit, singular, plural in ((1e9, "bilhão", "bilhões"), (1e6, "milhão", "milhões")):
+        if abs(value) >= limit:
+            n = value / limit
+            num = f"{n:.0f}" if round(n, 1).is_integer() else f"{n:.1f}".replace(".", ",")
+            text = f"{num} {singular if num == '1' else plural}"
+            return f"R$ {text}" if money else f"{text} {unit}".rstrip()
+    if abs(value) >= 1000:
+        num = f"{value:,.0f}".replace(",", ".")
+    elif float(value).is_integer():
+        num = f"{value:.0f}"
+    else:
+        num = f"{value:.1f}".replace(".", ",")
+    return f"R$ {num}" if money else f"{num} {unit}".rstrip()
+
+
 def _stat_bar_filter(overlay: dict, width: int, height: int, accent: str) -> str:
     """Barra comparativa animada (ex.: posse de bola, 2 valores 0-100) —
     cresce da esquerda pra direita no primeiro segundo da cena. Só ativa
@@ -416,8 +435,11 @@ def _stat_bar_filter(overlay: dict, width: int, height: int, accent: str) -> str
     def bar_and_label(label_y: int, label: str, value: float, color_hex: str) -> str:
         bar_y = label_y + label_font + label_gap
         target_w = max(int(bar_w * min(float(value) / scale, 1.0)), 1)
-        number = f"{float(value):.0f}" if float(value).is_integer() or is_pct else f"{float(value):.1f}".replace(".", ",")
-        text = _escape_drawtext(f"{label} {number}%" if is_pct else f"{label} {number} {unit}".rstrip())
+        if is_pct:
+            number = f"{float(value):.0f}" if float(value).is_integer() else f"{float(value):.1f}".replace(".", ",")
+            text = _escape_drawtext(f"{label} {number}%")
+        else:
+            text = _escape_drawtext(f"{label} {_fmt_stat(float(value), unit)}")
         # expansion=none é obrigatório aqui — o rótulo sempre tem um '%'
         # (percentual), e o parser de expansão do drawtext (%{...}) trata
         # um '%' sozinho como início de sintaxe quebrada ("Stray % near")
