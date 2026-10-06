@@ -20,6 +20,7 @@ transparência.
 """
 from __future__ import annotations
 
+import json
 import logging
 import shutil
 import sqlite3
@@ -56,7 +57,7 @@ MAX_ATTEMPTS = 4
 # investigar a falha. retry_uploads.py só reenvia "failed" (com
 # upload_meta.json), então "rendered" de dias atrás é execução que morreu
 # no meio e "dry_run" é teste — os dois também saem.
-CLEANUP_STATUSES = ("failed", "retried", "abandoned", "deleted", "uploaded", "rendered", "dry_run", "script_ready")
+CLEANUP_STATUSES = ("failed", "retried", "abandoned", "deleted", "uploaded", "rendered", "dry_run", "script_ready", "rendered_from_script")
 CLEANUP_AFTER_DAYS = 3
 # upload que falhou (token OAuth vence a cada ~7 dias) fica com
 # upload_meta.json esperando o retry_uploads — guarda por mais tempo
@@ -144,6 +145,28 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
             update(job_id, status="retried")
 
 
+def _render_approved(channel_name: str) -> None:
+    """Renderiza (sem publicar) o roteiro aprovado mais antigo do canal com
+    o comando salvo pelo --script-only. Falhou (ex.: revisão do vídeo):
+    volta pra fila normal do dia, o job vira 'abandoned'."""
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        row = conn.execute(
+            "SELECT id FROM jobs WHERE channel = ? AND status = 'script_approved' ORDER BY id LIMIT 1",
+            (channel_name,),
+        ).fetchone()
+    if not row:
+        return
+    cmd_file = ROOT / "output" / f"job_{row[0]}" / "render_cmd.json"
+    if not cmd_file.exists():
+        update(row[0], status="abandoned", error="render_cmd.json sumiu")
+        return
+    cmd = json.loads(cmd_file.read_text())
+    log.info("[%s] renderizando roteiro aprovado (job %s)", channel_name, row[0])
+    rc = subprocess.run([sys.executable, *cmd[1:]], cwd=ROOT).returncode
+    update(row[0], status="rendered_from_script" if rc == 0 else "abandoned",
+           error=None if rc == 0 else f"render do roteiro aprovado falhou (exit {rc})")
+
+
 def run_channel(channel_name: str, cfg: dict) -> None:
     uploads_per_day = cfg.get("uploads_per_day", 1)
     daily_format = cfg.get("daily_format", "short")
@@ -153,10 +176,12 @@ def run_channel(channel_name: str, cfg: dict) -> None:
         log.warning("[%s] sem token OAuth (%s) — pulando, rode auth_youtube.py primeiro", channel_name, token_file.name)
         return
 
-    # vídeo já renderizado com roteiro revisado (run_pipeline --no-upload)
-    # ocupa a vaga do dia antes de gerar outro
+    # roteiro revisado e aprovado (status script_approved, ver
+    # run_pipeline --script-only) renderiza primeiro; vídeo já renderizado
+    # com --no-upload ocupa a vaga do dia antes de gerar outro
     from retry_uploads import upload_pending
 
+    _render_approved(channel_name)
     ready = upload_pending(channel_name, "ready", limit=1)
 
     if channel_name == "botafogo":
