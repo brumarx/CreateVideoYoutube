@@ -261,6 +261,9 @@ def review_script(
         raw_problems = [p for p in raw_problems if p["tipo"] != "fora_da_fonte"]
 
     narration_words = set(re.findall(r"\w+", " ".join(sc.get("narration", "") for sc in script.get("scenes", [])).lower()))
+    script_text = " ".join(
+        [script.get("title", ""), script.get("thumbnail_text", "")] + [sc.get("narration", "") for sc in script.get("scenes", [])]
+    ).lower()
     problems = []
     for p in raw_problems:
         term = str(p.get("termo", "")).strip()
@@ -271,6 +274,11 @@ def review_script(
             if words and len(words & narration_words) / len(words) < 0.6:
                 log.info("deboche apontado não está no roteiro (%r) — ignorado", term)
                 continue
+        if term and len(term.split()) <= 2 and term[:1].isupper() and term.lower() not in script_text:
+            # revisor apontou nome que nem está no roteiro ("Ziyeh" num texto
+            # que só tem "Ziyech" — job 320)
+            log.info("termo apontado não está no roteiro (%r) — ignorado", term)
+            continue
         if p["tipo"] in _SEARCHABLE and term and not (facts or web_facts) and _confirmed_online(term, strict=p["tipo"] != "ferramenta_inexistente"):
             log.info("revisor não conhecia %r, mas a busca confirmou — ok", term)
             continue
