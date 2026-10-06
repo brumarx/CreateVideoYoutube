@@ -34,6 +34,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.orchestrator import DB_PATH, update  # noqa: E402
+from src.upload import UPLOAD_META_FILE  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("daily_run")
@@ -52,9 +53,14 @@ MAX_ATTEMPTS = 4
 # Pasta output/job_N só era apagada depois de upload com sucesso — falha,
 # retentativa e abandono deixavam tudo pra trás (9,9 GB em 06/10). Apaga a
 # de job que já terminou sem volta, depois de uns dias pra dar tempo de
-# investigar a falha. "rendered" fica: retry_uploads.py ainda precisa dele.
-CLEANUP_STATUSES = ("failed", "retried", "abandoned", "deleted", "uploaded")
+# investigar a falha. retry_uploads.py só reenvia "failed" (com
+# upload_meta.json), então "rendered" de dias atrás é execução que morreu
+# no meio e "dry_run" é teste — os dois também saem.
+CLEANUP_STATUSES = ("failed", "retried", "abandoned", "deleted", "uploaded", "rendered", "dry_run")
 CLEANUP_AFTER_DAYS = 3
+# upload que falhou (token OAuth vence a cada ~7 dias) fica com
+# upload_meta.json esperando o retry_uploads — guarda por mais tempo
+RETRY_KEEP_DAYS = 14
 
 
 def _last_job(channel_name: str, after_id: int):
@@ -74,10 +80,11 @@ def _max_job_id() -> int:
 def cleanup_output() -> None:
     with closing(sqlite3.connect(DB_PATH)) as conn:
         old = {
-            row[0] for row in conn.execute(
-                f"SELECT id FROM jobs WHERE status IN ({','.join('?' * len(CLEANUP_STATUSES))}) "
+            row[0]: (row[1], row[2]) for row in conn.execute(
+                f"SELECT id, status, datetime(updated_at) < datetime('now', ?) FROM jobs "
+                f"WHERE status IN ({','.join('?' * len(CLEANUP_STATUSES))}) "
                 "AND datetime(updated_at) < datetime('now', ?)",
-                (*CLEANUP_STATUSES, f"-{CLEANUP_AFTER_DAYS} days"),
+                (f"-{RETRY_KEEP_DAYS} days", *CLEANUP_STATUSES, f"-{CLEANUP_AFTER_DAYS} days"),
             )
         }
     freed = removed = 0
@@ -88,6 +95,9 @@ def cleanup_output() -> None:
             continue
         if job_id not in old:
             continue
+        status, past_retry_window = old[job_id]
+        if status == "failed" and (job_dir / UPLOAD_META_FILE).exists() and not past_retry_window:
+            continue  # vídeo pronto esperando reenvio
         freed += sum(f.stat().st_size for f in job_dir.rglob("*") if f.is_file())
         shutil.rmtree(job_dir, ignore_errors=True)
         removed += 1
