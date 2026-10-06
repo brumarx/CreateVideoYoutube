@@ -55,6 +55,39 @@ OPENAI_COMPAT_PROVIDERS = [
 
 GEMINI_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
+# Cloudflare Workers AI (grátis, 10 mil neurons/dia por conta): endpoint
+# compatível com OpenAI, mas um por conta e sem /models útil — lista fixa,
+# do mais forte pro mais leve
+CLOUDFLARE_CHAT_URL = "https://api.cloudflare.com/client/v4/accounts/{account}/ai/v1/chat/completions"
+CLOUDFLARE_MODELS = [
+    "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "@cf/mistralai/mistral-small-3.1-24b-instruct",
+    "@cf/qwen/qwen2.5-coder-32b-instruct",
+]
+
+
+def _cloudflare_complete(entries, messages, max_tokens, ok, model_filter, validate):
+    rotator = _rotator_for(entries)
+    for entry in rotator.order():
+        account, _, token = entry.partition(":")
+        if not token:
+            log.warning("CLOUDFLARE_AI_KEYS precisa ser ACCOUNT_ID:API_TOKEN")
+            rotator.ban(entry)
+            continue
+        for model in CLOUDFLARE_MODELS:
+            if model_filter is not None and not model_filter(model):
+                continue
+            result, status = _call_openai_compat(CLOUDFLARE_CHAT_URL.format(account=account), token, model, messages, max_tokens)
+            if ok(result):
+                log.info("resposta via cloudflare/%s", model)
+                return result
+            if result and validate is not None:
+                log.warning("resposta de cloudflare/%s não passou na validação, tentando próximo modelo", model)
+            if status in (401, 403):
+                rotator.ban(entry)
+                break
+    return None
+
 _MAX_MODEL_CANDIDATES = 4
 _model_cache: dict[str, list[str]] = {}
 
@@ -255,6 +288,11 @@ def complete(
                 if status in (401, 403):
                     rotator.ban(api_key)
                     break  # próxima chave, não adianta repetir modelos com a mesma
+
+    if keys.cloudflare:
+        result = _cloudflare_complete(keys.cloudflare, messages, max_tokens, _ok, model_filter, validate)
+        if result is not None:
+            return result
 
     if keys.gemini:
         rotator = _rotator_for(keys.gemini)

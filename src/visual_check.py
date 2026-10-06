@@ -120,6 +120,9 @@ def _gemini(prompt: str, jpeg: bytes) -> str | None:
 # com notícia do BAIRRO Botafogo e a mesma imagem em 9 de 16 cenas)
 _OPENAI_COMPAT_VISION = [
     ("mistral", "https://api.mistral.ai/v1/chat/completions", ["mistral-small-latest"]),
+    # Groq grátis: o qwen3.8 aceita imagem (testado 06/10, leu o texto da
+    # thumbnail) — divide a cota diária com o texto
+    ("groq", "https://api.groq.com/openai/v1/chat/completions", ["qwen/qwen3.8-27b"]),
     ("openrouter", "https://openrouter.ai/api/v1/chat/completions", ["google/gemma-4-31b-it:free", "qwen/qwen3.8-27b:free"]),
 ]
 
@@ -155,9 +158,35 @@ def _openai_compat(prompt: str, jpeg: bytes) -> str | None:
 
 
 def ask_vision(prompt: str, jpeg: bytes) -> str | None:
-    """Resposta de texto de um modelo com visão: Gemini, depois Mistral,
-    depois OpenRouter grátis. None se nenhum respondeu."""
-    return _gemini(prompt, jpeg) or _openai_compat(prompt, jpeg)
+    """Resposta de texto de um modelo com visão: Gemini, Mistral, Groq,
+    OpenRouter grátis e Cloudflare. None se nenhum respondeu."""
+    return _gemini(prompt, jpeg) or _openai_compat(prompt, jpeg) or _cloudflare_vision(prompt, jpeg)
+
+
+def _cloudflare_vision(prompt: str, jpeg: bytes) -> str | None:
+    from .providers import CLOUDFLARE_CHAT_URL
+
+    data_url = "data:image/jpeg;base64," + base64.b64encode(jpeg).decode()
+    for entry in LLMKeys().cloudflare:
+        account, _, token = entry.partition(":")
+        if not token:
+            continue
+        try:
+            resp = httpx.post(
+                CLOUDFLARE_CHAT_URL.format(account=account), headers={"Authorization": f"Bearer {token}"}, timeout=120,
+                json={"model": "@cf/mistralai/mistral-small-3.1-24b-instruct", "temperature": 0, "messages": [
+                    {"role": "user", "content": [
+                        {"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": data_url}},
+                    ]},
+                ]},
+            )
+            if resp.status_code == 200:
+                content = resp.json()["choices"][0]["message"]["content"]
+                if content:
+                    return content
+        except Exception as exc:  # noqa: BLE001
+            log.warning("visão cloudflare falhou: %s", exc)
+    return None
 
 
 def matches_scene(image: bytes, narration: str, context: str) -> bool | None:
@@ -176,7 +205,7 @@ def matches_scene(image: bytes, narration: str, context: str) -> bool | None:
     )
     text = ask_vision(prompt, jpeg)
     if text is None:
-        log.warning("checagem visual indisponível (gemini, mistral e openrouter falharam)")
+        log.warning("checagem visual indisponível (nenhum provedor de visão respondeu)")
         return None
     m = re.search(r"\{.*\}", text, re.DOTALL)
     try:
