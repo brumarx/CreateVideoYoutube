@@ -21,6 +21,7 @@ transparência.
 from __future__ import annotations
 
 import logging
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -48,6 +49,13 @@ EXIT_SCRIPT_REJECTED = 3
 # Pollinations fora, JSON malformado do LLM) perdia o dia direto.
 MAX_ATTEMPTS = 4
 
+# Pasta output/job_N só era apagada depois de upload com sucesso — falha,
+# retentativa e abandono deixavam tudo pra trás (9,9 GB em 06/10). Apaga a
+# de job que já terminou sem volta, depois de uns dias pra dar tempo de
+# investigar a falha. "rendered" fica: retry_uploads.py ainda precisa dele.
+CLEANUP_STATUSES = ("failed", "retried", "abandoned", "deleted", "uploaded")
+CLEANUP_AFTER_DAYS = 3
+
 
 def _last_job(channel_name: str, after_id: int):
     """Job criado por esta tentativa (id maior que o último antes dela)."""
@@ -61,6 +69,30 @@ def _last_job(channel_name: str, after_id: int):
 def _max_job_id() -> int:
     with closing(sqlite3.connect(DB_PATH)) as conn:
         return conn.execute("SELECT COALESCE(MAX(id), 0) FROM jobs").fetchone()[0]
+
+
+def cleanup_output() -> None:
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        old = {
+            row[0] for row in conn.execute(
+                f"SELECT id FROM jobs WHERE status IN ({','.join('?' * len(CLEANUP_STATUSES))}) "
+                "AND datetime(updated_at) < datetime('now', ?)",
+                (*CLEANUP_STATUSES, f"-{CLEANUP_AFTER_DAYS} days"),
+            )
+        }
+    freed = removed = 0
+    for job_dir in (ROOT / "output").glob("job_*"):
+        try:
+            job_id = int(job_dir.name.removeprefix("job_"))
+        except ValueError:
+            continue
+        if job_id not in old:
+            continue
+        freed += sum(f.stat().st_size for f in job_dir.rglob("*") if f.is_file())
+        shutil.rmtree(job_dir, ignore_errors=True)
+        removed += 1
+    if removed:
+        log.info("limpeza: %d pasta(s) de job antigo removida(s), %.1f GB liberados", removed, freed / 1e9)
 
 
 def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_short: bool = False) -> None:
@@ -132,6 +164,7 @@ def run_channel(channel_name: str, cfg: dict) -> None:
 
 def main() -> None:
     channels_dir = ROOT / "channels"
+    cleanup_output()
 
     for yaml_path in sorted(channels_dir.glob("*.yaml")):
         channel_name = yaml_path.stem
