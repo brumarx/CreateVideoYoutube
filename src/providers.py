@@ -198,6 +198,7 @@ def complete(
     keys: LLMKeys | None = None,
     max_tokens: int = 4096,
     validate: Callable[[str], bool] | None = None,
+    model_filter: Callable[[str], bool] | None = None,
 ) -> str:
     """Roda a cascata de provedores (com rodízio de chaves e descoberta
     dinâmica de modelo dentro de cada um) e devolve a primeira resposta não
@@ -220,6 +221,10 @@ def complete(
     meio do JSON — foi exatamente o que quebrou o roteiro de formato longo
     (31 cenas) antes desse parâmetro existir.
 
+    `model_filter` pula modelo pelo nome antes de chamar — pra julgamento
+    que modelo pequeno erra (checagem de tema: allam-2-7b aprovou "Salmos"
+    no canal de política).
+
     Levanta RuntimeError se nenhum provedor configurado conseguir responder
     (ou, com `validate`, se nenhum devolver algo que passe na validação).
     """
@@ -239,6 +244,8 @@ def complete(
             if not models:
                 continue
             for model in models:
+                if model_filter is not None and not model_filter(model):
+                    continue
                 result, status = _call_openai_compat(chat_endpoint, api_key, model, messages, max_tokens)
                 if _ok(result):
                     log.info("resposta via %s/%s", name, model)
@@ -254,6 +261,8 @@ def complete(
         for api_key in rotator.order():
             models = _fetch_gemini_models(api_key)
             for model in models:
+                if model_filter is not None and not model_filter(model):
+                    continue
                 result = _call_gemini(api_key, model, messages, max_tokens)
                 if _ok(result):
                     log.info("resposta via gemini/%s", model)
