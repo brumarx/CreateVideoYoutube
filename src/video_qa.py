@@ -125,7 +125,10 @@ def _vision_batch(frames: list[tuple[int, Image.Image]], narrations: dict[int, s
     return cenas if isinstance(cenas, list) else None
 
 
-def review_video(narrations: list[str], scene_videos: list[Path], context: str, strict_visual: bool = False) -> list[str]:
+def review_video(
+    narrations: list[str], scene_videos: list[Path], context: str, strict_visual: bool = False,
+    trusted_scenes: set[int] | None = None,
+) -> list[str]:
     problems: list[str] = []
 
     dup = repeated_sentences(narrations)
@@ -150,6 +153,11 @@ def review_video(narrations: list[str], scene_videos: list[Path], context: str, 
             log.warning("revisão visual indisponível pras cenas %d+ — seguindo sem ela", start + 1)
             continue
         for v in verdicts:
+            # foto da própria matéria (e cena que a repete): o rosto é da
+            # pessoa citada mesmo — a regra de "rosto de outra pessoa" reprovou
+            # a foto oficial do Ziyech (job 319)
+            if isinstance(v, dict) and v.get("cena") in (trusted_scenes or set()):
+                continue
             if isinstance(v, dict) and v.get("ok") is False:
                 problems.append(f"cena {v.get('cena')} fora de contexto: {v.get('motivo')}")
     return problems
