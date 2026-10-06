@@ -820,7 +820,11 @@ def run(
             # timestamps calculados a partir da duração real de cada narração
             # (não estimados) — só faz sentido no documentário, o curto é curto
             # demais pra precisar de capítulo.
-            chapters = _build_chapters(script["scenes"], scene_durations)
+            # sem a cena de CTA: "7:46 Se esse vídeo te ajudou, deixa" virava
+            # o último capítulo
+            chapters = _build_chapters(
+                script["scenes"][:original_scene_count], scene_durations[:original_scene_count],
+            )
             if chapters:
                 description = chapters + "\n\n" + description
 

@@ -14,9 +14,14 @@ bloqueia o vídeo por causa disso.
 """
 from __future__ import annotations
 
+import difflib
+import json
 import logging
+import re
 
 import httpx
+
+from .providers import complete
 
 log = logging.getLogger("spellcheck")
 
@@ -55,17 +60,65 @@ MAX_PASSES = 3
 def fix_text(text: str, language: str = "pt-BR") -> str:
     """Repete até não sobrar erro corrigível: uma correção pode revelar
     outra ("das cidade perdida" -> "das cidades perdida" -> "...perdidas")."""
+    typos: set[str] = set()
     for _ in range(MAX_PASSES):
-        fixed = _fix_once(text, language)
+        fixed, typos = _fix_once(text, language)
         if fixed == text:
             break
         text = fixed
+    return _fix_typos(text, typos) if typos else text
+
+
+def _fix_typos(text: str, typos: set[str]) -> str:
+    """Palavra comum (minúscula) que o LanguageTool não conhece: a sugestão
+    dele costuma ser ruim ("quemoprático" -> "quemo prático"; o certo é
+    "quiroprático"), então quem corrige é o LLM, vendo a frase. Nome próprio
+    (maiúscula) nunca chega aqui."""
+    from .topics import _SMALL_MODEL_RE  # modelo pequeno "corrige" palavra certa
+
+    prompt = (
+        f"Texto em português do Brasil:\n{text[:3000]}\n\n"
+        f"Palavras suspeitas de erro de digitação: {sorted(typos)}\n"
+        "Para cada uma, devolva a palavra que o autor QUIS escrever, corrigindo "
+        "só letras trocadas, faltando ou sobrando (\"antigoss\" -> \"antigos\") — "
+        "nunca troque por outra palavra de sentido diferente. Se ela já está "
+        "certa (termo técnico, estrangeirismo, gíria), devolva igual. Responda "
+        'SÓ JSON {"palavra": "correção"}.'
+    )
+
+    def parse(raw: str) -> dict | None:
+        m = re.search(r"\{.*\}", raw, re.DOTALL)
+        try:
+            d = json.loads(m.group(0)) if m else None
+        except json.JSONDecodeError:
+            return None
+        return d if isinstance(d, dict) and set(d) <= typos else None
+
+    try:
+        raw = complete(
+            [{"role": "user", "content": prompt}], max_tokens=300,
+            validate=lambda r: parse(r) is not None,
+            model_filter=lambda m: not _SMALL_MODEL_RE.search(m),
+        )
+    except RuntimeError as exc:
+        log.warning("correção de digitação sem LLM (%s) — fica como está", exc)
+        return text
+    for wrong, right in parse(raw).items():
+        right = str(right).strip()
+        # correção tem que ser a MESMA palavra com letras arrumadas:
+        # "quemoprático" -> "prático" (0,74) mudava o sentido; o certo
+        # "quiroprático" é 0,83
+        similar = difflib.SequenceMatcher(None, wrong, right.lower()).ratio() >= 0.8
+        if right and right != wrong and len(right.split()) == 1 and similar:
+            log.warning("corrigido (digitação): %r -> %r", wrong, right)
+            text = re.sub(rf"(?<!\w){re.escape(wrong)}(?!\w)", right, text)
     return text
 
 
-def _fix_once(text: str, language: str) -> str:
+def _fix_once(text: str, language: str) -> tuple[str, set[str]]:
+    typos: set[str] = set()
     if not text or not text.strip():
-        return text
+        return text, typos
     words = text.split()
     title_case = len(words) > 2 and sum(w[:1].isupper() for w in words) / len(words) > 0.6
     probe = text.lower() if title_case else text
@@ -73,7 +126,7 @@ def _fix_once(text: str, language: str) -> str:
         probe = text
     matches = _matches(probe, language)
     if not matches:
-        return text
+        return text, typos
     fixed = text
     next_start = len(text)
     # de trás pra frente: corrigir um trecho não desloca os offsets anteriores
@@ -86,6 +139,9 @@ def _fix_once(text: str, language: str) -> str:
             # concordância entre linhas/cenas diferentes ("o\n1:06" -> "a
             # 1:06"): o LanguageTool lê como uma frase só
             continue
+        if category == "TYPOS" and not title_case and original.isalpha() and original.islower():
+            typos.add(original)
+            continue
         if category not in AUTO_FIX_CATEGORIES or not m.get("replacements"):
             log.info("LanguageTool apontou (não corrigido, %s): %r — %s", category, original, m["message"])
             continue
@@ -93,7 +149,7 @@ def _fix_once(text: str, language: str) -> str:
         log.warning("corrigido: %r -> %r (%s)", original, new, m["message"])
         fixed = fixed[:m["offset"]] + new + fixed[m["offset"] + m["length"]:]
         next_start = m["offset"]
-    return fixed
+    return fixed, typos
 
 
 def fix_script(script: dict, language: str = "pt-BR") -> dict:
