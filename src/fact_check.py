@@ -237,12 +237,18 @@ def review_script(
     copied = copied_from_source(script, facts, web_facts)
     if len(copied) >= 2:
         return copied
+    unknown = unknown_names(script, topic, facts, web_facts)
     raw_problems: list[dict] | None = None
+    from .topics import _SMALL_MODEL_RE
+
     try:
         raw = complete(
             [{"role": "user", "content": _review_prompt(script, topic, facts, web_facts)}],
             max_tokens=3000,
             validate=lambda r: _parse(r) is not None,
+            # modelo pequeno aprovava "pesquisador Trent-Von Haesler" e
+            # "o caso de Dobelle" inventados (job 306)
+            model_filter=lambda m: not _SMALL_MODEL_RE.search(m),
         )
         raw_problems = _parse(raw)
     except RuntimeError as exc:
@@ -269,6 +275,57 @@ def review_script(
             log.info("revisor não conhecia %r, mas a busca confirmou — ok", term)
             continue
         problems.append(p)
+    return problems + unknown
+
+
+# nome próprio que não precisa de confirmação (aparece em qualquer roteiro)
+_COMMON_NAMES = {
+    "brasil", "deus", "terra", "lua", "sol", "europa", "américa", "áfrica", "ásia",
+    "internet", "google", "youtube", "chatgpt", "instagram", "whatsapp", "copa",
+}
+_NAME_RE = re.compile(r"(?<![.!?]\s)(?<!^)\b([A-ZÀ-Ý][a-zà-ÿ]+(?:[- ](?:de |da |do |von |van )?[A-ZÀ-Ý][a-zà-ÿ]+){0,3})")
+_name_cache: dict[str, bool] = {}
+
+
+def unknown_names(script: dict, topic: str, facts: dict | None, web_facts: list[dict] | None) -> list[dict]:
+    """Nome próprio citado na narração que não está em nenhuma fonte e a
+    busca (nome + tema) não acha: inventado. Checagem por código — o revisor
+    LLM aprovou "a pesquisa de Trent-Von Haesler" e "o caso de Dobelle"
+    (job 306, experiências de quase-morte)."""
+    narration = " ".join(sc.get("narration", "") for sc in script.get("scenes", []))
+    known = " ".join([
+        topic, json.dumps(facts or {}, ensure_ascii=False),
+        " ".join(f"{f.get('titulo', '')} {f.get('trecho', '')}" for f in (web_facts or [])),
+    ]).lower()
+    names: list[str] = []
+    for sentence in re.split(r"(?<=[.!?])\s+", narration):
+        # 1ª palavra da frase é maiúscula por ser começo de frase
+        for m in _NAME_RE.finditer(sentence):
+            name = m.group(1)
+            if m.start() == 0 and " " not in name and "-" not in name:
+                continue
+            if name.lower() in _COMMON_NAMES or name.lower() in known or len(name) < 4:
+                continue
+            if name not in names:
+                names.append(name)
+    problems = []
+    for name in names[:6]:
+        if name not in _name_cache:
+            # pessoa (1-2 palavras) só vale no contexto do tema — "Dobelle"
+            # existe, mas não em experiência de quase-morte; instituição
+            # (3+ palavras, "Universidade Federal de São Paulo") basta existir
+            query = name if len(name.split()) >= 3 else f"{name} {topic}"
+            results = search_topic_facts(query, max_results=3) or []
+            words = re.findall(r"\w{3,}", name.lower())
+            _name_cache[name] = any(
+                all(w in f"{r['titulo']} {r['trecho']}".lower() for w in words) for r in results
+            )
+        if not _name_cache[name]:
+            log.warning("nome sem fonte nem resultado na busca: %r", name)
+            problems.append({
+                "tipo": "fato_nao_confirmado", "termo": name,
+                "motivo": "nome próprio que não aparece nas fontes nem na busca — provavelmente inventado",
+            })
     return problems
 
 

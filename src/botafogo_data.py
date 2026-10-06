@@ -631,6 +631,21 @@ def _outro_botafogo(art: dict) -> bool:
                                                       for f in _OUTRO_BOTAFOGO_FONTES)
 
 
+PORTAL_MIN_EXCERPT = 400  # resumo menor que isso é chamada, não a notícia
+_PROMO_RE = re.compile(
+    r"chave pix|\bcupom\b|seja membro|whatsapp\.com/channel|inscreva-se no canal|ative o sininho|"
+    r"compre na|link na bio|\bjoin\b",
+    re.IGNORECASE,
+)
+
+
+def _is_video_or_promo(art: dict) -> bool:
+    url = (art.get("source_url") or "").lower()
+    if "youtube.com" in url or "youtu.be" in url:
+        return True
+    return bool(_PROMO_RE.search(art.get("excerpt") or ""))
+
+
 def portal_news_task(per_video: int = PORTAL_NEWS_PER_VIDEO) -> dict | None:
     """Tarefa de notícias a partir do Portal Botafogo (reserva da ESPN): até
     PORTAL_NEWS_PER_VIDEO manchetes recentes, de assuntos diferentes, ainda
@@ -667,9 +682,15 @@ def portal_news_task(per_video: int = PORTAL_NEWS_PER_VIDEO) -> dict | None:
             continue
         if _is_duplicate(title, escolhidas):
             continue
-        if art.get("source_type") != "authored" and len((art.get("excerpt") or "").strip()) < 80:
-            # agregada sem resumo (mais da metade): só o título fazia o
-            # roteiro "encher linguiça" e a revisão de fatos reprovar
+        if art.get("source_type") != "authored" and _is_video_or_promo(art):
+            # descrição de vídeo do YouTube ("CUPOM GOSETOR", "Chave PIX",
+            # "SEJA MEMBRO") não é notícia — job 305
+            log.info("portal: pulando vídeo/propaganda: %s", title)
+            continue
+        if art.get("source_type") != "authored" and len((art.get("excerpt") or "").strip()) < PORTAL_MIN_EXCERPT:
+            # agregada sem resumo ou só com chamada ("Seis nomes terão o
+            # vínculo encerrado... Saiba mais detalhes", sem os nomes — job
+            # 305): só isso fazia o roteiro "encher linguiça" sem o fato
             art["_texto"] = _texto_da_fonte(art.get("source_url"))
             if not art["_texto"]:
                 log.info("portal: pulando notícia sem texto: %s", title)
