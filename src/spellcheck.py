@@ -228,29 +228,49 @@ def _confirmed(text: str, candidates: list[tuple[int, int, str, str, str]]) -> l
 
 def _proofread_short(text: str) -> str:
     """Título/thumbnail com palavra certa no lugar errado, que o LanguageTool
-    não vê: "Tutorial Passa a Passa" (job 304). LLM grande revisa; só vale
-    se a correção for pequena (não reescreve o título)."""
+    não vê: "Tutorial Passa a Passa" (job 304), "quem quer lançam sua marca"
+    na descrição (job 310). LLM grande revisa; só vale se a correção for
+    pequena (não reescreve o texto)."""
     from .topics import _SMALL_MODEL_RE
 
     prompt = (
         f"Texto de título/thumbnail de vídeo do YouTube em português do Brasil: \"{text}\"\n"
         "Corrija SÓ erro de português ou de digitação (expressão errada, concordância, "
         "palavra trocada) mantendo maiúsculas, asteriscos e o resto igual. Sem erro, "
-        "devolva exatamente igual. Responda SÓ o texto, sem aspas."
+        "devolva exatamente igual (mesmas quebras de linha). Responda SÓ o texto, sem aspas."
     )
     try:
         raw = complete(
-            [{"role": "user", "content": prompt}], max_tokens=120,
+            [{"role": "user", "content": prompt}], max_tokens=max(120, len(text) // 2),
             validate=lambda r: 0 < len(r.strip().strip('"')) <= len(text) * 1.3 + 10,
             model_filter=lambda m: not _SMALL_MODEL_RE.search(m),
         )
     except RuntimeError:
         return text
-    new = raw.strip().splitlines()[0].strip().strip('"“”')
-    if new != text and difflib.SequenceMatcher(None, text.lower(), new.lower()).ratio() >= 0.85:
+    new = raw.strip().strip('"“”') if "\n" in text else raw.strip().splitlines()[0].strip().strip('"“”')
+    # texto longo: só aceita retoque (0,95), nunca reescrita
+    limit = 0.85 if len(text) < 150 else 0.95
+    if new != text and difflib.SequenceMatcher(None, text.lower(), new.lower()).ratio() >= limit:
+        if _introduces_typo(text, new):
+            log.info("revisão recusada (criou palavra inexistente): %r -> %r", text, new)
+            return text
         log.warning("revisado: %r -> %r", text, new)
         return new
     return text
+
+
+def _introduces_typo(old: str, new: str) -> bool:
+    """O LLM "corrigiu" "estreia" pra "estrea" (job 309): palavra nova que o
+    LanguageTool não reconhece invalida a revisão."""
+    old_words = set(re.findall(r"\w+", old.lower()))
+    changed = {w for w in re.findall(r"\w+", new.lower()) if w not in old_words}
+    if not changed:
+        return False
+    for m in _matches(new.lower(), "pt-BR") or []:
+        frag = new.lower()[m["offset"]:m["offset"] + m["length"]]
+        if m["rule"]["category"]["id"] == "TYPOS" and frag in changed:
+            return True
+    return False
 
 
 def fix_script(script: dict, language: str = "pt-BR") -> dict:
@@ -259,7 +279,7 @@ def fix_script(script: dict, language: str = "pt-BR") -> dict:
     for key in ("title", "thumbnail_text", "description"):
         if script.get(key):
             script[key] = fix_text(script[key], language)
-    for key in ("title", "thumbnail_text"):
+    for key in ("title", "thumbnail_text", "description"):
         if script.get(key):
             script[key] = _proofread_short(script[key])
     scenes = script.get("scenes") or []

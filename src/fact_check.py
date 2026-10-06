@@ -282,9 +282,14 @@ def review_script(
 _COMMON_NAMES = {
     "brasil", "deus", "terra", "lua", "sol", "europa", "américa", "áfrica", "ásia",
     "internet", "google", "youtube", "chatgpt", "instagram", "whatsapp", "copa",
+    "canva", "microsoft", "apple", "amazon", "meta", "openai", "photoshop", "excel", "word",
 }
 _NAME_RE = re.compile(r"(?<![.!?]\s)(?<!^)\b([A-ZÀ-Ý][a-zà-ÿ]+(?:[- ](?:de |da |do |von |van )?[A-ZÀ-Ý][a-zà-ÿ]+){0,3})")
 _name_cache: dict[str, bool] = {}
+_INSTITUTION_RE = re.compile(
+    r"(Justiça|Tribunal|Supremo|Câmara|Senado|Ministério|Universidade|Instituto|Polícia|Governo|"
+    r"Banco|Receita|Assembleia|Congresso|Prefeitura|Secretaria|Agência|Fundação|Museu|Hospital)\b"
+)
 
 
 def unknown_names(script: dict, topic: str, facts: dict | None, web_facts: list[dict] | None) -> list[dict]:
@@ -304,7 +309,8 @@ def unknown_names(script: dict, topic: str, facts: dict | None, web_facts: list[
             name = m.group(1)
             if m.start() == 0 and " " not in name and "-" not in name:
                 continue
-            if name.lower() in _COMMON_NAMES or name.lower() in known or len(name) < 4:
+            first = name.split()[0].split("-")[0].lower()  # "Google Imagens"
+            if first in _COMMON_NAMES or name.lower() in known or len(name) < 4:
                 continue
             if name not in names:
                 names.append(name)
@@ -314,12 +320,20 @@ def unknown_names(script: dict, topic: str, facts: dict | None, web_facts: list[
             # pessoa (1-2 palavras) só vale no contexto do tema — "Dobelle"
             # existe, mas não em experiência de quase-morte; instituição
             # (3+ palavras, "Universidade Federal de São Paulo") basta existir
-            query = name if len(name.split()) >= 3 else f"{name} {topic}"
+            # tema inteiro diluía a busca ("Justiça Eleitoral" e a tática
+            # finlandesa "Motti" reprovados à toa): nome + 3 palavras-chave
+            institution = len(name.split()) >= 3 or _INSTITUTION_RE.match(name)
+            keywords = sorted(set(re.findall(r"\w{5,}", topic.lower())), key=len, reverse=True)[:3]
+            query = name if institution else f"{name} {' '.join(keywords)}"
             results = search_topic_facts(query, max_results=3) or []
             words = re.findall(r"\w{3,}", name.lower())
-            _name_cache[name] = any(
-                all(w in f"{r['titulo']} {r['trecho']}".lower() for w in words) for r in results
-            )
+            def ok(r: dict) -> bool:
+                text = f"{r['titulo']} {r['trecho']}".lower()
+                # pessoa: nome E assunto no mesmo resultado ("Dobelle" existe,
+                # mas não em matéria de quase-morte)
+                return all(w in text for w in words) and (institution or not keywords or any(k in text for k in keywords))
+
+            _name_cache[name] = any(ok(r) for r in results)
         if not _name_cache[name]:
             log.warning("nome sem fonte nem resultado na busca: %r", name)
             problems.append({
