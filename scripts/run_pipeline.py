@@ -33,6 +33,7 @@ from src.config import ChannelConfig
 from src.fact_check import BLOCKING_TYPES, feedback_for_rewrite, review_script
 from src.orchestrator import enqueue, update
 from src.script_gen import engagement_question, generate_script
+from src.spellcheck import fix_script, fix_text
 from src.stock_media import search_stock_clip, search_stock_photo
 from src.thumbnail import make_thumbnail, photo_scene_frame, title_card
 from src.topics import pick_topic
@@ -478,6 +479,8 @@ def run(
                 web_facts=web_facts, revision_feedback=feedback_for_rewrite(problems),
             )
         update(job_id, status="scripted")
+        # português revisado antes de narrar: a narração vira legenda na tela
+        script = fix_script(script, channel.language)
 
         # bordão de entrada do canal — por código, igual ao CTA abaixo, pra
         # sair sempre igual; o gancho do LLM vem logo depois.
@@ -864,7 +867,7 @@ def run(
             "tags": script["tags"],
             "publish_at": publish_at,
             # comentário com pergunta postado pelo canal logo depois do upload
-            "comment": engagement_question(script["title"], script["scenes"][:original_scene_count])
+            "comment": fix_text(engagement_question(script["title"], script["scenes"][:original_scene_count]), channel.language)
             + (f"\n\n{channel.website_cta}: {channel.website}" if channel.website else ""),
         }
         (work_dir / UPLOAD_META_FILE).write_text(json.dumps(upload_meta, ensure_ascii=False, indent=2))
