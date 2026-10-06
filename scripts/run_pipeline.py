@@ -887,6 +887,7 @@ def run(
             description += "\n\n" + " ".join(hashtags)
 
         if dry_run:
+            update(job_id, status="dry_run")
             log.info("[%s] --dry-run: não vou publicar. Revise %s manualmente.", job_id, final_video)
             return
 

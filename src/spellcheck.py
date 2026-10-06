@@ -129,6 +129,7 @@ def _fix_once(text: str, language: str) -> tuple[str, set[str]]:
         return text, typos
     fixed = text
     next_start = len(text)
+    logged: set[tuple[str, str]] = set()  # nome repetido no texto: 1 linha de log só
     # de trás pra frente: corrigir um trecho não desloca os offsets anteriores
     for m in sorted(matches, key=lambda m: m["offset"], reverse=True):
         category = m["rule"]["category"]["id"]
@@ -143,7 +144,9 @@ def _fix_once(text: str, language: str) -> tuple[str, set[str]]:
             typos.add(original)
             continue
         if category not in AUTO_FIX_CATEGORIES or not m.get("replacements"):
-            log.info("LanguageTool apontou (não corrigido, %s): %r — %s", category, original, m["message"])
+            if (category, original) not in logged:
+                logged.add((category, original))
+                log.info("LanguageTool apontou (não corrigido, %s): %r — %s", category, original, m["message"])
             continue
         new = _match_case(original, m["replacements"][0]["value"])
         log.warning("corrigido: %r -> %r (%s)", original, new, m["message"])

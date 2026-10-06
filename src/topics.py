@@ -99,6 +99,9 @@ def _is_valid_topic(topic: str) -> bool:
     )
 
 
+_ENUM_PREFIX_RE = re.compile(r"^\s*(\d+[.)]|[-*•])\s+")
+
+
 def _first_line(raw: str) -> str:
     # às vezes o modelo devolve mais de uma linha mesmo pedindo pra não —
     # fica só com a primeira linha não vazia.
@@ -106,8 +109,11 @@ def _first_line(raw: str) -> str:
     for line in cleaned.splitlines():
         line = line.strip()
         if line:
-            return line
-    return cleaned
+            cleaned = line
+            break
+    # numeração de lista vazada ("1. O enigma da..." — dry-run de 06/10);
+    # "7 fatos sobre..." (sem ponto) é tema de lista e fica
+    return _ENUM_PREFIX_RE.sub("", cleaned).strip('"“” ')
 
 
 def _generate_new_topic(niche: str, used: list[str]) -> str:
