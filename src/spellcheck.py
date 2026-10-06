@@ -60,16 +60,23 @@ MAX_PASSES = 3
 def fix_text(text: str, language: str = "pt-BR") -> str:
     """Repete até não sobrar erro corrigível: uma correção pode revelar
     outra ("das cidade perdida" -> "das cidades perdida" -> "...perdidas")."""
-    typos: set[str] = set()
+    typos: dict[str, list[str]] = {}
     for _ in range(MAX_PASSES):
         fixed, typos = _fix_once(text, language)
         if fixed == text:
             break
         text = fixed
-    return _fix_typos(text, typos) if typos else text
+    # 2 opiniões: modelo grátis às vezes acha que "sumergida" (espanhol) é
+    # português; só aplica correção que bate com o corretor ou é parecida
+    for _ in range(2):
+        if not typos:
+            break
+        text, typos = _fix_typos(text, typos)
+    return text
 
 
-def _fix_typos(text: str, typos: set[str]) -> str:
+def _fix_typos(text: str, typos: dict[str, list[str]]) -> tuple[str, dict[str, list[str]]]:
+    """Devolve o texto e as palavras que continuaram como estavam."""
     """Palavra comum (minúscula) que o LanguageTool não conhece: a sugestão
     dele costuma ser ruim ("quemoprático" -> "quemo prático"; o certo é
     "quiroprático"), então quem corrige é o LLM, vendo a frase. Nome próprio
@@ -78,11 +85,15 @@ def _fix_typos(text: str, typos: set[str]) -> str:
 
     prompt = (
         f"Texto em português do Brasil:\n{text[:3000]}\n\n"
-        f"Palavras suspeitas de erro de digitação: {sorted(typos)}\n"
-        "Para cada uma, devolva a palavra que o autor QUIS escrever, corrigindo "
-        "só letras trocadas, faltando ou sobrando (\"antigoss\" -> \"antigos\") — "
-        "nunca troque por outra palavra de sentido diferente. Se ela já está "
-        "certa (termo técnico, estrangeirismo, gíria), devolva igual. Responda "
+        "Palavras suspeitas de erro de digitação (com a sugestão do corretor): "
+        + "; ".join(f"{w} -> {sug or '?'}" for w, sug in sorted(typos.items())) + "\n"
+        "Para cada uma: ela existe no dicionário do PORTUGUÊS DO BRASIL (ou é "
+        "termo técnico/estrangeirismo de uso comum no Brasil, tipo \"backtest\")? "
+        "Palavra de outra língua parecida com o português NÃO conta (espanhol "
+        "\"sumergida\" -> \"submergida\"). Se existe, devolva igual. Se não, "
+        "devolva a palavra em português que o autor quis escrever, corrigindo só "
+        "letras trocadas, faltando ou sobrando (\"antigoss\" -> \"antigos\") — "
+        "nunca outra palavra de sentido diferente. Responda "
         'SÓ JSON {"palavra": "correção"}.'
     )
 
@@ -92,7 +103,7 @@ def _fix_typos(text: str, typos: set[str]) -> str:
             d = json.loads(m.group(0)) if m else None
         except json.JSONDecodeError:
             return None
-        return d if isinstance(d, dict) and set(d) <= typos else None
+        return d if isinstance(d, dict) and set(d) <= set(typos) else None
 
     try:
         raw = complete(
@@ -102,21 +113,29 @@ def _fix_typos(text: str, typos: set[str]) -> str:
         )
     except RuntimeError as exc:
         log.warning("correção de digitação sem LLM (%s) — fica como está", exc)
-        return text
+        return text, {}
+    remaining: dict[str, list[str]] = {}
     for wrong, right in parse(raw).items():
         right = str(right).strip()
         # correção tem que ser a MESMA palavra com letras arrumadas:
         # "quemoprático" -> "prático" (0,74) mudava o sentido; o certo
         # "quiroprático" é 0,83
+        # ou uma das sugestões do LanguageTool ("sumergida" -> "submergida")
         similar = difflib.SequenceMatcher(None, wrong, right.lower()).ratio() >= 0.8
-        if right and right != wrong and len(right.split()) == 1 and similar:
-            log.warning("corrigido (digitação): %r -> %r", wrong, right)
-            text = re.sub(rf"(?<!\w){re.escape(wrong)}(?!\w)", right, text)
-    return text
+        suggested = right.lower() in {x.lower() for x in typos.get(wrong, [])}
+        if right == wrong or not right:
+            remaining[wrong] = typos[wrong]
+            continue
+        if len(right.split()) != 1 or not (similar or suggested):
+            log.info("digitação: %r -> %r recusado (palavra diferente demais)", wrong, right)
+            continue
+        log.warning("corrigido (digitação): %r -> %r", wrong, right)
+        text = re.sub(rf"(?<!\w){re.escape(wrong)}(?!\w)", right, text)
+    return text, remaining
 
 
-def _fix_once(text: str, language: str) -> tuple[str, set[str]]:
-    typos: set[str] = set()
+def _fix_once(text: str, language: str) -> tuple[str, dict[str, list[str]]]:
+    typos: dict[str, list[str]] = {}
     if not text or not text.strip():
         return text, typos
     words = text.split()
@@ -141,7 +160,7 @@ def _fix_once(text: str, language: str) -> tuple[str, set[str]]:
             # 1:06"): o LanguageTool lê como uma frase só
             continue
         if category == "TYPOS" and not title_case and original.isalpha() and original.islower():
-            typos.add(original)
+            typos[original] = [r["value"] for r in m.get("replacements", [])[:3]]
             continue
         if category not in AUTO_FIX_CATEGORIES or not m.get("replacements"):
             if (category, original) not in logged:

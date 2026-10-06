@@ -39,8 +39,10 @@ PRONUNCIATIONS = {
     "SAF": "Sáfi",  # "a SAF" se fala como palavra, não "ésse-á-éfe"
     "UOL": "Uól",
     "ge": "Gê-É",  # site ge (Globo Esporte): minúsculo a voz lê "jê", "GE" também sai errado
+    # verbo recuar: a voz lia "récua" (o substantivo) — dry-run de 06/10
+    "recua": "recúa",
+    "recuam": "recúam",
 }
-_PRON_RE = re.compile(r"\b(" + "|".join(map(re.escape, PRONUNCIATIONS)) + r")\b", re.IGNORECASE)
 _SPELLING_BACK = {v.lower(): k for k, v in PRONUNCIATIONS.items()}
 
 # PALAVRA INTEIRA EM MAIÚSCULAS (5+ letras) a voz costuma soletrar: nome de
@@ -58,7 +60,24 @@ _SHORT_WORDS = {
 }
 
 
-def _for_speech(text: str) -> tuple[str, list[tuple[str, str]]]:
+def _apply_pronunciations(text: str, extra: dict[str, str] | None) -> str:
+    """Fixas (PRONUNCIATIONS) + as do roteiro: nome estrangeiro que o LLM
+    soletrou à portuguesa com a tônica marcada ("Pavlopetri" ->
+    "Pavlopétri")."""
+    table = {**(extra or {}), **PRONUNCIATIONS}
+    pattern = re.compile(r"\b(" + "|".join(map(re.escape, sorted(table, key=len, reverse=True))) + r")\b", re.IGNORECASE)
+    lower = {k.lower(): v for k, v in table.items()}
+
+    def swap(m: re.Match) -> str:
+        new = lower[m[1].lower()]
+        if m[1][:1].isupper() and new[:1].islower():
+            new = new[:1].upper() + new[1:]  # "Recua" no começo da frase
+        return new
+
+    return pattern.sub(swap, text)
+
+
+def _for_speech(text: str, extra: dict[str, str] | None = None) -> tuple[str, list[tuple[str, str]]]:
     """Texto pra síntese + a lista, em ordem, de (palavra falada, original)
     das palavras em maiúsculas trocadas — a legenda karaokê devolve a
     grafia original na mesma ordem, sem tocar num "lance" comum só porque
@@ -72,7 +91,7 @@ def _for_speech(text: str) -> tuple[str, list[tuple[str, str]]]:
         trocas.append((word.capitalize().lower(), word))
         return word.capitalize()
 
-    text = _PRON_RE.sub(lambda m: PRONUNCIATIONS[next(k for k in PRONUNCIATIONS if k.lower() == m[1].lower())], text)
+    text = _apply_pronunciations(text, extra)
     text = _versus(text)
     return _CAPS_WORD.sub(caps, text), trocas
 
@@ -131,12 +150,17 @@ def _restore_punctuation(word_boundaries: list[dict], text: str) -> list[dict]:
     return word_boundaries
 
 
-def _restore_spelling(word_boundaries: list[dict], trocas: list[tuple[str, str]] | None = None) -> list[dict]:
+def _restore_spelling(
+    word_boundaries: list[dict], trocas: list[tuple[str, str]] | None = None, extra: dict[str, str] | None = None,
+) -> list[dict]:
     word_boundaries = _join_domains(word_boundaries)
     pendentes = list(trocas or [])
+    back = {**{v.lower(): k for k, v in (extra or {}).items()}, **_SPELLING_BACK}
     for w in word_boundaries:
         core = w["text"].strip(".,;:!?")
-        original = _SPELLING_BACK.get(core.lower())
+        original = back.get(core.lower())
+        if original and core[:1].isupper() and original[:1].islower():
+            original = original[:1].upper() + original[1:]  # "Recúa," no começo da frase
         if not original and pendentes and core.lower() == pendentes[0][0]:
             original = pendentes.pop(0)[1]
         if original:
@@ -256,19 +280,21 @@ def _synthesize_azure(text: str, output_path: Path, voice: str) -> list[dict]:
     return word_boundaries
 
 
-def narrate(text: str, output_path: Path, voice: str = DEFAULT_VOICE) -> tuple[Path, list[dict]]:
+def narrate(
+    text: str, output_path: Path, voice: str = DEFAULT_VOICE, pronunciations: dict[str, str] | None = None,
+) -> tuple[Path, list[dict]]:
     """Sintetiza `text` em áudio mp3 e devolve (caminho salvo, lista de
     palavras com tempo real `{"text", "start", "end"}` em segundos — vazia
     se o serviço não mandou WordBoundary por algum motivo; quem chamar deve
     cair pra um fallback nesse caso, nunca assumir que sempre vem preenchida)."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    text, spelling_back = _for_speech(text)
+    text, spelling_back = _for_speech(text, pronunciations)
     if voice not in EDGE_VOICES:
         # voz só-Azure
         if AZURE_SPEECH_KEYS:
             try:
                 words = _restore_punctuation(_synthesize_azure(text, output_path, voice), text)
-                return output_path, _restore_spelling(words, spelling_back)
+                return output_path, _restore_spelling(words, spelling_back, pronunciations)
             except Exception as exc:  # noqa: BLE001 — qualquer falha da Azure cai pro grátis
                 log.warning("azure tts indisponível (%s) — usando edge-tts", exc)
         else:
@@ -278,7 +304,7 @@ def narrate(text: str, output_path: Path, voice: str = DEFAULT_VOICE) -> tuple[P
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
             word_boundaries = asyncio.run(_synthesize(text, output_path, voice, metadata_path))
-            return output_path, _restore_spelling(_restore_punctuation(word_boundaries, text), spelling_back)
+            return output_path, _restore_spelling(_restore_punctuation(word_boundaries, text), spelling_back, pronunciations)
         except edge_tts.exceptions.NoAudioReceived:
             if attempt == MAX_ATTEMPTS:
                 raise

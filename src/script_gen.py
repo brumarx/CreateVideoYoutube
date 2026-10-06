@@ -171,6 +171,7 @@ Gere um JSON com exatamente este formato:
 {{
   "title": "título chamativo, até 100 caracteres",
   "thumbnail_text": "gancho CURTÍSSIMO pra thumbnail, no máximo 4 palavras, em português correto (concordância certa, nenhuma palavra em inglês — saiu \"DOR É FUEL\" e \"A ÁLCOOL VERDADE\"), tipo manchete de banca de jornal — não é o título, é a frase que faz alguém parar de rolar o feed",
+  "pronuncia": {{"OPCIONAL — só nomes estrangeiros/difíceis da narração (lugar, pessoa, espécie) que uma voz brasileira leria errado": "como se fala, escrito à portuguesa com acento na sílaba tônica — ex.: \"Pavlopetri\": \"Pavlopétri\", \"Wegener\": \"Véguener\", \"Mesosaurus\": \"Mesossáurus\". Palavra portuguesa comum nunca entra. Sem nome assim, {{}}"}},
   "thumbnail_image_prompt": "prompt em inglês pro momento MAIS visualmente marcante/dramático de toda a história (não precisa ser a cena 1) — close-up, alto contraste, cor vibrante, um único foco claro na imagem. Primeiro pergunte: essa história tem UM protagonista real específico e identificável (uma pessoa que existiu/existe de verdade, com nome — político, atleta, empresário, figura histórica, NÃO importa se o nome aparece literalmente neste prompt)? Se SIM: NUNCA um close no rosto, nem descrito de forma genérica ('a woman's face', 'a determined man') — o contexto (uniforme, número de peito, roupa de época, cargo) já entrega pra quem assiste que aquele rosto É pra ser ela, e a IA não sabe gerar o rosto real dela. Use em vez disso um close em mãos/objeto pessoal (crachá, número de peito, caneta, uniforme), uma silhueta de costas/longe, ou um símbolo/cenário forte relacionado à história. Se NÃO (a cena é sobre um personagem fictício, genérico, ou 'alguém' sem identidade real específica): aí sim pode descrever uma expressão facial EXAGERADA e genuína (chocada, olhos arregalados, boca aberta, maravilhada, com medo) — rosto humano com emoção forte é o maior fator isolado de clique em thumbnail. Se não tiver pessoa nenhuma, use um objeto/cenário com contraste visual forte numa composição que gere uma pergunta na cabeça de quem vê. Mesma regra das outras imagens: SEM texto, palavras, logos, botões ou UI",
   "description": "descrição para o YouTube, 2-3 parágrafos, com contexto e call-to-action",
   "tags": ["tag1", "tag2", "..."],
@@ -187,9 +188,15 @@ vários fatos/frases, NUNCA uma frase única de uma linha só. O roteiro
 completo deve somar entre {total_min_words} e {total_max_words} palavras no
 total (~{min_minutes:.0f} a {max_minutes:.0f} minutos narrados). Se não
 tiver conteúdo real suficiente pra encher uma cena no tamanho pedido,
-aprofunde com mais detalhes concretos (contexto, números, comparações,
-consequências) em vez de encurtar — nunca encher linguiça repetindo a
-mesma ideia com palavras diferentes só pra bater a contagem.
+aprofunde com detalhes concretos QUE VOCÊ TEM CERTEZA que são reais
+(contexto, números, comparações, consequências). Sem mais fato real,
+termine antes do tamanho pedido — vídeo mais curto é melhor que detalhe
+inventado (data, origem, "habitantes que sobreviveram"). Nunca encha
+linguiça repetindo a mesma ideia com outras palavras, nunca termine com
+conselho de turismo ("não deixe de visitar", "experiência única") e não
+repita a mesma palavra frase após frase — troque por pronome ou sinônimo
+(o nome do assunto 12 vezes e "cidade" 16 vezes num vídeo de 3 minutos,
+dry-run de 06/10).
 
 REGRA CRÍTICA sobre "stock_query": priorize filmagem REAL sobre imagem
 gerada sempre que o assunto existe filmado de verdade — filmagem real de
@@ -283,6 +290,32 @@ def _filler_phrase(script: dict, topic: str = "", min_scenes: int = 4, min_ratio
             continue
         return " ".join(gram)
     return None
+
+
+_STOPWORDS = set(
+    "para pela pelo pelos pelas como mais mas isso essa esse esta este está "
+    "foram eram será seria tinha temos você vocês ele ela eles elas seus suas "
+    "também ainda quando onde porque sobre entre depois antes muito muita "
+    "cada todo toda todos todas outro outra outros outras mesmo mesma desta "
+    "deste dessa desse aqui hoje sempre nunca apenas quem qual quais".split()
+)
+
+
+def _overused_word(script: dict, ignore: str = "") -> str | None:
+    """Palavra de conteúdo repetida demais no roteiro todo (mais de ~2,2% das
+    palavras, mínimo 9 vezes): "cidade" 16x e "Pavlopetri" 12x em 476
+    palavras no dry-run de 06/10 — soa repetitivo de ouvir."""
+    words = [w for s in script.get("scenes", []) for w in re.findall(r"\w+", s.get("narration", "").lower())]
+    if not words:
+        return None
+    limit = max(9, len(words) / 45)
+    skip = _STOPWORDS | set(re.findall(r"\w+", ignore.lower()))  # nome do canal ("Botafogo")
+    counts: dict[str, int] = {}
+    for w in words:
+        if len(w) > 3 and not w.isdigit() and w not in skip:
+            counts[w] = counts.get(w, 0) + 1
+    word, n = max(counts.items(), key=lambda kv: kv[1], default=("", 0))
+    return f"{word} ({n}x)" if n > limit else None
 
 
 def _is_parseable_script(raw: str, required: set[str]) -> bool:
@@ -452,6 +485,16 @@ def generate_script(
 
             script = _drop_repeated_scenes(script)
             filler = _filler_phrase(script, topic)
+            overused = None if filler else _overused_word(script, channel.channel_title)
+            if overused:
+                filler_fallback = script
+                last_error = ValueError(f"palavra repetida demais ({overused})")
+                log.warning("tentativa %d/3: palavra repetida demais (%s), tentando de novo", attempt + 1, overused)
+                word = overused.split()[0]
+                messages = [messages[0], {"role": "user", "content": messages[1]["content"]
+                                          + f"\n\nA palavra \"{word}\" apareceu demais: varie com pronome/sinônimo, "
+                                          "e não repita a mesma palavra frase após frase."}]
+                continue
             if filler:
                 # bordão em toda cena ("isso mostra a importância", job 239)
                 # = enchimento de modelo fraco: tenta de novo, pedindo pra não.
