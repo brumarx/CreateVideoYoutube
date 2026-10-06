@@ -25,6 +25,12 @@ from .providers import _rotator_for
 log = logging.getLogger("web_search")
 
 SEARCH_URL = "https://api.tavily.com/search"
+# rede social e vídeo não são fonte: tema vago ("cidade engolida pelo mar")
+# só trazia reels e vídeos do YouTube
+EXCLUDED_DOMAINS = [
+    "youtube.com", "instagram.com", "facebook.com", "tiktok.com", "x.com",
+    "twitter.com", "pinterest.com", "kwai.com", "threads.net", "reddit.com",
+]
 
 
 def search_topic_facts(query: str, max_results: int = 5) -> list[dict] | None:
@@ -46,6 +52,7 @@ def search_topic_facts(query: str, max_results: int = 5) -> list[dict] | None:
                     "search_depth": "basic",
                     "max_results": max_results,
                     "include_answer": False,
+                    "exclude_domains": EXCLUDED_DOMAINS,
                 },
                 timeout=20,
             )

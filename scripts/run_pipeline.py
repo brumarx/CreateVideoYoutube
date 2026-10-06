@@ -213,7 +213,8 @@ def _clip_still(path: Path) -> bytes | None:
 
 def _chapter_starts(n: int) -> list[int]:
     """Índice da cena que abre cada capítulo — o mesmo agrupamento serve pros
-    timestamps da descrição e pro selo "Parte X de Y" na tela."""
+    timestamps da descrição. O selo "Parte X de Y" na tela saiu (06/10): sem
+    o título do capítulo do lado, não dizia nada a quem assiste."""
     if n < 3:
         return []
     n_chapters = min(MAX_CHAPTERS, max(3, n // 4))
@@ -395,15 +396,19 @@ def run(
         # instituição/pessoa real e fato recente (ex.: gastos do STF), onde o
         # LLM sozinho inventava número e a revisão de fatos barrava o
         # roteiro (3 falhas em 5 dias, jobs 139/146/157/161).
-        web_facts = None
-        if (user_provided_topic or channel_name == "politica") and facts is None:
-            from src.web_search import search_topic_facts
+        # todo tema sem dado real busca fonte (não só digitado/politica): tema
+        # da fila do curiosidades sem fonte saiu "Pavlopetri do século 12 que
+        # reaparece na maré baixa" (tem ~5 mil anos e fica sempre submersa)
+        # e a revisão aprovou — dry-run de 06/10
+        from src.web_search import search_topic_facts
 
+        web_facts = None
+        if facts is None:
             web_facts = search_topic_facts(topic)
             if web_facts:
-                log.info("[%s] tema digitado ancorado com %d fonte(s) da internet", job_id, len(web_facts))
+                log.info("[%s] tema ancorado com %d fonte(s) da internet", job_id, len(web_facts))
             else:
-                log.info("[%s] tema digitado sem busca na internet (sem chave configurada ou sem resultado)", job_id)
+                log.info("[%s] tema sem busca na internet (sem chave configurada ou sem resultado)", job_id)
 
         log.info("[%s] gerando roteiro (%s) para: %s (voz: %s)", job_id, "longo" if long_form else "curto", topic, tts_voice)
         if script_file:
@@ -485,7 +490,7 @@ def run(
                     # calculado pro tema original).
                     novo = pick_topic(channel_name, channel.topics, channel.niche)
                     if long_form or not LIST_TOPIC_RE.match(novo):
-                        topic, web_facts = novo, None
+                        topic, web_facts = novo, search_topic_facts(novo)
                         if list_count:
                             # tema novo não é lista: sem selo 7, 6, 5... de
                             # contagem regressiva (job 295, Short do oceano)
@@ -494,8 +499,9 @@ def run(
                         update(job_id, topic=topic)
                         script = generate_script(
                             channel, topic, None, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes,
+                            web_facts=web_facts,
                         )
-                        problems = review_script(script, topic, None, None)
+                        problems = review_script(script, topic, None, web_facts)
                         if problems == []:
                             break
                 raise ScriptRejected(
@@ -538,29 +544,27 @@ def run(
             "stock_query": "thumbs up hand gesture",
         })
 
-        # selo "Parte X de Y" na tela (só formato longo) no começo de cada
-        # capítulo — marco visível de progresso pra segurar a retenção no
-        # meio do vídeo. O 1º capítulo não ganha selo (não cobre o gancho de
-        # abertura) e a cena de CTA também não.
         # narra tudo antes de renderizar: o formato (vertical x 16:9) sai da
         # duração REAL da narração, não do que foi pedido ao roteiro
+        # nome estrangeiro com a tônica marcada só pra voz ("Pavlopétri");
+        # a legenda volta pra grafia original (src/tts.py)
+        pronunciations = {
+            k: v for k, v in (script.get("pronuncia") or {}).items()
+            if isinstance(k, str) and isinstance(v, str) and 2 < len(k) <= 40 and 0 < len(v) <= 50
+            and k.lower() != v.lower()
+        } if isinstance(script.get("pronuncia"), dict) else {}
+        if pronunciations:
+            log.info("[%s] pronúncia: %s", job_id, pronunciations)
         narrations = []
         for i, scene in enumerate(script["scenes"]):
             audio_path = work_dir / f"scene_{i}.mp3"
-            _, word_boundaries = narrate(scene["narration"], audio_path, voice=tts_voice)
+            _, word_boundaries = narrate(scene["narration"], audio_path, voice=tts_voice, pronunciations=pronunciations)
             narrations.append((audio_path, word_boundaries, _ffprobe_duration(audio_path)))
         total_seconds = sum(d for _, _, d in narrations)
         if long_form and not user_forced_format and total_seconds <= SHORTS_MAX_SECONDS:
             log.warning("[%s] roteiro longo saiu com %.0fs — publicando como Short vertical", job_id, total_seconds)
             long_form = False
             width, height = SHORT_WIDTH, SHORT_HEIGHT
-
-        chapter_banners: dict[int, dict] = {}
-        if long_form:
-            starts = [idx for idx in _chapter_starts(len(script["scenes"])) if idx < original_scene_count]
-            for n_part, idx in enumerate(starts, start=1):
-                if idx > 0:
-                    chapter_banners[idx] = {"index": n_part, "total": len(starts)}
 
         visual_context = f"Canal: {channel.channel_title} — {channel.niche}.\nTema do vídeo: {topic}."
         scene_videos = []
@@ -724,7 +728,6 @@ def run(
                     stat_overlay=scene.get("stat_overlay"),
                     impact_beat=bool(scene.get("impact_beat")),
                     video_path=stock_clip_path,
-                    chapter_banner=chapter_banners.get(i),
                 )
             finally:
                 # sem finally, um clipe baixado (10-20MB) vaza pro /tmp toda vez
@@ -834,8 +837,8 @@ def run(
             description += "\n\nFonte dos dados: https://brmx.org/politica/"
 
         if web_facts:
-            # transparência: tema digitado por pessoa foi ancorado em busca
-            # real — lista as fontes usadas (gerado por código, sempre as
+            # transparência: tema ancorado em busca real — lista as fontes
+            # usadas (gerado por código, sempre as
             # URLs reais devolvidas pela busca, nunca inventado pelo LLM).
             fontes = "\n".join(f"- {f['titulo']}: {f['url']}" for f in web_facts)
             description += f"\n\nFontes consultadas:\n{fontes}"
