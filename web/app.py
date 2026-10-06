@@ -24,6 +24,7 @@ sys.path.insert(0, str(ROOT))
 
 from src.config import AZURE_SPEECH_KEYS, ChannelConfig  # noqa: E402
 from src.tts import EDGE_VOICES, azure_voices  # noqa: E402
+from src.topics import topic_problem  # noqa: E402
 from src.orchestrator import get_job, jobs_with_status, published_jobs, recent_jobs, update  # noqa: E402
 from src.politica_data import FACT_FETCHERS  # noqa: E402
 from src.topics import STATE_FILE as USED_TOPICS_FILE  # noqa: E402
@@ -517,6 +518,8 @@ def index():
         flash = "Configuração salva."
     elif request.args.get("topic_added") == "1":
         flash = "Tema adicionado à fila."
+    elif request.args.get("topic_error"):
+        flash = f"Tema recusado: {request.args['topic_error']}"
     elif request.args.get("approved") == "1":
         flash = "Vídeo publicado."
     elif request.args.get("approve_error"):
@@ -795,6 +798,9 @@ def add_topic(channel: str):
     topic = _clamp_list_topic(request.form.get("topic", "").strip())
     if not path.exists() or not topic:
         return redirect(url_for("index"))
+    problem = topic_problem(topic, ChannelConfig.load(channel).niche)
+    if problem:
+        return redirect(url_for("index", topic_error=problem))
 
     text = path.read_text()
     text = _yaml_append_list_item(text, "topics", topic)
@@ -814,6 +820,9 @@ def update_topic(channel: str):
         return redirect(url_for("index"))
     if not path.exists() or not new_topic:
         return redirect(url_for("index"))
+    problem = topic_problem(new_topic, ChannelConfig.load(channel).niche)
+    if problem:
+        return redirect(url_for("index", topic_error=problem))
 
     text = path.read_text()
     updated = _yaml_replace_list_item(text, "topics", index, new_topic)
@@ -890,6 +899,10 @@ def run_channel(channel: str):
     long_param = request.args.get("long")
     custom_topic = request.form.get("topic", "").strip()
     fact_label = request.form.get("fact_label", "").strip()
+    if custom_topic:
+        problem = topic_problem(custom_topic, ChannelConfig.load(channel).niche)
+        if problem:
+            return redirect(url_for("index", topic_error=problem))
     # nice/ionice — mesmo tratamento que o cron já dá pro daily_run.py, pra
     # não competir por CPU/IO com os outros serviços da máquina quando
     # disparado manualmente pelo painel.

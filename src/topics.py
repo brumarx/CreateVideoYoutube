@@ -271,3 +271,48 @@ def pick_topic(
     used.append(topic)
     _save(state)
     return topic
+
+
+# modelo pequeno (<= ~9B) aprova qualquer coisa nessa checagem
+_SMALL_MODEL_RE = re.compile(r"(?<![\d.])[1-9](\.\d+)?b\b|allam|\b(mini|nano|tiny|lite)\b", re.IGNORECASE)
+
+
+def _parse_verdict(raw: str) -> dict | None:
+    m = re.search(r"\{.*\}", raw, re.DOTALL)
+    try:
+        verdict = json.loads(m.group(0)) if m else None
+    except json.JSONDecodeError:
+        return None
+    return verdict if isinstance(verdict, dict) and isinstance(verdict.get("ok"), bool) else None
+
+
+def topic_problem(topic: str, niche: str, strict: bool = True) -> str | None:
+    """Motivo pra recusar o tema antes de gastar roteiro/render, ou None se
+    serve. Pega tema embaralhado (ditado por voz: "17, pôn, não precisável
+    esse tema... risos 118" virou vídeo de Salmos no politica, job 274) e
+    tema fora do nicho do canal. Sem veredito da IA, `strict` recusa (tema
+    digitado agora — foi assim que o embaralhado passou no teste do painel);
+    sem `strict` aprova (tema da fila, já checado quando entrou nela)."""
+    if not _is_valid_topic(topic):
+        return "texto quebrado (lixo, conversa ou frase cortada)"
+    prompt = (
+        f"Nicho do canal do YouTube: {niche}\n"
+        f"Tema proposto para o próximo vídeo: \"{topic}\"\n\n"
+        "Responda só com JSON {\"ok\": true|false, \"motivo\": \"...\"}. "
+        "ok=false se: (1) o tema não é uma frase com sentido claro — palavras "
+        "embaralhadas, trechos sem nexo, instruções soltas, cara de ditado por "
+        "voz mal transcrito; ou (2) o assunto claramente não pertence ao nicho "
+        "do canal. Tema com sentido e dentro do nicho, mesmo com pequeno erro "
+        "de digitação, é ok=true. motivo: curto, em português."
+    )
+    try:
+        raw = complete(
+            [{"role": "user", "content": prompt}], max_tokens=200,
+            validate=lambda r: _parse_verdict(r) is not None,
+            model_filter=lambda m: not _SMALL_MODEL_RE.search(m),
+        )
+    except RuntimeError as exc:
+        log.warning("checagem do tema: nenhum provedor respondeu (%s)", exc)
+        return "não consegui validar o tema agora (IA fora do ar) — tente de novo" if strict else None
+    verdict = _parse_verdict(raw)
+    return None if verdict["ok"] else (verdict.get("motivo") or "tema sem sentido ou fora do nicho")

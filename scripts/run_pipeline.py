@@ -36,7 +36,7 @@ from src.script_gen import engagement_question, generate_script
 from src.spellcheck import fix_script, fix_text
 from src.stock_media import search_stock_clip, search_stock_photo
 from src.thumbnail import make_thumbnail, photo_scene_frame, title_card
-from src.topics import pick_topic
+from src.topics import pick_topic, topic_problem
 from src.tts import narrate
 from src.video_qa import review_video
 from src.visual_check import matches_scene
@@ -58,6 +58,8 @@ LONG_WIDTH, LONG_HEIGHT = 1920, 1080
 # comum, fora da aba Shorts (jobs 262/270/278 — 81-197s em 16:9). Folga
 # abaixo dos 180s do limite do Shorts.
 SHORTS_MAX_SECONDS = 170
+
+MAX_TOPIC_CHECKS = 3
 
 # Vídeo de lista (ex.: "10 fatos sobre..."), só no formato curto: 1 cena =
 # 1 item, com selo de contagem regressiva gravado na cena (ver
@@ -335,6 +337,20 @@ def run(
         )
     elif topic is None:
         raise SystemExit(f"channels/{channel_name}.yaml não tem topics configurado e --topic não foi passado")
+
+    # tema sem base em dado real (fila, viral, digitado): sem sentido ou fora
+    # do nicho não vira vídeo. Da fila, troca por outro; digitado, recusa.
+    if facts is None:
+        for _ in range(MAX_TOPIC_CHECKS):
+            problem = topic_problem(topic, channel.niche, strict=user_provided_topic)
+            if problem is None:
+                break
+            log.warning("[%s] tema recusado (%s): %s", channel_name, problem, topic)
+            if user_provided_topic or not channel.topics:
+                raise ScriptRejected(f"tema recusado: {problem}")
+            topic = pick_topic(channel_name, channel.topics, channel.niche)
+        else:
+            raise ScriptRejected(f"{MAX_TOPIC_CHECKS} temas seguidos recusados")
 
     list_count = None
     if not long_form:
