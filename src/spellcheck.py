@@ -21,7 +21,9 @@ import httpx
 log = logging.getLogger("spellcheck")
 
 CHECK_URL = "https://api.languagetool.org/v2/check"
-AUTO_FIX_CATEGORIES = {"GRAMMAR", "CONFUSED_WORDS", "CRASE"}
+# CONFUSED_WORDS fica de fora: trocava "a relatoria" por "a relatória"
+# (varredura dos vídeos publicados, 06/10)
+AUTO_FIX_CATEGORIES = {"GRAMMAR", "CRASE"}
 SEP = "\n\n"
 
 
@@ -80,6 +82,10 @@ def _fix_once(text: str, language: str) -> str:
         original = text[m["offset"]:m["offset"] + m["length"]]
         if m["offset"] + m["length"] > next_start:
             continue  # sobrepõe trecho já corrigido — fica pra próxima passada
+        if "\n" in original:
+            # concordância entre linhas/cenas diferentes ("o\n1:06" -> "a
+            # 1:06"): o LanguageTool lê como uma frase só
+            continue
         if category not in AUTO_FIX_CATEGORIES or not m.get("replacements"):
             log.info("LanguageTool apontou (não corrigido, %s): %r — %s", category, original, m["message"])
             continue

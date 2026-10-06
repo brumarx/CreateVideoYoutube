@@ -532,3 +532,39 @@ def engagement_question(title: str, scenes: list[dict]) -> str:
     except RuntimeError as exc:
         log.warning("pergunta de engajamento: nenhum provedor respondeu (%s) — usando a genérica", exc)
         return fallback
+
+
+def _parse_titles(raw: str, n: int) -> list[str] | None:
+    m = re.search(r"\[.*\]", raw, re.DOTALL)
+    try:
+        titles = json.loads(m.group(0)) if m else None
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(titles, list) or len(titles) != n:
+        return None
+    titles = [" ".join(str(t).split()).strip(" .") for t in titles]
+    return titles if all(1 <= len(t.split()) <= 7 and len(t) <= 60 for t in titles) else None
+
+
+def chapter_titles(chapters: list[str]) -> list[str] | None:
+    """Título curto de cada capítulo, a partir do que ele narra. Antes era o
+    começo da narração cortado no meio ("Wegener usou a Glossopteris e o").
+    None = sem provedor: quem chama cai pro corte antigo."""
+    trechos = "\n".join(f"{i + 1}. {c[:500]}" for i, c in enumerate(chapters))
+    prompt = (
+        "Capítulos de um vídeo do YouTube (narração de cada um):\n"
+        f"{trechos}\n\n"
+        f"Dê um título curto (2 a 5 palavras, português do Brasil, frase "
+        "completa, sem cortar no meio, sem número, sem aspas) para cada um dos "
+        f"{len(chapters)} capítulos, dizendo do que ele trata. Responda SÓ uma "
+        'lista JSON de strings, ex.: ["A descoberta", "Como funciona"].'
+    )
+    try:
+        raw = complete(
+            [{"role": "user", "content": prompt}], max_tokens=400,
+            validate=lambda r: _parse_titles(r, len(chapters)) is not None,
+        )
+    except RuntimeError as exc:
+        log.warning("títulos dos capítulos: nenhum provedor respondeu (%s)", exc)
+        return None
+    return _parse_titles(raw, len(chapters))
