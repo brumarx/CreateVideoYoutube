@@ -59,7 +59,10 @@ AVISO_CRESCIMENTO = (
     "causa do crescimento. Além disso, é autodeclarado pelo próprio "
     "candidato à Justiça Eleitoral — pode conter erro de digitação (ex.: "
     "casa decimal a mais); sempre diga \"segundo a declaração à Justiça "
-    "Eleitoral\", nunca apresente o valor como fato 100% verificado."
+    "Eleitoral\", nunca apresente o valor como fato 100% verificado. "
+    "Cargo é o DISPUTADO em cada candidatura (a pessoa pode não ter sido "
+    "eleita) e muda de uma pra outra — no título, diga \"candidatos\" ou "
+    "\"políticos\", nunca um cargo só (\"vereadores\") que não vale pra todos."
 )
 
 
@@ -493,7 +496,7 @@ def maior_crescimento_patrimonio(limit: int = 5, offset: int = 0) -> list[dict]:
                 WHERE c.nr_cpf_cand != '' AND c.nr_cpf_cand IS NOT NULL
                 GROUP BY b.sq_candidato
             )
-            SELECT p1.nome, p1.cargo, p1.ano, p1.total, p2.ano, p2.total
+            SELECT p1.nome, p1.cargo, p1.ano, p1.total, p2.ano, p2.total, p2.cargo
             FROM pat p1
             JOIN pat p2 ON p2.cpf = p1.cpf AND p2.ano > p1.ano
             WHERE p2.total > p1.total AND p2.total < ? AND p1.total > 0
@@ -505,9 +508,13 @@ def maior_crescimento_patrimonio(limit: int = 5, offset: int = 0) -> list[dict]:
         ).fetchall()
     return [
         {
-            "nome": r[0], "cargo": r[1],
-            "ano_anterior": r[2], "patrimonio_anterior": round(r[3], 2),
-            "ano_recente": r[4], "patrimonio_recente": round(r[5], 2),
+            # 1 "cargo" só (o da candidatura antiga) virou título errado:
+            # "Patrimônio de vereadores triplicou" num vídeo sobre deputado
+            # federal (F7kCsdCbAzA). É cargo DISPUTADO, não necessariamente
+            # eleito.
+            "nome": r[0],
+            "ano_anterior": r[2], "cargo_disputado_anterior": r[1], "patrimonio_anterior": round(r[3], 2),
+            "ano_recente": r[4], "cargo_disputado_recente": r[6], "patrimonio_recente": round(r[5], 2),
             "crescimento": round(r[5] - r[3], 2),
         }
         for r in rows
