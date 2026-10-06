@@ -52,6 +52,12 @@ SHORT_WIDTH, SHORT_HEIGHT = 1080, 1920
 # específico. Ver channels/<nome>.yaml -> long_form_scenes/long_form_topics.
 LONG_WIDTH, LONG_HEIGHT = 1920, 1080
 
+# "Longo" que saiu curto (tema trocado na revisão de fatos, frases cortadas)
+# vira Short vertical: 16:9 com menos de 3 min o YouTube trata como vídeo
+# comum, fora da aba Shorts (jobs 262/270/278 — 81-197s em 16:9). Folga
+# abaixo dos 180s do limite do Shorts.
+SHORTS_MAX_SECONDS = 170
+
 # Vídeo de lista (ex.: "10 fatos sobre..."), só no formato curto: 1 cena =
 # 1 item, com selo de contagem regressiva gravado na cena (ver
 # src/assemble.py). Nunca mais que isso — vídeo de "30 fatos" vira maçante
@@ -505,6 +511,19 @@ def run(
         # capítulo — marco visível de progresso pra segurar a retenção no
         # meio do vídeo. O 1º capítulo não ganha selo (não cobre o gancho de
         # abertura) e a cena de CTA também não.
+        # narra tudo antes de renderizar: o formato (vertical x 16:9) sai da
+        # duração REAL da narração, não do que foi pedido ao roteiro
+        narrations = []
+        for i, scene in enumerate(script["scenes"]):
+            audio_path = work_dir / f"scene_{i}.mp3"
+            _, word_boundaries = narrate(scene["narration"], audio_path, voice=tts_voice)
+            narrations.append((audio_path, word_boundaries, _ffprobe_duration(audio_path)))
+        total_seconds = sum(d for _, _, d in narrations)
+        if long_form and not user_forced_format and total_seconds <= SHORTS_MAX_SECONDS:
+            log.warning("[%s] roteiro longo saiu com %.0fs — publicando como Short vertical", job_id, total_seconds)
+            long_form = False
+            width, height = SHORT_WIDTH, SHORT_HEIGHT
+
         chapter_banners: dict[int, dict] = {}
         if long_form:
             starts = [idx for idx in _chapter_starts(len(script["scenes"])) if idx < original_scene_count]
@@ -522,8 +541,7 @@ def run(
         scene_sources: list[str] = []  # de onde veio o visual de cada cena (revisão final usa)
         for i, scene in enumerate(script["scenes"]):
             log.info("[%s] cena %d/%d", job_id, i + 1, len(script["scenes"]))
-            audio_path = work_dir / f"scene_{i}.mp3"
-            _, word_boundaries = narrate(scene["narration"], audio_path, voice=tts_voice)
+            audio_path, word_boundaries, scene_duration = narrations[i]
 
             # toda imagem/clipe real passa por um modelo de visão antes de
             # entrar: tem que combinar com o que ESTA cena narra (vídeos de
@@ -542,7 +560,7 @@ def run(
                 if verdict is None and channel.strict_visual:
                     return False  # IA sem checagem pode inventar jogador/escudo
                 return verdict
-            scene_durations.append(_ffprobe_duration(audio_path))
+            scene_durations.append(scene_duration)
 
             # Cascata de conteúdo visual, do mais vivo/crível pro último recurso:
             # 1) filmagem REAL (Pexels) — muito mais viva que imagem com zoom;
