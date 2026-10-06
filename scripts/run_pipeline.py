@@ -790,6 +790,7 @@ def run(
             # futebol com clipe de banco/IA precisa de olho; vídeo só com
             # foto das matérias (do próprio assunto) dispensa
             strict_visual=channel.strict_visual and "ia" in scene_sources,
+            trusted_scenes={i + 1 for i, src in enumerate(scene_sources) if src in ("noticia", "repetida")},
         )
         if qa_problems:
             for p in qa_problems:
