@@ -56,7 +56,7 @@ MAX_ATTEMPTS = 4
 # investigar a falha. retry_uploads.py só reenvia "failed" (com
 # upload_meta.json), então "rendered" de dias atrás é execução que morreu
 # no meio e "dry_run" é teste — os dois também saem.
-CLEANUP_STATUSES = ("failed", "retried", "abandoned", "deleted", "uploaded", "rendered", "dry_run")
+CLEANUP_STATUSES = ("failed", "retried", "abandoned", "deleted", "uploaded", "rendered", "dry_run", "script_ready")
 CLEANUP_AFTER_DAYS = 3
 # upload que falhou (token OAuth vence a cada ~7 dias) fica com
 # upload_meta.json esperando o retry_uploads — guarda por mais tempo
@@ -153,14 +153,20 @@ def run_channel(channel_name: str, cfg: dict) -> None:
         log.warning("[%s] sem token OAuth (%s) — pulando, rode auth_youtube.py primeiro", channel_name, token_file.name)
         return
 
+    # vídeo já renderizado com roteiro revisado (run_pipeline --no-upload)
+    # ocupa a vaga do dia antes de gerar outro
+    from retry_uploads import upload_pending
+
+    ready = upload_pending(channel_name, "ready", limit=1)
+
     if channel_name == "botafogo":
         # 2 vídeos independentes: prévia/pós-jogo quando houver jogo (regras
         # de sempre, silêncio sem jogo) + 1 por dia com temas do botafogo.win
-        for task in ("jogo", "portal"):
+        for task in ("jogo", "portal") if not ready else ("jogo",):
             _run_pipeline(channel_name, ["--botafogo-task", task], task)
         return
 
-    for i in range(uploads_per_day):
+    for i in range(ready, uploads_per_day):
         # sem --long/--no-long: run_pipeline.py lê channels/<nome>.yaml ->
         # daily_format sozinho (fonte única de verdade, editável no painel —
         # não duplica a decisão aqui pra nunca dessincronizar da UI).
