@@ -286,6 +286,19 @@ _COMMON_NAMES = {
 }
 _NAME_RE = re.compile(r"(?<![.!?]\s)(?<!^)\b([A-ZÀ-Ý][a-zà-ÿ]+(?:[- ](?:de |da |do |von |van )?[A-ZÀ-Ý][a-zà-ÿ]+){0,3})")
 _name_cache: dict[str, bool] = {}
+# só nome em posição de ATRIBUIÇÃO ("o caso de Dobelle", "segundo o
+# pesquisador X") é checado: checar todo nome reprovava país e lugar real
+# (Grécia, Chile, Etiópia, Xochimilco — job 315)
+_ATTRIBUTION_RE = re.compile(
+    r"(?:\b(?:caso|pesquisa|estudo|teoria|método|relato|experimento|livro|descoberta|trabalho|equipe|análise)s?"
+    r"(?: (?:feit[oa]s?|conduzid[oa]s?|liderad[oa]s?|publicad[oa]s?))?(?: (?:de|do|da|por|pelo|pela))"
+    r"|\b(?:segundo|conforme|explica|afirma|disse|relatou|descobriu|criou|criado por|descoberto por)"
+    r"|\b(?:dr|dra|doutor|doutora|professor|professora|pesquisador|pesquisadora|cientista|médico|médica|"
+    r"psicólogo|psicóloga|neurocientista|engenheiro|engenheira|autor|autora|especialista|sargento|capitão))"
+    r"\.?(?: (?:o|a|os|as|do|da|dos|das|norte-americano|americano|americana|britânico|britânica|"
+    r"brasileiro|brasileira|alemão|alemã|francês|francesa|russo|russa))* $",
+    re.IGNORECASE,
+)
 _INSTITUTION_RE = re.compile(
     r"(Justiça|Tribunal|Supremo|Câmara|Senado|Ministério|Universidade|Instituto|Polícia|Governo|"
     r"Banco|Receita|Assembleia|Congresso|Prefeitura|Secretaria|Agência|Fundação|Museu|Hospital)\b"
@@ -308,6 +321,8 @@ def unknown_names(script: dict, topic: str, facts: dict | None, web_facts: list[
         for m in _NAME_RE.finditer(sentence):
             name = m.group(1)
             if m.start() == 0 and " " not in name and "-" not in name:
+                continue
+            if not _ATTRIBUTION_RE.search(sentence[max(0, m.start() - 60):m.start()]):
                 continue
             first = name.split()[0].split("-")[0].lower()  # "Google Imagens"
             if first in _COMMON_NAMES or name.lower() in known or len(name) < 4:
