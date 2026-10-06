@@ -528,9 +528,12 @@ def run(
             (work_dir / "script.json").write_text(json.dumps(script, ensure_ascii=False, indent=2))
             render = [
                 ".venv/bin/python", "scripts/run_pipeline.py", "--channel", channel_name,
-                "--topic", topic, "--script-file", str(work_dir / "script.json"),
-                "--long" if long_form else "--no-long", "--no-upload",
+                "--topic", topic, "--script-file", str(work_dir / "script.json"), "--no-upload",
             ]
+            if long_form != (channel.daily_format == "long"):
+                # só força quando foge do padrão do canal: forçado, o longo
+                # que sai curto não vira Short (Botafogo de 1:20 em 16:9)
+                render.append("--long" if long_form else "--no-long")
             if facts is not None:
                 (work_dir / "facts.json").write_text(json.dumps(
                     {**facts, "_fotos": news_photos, "_fontes": news_sources}, ensure_ascii=False, indent=2,
