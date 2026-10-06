@@ -28,10 +28,11 @@ log = logging.getLogger("video_qa")
 
 _FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
-# mesma imagem em mais da metade das cenas (e em pelo menos 5) = vídeo
-# "parado" (job 193: a mesma foto em 20 de 23 cenas)
+# mesma imagem em mais da metade das cenas (e em pelo menos 3) = vídeo
+# "parado" (job 193: a mesma foto em 20 de 23 cenas; job 278, notícia
+# curta com a mesma foto em 4 de 5 cenas, passava com o mínimo antigo de 5)
 _MAX_SAME_VISUAL_SHARE = 0.5
-_MIN_SAME_VISUAL_SCENES = 5
+_MIN_SAME_VISUAL_SCENES = 3
 _BATCH = 8  # cenas por chamada de visão
 
 
