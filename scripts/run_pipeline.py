@@ -32,7 +32,7 @@ from src.assemble import SFX_DIR, _ffprobe_duration, add_background_music, conca
 from src.config import ChannelConfig
 from src.fact_check import BLOCKING_TYPES, feedback_for_rewrite, review_script
 from src.orchestrator import enqueue, update
-from src.script_gen import engagement_question, generate_script
+from src.script_gen import chapter_titles, engagement_question, generate_script
 from src.spellcheck import fix_script, fix_text
 from src.stock_media import search_stock_clip, search_stock_photo
 from src.thumbnail import make_thumbnail, photo_scene_frame, title_card
@@ -226,16 +226,24 @@ def _build_chapters(scenes: list[dict], durations: list[float]) -> str:
     if n < 3 or len(durations) != n:
         return ""
 
-    lines = []
+    starts = []
     last_ts = -MIN_CHAPTER_GAP_SECONDS
     for idx in _chapter_starts(n):
         cumulative = sum(durations[:idx])
-        if cumulative - last_ts >= MIN_CHAPTER_GAP_SECONDS or not lines:
-            mm, ss = divmod(int(cumulative), 60)
-            lines.append(f"{mm}:{ss:02d} {_chapter_label(scenes[idx]['narration'])}")
+        if cumulative - last_ts >= MIN_CHAPTER_GAP_SECONDS or not starts:
+            starts.append((idx, cumulative))
             last_ts = cumulative
+    if len(starts) < 3:
+        return ""
 
-    return "\n".join(lines) if len(lines) >= 3 else ""
+    bounds = [idx for idx, _ in starts] + [n]
+    texts = [" ".join(s["narration"] for s in scenes[a:b]) for a, b in zip(bounds, bounds[1:])]
+    titles = chapter_titles(texts) or [_chapter_label(scenes[idx]["narration"]) for idx, _ in starts]
+    lines = []
+    for (_, cumulative), title in zip(starts, titles):
+        mm, ss = divmod(int(cumulative), 60)
+        lines.append(f"{mm}:{ss:02d} {title}")
+    return "\n".join(lines)
 
 
 def run(
