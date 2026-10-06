@@ -292,6 +292,28 @@ def _filler_phrase(script: dict, topic: str = "", min_scenes: int = 4, min_ratio
     return None
 
 
+_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
+_CTA_RE = re.compile(
+    r"\b(inscrev\w*|deix\w* (o |seu |um )?like|curt\w* (o |este |esse )?vídeo|sininho|"
+    r"ative as notificações|obrigad[oa] por assistir|até a próxima)\b",
+    re.IGNORECASE,
+)
+
+
+def _drop_llm_cta(script: dict) -> dict:
+    """O pedido de like/inscrição é gerado por código no fim
+    (run_pipeline.py); o do LLM nas últimas cenas virava CTA dobrado
+    ("Obrigado por assistir... deixe seu like e se inscreva" + o nosso)."""
+    scenes = list(script.get("scenes", []))
+    for idx in range(max(0, len(scenes) - 2), len(scenes)):
+        frases = _SENTENCE_RE.split(scenes[idx].get("narration", ""))
+        keep = [f for f in frases if not _CTA_RE.search(f)]
+        if len(keep) != len(frases):
+            log.info("CTA do roteiro cortado: %s", " ".join(f for f in frases if _CTA_RE.search(f))[:120])
+            scenes[idx] = {**scenes[idx], "narration": " ".join(keep).strip()}
+    return {**script, "scenes": [sc for sc in scenes if sc.get("narration", "").strip()]}
+
+
 _STOPWORDS = set(
     "para pela pelo pelos pelas como mais mas isso essa esse esta este está "
     "foram eram será seria tinha temos você vocês ele ela eles elas seus suas "
@@ -483,7 +505,7 @@ def generate_script(
             if missing:
                 raise ValueError(f"JSON do roteiro sem campos {missing}: {script}")
 
-            script = _drop_repeated_scenes(script)
+            script = _drop_llm_cta(_drop_repeated_scenes(script))
             filler = _filler_phrase(script, topic)
             overused = None if filler else _overused_word(script, channel.channel_title)
             if overused:

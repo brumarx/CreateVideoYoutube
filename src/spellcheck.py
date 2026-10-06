@@ -146,8 +146,8 @@ def _fix_once(text: str, language: str) -> tuple[str, dict[str, list[str]]]:
     matches = _matches(probe, language)
     if not matches:
         return text, typos
-    fixed = text
     next_start = len(text)
+    candidates: list[tuple[int, int, str, str, str]] = []  # (início, fim, original, novo, motivo)
     logged: set[tuple[str, str]] = set()  # nome repetido no texto: 1 linha de log só
     # de trás pra frente: corrigir um trecho não desloca os offsets anteriores
     for m in sorted(matches, key=lambda m: m["offset"], reverse=True):
@@ -168,10 +168,89 @@ def _fix_once(text: str, language: str) -> tuple[str, dict[str, list[str]]]:
                 log.info("LanguageTool apontou (não corrigido, %s): %r — %s", category, original, m["message"])
             continue
         new = _match_case(original, m["replacements"][0]["value"])
-        log.warning("corrigido: %r -> %r (%s)", original, new, m["message"])
-        fixed = fixed[:m["offset"]] + new + fixed[m["offset"] + m["length"]:]
+        candidates.append((m["offset"], m["offset"] + m["length"], original, new, m["message"]))
         next_start = m["offset"]
+    fixed = text
+    for start, end, original, new, motivo in _confirmed(text, candidates):  # já de trás pra frente
+        log.warning("corrigido: %r -> %r (%s)", original, new, motivo)
+        fixed = fixed[:start] + new + fixed[end:]
     return fixed, typos
+
+
+def _confirmed(text: str, candidates: list[tuple[int, int, str, str, str]]) -> list[tuple[int, int, str, str, str]]:
+    """Regra de concordância do LanguageTool também erra: "vermelho
+    terracota" (nome de cor composto, certo) virou "vermelha terracota" no
+    job 304. Um LLM grande confirma cada troca vendo a frase; sem LLM, vale a
+    sugestão do LanguageTool (pegou "Um Cidade")."""
+    if not candidates:
+        return []
+    from .topics import _SMALL_MODEL_RE
+
+    itens = []
+    for k, (start, end, original, new, _) in enumerate(candidates):
+        frase = text[max(0, start - 60):end + 60].replace("\n", " ")
+        itens.append(f'{k}. trecho "{original}" -> "{new}" | frase: "...{frase}..."')
+    prompt = (
+        "Um corretor automático de português do Brasil sugeriu estas trocas:\n"
+        + "\n".join(itens)
+        + "\n\nPara cada uma: o trecho original está ERRADO e a troca o corrige? "
+        "Nome de cor composto (\"vermelho terracota\", \"azul piscina\"), título, "
+        "nome próprio e expressão correta não se trocam. Responda SÓ JSON "
+        '{"0": true, "1": false, ...} (true = aplicar a troca).'
+    )
+
+    def parse(raw: str) -> dict | None:
+        m = re.search(r"\{.*\}", raw, re.DOTALL)
+        try:
+            d = json.loads(m.group(0)) if m else None
+        except json.JSONDecodeError:
+            return None
+        return d if isinstance(d, dict) and all(isinstance(v, bool) for v in d.values()) else None
+
+    try:
+        raw = complete(
+            [{"role": "user", "content": prompt}], max_tokens=200,
+            validate=lambda r: parse(r) is not None,
+            model_filter=lambda m: not _SMALL_MODEL_RE.search(m),
+        )
+    except RuntimeError as exc:
+        log.warning("confirmação das correções sem LLM (%s) — vale o LanguageTool", exc)
+        return candidates
+    verdict = parse(raw)
+    kept = []
+    for k, c in enumerate(candidates):
+        if verdict.get(str(k), False):
+            kept.append(c)
+        else:
+            log.info("correção recusada pelo LLM: %r -> %r", c[2], c[3])
+    return kept
+
+
+def _proofread_short(text: str) -> str:
+    """Título/thumbnail com palavra certa no lugar errado, que o LanguageTool
+    não vê: "Tutorial Passa a Passa" (job 304). LLM grande revisa; só vale
+    se a correção for pequena (não reescreve o título)."""
+    from .topics import _SMALL_MODEL_RE
+
+    prompt = (
+        f"Texto de título/thumbnail de vídeo do YouTube em português do Brasil: \"{text}\"\n"
+        "Corrija SÓ erro de português ou de digitação (expressão errada, concordância, "
+        "palavra trocada) mantendo maiúsculas, asteriscos e o resto igual. Sem erro, "
+        "devolva exatamente igual. Responda SÓ o texto, sem aspas."
+    )
+    try:
+        raw = complete(
+            [{"role": "user", "content": prompt}], max_tokens=120,
+            validate=lambda r: 0 < len(r.strip().strip('"')) <= len(text) * 1.3 + 10,
+            model_filter=lambda m: not _SMALL_MODEL_RE.search(m),
+        )
+    except RuntimeError:
+        return text
+    new = raw.strip().splitlines()[0].strip().strip('"“”')
+    if new != text and difflib.SequenceMatcher(None, text.lower(), new.lower()).ratio() >= 0.85:
+        log.warning("revisado: %r -> %r", text, new)
+        return new
+    return text
 
 
 def fix_script(script: dict, language: str = "pt-BR") -> dict:
@@ -180,6 +259,9 @@ def fix_script(script: dict, language: str = "pt-BR") -> dict:
     for key in ("title", "thumbnail_text", "description"):
         if script.get(key):
             script[key] = fix_text(script[key], language)
+    for key in ("title", "thumbnail_text"):
+        if script.get(key):
+            script[key] = _proofread_short(script[key])
     scenes = script.get("scenes") or []
     narrations = [" ".join(s["narration"].split()) for s in scenes]  # sem \n\n interno
     joined = fix_text(SEP.join(narrations), language)
