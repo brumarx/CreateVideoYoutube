@@ -196,7 +196,11 @@ linguiça repetindo a mesma ideia com outras palavras, nunca termine com
 conselho de turismo ("não deixe de visitar", "experiência única") e não
 repita a mesma palavra frase após frase — troque por pronome ou sinônimo
 (o nome do assunto 12 vezes e "cidade" 16 vezes num vídeo de 3 minutos,
-dry-run de 06/10).
+dry-run de 06/10). Nunca narre em primeira pessoa como se fosse uma pessoa
+real com história própria ("durante meus 8 anos como sargento") nem invente
+personagem com nome ("Maria, uma jovem profissional") — o narrador é o
+canal. Se o título ou o gancho promete um método, passos ou N casos, o
+roteiro ENTREGA cada um, concreto e na ordem — nunca só repete a promessa.
 
 REGRA CRÍTICA sobre "stock_query": priorize filmagem REAL sobre imagem
 gerada sempre que o assunto existe filmado de verdade — filmagem real de
