@@ -60,11 +60,25 @@ _SHORT_WORDS = {
 }
 
 
+def _is_mixed_case(word: str) -> bool:
+    return any(c.isupper() for c in word[1:]) and not word.isupper()
+
+
 def _apply_pronunciations(text: str, extra: dict[str, str] | None) -> str:
     """Fixas (PRONUNCIATIONS) + as do roteiro: nome estrangeiro que o LLM
     soletrou à portuguesa com a tônica marcada ("Pavlopetri" ->
     "Pavlopétri")."""
     table = {**(extra or {}), **PRONUNCIATIONS}
+    # maiúscula no meio da palavra ("vIA", marca do canal) é grafia própria:
+    # troca só escrita exatamente assim — sem diferenciar, todo "via" comum
+    # da narração viraria "via I-A"
+    exact = {k: v for k, v in table.items() if _is_mixed_case(k)}
+    if exact:
+        text = re.sub(
+            r"\b(" + "|".join(map(re.escape, sorted(exact, key=len, reverse=True))) + r")\b",
+            lambda m: exact[m[1]], text,
+        )
+        table = {k: v for k, v in table.items() if k not in exact}
     pattern = re.compile(r"\b(" + "|".join(map(re.escape, sorted(table, key=len, reverse=True))) + r")\b", re.IGNORECASE)
     lower = {k.lower(): v for k, v in table.items()}
 
@@ -150,10 +164,41 @@ def _restore_punctuation(word_boundaries: list[dict], text: str) -> list[dict]:
     return word_boundaries
 
 
+def _join_multiword(word_boundaries: list[dict], extra: dict[str, str] | None) -> list[dict]:
+    """Pronúncia de várias palavras ("vIA" -> "via I-A") volta pra 1 palavra
+    só na legenda, com o tempo do trecho inteiro."""
+    multi = {
+        tuple(re.findall(r"\w+", v.lower())): k for k, v in (extra or {}).items() if len(re.findall(r"\w+", v)) > 1
+    }
+    if not multi:
+        return word_boundaries
+    out: list[dict] = []
+    i = 0
+    while i < len(word_boundaries):
+        for spoken, original in multi.items():
+            # a voz pode devolver "I-A" como 1 palavra ou 2: junta palavras
+            # até completar as do trecho falado
+            tokens: list[str] = []
+            j = i
+            while j < len(word_boundaries) and len(tokens) < len(spoken):
+                tokens += re.findall(r"\w+", word_boundaries[j]["text"].lower())
+                j += 1
+            if tuple(tokens) == spoken:
+                window = word_boundaries[i:j]
+                tail = re.search(r"[.,;:!?]*$", window[-1]["text"])[0]
+                out.append({**window[0], "text": original + tail, "end": window[-1].get("end", window[0].get("end"))})
+                i = j
+                break
+        else:
+            out.append(word_boundaries[i])
+            i += 1
+    return out
+
+
 def _restore_spelling(
     word_boundaries: list[dict], trocas: list[tuple[str, str]] | None = None, extra: dict[str, str] | None = None,
 ) -> list[dict]:
-    word_boundaries = _join_domains(word_boundaries)
+    word_boundaries = _join_multiword(_join_domains(word_boundaries), extra)
     pendentes = list(trocas or [])
     back = {**{v.lower(): k for k, v in (extra or {}).items()}, **_SPELLING_BACK}
     for w in word_boundaries:

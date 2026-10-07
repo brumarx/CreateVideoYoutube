@@ -4,7 +4,7 @@ accent: "#8c8cff"
 hashtags: ["#Politica", "#Brasil", "#NumerosDaRepublica"]
 youtube_handle: "@numerosdarepublica"
 channel_title: "Números da República"
-greeting: "Fala, contribuinte!"
+greeting: "Faaala, contribuinte!"
 language: "pt-BR"
 tts_voice_weights:
   pt-BR-AntonioNeural: 100

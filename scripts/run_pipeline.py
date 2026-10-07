@@ -581,6 +581,7 @@ def run(
             if isinstance(k, str) and isinstance(v, str) and 2 < len(k) <= 40 and 0 < len(v) <= 50
             and k.lower() != v.lower()
         } if isinstance(script.get("pronuncia"), dict) else {}
+        pronunciations.update(channel.pronunciations)  # nome do canal ("Aprender vIA")
         if pronunciations:
             log.info("[%s] pronúncia: %s", job_id, pronunciations)
         narrations = []
