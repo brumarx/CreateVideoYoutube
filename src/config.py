@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -8,7 +9,16 @@ import yaml
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
+# Chaves de API vêm do ficheiro central da máquina (o mesmo do ariaBot e
+# dos outros sistemas — trocar/somar chave num lugar só); o .env do projeto
+# fica só com configuração local e, se tiver alguma chave, só preenche o que
+# faltar no central. Sem ficheiro central (clone novo), vale só o .env.
+SECRETS_FILE = Path(os.getenv("SECRETS_FILE", "~/.secrets/keys.env")).expanduser()
+load_dotenv(SECRETS_FILE)
 load_dotenv(ROOT / ".env")
+# o httpx loga a URL inteira em INFO, e Gemini/Pixabay levam a chave na
+# query string — sem isso as chaves iam parar no logs/daily_run.log
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def _keys(env_var: str) -> list[str]:

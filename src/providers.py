@@ -42,7 +42,17 @@ _NON_CHAT_HINTS = (
     "whisper", "tts", "voice", "guard", "safeguard", "moderation", "embed",
     "image", "vision", "orpheus", "vibe-cli", "-fim", "codestral", "voxtral",
     "content-safety", "omni", "safety", "compound",
+    # modelo de código escreve roteiro ruim: o mistral-code-latest era o 1º
+    # da lista do Mistral e virou o escritor de reserva — copiava a fonte e
+    # inventava fato, e a revisão reprovou o dia inteiro (07/10)
+    "code", "leanstral",
 )
+
+# Modelos que vão PRIMEIRO quando o provedor tem (a ordem do /models é
+# alfabética/aleatória, e os 4 primeiros nem sempre são os bons pra texto)
+_PREFERRED_MODELS = {
+    "mistral": ["mistral-medium-latest", "mistral-small-latest", "magistral-medium-latest"],
+}
 
 # (nome, atributo em LLMKeys, endpoint de chat, endpoint de listagem de modelos)
 OPENAI_COMPAT_PROVIDERS = [
@@ -110,7 +120,9 @@ def _fetch_models(provider: str, list_url: str, api_key: str) -> list[str]:
             all_ids = [m["id"] for m in data]
             if provider == "openrouter":
                 all_ids = [m for m in all_ids if m.endswith(":free")]
-            models = [m for m in all_ids if _is_chat_model(m)][:_MAX_MODEL_CANDIDATES]
+            chat = [m for m in all_ids if _is_chat_model(m)]
+            preferred = [m for m in _PREFERRED_MODELS.get(provider, []) if m in chat]
+            models = (preferred + [m for m in chat if m not in preferred])[:_MAX_MODEL_CANDIDATES]
         else:
             log.warning("%s /models -> HTTP %s", provider, resp.status_code)
     except Exception as exc:
@@ -127,7 +139,7 @@ def _fetch_gemini_models(api_key: str) -> list[str]:
 
     models: list[str] = []
     try:
-        resp = httpx.get(GEMINI_MODELS_URL, params={"key": api_key}, timeout=20)
+        resp = httpx.get(GEMINI_MODELS_URL, headers={"x-goog-api-key": api_key}, timeout=20)
         if resp.status_code == 200:
             data = resp.json().get("models", [])
             candidates = [
@@ -205,10 +217,11 @@ def _call_openai_compat(
 
 def _call_gemini(api_key: str, model: str, messages: list[dict], max_tokens: int) -> str | None:
     prompt = "\n\n".join(m["content"] for m in messages)
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     try:
         resp = httpx.post(
             url,
+            headers={"x-goog-api-key": api_key},
             json={
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": {"maxOutputTokens": max_tokens},
@@ -310,6 +323,6 @@ def complete(
 
     raise RuntimeError(
         "Nenhum provedor LLM respondeu (ou nenhuma resposta passou na validação). "
-        "Confira as chaves no .env (XAI_API_KEYS, GROQ_API_KEYS, CEREBRAS_API_KEYS, "
+        "Confira as chaves em ~/.secrets/keys.env (XAI_API_KEYS, GROQ_API_KEYS, CEREBRAS_API_KEYS, "
         "OPENROUTER_API_KEYS, MISTRAL_API_KEYS, GEMINI_API_KEYS)."
     )
