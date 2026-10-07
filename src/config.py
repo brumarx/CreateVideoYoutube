@@ -145,6 +145,10 @@ class ChannelConfig:
     # — inserido por CÓDIGO antes da 1ª cena, nunca pelo LLM (que é
     # proibido de abrir com saudação). Vazio = sem bordão.
     greeting: str = ""
+    # pronúncia fixa do canal (nome da marca etc.), mesmo formato do
+    # "pronuncia" do roteiro: {"grafia": "como a voz deve falar"}. Chave
+    # com maiúscula no meio ("vIA") só troca escrita exatamente assim.
+    pronunciations: dict[str, str] = field(default_factory=dict)
 
     @staticmethod
     def load(name: str) -> "ChannelConfig":
@@ -184,4 +188,5 @@ class ChannelConfig:
             strict_visual=bool(data.get("strict_visual", False)),
             website_cta=data.get("website_cta", "🌐 Site"),
             greeting=data.get("greeting", ""),
+            pronunciations={str(k): str(v) for k, v in (data.get("pronuncia") or {}).items()},
         )
