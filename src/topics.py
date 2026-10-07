@@ -139,8 +139,9 @@ _SUBJECT_RULES = (
     "Não cite youtubers, podcasters ou o canal do vídeo de inspiração — o "
     "tema é o assunto, não quem falou dele.\n\n"
     'Responda SÓ com JSON numa linha: {"assunto": "SÓ o nome próprio do '
-    'assunto como aparece na Wikipedia (ex.: "Mary Celeste", "Elizabeth '
-    'Smart"), sem palavra descritiva", "tema": "título do tema em '
+    'assunto como aparece na Wikipedia, no idioma ORIGINAL se for estrangeiro '
+    '(ex.: "Mary Celeste", "Elizabeth Smart", "Headless Valley" — não '
+    '"Vale Sem Cabeça"), sem palavra descritiva", "tema": "título do tema em '
     'português, uma linha"}'
 )
 _STOPWORDS = {
@@ -201,7 +202,7 @@ def _parse_subject(raw: str) -> tuple[str, str] | None:
 LIST_RE = re.compile(r"^\s*\d{1,2}\s+\w+")
 
 
-def _confirmed_topic(prompt: str, used: list[str], label: str, tries: int = 3) -> str:
+def _confirmed_topic(prompt: str, used: list[str], label: str, niche: str, tries: int = 3) -> str:
     """Pede assunto+tema ao LLM e só aceita o que a busca confirma; assunto
     não confirmado volta pro prompt como proibido. RuntimeError se nenhum
     passar — melhor sem tema novo do que tema inventado."""
@@ -222,6 +223,13 @@ def _confirmed_topic(prompt: str, used: list[str], label: str, tries: int = 3) -
         if topic in used:
             rejected.append(subject)
             continue
+        # assunto claramente fora do nicho do canal (polêmica dentro do
+        # nicho vale — dá view)
+        problem = topic_problem(topic, niche, strict=False)
+        if problem:
+            log.warning("%s: %r fora do nicho (%s) — descartado", label, topic, problem)
+            rejected.append(f"{subject} (fora do nicho)")
+            continue
         if subject_confirmed(subject):
             log.info("%s: assunto %r confirmado na busca", label, subject)
             return topic
@@ -239,7 +247,7 @@ def _generate_new_topic(niche: str, used: list[str]) -> str:
         f"algo muito parecido/reformulado):\n{used_block}\n\n"
         f"Proponha UM tema novo. {_SUBJECT_RULES}"
     )
-    return _confirmed_topic(prompt, used, "tema novo")
+    return _confirmed_topic(prompt, used, "tema novo", niche)
 
 
 # Filtro da busca do YouTube: ordenar por visualizações, enviados este mês,
@@ -299,7 +307,7 @@ def _generate_viral_topic(niche: str, viral: list[tuple[str, int]], used: list[s
         "versão genérica. Ignore vídeos que não têm nada a ver com o nicho "
         f"ou cujo assunto você não sabe qual é. {_SUBJECT_RULES}"
     )
-    return _confirmed_topic(prompt, used, "tema viral", tries=2)
+    return _confirmed_topic(prompt, used, "tema viral", niche, tries=2)
 
 
 def _try_viral_topic(channel_name: str, niche: str, queries: list[str], used: list[str]) -> str | None:
