@@ -162,7 +162,7 @@ def _subject_words(subject: str) -> list[str]:
     return [w for w in re.findall(r"\w{3,}|\d+", _norm(subject)) if w not in _STOPWORDS]
 
 
-def subject_confirmed(subject: str) -> bool:
+def subject_confirmed(subject: str, topic: str | None = None) -> bool:
     """True se a busca real acha o assunto: um resultado que tenha TODAS as
     palavras do assunto (sem acento, ignorando palavra curta). Busca sempre
     devolve alguma coisa — contar resultados não confirma nada (o "cadáver
@@ -170,11 +170,37 @@ def subject_confirmed(subject: str) -> bool:
     words = _subject_words(subject)
     if not words:
         return False
-    for r in search_topic_facts(subject, max_results=5) or []:
-        text = _norm(f"{r.get('titulo', '')} {r.get('trecho', '')}")
-        if all(w in text for w in words):
-            return True
-    return False
+    results = search_topic_facts(subject, max_results=5) or []
+    if not any(all(w in _norm(f"{r.get('titulo', '')} {r.get('trecho', '')}") for w in words) for r in results):
+        return False
+    if topic is None:
+        return True
+    # o nome existir não basta: "Tangier" (cidade) passou e o tema era um
+    # homem 12 anos num cofre de banco em Tangier, que não existe (rerun de
+    # 07/10). Um juiz lê os resultados da busca do TEMA e diz se o caso
+    # descrito está ali — funciona com resultado em inglês
+    found = search_topic_facts(topic, max_results=5) or []
+    sources = "\n".join(f"- {r.get('titulo', '')}: {r.get('trecho', '')}" for r in results[:3] + found)
+    prompt = (
+        f"Tema proposto para um vídeo: \"{topic}\"\n\nResultados reais de busca na "
+        f"internet:\n{sources}\n\nOs resultados confirmam que o caso/fato/pessoa "
+        "ESPECÍFICO do tema existe de verdade (não só um nome parecido, a mesma "
+        "cidade ou o mesmo assunto geral)? Sensacionalismo no título é ok; o "
+        "fato central precisa existir. Responda só com JSON "
+        '{"ok": true|false, "motivo": "curto"}'
+    )
+    try:
+        raw = complete(
+            [{"role": "user", "content": prompt}], max_tokens=200,
+            validate=lambda r: _parse_verdict(r) is not None,
+            model_filter=lambda m: not _SMALL_MODEL_RE.search(m),
+        )
+    except RuntimeError:
+        return False  # sem juiz não aprova tema criado pela IA
+    verdict = _parse_verdict(raw)
+    if not verdict["ok"]:
+        log.warning("tema %r: busca não confirma o caso (%s)", topic, verdict.get("motivo"))
+    return verdict["ok"]
 
 
 def _parse_subject(raw: str) -> tuple[str, str] | None:
@@ -230,7 +256,7 @@ def _confirmed_topic(prompt: str, used: list[str], label: str, niche: str, tries
             log.warning("%s: %r fora do nicho (%s) — descartado", label, topic, problem)
             rejected.append(f"{subject} (fora do nicho)")
             continue
-        if subject_confirmed(subject):
+        if subject_confirmed(subject, topic):
             log.info("%s: assunto %r confirmado na busca", label, subject)
             return topic
         log.warning("%s: assunto %r não encontrado na busca — descartado", label, subject)
