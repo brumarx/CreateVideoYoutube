@@ -18,6 +18,7 @@ import json
 import logging
 import re
 import subprocess
+import time
 from pathlib import Path
 
 import httpx
@@ -92,6 +93,25 @@ def frames_from_clip(path: Path) -> bytes | None:
         return None
 
 
+# modelo/chave sem cota (429) ou travado (timeout) fica de fora por um tempo
+# no processo: sem isso CADA imagem esperava 3 timeouts de 2 min do
+# gemini-flash-latest + 429 de todas as chaves (07/10: ~6 min por imagem,
+# render de 27 cenas parado a manhã inteira)
+_TIMEOUT = 45
+_COOLDOWN_429 = 15 * 60
+_COOLDOWN_TIMEOUT = 30 * 60
+_cooldown: dict[str, float] = {}
+
+
+def _resting(*names: str) -> bool:
+    now = time.monotonic()
+    return any(_cooldown.get(n, 0) > now for n in names)
+
+
+def _rest(name: str, seconds: int) -> None:
+    _cooldown[name] = time.monotonic() + seconds
+
+
 def _gemini(prompt: str, jpeg: bytes) -> str | None:
     keys = LLMKeys().gemini
     if not keys:
@@ -103,13 +123,22 @@ def _gemini(prompt: str, jpeg: bytes) -> str | None:
     rotator = _rotator_for(keys)
     for model in _MODELS:
         for key in rotator.order():
+            slot = f"gemini:{model}:{key[-6:]}"
+            if _resting(f"gemini:{model}", slot):
+                continue
             try:
-                resp = httpx.post(_URL.format(model=model), params={"key": key}, json=body, timeout=120)
+                resp = httpx.post(_URL.format(model=model), headers={"x-goog-api-key": key}, json=body, timeout=_TIMEOUT)
                 if resp.status_code in (401, 403):
                     rotator.ban(key)
                     continue
+                if resp.status_code == 429:
+                    _rest(slot, _COOLDOWN_429)
+                    continue
                 if resp.status_code == 200:
                     return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+            except httpx.TimeoutException:
+                log.warning("visão gemini (%s) sem resposta em %ds — fora por %d min", model, _TIMEOUT, _COOLDOWN_TIMEOUT // 60)
+                _rest(f"gemini:{model}", _COOLDOWN_TIMEOUT)
             except Exception as exc:  # noqa: BLE001
                 log.warning("visão gemini (%s) falhou: %s", model, exc)
     return None
@@ -137,8 +166,11 @@ def _openai_compat(prompt: str, jpeg: bytes) -> str | None:
         rotator = _rotator_for(keys)
         for model in models:
             for key in rotator.order():
+                slot = f"{provider}:{model}:{key[-6:]}"
+                if _resting(f"{provider}:{model}", slot):
+                    continue
                 try:
-                    resp = httpx.post(url, headers={"Authorization": f"Bearer {key}"}, timeout=120, json={
+                    resp = httpx.post(url, headers={"Authorization": f"Bearer {key}"}, timeout=_TIMEOUT, json={
                         "model": model, "temperature": 0,
                         "messages": [{"role": "user", "content": [
                             {"type": "text", "text": prompt},
@@ -148,10 +180,16 @@ def _openai_compat(prompt: str, jpeg: bytes) -> str | None:
                     if resp.status_code in (401, 403):
                         rotator.ban(key)
                         continue
+                    if resp.status_code == 429:
+                        _rest(slot, _COOLDOWN_429)
+                        continue
                     if resp.status_code == 200:
                         content = resp.json()["choices"][0]["message"]["content"]
                         if content:
                             return content
+                except httpx.TimeoutException:
+                    log.warning("visão %s (%s) sem resposta em %ds — fora por %d min", provider, model, _TIMEOUT, _COOLDOWN_TIMEOUT // 60)
+                    _rest(f"{provider}:{model}", _COOLDOWN_TIMEOUT)
                 except Exception as exc:  # noqa: BLE001
                     log.warning("visão %s (%s) falhou: %s", provider, model, exc)
     return None

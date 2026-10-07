@@ -68,7 +68,8 @@ cd CreateVideoYoutube
 clone) e cria o `.env` a partir do `.env.example`. No final ele imprime
 o que falta, que depende de conta sua e não dá pra automatizar:
 
-1. Preencher o `.env` com chaves grátis (LLM, imagem, vídeo/foto real —
+1. Preencher o `.env` (ou o ficheiro central `~/.secrets/keys.env`, que tem
+   prioridade) com chaves grátis (LLM, imagem, vídeo/foto real —
    nenhuma pede cartão).
 2. Criar um projeto no [Google Cloud Console](https://console.cloud.google.com),
    ativar a **YouTube Data API v3**, criar uma credencial OAuth tipo
