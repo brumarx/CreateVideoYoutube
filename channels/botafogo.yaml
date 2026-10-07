@@ -21,10 +21,10 @@ uploads_per_day: 1
 # formato do vídeo diário de notícias do botafogo.win. Prévia de jogo é
 # sempre curta e pós-jogo sempre longo, independente deste campo (ver
 # run_pipeline.py, branch "botafogo").
-daily_format: "long"
+daily_format: "short"
 # pré-jogo: rápido, gancho + contexto + expectativa.
 short_min_minutes: 1.5
-short_max_minutes: 3
+short_max_minutes: 2
 # pós-jogo: espaço pra cobrir formação, posse de bola, gols e destaques
 # sem virar lista lida às pressas.
 long_min_minutes: 4
