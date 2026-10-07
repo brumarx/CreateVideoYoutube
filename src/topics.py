@@ -10,10 +10,17 @@ de meses rodando todo dia.
 
 Temas virais: se o canal tem `viral_queries` no yaml, parte dos vídeos
 (`viral_share`, padrão 50%, e 100% quando a lista fixa esgota) usa um tema
-inspirado no que está bombando no YouTube no mês — busca os vídeos mais
+tirado do que está bombando no YouTube no mês — busca os vídeos mais
 vistos do nicho via yt-dlp (sem gastar cota da YouTube Data API, que fica
-toda pros uploads) e pede pro LLM um tema original do canal no mesmo
-gancho. Se a busca ou o LLM falhar, cai na lista fixa normalmente.
+toda pros uploads) e pede pro LLM o ASSUNTO REAL de um deles. Se a busca ou
+o LLM falhar, cai na lista fixa normalmente.
+
+Tema que não veio da lista fixa (viral ou gerado) só vale com um assunto
+real e específico (caso, pessoa, lugar, evento) que a busca na internet
+confirma — antes o LLM transformava a trend num tema genérico ("7 casos
+reais de crimes bizarros...") e o roteirista preenchia de memória, ou
+inventava o tema do zero ("o cadáver de Tangier", "as Boas de São Miguel"
+— 07/10, 8 roteiros reprovados no dia).
 """
 from __future__ import annotations
 
@@ -25,6 +32,7 @@ from pathlib import Path
 
 from .providers import complete
 from .script_gen import current_date_rule
+from .web_search import search_topic_facts
 
 log = logging.getLogger("topics")
 
@@ -116,6 +124,112 @@ def _first_line(raw: str) -> str:
     return _ENUM_PREFIX_RE.sub("", cleaned).strip('"“” ')
 
 
+# regras comuns do tema viral e do gerado: assunto ÚNICO, real e citado pelo
+# nome — é o que a busca consegue confirmar e o roteiro consegue sustentar
+_SUBJECT_RULES = (
+    "O tema precisa ser sobre UM assunto real, específico e documentado "
+    "(um caso, uma pessoa, um lugar, um evento, uma descoberta, uma "
+    "ferramenta) e CITAR esse assunto pelo nome no próprio tema — nada de "
+    "tema vago ('a modelo que o mundo adora', 'um mistério do Canadá') e "
+    "nada de lista ('7 casos...', 'N fatos...'), que obriga a inventar "
+    "itens. Se você não tem CERTEZA de que o assunto existe, escolha outro. "
+    "NUNCA proponha tema que acuse ou insinue irregularidade de uma pessoa "
+    "real específica — prefira tema explicativo, verificável em fonte "
+    "pública.\n\n"
+    "Não cite youtubers, podcasters ou o canal do vídeo de inspiração — o "
+    "tema é o assunto, não quem falou dele.\n\n"
+    'Responda SÓ com JSON numa linha: {"assunto": "SÓ o nome próprio do '
+    'assunto como aparece na Wikipedia (ex.: "Mary Celeste", "Elizabeth '
+    'Smart"), sem palavra descritiva", "tema": "título do tema em '
+    'português, uma linha"}'
+)
+_STOPWORDS = {
+    "caso", "the", "and", "como", "para", "pela", "pelo", "sobre", "entre", "depois", "antes", "mais", "muito",
+    "the", "and", "with", "from", "that", "dos", "das", "nos", "nas", "uma", "que", "foi",
+}
+
+
+def _norm(text: str) -> str:
+    import unicodedata
+
+    return unicodedata.normalize("NFKD", text.lower()).encode("ascii", "ignore").decode()
+
+
+def _subject_words(subject: str) -> list[str]:
+    # número e palavra de 3 letras contam ("Voo 585", "Air") — sem eles o
+    # inexistente "Voo 585 Air Canada 1985" passava só com "canada 1985"
+    return [w for w in re.findall(r"\w{3,}|\d+", _norm(subject)) if w not in _STOPWORDS]
+
+
+def subject_confirmed(subject: str) -> bool:
+    """True se a busca real acha o assunto: um resultado que tenha TODAS as
+    palavras do assunto (sem acento, ignorando palavra curta). Busca sempre
+    devolve alguma coisa — contar resultados não confirma nada (o "cadáver
+    de Tangier" teve 5 resultados e não existe)."""
+    words = _subject_words(subject)
+    if not words:
+        return False
+    for r in search_topic_facts(subject, max_results=5) or []:
+        text = _norm(f"{r.get('titulo', '')} {r.get('trecho', '')}")
+        if all(w in text for w in words):
+            return True
+    return False
+
+
+def _parse_subject(raw: str) -> tuple[str, str] | None:
+    m = re.search(r"\{.*?\}", raw, re.DOTALL)
+    if not m:
+        return None
+    try:
+        data = json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return None
+    subject = str(data.get("assunto") or "").strip()
+    topic = _first_line(str(data.get("tema") or ""))
+    words = _subject_words(subject)
+    if not words or len(subject.split()) > 8 or not _is_valid_topic(topic):
+        return None
+    # o tema cita o assunto (pelo menos metade das palavras) — senão a busca
+    # do roteiro ancora em outra coisa
+    if sum(w in _norm(topic) for w in words) * 2 < len(words):
+        return None
+    if LIST_RE.match(topic):
+        return None
+    return subject, topic
+
+
+LIST_RE = re.compile(r"^\s*\d{1,2}\s+\w+")
+
+
+def _confirmed_topic(prompt: str, used: list[str], label: str, tries: int = 3) -> str:
+    """Pede assunto+tema ao LLM e só aceita o que a busca confirma; assunto
+    não confirmado volta pro prompt como proibido. RuntimeError se nenhum
+    passar — melhor sem tema novo do que tema inventado."""
+    rejected: list[str] = []
+    for attempt in range(tries):
+        extra = ""
+        if rejected:
+            extra = "\n\nAssuntos que NÃO foram encontrados na internet (não use): " + "; ".join(rejected)
+        try:
+            raw = complete(
+                [{"role": "user", "content": prompt + extra}], max_tokens=400,
+                validate=lambda r: _parse_subject(r) is not None,
+            )
+        except RuntimeError as exc:
+            log.warning("%s: tentativa %d/%d sem resposta válida (%s)", label, attempt + 1, tries, exc)
+            continue
+        subject, topic = _parse_subject(raw)  # type: ignore[misc]
+        if topic in used:
+            rejected.append(subject)
+            continue
+        if subject_confirmed(subject):
+            log.info("%s: assunto %r confirmado na busca", label, subject)
+            return topic
+        log.warning("%s: assunto %r não encontrado na busca — descartado", label, subject)
+        rejected.append(subject)
+    raise RuntimeError(f"{label}: nenhum assunto confirmado na internet após {tries} tentativas")
+
+
 def _generate_new_topic(niche: str, used: list[str]) -> str:
     used_block = "\n".join(f"- {t}" for t in used) or "(nenhum ainda)"
     prompt = (
@@ -123,37 +237,9 @@ def _generate_new_topic(niche: str, used: list[str]) -> str:
         f"sobre: {niche}.\n\n{current_date_rule()}\n\n"
         f"Temas JÁ USADOS neste canal (NÃO pode repetir nenhum destes, nem "
         f"algo muito parecido/reformulado):\n{used_block}\n\n"
-        "Responda com UM ÚNICO tema novo, específico e ainda não coberto "
-        "acima, em português, numa linha só, sem numeração, sem aspas, sem "
-        "explicação — só o texto do tema. Se for um tema de lista ('N "
-        "fatos/coisas sobre...'), o N NUNCA pode passar de 10 — nada de "
-        "20, 30, 40 itens."
+        f"Proponha UM tema novo. {_SUBJECT_RULES}"
     )
-    messages = [{"role": "user", "content": prompt}]
-
-    # `validate` faz a cascata de provedores/modelos em providers.complete()
-    # já pular pro próximo modelo na hora que um vier com lixo (raciocínio
-    # vazado, resposta cortada) — em vez de aceitar a primeira resposta não
-    # vazia e só descobrir depois que era garbage. Mesmo assim mantém um
-    # retry externo: às vezes TODOS os modelos disponíveis nesse momento
-    # estão instáveis (rate limit, sobrecarga) e uma nova rodada da cascata
-    # já resolve.
-    last_topic = ""
-    for attempt in range(3):
-        try:
-            raw = complete(messages, max_tokens=200, validate=lambda r: _is_valid_topic(_first_line(r)))
-        except RuntimeError as exc:
-            last_topic = str(exc)
-            log.warning("tentativa %d/3: nenhum provedor devolveu tema válido (%s), tentando de novo", attempt + 1, exc)
-            continue
-        topic = _first_line(raw)
-        if _is_valid_topic(topic):
-            return topic
-        last_topic = topic  # defensivo: não deveria acontecer com validate acima
-
-    raise RuntimeError(
-        f"LLM não devolveu um tema válido após 3 tentativas (último: {last_topic!r})"
-    )
+    return _confirmed_topic(prompt, used, "tema novo")
 
 
 # Filtro da busca do YouTube: ordenar por visualizações, enviados este mês,
@@ -206,27 +292,14 @@ def _generate_viral_topic(niche: str, viral: list[tuple[str, int]], used: list[s
         f"outro idioma):\n{viral_block}\n\n"
         f"Temas JÁ USADOS neste canal (NÃO pode repetir nenhum destes, nem "
         f"algo muito parecido/reformulado):\n{used_block}\n\n"
-        "Crie UM tema novo para este canal que aproveite o assunto/gancho "
-        "de um dos vídeos virais acima, mas adaptado ao nicho e ao público "
-        "brasileiro — nunca copie o título, e ignore vídeos que não têm "
-        "nada a ver com o nicho. Só fatos reais, nada de boato. NUNCA "
-        "proponha tema que acuse ou insinue irregularidade de uma pessoa "
-        "real específica (ex.: 'gastos suspeitos de fulano', 'o que o "
-        "ministro X escondeu') — prefira tema explicativo sobre como algo "
-        "funciona ou quanto custa, verificável em fonte pública. Responda em "
-        "português, numa linha só, sem numeração, sem aspas, sem explicação "
-        "— só o texto do tema. Se for um tema de lista ('N fatos/coisas "
-        "sobre...'), o N NUNCA pode passar de 10."
+        "Escolha UM dos vídeos virais acima que tenha a ver com o nicho e "
+        "use o MESMO assunto real dele (o caso, a pessoa, o lugar, o evento "
+        "de que ele fala) num tema com título próprio, adaptado ao público "
+        "brasileiro — nunca copie o título e nunca troque o assunto por uma "
+        "versão genérica. Ignore vídeos que não têm nada a ver com o nicho "
+        f"ou cujo assunto você não sabe qual é. {_SUBJECT_RULES}"
     )
-    raw = complete(
-        [{"role": "user", "content": prompt}],
-        max_tokens=400,
-        validate=lambda r: _is_valid_topic(_first_line(r)),
-    )
-    topic = _first_line(raw)
-    if not _is_valid_topic(topic):
-        raise RuntimeError(f"tema viral inválido: {topic!r}")
-    return topic
+    return _confirmed_topic(prompt, used, "tema viral", tries=2)
 
 
 def _try_viral_topic(channel_name: str, niche: str, queries: list[str], used: list[str]) -> str | None:
