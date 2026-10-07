@@ -324,6 +324,7 @@ def unknown_names(script: dict, topic: str, facts: dict | None, web_facts: list[
         " ".join(f"{f.get('titulo', '')} {f.get('trecho', '')}" for f in (web_facts or [])),
     ]).lower()
     names: list[str] = []
+    contexts: dict[str, str] = {}
     for sentence in re.split(r"(?<=[.!?])\s+", narration):
         # 1ª palavra da frase é maiúscula por ser começo de frase
         for m in _NAME_RE.finditer(sentence):
@@ -337,6 +338,7 @@ def unknown_names(script: dict, topic: str, facts: dict | None, web_facts: list[
                 continue
             if name not in names:
                 names.append(name)
+                contexts[name] = sentence
     problems = []
     for name in names[:6]:
         if name not in _name_cache:
@@ -356,7 +358,23 @@ def unknown_names(script: dict, topic: str, facts: dict | None, web_facts: list[
                 # mas não em matéria de quase-morte)
                 return all(w in text for w in words) and (institution or not keywords or any(k in text for k in keywords))
 
-            _name_cache[name] = any(ok(r) for r in results)
+            found = any(ok(r) for r in results)
+            if not found and not institution:
+                # as palavras longas do tema às vezes são só enchimento
+                # ("registrados continuaram chocaram") e a busca não achava
+                # a Elizabeth Smart (07/10): tenta o nome sozinho, com o
+                # contexto vindo da frase que cita a pessoa — ano e nome
+                # próprio, que valem em qualquer idioma (resultado costuma
+                # vir em inglês: "sequestrada" nunca batia com "abducted")
+                ctx = contexts[name]
+                keywords = [
+                    w.lower() for w in re.findall(r"\b(?:1[5-9]\d\d|20\d\d)\b|\b[A-ZÀ-Ý][a-zà-ÿ]{2,}\b", ctx)
+                    if w.lower() not in name.lower() and not ctx.startswith(w)
+                ][:6]
+                if keywords:  # sem contexto, nome sozinho não prova nada
+                    results = search_topic_facts(name, max_results=5) or []
+                    found = any(ok(r) for r in results)
+            _name_cache[name] = found
         if not _name_cache[name]:
             log.warning("nome sem fonte nem resultado na busca: %r", name)
             problems.append({
