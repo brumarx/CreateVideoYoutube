@@ -71,6 +71,9 @@ topics:
   - "como usar IA para automatizar a criação de relatórios financeiros e prever tendências de gastos"
   - "como automatizar a criação de vídeos longos com apenas um clique usando agentes de IA para gerar roteiro, narração e edição"
   - "como usar a automação de agentes de IA para gerenciar um portfólio de investimentos e simular estratégias de trading sem sair de casa"
+  - "GPT-6 Astra: Guia prático para gerar código e automatizar projetos sem escrever uma linha de programação"
+  - "GPT-6 Astra: como usar a automação para criar e testar as primeiras versões de um aplicativo ou site sem escrever código"
+  - "Como usar o Claude Code para automatizar tarefas de programação e produtividade, passo a passo"
 prompt_base: >
   Escreva um roteiro de tutorial prático no estilo de canais de tecnologia/
   produtividade do YouTube. O ângulo deste canal é PRÁTICO E ACIONÁVEL — o
