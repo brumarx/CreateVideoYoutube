@@ -168,11 +168,15 @@ def _sized_for_facts(facts: dict, scenes: int | None, min_minutes: float, max_mi
 _SENT_SPLIT = re.compile(r"(?<=[.!?])\s+")
 
 
-def _cut_flagged_sentences(script: dict, problems: list[dict], max_cuts: int = 3) -> dict | None:
+def _cut_flagged_sentences(
+    script: dict, problems: list[dict], max_cuts: int = 3, lenient: bool = False,
+) -> dict | None:
     """Roteiro sem as frases que a revisão apontou (cada `termo` é a
     afirmação curta do revisor — acha a frase que tem a maioria das palavras
     dele). None se não achou alguma, ou se precisaria cortar mais que
-    `max_cuts` frases (aí o roteiro está ruim mesmo, não é uma frase solta)."""
+    `max_cuts` frases (aí o roteiro está ruim mesmo, não é uma frase solta).
+    lenient (última tentativa do dia): pula o termo que não achou e corta
+    quantas frases precisar, desde que sobrem pelo menos 2 cenas."""
     def words(text: str) -> set[str]:
         return {w for w in re.findall(r"\w+", text.lower()) if len(w) > 3}
 
@@ -181,6 +185,8 @@ def _cut_flagged_sentences(script: dict, problems: list[dict], max_cuts: int = 3
     for p in problems:
         term = words(str(p.get("termo", "")))
         if not term:
+            if lenient:
+                continue
             return None
         best, best_score = None, 0.0
         for si, sentences in enumerate(scenes):
@@ -189,16 +195,41 @@ def _cut_flagged_sentences(script: dict, problems: list[dict], max_cuts: int = 3
                 if score > best_score:
                     best, best_score = (si, ji), score
         if best is None or best_score < 0.6:
+            if lenient:
+                continue
             return None
         to_cut.add(best)
-    if len(to_cut) > max_cuts:
+    if len(to_cut) > max_cuts and not lenient:
         return None
     new_scenes = []
     for si, sentences in enumerate(scenes):
         kept = " ".join(x for ji, x in enumerate(sentences) if (si, ji) not in to_cut).strip()
         if kept:
             new_scenes.append({**script["scenes"][si], "narration": kept})
+    if lenient and (not to_cut or len(new_scenes) < 2):
+        return None
     return {**script, "scenes": new_scenes}
+
+
+def _forced_cut(script: dict, problems: list[dict], topic: str, facts, web_facts, job_id) -> dict:
+    """Última tentativa do dia: corta as frases reprovadas e revisa de novo,
+    até 3 rodadas. Não reprova nunca — sobra o roteiro com o máximo de
+    frases apontadas removidas."""
+    for _ in range(3):
+        if not problems:
+            break
+        cut = _cut_flagged_sentences(script, problems, lenient=True)
+        if cut is None:
+            break
+        script = cut
+        log.warning("[%s] última tentativa do dia: frases reprovadas cortadas (%d cenas)", job_id, len(script["scenes"]))
+        problems = review_script(script, topic, facts, web_facts) or []
+    if problems:
+        log.warning(
+            "[%s] última tentativa do dia — publica com ressalvas da revisão: %s", job_id,
+            "; ".join(str(p.get("termo")) for p in problems),
+        )
+    return script
 
 
 def _clip_still(path: Path) -> bytes | None:
@@ -259,6 +290,7 @@ def run(
     facts_file: str | None = None,
     script_only: bool = False,
     no_upload: bool = False,
+    must_publish: bool = False,
 ) -> None:
     channel = ChannelConfig.load(channel_name)
     # guardado ANTES de qualquer auto-preenchimento abaixo — só um tema
@@ -438,6 +470,9 @@ def run(
                 # NÃO sai (não existe mais aprovação manual depois)
                 problems = review_script(script, topic, facts, web_facts)
                 if problems is None:
+                    if must_publish:
+                        log.warning("[%s] revisor de fatos indisponível — última tentativa do dia, segue sem revisão", job_id)
+                        break
                     raise ScriptRejected("revisor de fatos indisponível — vídeo não sai sem revisão")
             if not problems:
                 break
@@ -509,6 +544,13 @@ def run(
                         problems = review_script(script, topic, None, web_facts)
                         if problems == []:
                             break
+                if must_publish:
+                    # última tentativa do dia: o vídeo SEMPRE sai — corta as
+                    # frases apontadas (até 3 rodadas de revisão), em vez de
+                    # descartar o roteiro e passar o dia sem vídeo (botafogo
+                    # 09/10: 4 notícias seguidas reprovadas, jobs 350-353)
+                    script = _forced_cut(script, problems or [], topic, facts, web_facts, job_id)
+                    break
                 raise ScriptRejected(
                     "roteiro reprovado na revisão de fatos: "
                     + "; ".join(f"{p.get('termo')} ({p.get('motivo')})" for p in (problems or [{"termo": "revisor de fatos", "motivo": "indisponível"}]))
@@ -796,6 +838,9 @@ def run(
         if qa_problems:
             for p in qa_problems:
                 log.warning("[%s] revisão do vídeo: %s", job_id, p)
+        if qa_problems and must_publish:
+            log.warning("[%s] última tentativa do dia — publica mesmo com ressalvas da revisão do vídeo", job_id)
+        elif qa_problems:
             raise ScriptRejected("vídeo reprovado na revisão antes do upload: " + "; ".join(qa_problems))
         update(job_id, status="rendered", video_path=str(final_video))
         log.info("[%s] revisão do vídeo aprovada", job_id)
@@ -992,6 +1037,7 @@ def main() -> None:
     parser.add_argument("--script-file", default=None, help="JSON de roteiro pronto (mesmo formato do gerado) — pula a geração, mantém todas as revisões")
     parser.add_argument("--script-only", action="store_true", help="para depois do roteiro aprovado nas revisões; salva script.json/facts.json e o comando de render")
     parser.add_argument("--no-upload", action="store_true", help="renderiza e deixa 'ready' (com upload_meta) pro daily_run publicar")
+    parser.add_argument("--must-publish", action="store_true", help="última tentativa do dia: revisões viram aviso (corta frases reprovadas) em vez de descartar o vídeo")
     parser.add_argument("--fact-label", default=None, help="só canal 'politica' no curto: força um tema específico de src.politica_data.FACT_FETCHERS em vez de sortear")
     args = parser.parse_args()
 
@@ -1000,6 +1046,7 @@ def main() -> None:
             args.channel, args.topic, args.dry_run, args.publish_at, long_form=args.long,
             fact_label=args.fact_label, botafogo_task=args.botafogo_task, script_file=args.script_file,
             facts_file=args.facts_file, script_only=args.script_only, no_upload=args.no_upload,
+            must_publish=args.must_publish,
         )
     except ScriptRejected:
         sys.exit(EXIT_SCRIPT_REJECTED)
