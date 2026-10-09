@@ -32,7 +32,7 @@ from src.assemble import SFX_DIR, _ffprobe_duration, add_background_music, conca
 from src.config import ChannelConfig
 from src.fact_check import BLOCKING_TYPES, feedback_for_rewrite, review_script
 from src.orchestrator import enqueue, update
-from src.script_gen import chapter_titles, engagement_question, generate_script
+from src.script_gen import chapter_titles, engagement_question, fix_dangling_hooks, generate_script
 from src.spellcheck import fix_script, fix_text
 from src.stock_media import search_stock_clip, search_stock_photo
 from src.thumbnail import make_thumbnail, photo_scene_frame, title_card
@@ -567,6 +567,8 @@ def run(
                 web_facts=web_facts, revision_feedback=feedback_for_rewrite(problems),
             )
         update(job_id, status="scripted")
+        # pergunta de transição que a cena seguinte não responde (job 363)
+        script = fix_dangling_hooks(script)
         # português revisado antes de narrar: a narração vira legenda na tela
         script = fix_script(script, channel.language)
 

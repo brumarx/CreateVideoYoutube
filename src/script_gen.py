@@ -86,7 +86,11 @@ SYSTEM_PROMPT = (
     "TODA cena, não só a primeira, tem que terminar puxando pra próxima: uma "
     "pergunta em aberto, uma contradição ainda não explicada, uma promessa "
     "('mas o que aconteceu depois é ainda mais surpreendente'), nunca uma "
-    "frase que soa como ponto final de assunto encerrado. Varie o ritmo das "
+    "frase que soa como ponto final de assunto encerrado. A pergunta ou "
+    "promessa do fim de uma cena TEM que ser respondida logo na 1ª frase da "
+    "cena seguinte, sobre o MESMO assunto — se a próxima cena fala de outra "
+    "coisa, a ponte anuncia esse outro assunto (nunca pergunte sobre o "
+    "adversário e comece a cena seguinte falando de dívida). Varie o ritmo das "
     "frases (curtas e diretas misturadas com uma mais longa, nunca a mesma "
     "estrutura sintática repetida cena após cena), fale direto com quem "
     "assiste ('você', 'imagina se...', perguntas retóricas) em vez de tom de "
@@ -621,6 +625,55 @@ def generate_script(
         return _sanitize_person_images(topic, filler_fallback)
 
     raise ValueError(f"LLM não devolveu roteiro válido após 3 tentativas: {last_error}")
+
+
+_SENTENCES = re.compile(r"(?<=[.!?])\s+")
+
+
+def fix_dangling_hooks(script: dict) -> dict:
+    """Pergunta de fim de cena que a cena seguinte não responde (job 363:
+    "E quem vem do outro lado?" seguida do prazo da recuperação judicial)
+    sai do roteiro. Um LLM só aponta quais estão soltas; o corte é por
+    código e só tira a pergunta — nunca acrescenta fato. Sem LLM, segue."""
+    scenes = script.get("scenes") or []
+    pairs: list[tuple[int, str, str]] = []
+    for i in range(len(scenes) - 1):
+        sentences = _SENTENCES.split(scenes[i].get("narration", "").strip())
+        if len(sentences) > 1 and sentences[-1].endswith("?"):
+            nxt = " ".join(_SENTENCES.split(scenes[i + 1].get("narration", "").strip())[:2])
+            pairs.append((i, sentences[-1], nxt))
+    if not pairs:
+        return script
+    listing = "\n".join(f"{k}) PERGUNTA: {q}\n   COMEÇO DA CENA SEGUINTE: {n}" for k, (_, q, n) in enumerate(pairs))
+    prompt = (
+        "Em cada item, a PERGUNTA fecha uma cena de vídeo e puxa pra seguinte. "
+        "Ela está CONECTADA se o começo da cena seguinte responde ou continua "
+        "exatamente o assunto da pergunta; DESCONECTADA se fala de outra coisa.\n\n"
+        f"{listing}\n\nResponda só JSON: {{\"desconectadas\": [números]}}"
+    )
+
+    def parse(raw: str) -> list[int] | None:
+        m = re.search(r"\{.*\}", raw, re.S)
+        try:
+            data = json.loads(m.group(0)) if m else None
+            ids = data.get("desconectadas") if isinstance(data, dict) else None
+            return [int(x) for x in ids] if isinstance(ids, list) else None
+        except (ValueError, TypeError):
+            return None
+
+    try:
+        raw = complete([{"role": "user", "content": prompt}], max_tokens=200, validate=lambda r: parse(r) is not None)
+    except RuntimeError as exc:
+        log.warning("checagem de ganchos: nenhum provedor respondeu (%s) — segue sem", exc)
+        return script
+    new_scenes = [dict(sc) for sc in scenes]
+    for k in parse(raw) or []:
+        if 0 <= k < len(pairs):
+            i, question, _ = pairs[k]
+            narration = new_scenes[i]["narration"].strip()
+            new_scenes[i]["narration"] = narration[: len(narration) - len(question)].rstrip()
+            log.warning("gancho solto cortado da cena %d: %s", i + 1, question)
+    return {**script, "scenes": new_scenes}
 
 
 # Pergunta do comentário que o canal posta logo depois do upload (ver
