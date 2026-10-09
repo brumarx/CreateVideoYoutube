@@ -6,7 +6,10 @@ import json
 import logging
 import math
 import re
+import sqlite3
+from contextlib import closing
 from datetime import date
+from pathlib import Path
 
 from .config import ChannelConfig
 from .providers import complete
@@ -450,6 +453,55 @@ def _sanitize_person_images(topic: str, script: dict) -> dict:
     return script
 
 
+QUEUE_DB = Path(__file__).resolve().parent.parent / "data" / "queue.db"
+_FACT_PREFIX = "roteiro reprovado na revisão de fatos: "
+_VIDEO_PREFIX = "vídeo reprovado na revisão antes do upload: "
+
+
+def _split_items(text: str) -> list[str]:
+    """Separa 'A (motivo; x); B (motivo)' no ';' de fora dos parênteses."""
+    items, depth, cur = [], 0, ""
+    for ch in text:
+        depth += (ch == "(") - (ch == ")")
+        if ch == ";" and depth <= 0:
+            items.append(cur.strip())
+            cur = ""
+        else:
+            cur += ch
+    return [i for i in [*items, cur.strip()] if i]
+
+
+def recent_mistakes(channel_name: str, jobs: int = 8, max_items: int = 12) -> str:
+    """Aprende com o que já foi reprovado: os motivos das últimas revisões
+    (fatos e vídeo) deste canal, guardados no erro do job, entram no prompt
+    pro LLM não repetir o mesmo tipo de erro (botafogo 09/10: 'jogo em casa'
+    sendo fora, 'zona de rebaixamento' sem fonte, jobs 350-353)."""
+    try:
+        with closing(sqlite3.connect(QUEUE_DB)) as conn:
+            rows = conn.execute(
+                "SELECT error FROM jobs WHERE channel = ? AND status IN ('retried', 'failed') "
+                "AND (error LIKE ? OR error LIKE ?) ORDER BY id DESC LIMIT ?",
+                (channel_name, _FACT_PREFIX + "%", _VIDEO_PREFIX + "%", jobs),
+            ).fetchall()
+    except sqlite3.Error:
+        return ""
+    lines: list[str] = []
+    for (error,) in rows:
+        if error.startswith(_FACT_PREFIX):
+            items = [f"- fato: {i[:220]}" for i in _split_items(error[len(_FACT_PREFIX):])]
+        else:
+            items = [f"- imagem/vídeo: {i[:220]}" for i in _split_items(error[len(_VIDEO_PREFIX):])]
+        lines += [i for i in items if i not in lines]
+    if not lines:
+        return ""
+    return (
+        "\n\nERROS RECENTES DESTE CANAL (roteiros/vídeos já reprovados — NÃO repita o mesmo tipo de erro; "
+        "na dúvida, deixe a afirmação de fora; mando/local de jogo, próximo adversário, posição na tabela "
+        "e números só se estiverem nas fontes; image_prompt de cada cena tem que mostrar exatamente o "
+        "assunto daquela cena e variar entre as cenas):\n" + "\n".join(lines[:max_items])
+    )
+
+
 def generate_script(
     channel: ChannelConfig,
     topic: str,
@@ -476,7 +528,7 @@ def generate_script(
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": _prompt_for(channel, topic, facts, scenes, min_minutes, max_minutes, web_facts)
-         + (revision_feedback or "")},
+         + recent_mistakes(channel.name) + (revision_feedback or "")},
     ]
 
     required = {"title", "description", "tags", "scenes"}

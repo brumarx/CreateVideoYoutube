@@ -50,6 +50,10 @@ EXIT_SCRIPT_REJECTED = 3
 # passou 27-30/09 sem vídeo, e falha passageira (TTS "No audio was received",
 # Pollinations fora, JSON malformado do LLM) perdia o dia direto.
 MAX_ATTEMPTS = 4
+# a partir da última tentativa normal, o vídeo do dia SEMPRE sai
+# (--must-publish: revisões cortam frase/avisam em vez de descartar); repete
+# esse modo até MUST_PUBLISH_ATTEMPTS vezes se ainda cair (render, LLM fora)
+MUST_PUBLISH_ATTEMPTS = 3
 
 # Pasta output/job_N só era apagada depois de upload com sucesso — falha,
 # retentativa e abandono deixavam tudo pra trás (9,9 GB em 06/10). Apaga a
@@ -117,12 +121,18 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
     politica, o curto usa sempre dado real do banco — o que mais passa na
     revisão)."""
     base_cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name, *extra]
-    for attempt in range(1, MAX_ATTEMPTS + 1):
+    total = MAX_ATTEMPTS + MUST_PUBLISH_ATTEMPTS - 1
+    for attempt in range(1, total + 1):
         cmd = base_cmd
-        if fallback_short and attempt == MAX_ATTEMPTS:
-            cmd = [*base_cmd, "--no-long"]
+        if attempt >= MAX_ATTEMPTS:
+            # o vídeo do dia SEMPRE sai: as revisões (fatos/vídeo) cortam
+            # frase e avisam em vez de descartar. O roteiro novo já recebe os
+            # motivos das reprovações anteriores (script_gen.recent_mistakes)
+            cmd = [*cmd, "--must-publish"]
+        if fallback_short and attempt >= MAX_ATTEMPTS:
+            cmd = [*cmd, "--no-long"]
             log.warning("[%s] %s: última tentativa no formato curto", channel_name, label)
-        log.info("[%s] %s (tentativa %d/%d)", channel_name, label, attempt, MAX_ATTEMPTS)
+        log.info("[%s] %s (tentativa %d/%d)", channel_name, label, attempt, total)
         before = _max_job_id()
         rc = subprocess.run(cmd, cwd=ROOT).returncode
         if rc == 0:
@@ -137,8 +147,8 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
             log.error("[%s] %s: vídeo %d renderizado mas não publicado — fica pro retry_uploads", channel_name, label, job_id)
             return
         motivo = "roteiro reprovado na revisão de fatos" if rc == EXIT_SCRIPT_REJECTED else f"falhou antes do render (exit {rc})"
-        if attempt == MAX_ATTEMPTS:
-            log.error("[%s] %s: %s — %d tentativas, sem vídeo hoje", channel_name, label, motivo, MAX_ATTEMPTS)
+        if attempt == total:
+            log.error("[%s] %s: %s — %d tentativas, sem vídeo hoje", channel_name, label, motivo, total)
             return
         log.warning("[%s] %s: %s (job %d) — tentando de novo", channel_name, label, motivo, job_id)
         if status == "failed":
