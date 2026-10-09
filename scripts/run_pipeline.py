@@ -216,6 +216,13 @@ def _forced_cut(script: dict, problems: list[dict], topic: str, facts, web_facts
     até 3 rodadas. Não reprova nunca — sobra o roteiro com o máximo de
     frases apontadas removidas."""
     for _ in range(3):
+        if any(p.get("tipo") == "titulo_enganoso" for p in problems):
+            # título não é frase da narração (job 362: "4 nomes que podem
+            # mudar o jogo"): vira o próprio tema/manchete, que a fonte sustenta
+            safe = re.sub(r"^Notícias do [^:]+:\s*", "", topic).strip()[:100]
+            script = {**script, "title": safe, "thumbnail_text": None}  # o da thumb repetia a promessa
+            problems = [p for p in problems if p.get("tipo") != "titulo_enganoso"]
+            log.warning("[%s] última tentativa do dia: título reprovado trocado pelo tema: %s", job_id, safe)
         if not problems:
             break
         cut = _cut_flagged_sentences(script, problems, lenient=True)
