@@ -105,6 +105,9 @@ def _for_speech(text: str, extra: dict[str, str] | None = None) -> tuple[str, li
         trocas.append((word.capitalize().lower(), word))
         return word.capitalize()
 
+    from .spellcheck import clean_markup
+
+    text = clean_markup(text)  # última barreira: nada de "asterisco" falado
     text = _apply_pronunciations(text, extra)
     text = _versus(text)
     return _CAPS_WORD.sub(caps, text), trocas

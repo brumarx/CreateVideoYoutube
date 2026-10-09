@@ -273,9 +273,34 @@ def _introduces_typo(old: str, new: str) -> bool:
     return False
 
 
+# Marcação de texto que o LLM às vezes põe no roteiro (**negrito**, # título,
+# [link](url), emoji) — a voz lia "asterisco asterisco" (botafogo, job 361).
+_MD_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+_MD_MARKS = re.compile(r"[*_`#~^|<>{}\[\]\\]+")
+_EMOJI = re.compile(
+    "[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0000FE0F\U0000200D\U00002B00-\U00002BFF]+"
+)
+_LIST_BULLET = re.compile(r"(?m)^\s*(?:[-•–]|\d+[.)])\s+")
+
+
+def clean_markup(text: str) -> str:
+    """Só o que pode ser FALADO: tira markdown, emoji e marcador de lista."""
+    text = _MD_LINK.sub(r"\1", text)
+    text = _LIST_BULLET.sub("", text)
+    text = _MD_MARKS.sub(" ", text)
+    text = _EMOJI.sub(" ", text)
+    text = re.sub(r"\s+([,.;:!?])", r"\1", text)
+    return " ".join(text.split())
+
+
 def fix_script(script: dict, language: str = "pt-BR") -> dict:
     """Corrige título, texto da thumbnail, descrição e narrações no lugar.
     Narrações vão numa chamada só (limite da API pública: 20 req/min)."""
+    for scene in script.get("scenes") or []:
+        scene["narration"] = clean_markup(scene.get("narration", ""))
+    for key in ("title", "thumbnail_text"):
+        if script.get(key):
+            script[key] = clean_markup(script[key])
     for key in ("title", "thumbnail_text", "description"):
         if script.get(key):
             script[key] = fix_text(script[key], language)
@@ -289,4 +314,7 @@ def fix_script(script: dict, language: str = "pt-BR") -> dict:
     if len(parts) == len(scenes):
         for scene, narration in zip(scenes, parts):
             scene["narration"] = narration
+    # de novo no fim: a correção (também por LLM) pode devolver marcação
+    for scene in scenes:
+        scene["narration"] = clean_markup(scene["narration"])
     return script
