@@ -12,6 +12,7 @@ import logging
 import re
 import time
 from pathlib import Path
+from typing import Callable
 
 import edge_tts
 import httpx
@@ -397,14 +398,44 @@ def _gender(voice: str) -> str:
     return "male" if "Antonio" in voice else "female"
 
 
+_job_engine: "Callable[[str, Path, str], list[dict]] | None" = None  # motor que narrou a 1ª cena: o resto do job fica nele
+
+
 def _synthesize_fallback(text: str, output_path: Path, voice: str) -> list[dict]:
+    """Job 398: cenas 0-4 no Google e 5-26 na ElevenLabs — a voz trocava no
+    meio do vídeo e as taxas diferentes (24 kHz x 44,1 kHz) quebravam a
+    junção das cenas (áudio de 561 s num vídeo de 305 s). Agora o job fica
+    no motor da 1ª cena e todo áudio sai em 24 kHz mono, igual ao edge-tts."""
+    global _job_engine
+    engines = [_synthesize_google, _synthesize_eleven]
+    if _job_engine is not None and _job_engine in engines:
+        engines.remove(_job_engine)
+        engines.insert(0, _job_engine)
     errors = []
-    for engine in (_synthesize_google, _synthesize_eleven):
+    for engine in engines:
         try:
-            return engine(text, output_path, _gender(voice))
+            words = engine(text, output_path, _gender(voice))
         except Exception as exc:  # noqa: BLE001
+            log.warning("%s falhou: %s", engine.__name__, exc)
             errors.append(f"{engine.__name__}: {exc}")
+            continue
+        if _job_engine and engine is not _job_engine:
+            log.warning("voz trocou de motor no meio do job (%s -> %s)", _job_engine.__name__, engine.__name__)
+        _job_engine = engine
+        _normalize_audio(output_path)
+        return words
     raise RuntimeError("nenhum motor de voz disponível — " + " | ".join(errors))
+
+
+def _normalize_audio(path: Path) -> None:
+    import subprocess
+
+    tmp = path.with_suffix(".norm.mp3")
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-i", str(path), "-ar", "24000", "-ac", "1", "-b:a", "96k", str(tmp)],
+        check=True,
+    )
+    tmp.replace(path)
 
 
 def _reserve_google_quota(n_bytes: int) -> None:
