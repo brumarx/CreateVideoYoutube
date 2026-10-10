@@ -376,11 +376,16 @@ def narrate(
     return output_path, _restore_spelling(_restore_punctuation(words, text), spelling_back, pronunciations)
 
 
-# edge-tts fora do ar: Google Cloud TTS (1 mi caracteres/mês grátis nas
-# vozes Neural2/WaveNet; precisa da API ativada no projeto da service
-# account) e depois ElevenLabs (cota grátis pequena, rodízio de chaves).
+# edge-tts fora do ar: Google Cloud TTS e depois ElevenLabs (cota grátis
+# pequena, rodízio de chaves). Google: vozes WaveNet (4 mi caracteres/mês
+# grátis; Neural2 só 1 mi). O projeto tem faturamento ligado, então o TETO
+# abaixo é a garantia de custo ZERO (exigência do dono: nem 1 centavo):
+# conta o SSML inteiro em bytes (com as <mark>, bem mais que o cobrado) por
+# mês UTC e para de usar o Google bem antes dos 4 mi.
 _EDGE_BLOCKED = False
-GOOGLE_VOICES = {"male": "pt-BR-Neural2-B", "female": "pt-BR-Neural2-A"}
+GOOGLE_VOICES = {"male": "pt-BR-Wavenet-B", "female": "pt-BR-Wavenet-A"}
+GOOGLE_MONTHLY_CAP_BYTES = 2_500_000
+GOOGLE_USAGE_FILE = Path(__file__).resolve().parent.parent / "data" / "google_tts_usage.json"
 # só vozes "premade": voz da biblioteca (as brasileiras) exige plano pago
 ELEVEN_VOICES = {"male": "TX3LPaxmHKxFdv7VOQHJ", "female": "EXAVITQu4vr4xnSDxMaL"}  # Liam / Sarah
 ELEVEN_MODEL = "eleven_turbo_v2_5"  # meio crédito por caractere, fala pt-BR
@@ -400,6 +405,22 @@ def _synthesize_fallback(text: str, output_path: Path, voice: str) -> list[dict]
         except Exception as exc:  # noqa: BLE001
             errors.append(f"{engine.__name__}: {exc}")
     raise RuntimeError("nenhum motor de voz disponível — " + " | ".join(errors))
+
+
+def _reserve_google_quota(n_bytes: int) -> None:
+    """Soma ANTES de chamar (falha também conta); estourou o teto, recusa."""
+    from datetime import datetime, timezone
+
+    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    try:
+        usage = json.loads(GOOGLE_USAGE_FILE.read_text())
+    except (OSError, ValueError):
+        usage = {}
+    used = usage.get(month, 0)
+    if used + n_bytes > GOOGLE_MONTHLY_CAP_BYTES:
+        raise RuntimeError(f"teto mensal grátis do google tts atingido ({used}/{GOOGLE_MONTHLY_CAP_BYTES} bytes)")
+    usage[month] = used + n_bytes
+    GOOGLE_USAGE_FILE.write_text(json.dumps(usage))
 
 
 def _synthesize_google(text: str, output_path: Path, gender: str) -> list[dict]:
@@ -423,6 +444,7 @@ def _synthesize_google(text: str, output_path: Path, gender: str) -> list[dict]:
     creds.refresh(google.auth.transport.requests.Request())
     tokens = text.split()
     ssml = "<speak>" + " ".join(f'<mark name="{i}"/>{escape(t)}' for i, t in enumerate(tokens)) + "</speak>"
+    _reserve_google_quota(len(ssml.encode()))
     resp = httpx.post(
         "https://texttospeech.googleapis.com/v1beta1/text:synthesize",
         headers={"Authorization": f"Bearer {creds.token}", "x-goog-user-project": str(creds.project_id)},
