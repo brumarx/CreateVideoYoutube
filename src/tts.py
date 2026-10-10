@@ -407,7 +407,7 @@ def _synthesize_fallback(text: str, output_path: Path, voice: str) -> list[dict]
     junção das cenas (áudio de 561 s num vídeo de 305 s). Agora o job fica
     no motor da 1ª cena e todo áudio sai em 24 kHz mono, igual ao edge-tts."""
     global _job_engine
-    engines = [_synthesize_google, _synthesize_eleven]
+    engines: list[Callable[[str, Path, str], list[dict]]] = [_synthesize_google, _synthesize_eleven]
     if _job_engine is not None and _job_engine in engines:
         engines.remove(_job_engine)
         engines.insert(0, _job_engine)
