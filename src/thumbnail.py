@@ -377,7 +377,7 @@ def _render_text_block(hook_text: str, max_w: int, max_h: int) -> Image.Image:
     # palavra de destaque: faixa amarela sólida com letra preta (o padrão
     # dos canais grandes) — letra amarela sobre fundo escuro sumia no feed
     shadow_off, box_pad = 9, 14
-    block = Image.new("RGBA", (max_w + 40 + 2 * box_pad, total + 40 + 2 * box_pad), (0, 0, 0, 0))
+    block = Image.new("RGBA", (int(max_w + 40 + 2 * box_pad), int(total + 40 + 2 * box_pad)), (0, 0, 0, 0))
     shadow = Image.new("RGBA", block.size, (0, 0, 0, 0))
     draw, sdraw = ImageDraw.Draw(block), ImageDraw.Draw(shadow)
     y = 10 + box_pad
