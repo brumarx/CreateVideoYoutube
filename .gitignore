@@ -8,6 +8,7 @@ data/used_political_facts.json
 data/playlists.json
 data/botafogo_covered_matches.json
 data/stock_media_recent.json
+data/google_tts_usage.json
 __pycache__/
 *.pyc
 .venv/
