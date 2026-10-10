@@ -58,6 +58,9 @@ TAVILY_API_KEYS = _keys("TAVILY_API_KEYS")
 # Azure sorteada cai pro edge-tts grátis.
 AZURE_SPEECH_KEYS = _keys("AZURE_SPEECH_KEYS")
 AZURE_SPEECH_REGION = os.environ.get("AZURE_SPEECH_REGION", "brazilsouth").strip()
+# motores de voz alternativos quando o edge-tts cai (ver src/tts.py)
+ELEVENLABS_API_KEYS = _keys("ELEVENLABS_API_KEYS")
+GCP_TTS_KEY_FILE = (os.environ.get("GCP_TTS_KEY_FILE") or os.environ.get("GCP_TSE_READER_KEY_FILE") or "").strip()
 YOUTUBE_CLIENT_SECRET_FILE = ROOT / os.getenv(
     "YOUTUBE_CLIENT_SECRET_FILE", "credentials/client_secret.json"
 )

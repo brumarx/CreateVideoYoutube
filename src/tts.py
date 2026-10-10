@@ -349,16 +349,142 @@ def narrate(
             log.warning("voz %s é da Azure mas não há AZURE_SPEECH_KEYS no .env — usando edge-tts", voice)
         voice = EDGE_FALLBACK_VOICE
     metadata_path = output_path.with_suffix(".wordtimes.json")
-    for attempt in range(1, MAX_ATTEMPTS + 1):
+    global _EDGE_BLOCKED
+    if not _EDGE_BLOCKED:
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            try:
+                word_boundaries = asyncio.run(_synthesize(text, output_path, voice, metadata_path))
+                return output_path, _restore_spelling(_restore_punctuation(word_boundaries, text), spelling_back, pronunciations)
+            except edge_tts.exceptions.NoAudioReceived:
+                if attempt == MAX_ATTEMPTS:
+                    break
+                log.warning(
+                    "edge-tts não devolveu áudio (tentativa %d/%d) — tentando de novo",
+                    attempt, MAX_ATTEMPTS,
+                )
+                time.sleep(RETRY_DELAY_S)
+            except Exception as exc:  # noqa: BLE001
+                # 403 no handshake = Microsoft mudou o protocolo (10/10/2026,
+                # rany2/edge-tts#490) — não adianta insistir nas outras cenas
+                if "403" in str(exc):
+                    _EDGE_BLOCKED = True
+                    log.warning("edge-tts bloqueado (403) — usando motor alternativo pro resto do job")
+                else:
+                    log.warning("edge-tts falhou (%s) — usando motor alternativo", exc)
+                break
+    words = _synthesize_fallback(text, output_path, voice)
+    return output_path, _restore_spelling(_restore_punctuation(words, text), spelling_back, pronunciations)
+
+
+# edge-tts fora do ar: Google Cloud TTS (1 mi caracteres/mês grátis nas
+# vozes Neural2/WaveNet; precisa da API ativada no projeto da service
+# account) e depois ElevenLabs (cota grátis pequena, rodízio de chaves).
+_EDGE_BLOCKED = False
+GOOGLE_VOICES = {"male": "pt-BR-Neural2-B", "female": "pt-BR-Neural2-A"}
+# só vozes "premade": voz da biblioteca (as brasileiras) exige plano pago
+ELEVEN_VOICES = {"male": "TX3LPaxmHKxFdv7VOQHJ", "female": "EXAVITQu4vr4xnSDxMaL"}  # Liam / Sarah
+ELEVEN_MODEL = "eleven_turbo_v2_5"  # meio crédito por caractere, fala pt-BR
+_dead_eleven_keys: set[str] = set()
+_google_disabled = False
+
+
+def _gender(voice: str) -> str:
+    return "male" if "Antonio" in voice else "female"
+
+
+def _synthesize_fallback(text: str, output_path: Path, voice: str) -> list[dict]:
+    errors = []
+    for engine in (_synthesize_google, _synthesize_eleven):
         try:
-            word_boundaries = asyncio.run(_synthesize(text, output_path, voice, metadata_path))
-            return output_path, _restore_spelling(_restore_punctuation(word_boundaries, text), spelling_back, pronunciations)
-        except edge_tts.exceptions.NoAudioReceived:
-            if attempt == MAX_ATTEMPTS:
-                raise
-            log.warning(
-                "edge-tts não devolveu áudio (tentativa %d/%d) — tentando de novo",
-                attempt, MAX_ATTEMPTS,
-            )
-            time.sleep(RETRY_DELAY_S)
-    return output_path, []
+            return engine(text, output_path, _gender(voice))
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{engine.__name__}: {exc}")
+    raise RuntimeError("nenhum motor de voz disponível — " + " | ".join(errors))
+
+
+def _synthesize_google(text: str, output_path: Path, gender: str) -> list[dict]:
+    """Google Cloud TTS v1beta1 com <mark> antes de cada palavra: o
+    timepoint de cada marca é o início real da palavra (karaokê)."""
+    global _google_disabled
+    from xml.sax.saxutils import escape
+
+    from .config import GCP_TTS_KEY_FILE
+
+    if _google_disabled or not GCP_TTS_KEY_FILE:
+        raise RuntimeError("google tts sem credencial/desativado")
+    import base64
+
+    import google.auth.transport.requests
+    from google.oauth2 import service_account
+
+    creds = service_account.Credentials.from_service_account_file(
+        GCP_TTS_KEY_FILE, scopes=["https://www.googleapis.com/auth/cloud-platform"],
+    )
+    creds.refresh(google.auth.transport.requests.Request())
+    tokens = text.split()
+    ssml = "<speak>" + " ".join(f'<mark name="{i}"/>{escape(t)}' for i, t in enumerate(tokens)) + "</speak>"
+    resp = httpx.post(
+        "https://texttospeech.googleapis.com/v1beta1/text:synthesize",
+        headers={"Authorization": f"Bearer {creds.token}", "x-goog-user-project": str(creds.project_id)},
+        json={
+            "input": {"ssml": ssml},
+            "voice": {"languageCode": "pt-BR", "name": GOOGLE_VOICES[gender]},
+            "audioConfig": {"audioEncoding": "MP3", "speakingRate": 1.0, "pitch": 1.0},
+            "enableTimePointing": ["SSML_MARK"],
+        },
+        timeout=120,
+    )
+    if resp.status_code == 403:
+        _google_disabled = True  # API não ativada no projeto: não tenta de novo neste job
+    resp.raise_for_status()
+    data = resp.json()
+    output_path.write_bytes(base64.b64decode(data["audioContent"]))
+    starts = [tp["timeSeconds"] for tp in data.get("timepoints", [])]
+    words = []
+    for i, start in enumerate(starts):
+        end = starts[i + 1] if i + 1 < len(starts) else start + 0.4
+        words.append({"text": tokens[int(data["timepoints"][i]["markName"])].strip(".,;:!?…\"“”"), "start": start, "end": end})
+    return words
+
+
+def _synthesize_eleven(text: str, output_path: Path, gender: str) -> list[dict]:
+    """ElevenLabs /with-timestamps: alinhamento por caractere -> palavras."""
+    import base64
+
+    from .config import ELEVENLABS_API_KEYS
+
+    last = "sem ELEVENLABS_API_KEYS"
+    for key in [k for k in ELEVENLABS_API_KEYS if k not in _dead_eleven_keys]:
+        resp = httpx.post(
+            f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVEN_VOICES[gender]}/with-timestamps",
+            headers={"xi-api-key": key},
+            json={"text": text, "model_id": ELEVEN_MODEL, "language_code": "pt"},
+            timeout=180,
+        )
+        if resp.status_code != 200:
+            last = f"{resp.status_code} {resp.text[:200]}"
+            if resp.status_code in (401, 402, 429) or "quota" in resp.text:
+                _dead_eleven_keys.add(key)  # cota da chave acabou: próxima
+            log.warning("elevenlabs falhou com uma chave (%s)", last)
+            continue
+        data = resp.json()
+        output_path.write_bytes(base64.b64decode(data["audio_base64"]))
+        al = data.get("alignment") or {}
+        words: list[dict] = []
+        cur, start, end = "", 0.0, 0.0
+        for ch, s, e in zip(al.get("characters", []), al.get("character_start_times_seconds", []), al.get("character_end_times_seconds", [])):
+            if ch.isspace():
+                if cur:
+                    words.append({"text": cur, "start": start, "end": end})
+                cur = ""
+                continue
+            if not cur:
+                start = s
+            cur += ch
+            end = e
+        if cur:
+            words.append({"text": cur, "start": start, "end": end})
+        for w in words:
+            w["text"] = w["text"].strip(".,;:!?…\"“”")
+        return [w for w in words if w["text"]]
+    raise RuntimeError(f"elevenlabs indisponível: {last}")
