@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 from pathlib import Path
 
 import httpx
-from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
 from .visuals import generate_image
 
@@ -149,30 +150,72 @@ def _thumb_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     return _load_font(size)
 
 
+_NO_PLURAL = {"MI", "MIL", "BI", "TRI", "KM", "KG", "MB", "GB", "HP", "X", "A", "E", "O", "DE", "EM"}
+
+
+def _plural(word: str) -> str | None:
+    if word.endswith("ÃO"):
+        return word[:-2] + "ÕES"
+    if word.endswith("AL"):
+        return word[:-2] + "AIS"
+    if word[-1] in "AEIOUÁÉÍÓÚÊÔ":
+        return word + "S"
+    if word[-1] in "RZ":
+        return word + "ES"
+    return None
+
+
+def fix_number_agreement(text: str) -> str:
+    """ "9 MORTE" -> "9 MORTES": o LLM às vezes erra a concordância do
+    número na thumbnail (publicado assim no curiosidades, 10/10)."""
+    def swap(m: re.Match) -> str:
+        num, star, word, tail = m[1], m[2], m[3], m[4]
+        if int(num) < 2 or word in _NO_PLURAL or word.endswith("S") or len(word) < 3:
+            return m[0]
+        plural = _plural(word)
+        return f"{num} {star}{plural}{tail}" if plural else m[0]
+
+    return re.sub(r"(?<![\d,.])(\d+) (\*?)([A-ZÀ-Ý]+)(\*?[?!]*)(?=\s|$)", swap, text)
+
+
+_LINE_END_WEAK = {"E", "O", "A", "OS", "AS", "DE", "DO", "DA", "EM", "NO", "NA", "UM", "UMA", "SEM", "COM", "PRA", "POR", "QUE", "SE"}
+
+
 def _split_hook(text: str) -> tuple[list[list[str]], set[int]]:
     """Quebra o gancho em 1-3 linhas curtas (estilo pôster empilhado) e
     devolve quais palavras vão em amarelo. `*palavra*` marca destaque
     explícito; sem marca, a última linha inteira fica em destaque."""
-    raw_words = text.upper().split()
-    # "R$ 2 MILHÕES" nunca quebra entre a moeda e o número
+    raw_words = fix_number_agreement(text.upper()).split()
+    # "R$ 2 MILHÕES" / "9 MORTES" nunca quebram entre moeda, número e o que
+    # ele conta ("R$ 50" numa linha e "MI" na outra — teste de 10/10)
     i = 0
     while i < len(raw_words) - 1:
         if raw_words[i].strip("*") in {"R$", "US$", "€", "$"}:
             raw_words[i:i + 2] = [f"{raw_words[i]}\u00a0{raw_words[i + 1]}"]
+            continue
+        if re.search(r"\d", raw_words[i]) and re.fullmatch(r"\*?[A-ZÀ-Ý%]+\*?[?!]*", raw_words[i + 1]):
+            raw_words[i:i + 2] = [f"{raw_words[i]}\u00a0{raw_words[i + 1]}"]
         i += 1
     words, marked = [], set()
     for i, w in enumerate(raw_words):
-        if w.startswith("*") or w.endswith("*"):
+        # "*MILHÕES*?" também é destaque — o "*" saía impresso na thumbnail
+        if "*" in w:
             marked.add(i)
-        words.append(w.strip("*"))
+        words.append(w.replace("*", ""))
     words = [w for w in words if w] or ["?"]
     n = len(words)
     if n <= 2:
         layout = [[w] for w in words] if n == 2 and sum(map(len, words)) > 9 else [words]
-    elif n == 3:
-        layout = [words[:1], words[1:]] if len(words[0]) >= len(" ".join(words[1:])) else [words[:2], words[2:]]
-    elif n == 4:
-        layout = [words[:2], words[2:]]
+    elif n <= 4:
+        # 2 linhas: a quebra mais equilibrada que não deixa palavra solta
+        # no fim da linha ("9 MORTES SEM / EXPLICAÇÃO" -> "9 MORTES / SEM
+        # EXPLICAÇÃO")
+        def score(k: int) -> int:
+            top, bottom = " ".join(words[:k]), " ".join(words[k:])
+            return max(len(top), len(bottom)) + (100 if words[k - 1] in _LINE_END_WEAK else 0)
+
+        k = min(range(1, n), key=score)
+        layout = [words[:k], words[k:]]
     else:
         per = -(-n // 3)
         layout = [words[i:i + per] for i in range(0, n, per)]
@@ -239,11 +282,25 @@ def _subject_mask(photo: Image.Image) -> Image.Image | None:
     return mask.point(lambda v: 255 if v > 110 else int(v * 255 / 110))
 
 
+def _radial_light(size: tuple[int, int], center: tuple[int, int], radius: int, rgb: tuple[int, int, int], strength: int) -> Image.Image:
+    """Mancha de luz suave (elipse desfocada) — separa o sujeito do fundo."""
+    light = Image.new("L", size, 0)
+    cx, cy = center
+    ImageDraw.Draw(light).ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=strength)
+    light = light.filter(ImageFilter.GaussianBlur(radius // 2))
+    layer = Image.new("RGBA", size, rgb + (0,))
+    layer.putalpha(light)
+    return layer
+
+
 def _cutout_composite(photo: Image.Image, accent_rgb: tuple[int, int, int]) -> Image.Image | None:
-    """Estilo "figurinha": sujeito recortado, com contorno branco e brilho
-    na cor do canal, grande no lado direito, sobre a própria foto desfocada
-    e escurecida. None (cai pro layout de foto inteira) quando o recorte não
-    acha um sujeito claro — paisagem, cenário, recorte que pegou quase tudo."""
+    """Sujeito recortado, GRANDE no lado direito (encosta no rodapé quando
+    o corpo continua), com luz de contorno na cor do canal, sombra forte e
+    uma luz atrás dele sobre a própria foto desfocada e escurecida. O
+    contorno branco de "figurinha" que existia antes era o que mais deixava
+    a thumbnail com cara de amadora (feedback do dono, 10/10). None (cai pro
+    layout de foto inteira) quando o recorte não acha um sujeito claro —
+    paisagem, cenário, recorte que pegou quase tudo."""
     W, H = THUMB_WIDTH, THUMB_HEIGHT
     work = photo.copy()
     work.thumbnail((1024, 1024), Image.LANCZOS)
@@ -262,25 +319,29 @@ def _cutout_composite(photo: Image.Image, accent_rgb: tuple[int, int, int]) -> I
     subject = work.convert("RGBA")
     subject.putalpha(mask)
     subject = subject.crop(bbox)
-    scale = min(H * 0.97 / subject.height, W * 0.6 / subject.width)
+    # sujeito inteiro cortado na borda de baixo da foto (corpo continua)
+    # pode passar da altura e "sair" pelo rodapé — parece mais perto
+    touches_bottom = bbox[3] >= work.height - 4
+    scale = min(H * (1.08 if touches_bottom else 0.92) / subject.height, W * 0.62 / subject.width)
     subject = subject.resize((int(subject.width * scale), int(subject.height * scale)), Image.LANCZOS)
+    subject = ImageEnhance.Contrast(subject).enhance(1.12)
     alpha = subject.getchannel("A")
 
     pad = 60
     canvas_alpha = Image.new("L", (subject.width + 2 * pad, subject.height + 2 * pad), 0)
     canvas_alpha.paste(alpha, (pad, pad))
-    outline = canvas_alpha.filter(ImageFilter.MaxFilter(15))
-    glow = canvas_alpha.filter(ImageFilter.MaxFilter(21)).filter(ImageFilter.GaussianBlur(28))
+    rim = canvas_alpha.filter(ImageFilter.MaxFilter(9)).filter(ImageFilter.GaussianBlur(7))
+    shadow = canvas_alpha.filter(ImageFilter.GaussianBlur(26))
 
-    bg = _cover(photo, W, H).filter(ImageFilter.GaussianBlur(22))
-    bg = ImageEnhance.Brightness(bg).enhance(0.5).convert("RGBA")
-    x = W - subject.width - 40 - pad
-    # sujeito cortado na borda de baixo da foto (corpo continua) encosta no
-    # rodapé; sujeito inteiro (objeto, pessoa de corpo todo) fica centralizado
-    touches_bottom = bbox[3] >= work.height - 4
-    y = (H - subject.height - pad + 10) if touches_bottom else (H - subject.height) // 2 - pad
-    bg.paste(Image.new("RGBA", canvas_alpha.size, accent_rgb + (255,)), (x, y), glow.point(lambda v: int(v * 0.85)))
-    bg.paste(Image.new("RGBA", canvas_alpha.size, (255, 255, 255, 255)), (x, y), outline)
+    bg = _cover(photo, W, H).filter(ImageFilter.GaussianBlur(24))
+    bg = ImageEnhance.Brightness(bg).enhance(0.38).convert("RGBA")
+    x = W - subject.width - 30 - pad
+    y = (H - subject.height - pad + int(H * 0.06)) if touches_bottom else (H - subject.height) // 2 - pad
+    cx, cy = x + pad + subject.width // 2, y + pad + subject.height // 2
+    bg.alpha_composite(_radial_light((W, H), (cx, cy), int(max(subject.width, subject.height) * 0.62), accent_rgb, 150))
+    bg.paste(Image.new("RGBA", canvas_alpha.size, (0, 0, 0, 255)), (x - 22, y + 14), shadow.point(lambda v: int(v * 0.8)))
+    rim_rgb = tuple(min(255, c + 70) for c in accent_rgb)
+    bg.paste(Image.new("RGBA", canvas_alpha.size, rim_rgb + (255,)), (x, y), rim.point(lambda v: int(v * 0.55)))
     bg.alpha_composite(subject, (x + pad, y + pad))
     return bg.convert("RGB")
 
@@ -299,7 +360,7 @@ def _render_text_block(hook_text: str, max_w: int, max_h: int) -> Image.Image:
         text = " ".join(line)
         size = 210  # teto: palavra curta sozinha na linha não vira um muro
         font = _thumb_font(size)
-        while size > 60 and font.getlength(text) + 2 * stroke > max_w:
+        while size > 60 and font.getlength(text) + 2 * stroke + 4 * 14 > max_w:  # 14 = folga da faixa de destaque
             size -= 6
             font = _thumb_font(size)
         rendered.append((parts, font))
@@ -313,20 +374,36 @@ def _render_text_block(hook_text: str, max_w: int, max_h: int) -> Image.Image:
         rendered = [(p, _thumb_font(max(40, int(f.size * scale)))) for p, f in rendered]
         total = sum(heights(rendered)) + gap * (len(rendered) - 1)
 
-    shadow_off = 9
-    block = Image.new("RGBA", (max_w + 40, total + 40), (0, 0, 0, 0))
+    # palavra de destaque: faixa amarela sólida com letra preta (o padrão
+    # dos canais grandes) — letra amarela sobre fundo escuro sumia no feed
+    shadow_off, box_pad = 9, 14
+    block = Image.new("RGBA", (max_w + 40 + 2 * box_pad, total + 40 + 2 * box_pad), (0, 0, 0, 0))
     shadow = Image.new("RGBA", block.size, (0, 0, 0, 0))
     draw, sdraw = ImageDraw.Draw(block), ImageDraw.Draw(shadow)
-    y = 10
+    y = 10 + box_pad
     for (parts, font), h in zip(rendered, heights(rendered)):
         top_off = font.getbbox("ÁG", stroke_width=stroke)[1]
-        x = 10 + stroke
-        for word, hl in parts:
-            fill = HIGHLIGHT_YELLOW if hl else (255, 255, 255)
-            sdraw.text((x + shadow_off, y - top_off + shadow_off), word, font=font, fill=(0, 0, 0, 200),
-                       stroke_width=stroke, stroke_fill=(0, 0, 0, 200))
-            draw.text((x, y - top_off), word, font=font, fill=fill, stroke_width=stroke, stroke_fill="black")
-            x += font.getlength(word + " ")
+        x = 10 + stroke + box_pad
+        space = font.getlength(" ")
+        i = 0
+        while i < len(parts):
+            # palavras destacadas seguidas dividem a mesma faixa
+            j = i
+            while j < len(parts) and parts[j][1] == parts[i][1]:
+                j += 1
+            text = " ".join(w for w, _ in parts[i:j])
+            w_px = font.getlength(text)
+            if parts[i][1]:
+                box = [x - box_pad, y - 4, x + w_px + box_pad, y + h + 4]
+                sdraw.rectangle([box[0] + shadow_off, box[1] + shadow_off, box[2] + shadow_off, box[3] + shadow_off], fill=(0, 0, 0, 200))
+                draw.rectangle(box, fill=HIGHLIGHT_YELLOW + (255,))
+                draw.text((x, y - top_off + stroke), text, font=font, fill=(0, 0, 0))
+            else:
+                sdraw.text((x + shadow_off, y - top_off + shadow_off), text, font=font, fill=(0, 0, 0, 200),
+                           stroke_width=stroke, stroke_fill=(0, 0, 0, 200))
+                draw.text((x, y - top_off), text, font=font, fill=(255, 255, 255), stroke_width=stroke, stroke_fill="black")
+            x += w_px + space + (2 * box_pad if parts[i][1] else 0)
+            i = j
         y += h + gap
     shadow = shadow.filter(ImageFilter.GaussianBlur(3))
     shadow.alpha_composite(block)
@@ -387,9 +464,14 @@ def make_thumbnail(
     by = max(20, (H - block.height) // 2)
     img.alpha_composite(block, (bx, by))
 
-    # borda na cor do canal (identidade visual em toda a lista de vídeos)
-    draw = ImageDraw.Draw(img)
-    draw.rectangle([0, 0, W - 1, H - 1], outline=_hex_to_rgb(accent) + (255,), width=12)
+    # vinheta: escurece os cantos e puxa o olho pro centro. A moldura na cor
+    # do canal que ficava aqui era o que mais dava cara de amador (10/10)
+    vignette = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(vignette).ellipse([-W * 0.15, -H * 0.25, W * 1.15, H * 1.25], fill=255)
+    vignette = ImageOps.invert(vignette.filter(ImageFilter.GaussianBlur(120))).point(lambda v: int(v * 0.7))
+    dark = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    dark.putalpha(vignette)
+    img.alpha_composite(dark)
 
     img = img.convert("RGB")
     output_path.parent.mkdir(parents=True, exist_ok=True)

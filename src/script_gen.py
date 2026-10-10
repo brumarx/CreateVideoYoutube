@@ -234,8 +234,12 @@ título inteiro colado na imagem — é uma frase mínima (2 a 4 palavras) que
 gera curiosidade sozinha, sem contexto nenhum, tipo "ELA FOI PROIBIDA",
 "O ERRO DE R$ 2 MILHÕES", "ISSO É REAL?". Pode usar número, pode terminar
 em pergunta, nunca uma frase completa com sujeito+verbo+complemento igual
-o título. Marque com *asteriscos* a palavra (ou número) de maior impacto —
-ela sai em amarelo na thumbnail, ex.: "O ERRO DE *R$ 2 MILHÕES*"."""
+o título. Tem que ter UM elemento CONCRETO desta história (número, valor,
+nome, objeto, lugar) — gancho genérico que serviria pra qualquer vídeo
+("A VERDADE OUSADA", "ISSO É CHOCANTE", "O SEGREDO REVELADO", "INCRÍVEL")
+é proibido. Concordância certa: número com plural ("9 MORTES", nunca "9
+MORTE"). Marque com *asteriscos* a palavra (ou número) de maior impacto —
+ela sai numa faixa amarela na thumbnail, ex.: "O ERRO DE *R$ 2 MILHÕES*"."""
 
 
 def _extract_json(raw: str) -> dict:
