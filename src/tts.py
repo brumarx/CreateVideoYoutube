@@ -37,8 +37,6 @@ PRONUNCIATIONS = {
     "Textor": "Técstor",  # John Textor (SAF do Botafogo): TÉX-tor, não tex-TÔR
     "FogãoNET": "Fogãonéti",  # site FogãoNET: a voz soletrava "Fogão N-E-T"
     "Botafogo.WIN": "botafogo.win",  # maiúsculo a voz soletra "dáblio-i-ene"
-    # "Fala aí" a voz lia certinho "a-í", sem gíria; carioca fala "aêê"
-    "Fala aí": "Fala aêê",
     "Tite": "Títi",  # técnico: a voz engolia o "e" final ("Tit") — varredura das legendas de 11/10
     "SAF": "Sáfi",  # "a SAF" se fala como palavra, não "ésse-á-éfe"
     "UOL": "Uól",
@@ -48,7 +46,6 @@ PRONUNCIATIONS = {
     "recuam": "recúam",
 }
 _SPELLING_BACK = {v.lower(): k for k, v in PRONUNCIATIONS.items()}
-_SPELLING_BACK["aêê"] = "aí"  # legenda do "Fala aí" (a troca é de 2 palavras, volta só a 2ª)
 
 # PALAVRA INTEIRA EM MAIÚSCULAS (5+ letras) a voz costuma soletrar: nome de
 # veículo ("O GLOBO", "LANCE!", "NETVASCO") ou ênfase do roteiro ("QUE SE

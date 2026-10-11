@@ -18,10 +18,15 @@ import json
 import logging
 import re
 import subprocess
+import tempfile
+import unicodedata
 from pathlib import Path
+
+import httpx
 
 from PIL import Image, ImageDraw, ImageFont
 
+from .config import LLMKeys
 from .visual_check import _RULES, ask_vision
 
 log = logging.getLogger("video_qa")
@@ -123,6 +128,76 @@ def _vision_batch(frames: list[tuple[int, Image.Image]], narrations: dict[int, s
     except json.JSONDecodeError:
         return None
     return cenas if isinstance(cenas, list) else None
+
+
+# Ouvido (11/10): o bordão "Fala aêê" saiu "Fala a é acento circunflexo"
+# no vídeo do Botafogo (job 414) e ninguém ouviu antes de publicar. Transcreve
+# a narração (raw.mp4, sem a música) com o Whisper grátis do Groq e compara
+# com o roteiro: palavra de soletração que o roteiro não tem, ou fala que
+# cobre pouco do texto (voz embolada/cortada), reprova.
+_WHISPER_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+_WHISPER_MODEL = "whisper-large-v3-turbo"
+_SPELLING_WORDS = {"acento", "assento", "circunflexo", "agudo", "crase", "cedilha", "trema", "hifen", "apostrofo"}  # "assento": grafia do Whisper p/ "acento"
+_MIN_COVERAGE = 0.6  # parte das palavras do roteiro que o ouvido reconhece
+
+
+def _plain_words(text: str) -> list[str]:
+    no_accents = unicodedata.normalize("NFKD", text.lower()).encode("ascii", "ignore").decode()
+    return re.findall(r"[a-z0-9]+", no_accents)
+
+
+def transcribe(video: Path) -> str | None:
+    """Narração do vídeo em texto, ou None sem chave/cota (free tier: o
+    Groq recusa com 429 ao estourar, nunca cobra)."""
+    keys = LLMKeys().groq
+    if not keys:
+        return None
+    with tempfile.TemporaryDirectory() as tmp:
+        audio = Path(tmp) / "voz.mp3"
+        # mono 16 kHz 32 kbps: 20 min ~ 5 MB, abaixo do limite de 25 MB
+        subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", "-i", str(video), "-vn", "-ac", "1", "-ar", "16000", "-b:a", "32k", str(audio)],
+            check=False,
+        )
+        if not audio.exists():
+            return None
+        for key in keys:
+            try:
+                resp = httpx.post(
+                    _WHISPER_URL, headers={"Authorization": f"Bearer {key}"}, timeout=180,
+                    data={"model": _WHISPER_MODEL, "language": "pt", "temperature": "0", "response_format": "text"},
+                    files={"file": ("voz.mp3", audio.read_bytes(), "audio/mpeg")},
+                )
+                if resp.status_code == 200:
+                    return resp.text
+                log.warning("transcrição groq: HTTP %d %s", resp.status_code, resp.text[:120])
+            except httpx.HTTPError as exc:
+                log.warning("transcrição groq falhou: %s", exc)
+    return None
+
+
+def audio_problems(narrations: list[str], heard: str) -> list[str]:
+    script_words = _plain_words(" ".join(narrations))
+    heard_words = _plain_words(heard)
+    problems = []
+    spelled = sorted((_SPELLING_WORDS & set(heard_words)) - set(script_words))
+    if spelled:
+        problems.append(f"a voz soletrou/leu sinal gráfico: \"{' '.join(spelled)}\" (ouvido: \"{heard[:100].strip()}\")")
+    content = [w for w in script_words if len(w) >= 4]
+    if content:
+        heard_set = set(heard_words)
+        coverage = sum(w in heard_set for w in content) / len(content)
+        if coverage < _MIN_COVERAGE:
+            problems.append(f"a fala bate só {coverage:.0%} com o roteiro (voz embolada ou cortada)")
+    return problems
+
+
+def review_audio(narrations: list[str], video: Path) -> list[str]:
+    heard = transcribe(video)
+    if heard is None:
+        log.warning("revisão do áudio indisponível (sem transcrição) — seguindo sem ela")
+        return []
+    return audio_problems(narrations, heard)
 
 
 def review_video(

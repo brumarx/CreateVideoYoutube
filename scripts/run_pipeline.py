@@ -38,7 +38,7 @@ from src.stock_media import search_stock_clip, search_stock_photo
 from src.thumbnail import make_thumbnail, photo_scene_frame, title_card
 from src.topics import pick_topic, topic_problem
 from src.tts import narrate
-from src.video_qa import review_video
+from src.video_qa import review_audio, review_video
 from src.visual_check import matches_scene
 from src.upload import UPLOAD_META_FILE, after_upload_status, post_comment, top_channel_videos, upload_video
 from src.visuals import generate_image
@@ -844,6 +844,11 @@ def run(
             strict_visual=channel.strict_visual and "ia" in scene_sources,
             trusted_scenes={i + 1 for i, src in enumerate(scene_sources) if src in ("noticia", "repetida")},
         )
+        # voz falando besteira não passa nem na última tentativa do dia —
+        # não publicar é melhor que "Fala a é acento circunflexo" (job 414)
+        audio_problems = review_audio([s["narration"] for s in script["scenes"]], raw_video)
+        if audio_problems:
+            raise ScriptRejected("áudio reprovado antes do upload: " + "; ".join(audio_problems))
         if qa_problems:
             for p in qa_problems:
                 log.warning("[%s] revisão do vídeo: %s", job_id, p)
