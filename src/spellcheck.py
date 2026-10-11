@@ -283,8 +283,28 @@ _EMOJI = re.compile(
 _LIST_BULLET = re.compile(r"(?m)^\s*(?:[-•–]|\d+[.)])\s+")
 
 
+# Clube com sigla de estado: a voz expande a sigla ("Atlético-MG" saía
+# "Atlético Minas Gerais") e o LLM às vezes já escreve assim. Ninguém fala
+# desse jeito — vira o nome que torcedor e narrador usam.
+_UF = r"(?:\s*[-/]\s*|\s+\(?|\s+de\s+)"
+_CLUB_NAMES = [
+    (re.compile(r"\b(?:Atl[eé]tico|Athletico)" + _UF + r"(?:MG\b\)?|Minas(?:\s+Gerais)?\b)", re.I), "Atlético Mineiro"),
+    (re.compile(r"\b(?:Atl[eé]tico|Athletico)" + _UF + r"(?:PR\b\)?|Paran[aá]\b)", re.I), "Athletico Paranaense"),
+    (re.compile(r"\bAtl[eé]tico\s+Paranaense\b", re.I), "Athletico Paranaense"),
+    (re.compile(r"\bAtl[eé]tico" + _UF + r"(?:GO\b\)?|Goi[aá]s\b)", re.I), "Atlético Goianiense"),
+    (re.compile(r"\bAm[eé]rica" + _UF + r"(?:MG\b\)?|Minas(?:\s+Gerais)?\b)", re.I), "América Mineiro"),
+]
+
+
+def club_names(text: str) -> str:
+    for pattern, name in _CLUB_NAMES:
+        text = pattern.sub(lambda m, n=name: n.upper() if m[0].isupper() else n, text)
+    return text
+
+
 def clean_markup(text: str) -> str:
     """Só o que pode ser FALADO: tira markdown, emoji e marcador de lista."""
+    text = club_names(text)
     text = _MD_LINK.sub(r"\1", text)
     text = _LIST_BULLET.sub("", text)
     text = _MD_MARKS.sub(" ", text)
@@ -301,6 +321,8 @@ def fix_script(script: dict, language: str = "pt-BR") -> dict:
     for key in ("title", "thumbnail_text"):
         if script.get(key):
             script[key] = clean_markup(script[key])
+    if script.get("description"):
+        script["description"] = club_names(script["description"])
     for key in ("title", "thumbnail_text", "description"):
         if script.get(key):
             script[key] = fix_text(script[key], language)

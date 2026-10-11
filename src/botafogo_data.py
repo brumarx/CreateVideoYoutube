@@ -703,6 +703,30 @@ def portal_news_task(per_video: int = PORTAL_NEWS_PER_VIDEO) -> dict | None:
 
     state["portal_news"] = sorted(used | {str(a["id"]) for a in escolhidas})
     _save_state(state)
+    return _portal_task(escolhidas)
+
+
+def portal_task_from_slugs(slugs: list[str]) -> dict | None:
+    """Refaz a tarefa de um vídeo já publicado a partir das matérias que ele
+    usou (links botafogo.win/noticias/<slug> da descrição) — pra regravar
+    um vídeo com erro sem depender das matérias ainda estarem no topo."""
+    escolhidas = []
+    for slug in slugs:
+        try:
+            resp = httpx.get(f"{PORTAL_API}/articles/{slug}", timeout=_TIMEOUT)
+            resp.raise_for_status()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("portal: matéria %s indisponível: %s", slug, exc)
+            continue
+        art = resp.json()
+        if art.get("source_type") != "authored" and len((art.get("excerpt") or "").strip()) < PORTAL_MIN_EXCERPT:
+            art["_texto"] = _texto_da_fonte(art.get("source_url"))
+        escolhidas.append(art)
+    return _portal_task(escolhidas) if escolhidas else None
+
+
+def _portal_task(escolhidas: list[dict]) -> dict:
+    from datetime import datetime
 
     noticias, fotos, fontes = [], [], []
     for art in escolhidas:
