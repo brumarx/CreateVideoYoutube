@@ -18,6 +18,7 @@ import difflib
 import json
 import logging
 import re
+import unicodedata
 
 import httpx
 
@@ -339,4 +340,42 @@ def fix_script(script: dict, language: str = "pt-BR") -> dict:
     # de novo no fim: a correção (também por LLM) pode devolver marcação
     for scene in scenes:
         scene["narration"] = clean_markup(scene["narration"])
+    names = narration_names(" ".join(s["narration"] for s in scenes))
+    for key in ("title", "thumbnail_text"):
+        if script.get(key):
+            script[key] = align_names(script[key], names)
     return script
+
+
+def _fold(word: str) -> str:
+    return unicodedata.normalize("NFKD", word.lower()).encode("ascii", "ignore").decode()
+
+
+def narration_names(text: str) -> list[str]:
+    """Nomes próprios da narração: palavra com inicial maiúscula fora do
+    começo de frase."""
+    names = []
+    for sentence in re.split(r"(?<=[.!?])\s+", text):
+        names += [w for w in re.findall(r"\w+", sentence)[1:] if w[:1].isupper() and len(w) >= 4]
+    return list(dict.fromkeys(names))
+
+
+def align_names(text: str, names: list[str]) -> str:
+    """Nome quase igual a um da narração vira o da narração: a thumbnail
+    saiu "JÚNIOR SAINTS" com a narração dizendo Júnior Santos (job 423) —
+    o LanguageTool aponta mas não corrige nome próprio. Só palavra de 5+
+    letras, mesma inicial e bem parecida (sem trocar palavra comum)."""
+    folded = {_fold(n): n for n in names}
+
+    def fix(m: re.Match) -> str:
+        word = m.group(0)
+        key = _fold(word)
+        if len(key) < 5 or key in folded:
+            return word
+        close = [c for c in difflib.get_close_matches(key, list(folded), n=1, cutoff=0.8) if c[0] == key[0]]
+        if not close:
+            return word
+        right = folded[close[0]]
+        log.info("nome corrigido pela narração: %r -> %r", word, right)
+        return right.upper() if word.isupper() else right
+    return re.sub(r"\w+", fix, text)

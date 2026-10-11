@@ -309,6 +309,7 @@ def render_scene(
     impact_beat: bool = False,
     video_path: Path | None = None,
     chapter_banner: dict | None = None,
+    grayscale: bool = False,
 ) -> Path:
     """Renderiza uma cena: zoom lento na imagem, sincronizado com a duração
     do áudio. `width`/`height` permitem vertical (Shorts, padrão) ou
@@ -334,7 +335,7 @@ def render_scene(
     if video_path is not None:
         return _render_scene_from_video(
             video_path, audio_path, output_path, width, height, watermark, list_number, accent,
-            caption, word_boundaries, stat_overlay, impact_beat, chapter_banner,
+            caption, word_boundaries, stat_overlay, impact_beat, chapter_banner, grayscale,
         )
     duration = _ffprobe_duration(audio_path)
     # 24 (não 30) fps — 20% menos frames pra codificar em CPU fraca (Pi 5,
@@ -563,6 +564,7 @@ def _render_scene_from_video(
     stat_overlay: dict | None = None,
     impact_beat: bool = False,
     chapter_banner: dict | None = None,
+    grayscale: bool = False,
 ) -> Path:
     """Filmagem REAL de banco de vídeo (Pexels) em vez de imagem estática
     com zoom — ver src/stock_media.py. `-stream_loop -1` cobre o caso do
@@ -572,6 +574,8 @@ def _render_scene_from_video(
     duration = _ffprobe_duration(audio_path)
     fps = 24
     filter_v = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps={fps}"
+    if grayscale:
+        filter_v += ",hue=s=0"  # antes da legenda/selo, que seguem coloridos
     filter_v += _overlay_filter_suffix(
         duration, width, height, watermark, list_number, accent, caption,
         word_boundaries, output_path.with_suffix(".ass"), stat_overlay, chapter_banner,

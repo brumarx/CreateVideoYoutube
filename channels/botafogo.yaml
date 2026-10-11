@@ -3,6 +3,9 @@ watermark: "botafogo.win"
 accent: "#e5e5e5"
 # imagem errada aqui é grave (outro clube, futebol americano) — ver src/config.py
 strict_visual: true
+# sem foto do Botafogo, a imagem sai em preto e branco (sem cor de outro clube)
+fallback_grayscale: true
+player_photos: true
 hashtags: ["#Botafogo", "#Fogao", "#EstrelaSolitaria"]
 youtube_handle: "@botafogowin"
 channel_title: "Botafogo WIN"

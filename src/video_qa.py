@@ -132,7 +132,7 @@ def _vision_batch(frames: list[tuple[int, Image.Image]], narrations: dict[int, s
 
 # Ouvido (11/10): o bordão "Fala aêê" saiu "Fala a é acento circunflexo"
 # no vídeo do Botafogo (job 414) e ninguém ouviu antes de publicar. Transcreve
-# a narração (raw.mp4, sem a música) com o Whisper grátis do Groq e compara
+# a narração (áudio de cada cena, sem a música) com o Whisper grátis do Groq e compara
 # com o roteiro: palavra de soletração que o roteiro não tem, ou fala que
 # cobre pouco do texto (voz embolada/cortada), reprova.
 _WHISPER_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
@@ -192,12 +192,18 @@ def audio_problems(narrations: list[str], heard: str) -> list[str]:
     return problems
 
 
-def review_audio(narrations: list[str], video: Path) -> list[str]:
-    heard = transcribe(video)
-    if heard is None:
-        log.warning("revisão do áudio indisponível (sem transcrição) — seguindo sem ela")
-        return []
-    return audio_problems(narrations, heard)
+def review_audio(narrations: list[str], scene_audios: list[Path]) -> list[str]:
+    """Uma transcrição por cena: o arquivo inteiro de uma vez o Whisper
+    devolvia com trechos cortados ("insustent sem retornos t", job 423) e a
+    voz estava perfeita — reprovaria vídeo bom."""
+    heard = []
+    for audio in scene_audios:
+        text = transcribe(audio)
+        if text is None:
+            log.warning("revisão do áudio indisponível (sem transcrição) — seguindo sem ela")
+            return []
+        heard.append(text)
+    return audio_problems(narrations, " ".join(heard))
 
 
 def review_video(

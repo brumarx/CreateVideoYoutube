@@ -144,6 +144,12 @@ class ChannelConfig:
     # americano): sem modelo de visão disponível, clipe de banco e imagem de
     # IA não entram, e a revisão final só aprova com a parte visual feita.
     strict_visual: bool = False
+    # visual que não é do próprio assunto (banco, IA, foto de jogador com
+    # camisa de outro clube) sai em preto e branco — futebol: nenhuma cor
+    # de outro time na tela
+    fallback_grayscale: bool = False
+    # foto (Wikipédia) de quem a cena cita, do elenco do clube
+    player_photos: bool = False
     # bordão de entrada falado no começo de todo vídeo ("Fala, alvinegros!")
     # — inserido por CÓDIGO antes da 1ª cena, nunca pelo LLM (que é
     # proibido de abrir com saudação). Vazio = sem bordão.
@@ -189,6 +195,8 @@ class ChannelConfig:
             require_approval=data.get("require_approval", True),
             website=data.get("website", ""),
             strict_visual=bool(data.get("strict_visual", False)),
+            fallback_grayscale=bool(data.get("fallback_grayscale", False)),
+            player_photos=bool(data.get("player_photos", False)),
             website_cta=data.get("website_cta", "🌐 Site"),
             greeting=data.get("greeting", ""),
             pronunciations={str(k): str(v) for k, v in (data.get("pronuncia") or {}).items()},

@@ -77,6 +77,13 @@ def _espn_get(url: str) -> dict | None:
         return None
 
 
+def elenco() -> list[str]:
+    """Nomes do elenco atual (ESPN) — quem a cena pode citar e ganhar foto
+    (ver src/people_photos.py). Lista vazia se a ESPN cair."""
+    data = _espn_get(f"https://site.api.espn.com/apis/site/v2/sports/soccer/bra.1/teams/{BOTAFOGO_ESPN_ID}/roster")
+    return [a["displayName"] for a in (data or {}).get("athletes", []) if a.get("displayName")]
+
+
 def _load_state() -> dict:
     if STATE_FILE.exists():
         return json.loads(STATE_FILE.read_text())

@@ -16,3 +16,4 @@ __pycache__/
 assets/music/*.mp3
 assets/sfx/*.mp3
 .code-graph/
+data/people_photos.json

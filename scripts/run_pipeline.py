@@ -16,6 +16,7 @@ vídeo de lista: 1 cena por item, com selo de contagem regressiva.
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import logging
 import math
@@ -26,12 +27,15 @@ import sys
 import subprocess
 from pathlib import Path
 
+from PIL import Image
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.assemble import SFX_DIR, _ffprobe_duration, add_background_music, concat_scenes, render_scene
 from src.config import ChannelConfig
 from src.fact_check import BLOCKING_TYPES, feedback_for_rewrite, review_script
 from src.orchestrator import enqueue, update
+from src.people_photos import names_in, person_photo
 from src.script_gen import chapter_titles, engagement_question, fix_dangling_hooks, generate_script
 from src.spellcheck import fix_script, fix_text
 from src.stock_media import search_stock_clip, search_stock_photo
@@ -95,6 +99,14 @@ def _chapter_label(narration: str, max_words: int = 6) -> str:
     words = narration.strip().split()[:max_words]
     label = " ".join(words).rstrip(",.;:!?-")
     return label[:1].upper() + label[1:] if label else "Continua"
+
+
+def _gray(png: bytes) -> bytes:
+    """Visual que não é do próprio assunto em preto e branco
+    (channel.fallback_grayscale): no futebol, some a cor de outro clube."""
+    out = io.BytesIO()
+    Image.open(io.BytesIO(png)).convert("L").convert("RGB").save(out, format="PNG")
+    return out.getvalue()
 
 
 def _words(text: str) -> set[str]:
@@ -654,6 +666,12 @@ def run(
         same_photo_run = 0  # cenas seguidas com a MESMA foto de notícia
         last_still: bytes | None = None  # último visual aprovado (reserva se a IA de imagem cair)
         scene_sources: list[str] = []  # de onde veio o visual de cada cena (revisão final usa)
+        squad: list[str] = []
+        if channel.player_photos:
+            from src.botafogo_data import elenco
+
+            squad = elenco()
+        player_credits: set[str] = set()
         for i, scene in enumerate(script["scenes"]):
             log.info("[%s] cena %d/%d", job_id, i + 1, len(script["scenes"]))
             audio_path, word_boundaries, scene_duration = narrations[i]
@@ -711,6 +729,16 @@ def run(
             # cena anterior ("O comunicado termina com...") — fica com a
             # foto dela. Antes caía no banco de vídeos, que pra futebol só
             # tem clube estrangeiro (Barcelona, Beşiktaş, Wolfsburg).
+            # quem a cena cita (elenco): foto do verbete na Wikipédia — entra
+            # quando a cena não casa com a foto de nenhuma notícia, antes de
+            # herdar a foto da cena anterior ou cair no banco de vídeos
+            player = None
+            if squad and i < original_scene_count:
+                for name in names_in(scene["narration"], squad):
+                    player = person_photo(name, "Botafogo")
+                    if player:
+                        break
+
             news_frame = None
             if i >= original_scene_count:
                 # cena de CTA (like/inscrição): cartão fixo do canal — a busca
@@ -720,6 +748,8 @@ def run(
                 photo = _news_photo_for_scene(scene["narration"], facts, news_photos)
                 if photo is not None:
                     photo_streak = 0
+                elif player is not None:
+                    pass  # cena sem foto própria de notícia que cita jogador: a foto dele
                 elif last_news_photo is not None and photo_streak < 2:
                     # cena que continua a notícia anterior: no máximo 2 cenas
                     # seguidas — a camisa de Flamengo/Flu da notícia das bets
@@ -746,8 +776,18 @@ def run(
                         last_news_photo = photo
                         news_frame = frame
 
+            player_frame = None
+            if news_frame is None and player is not None:
+                frame = photo_scene_frame(player["url"], width, height)
+                if frame is not None:
+                    frame = _gray(frame) if channel.fallback_grayscale else frame
+                    if matches_scene(frame, scene["narration"], visual_context) is not False:
+                        player_frame = frame
+                        player_credits.add(player["credito"])
+                        log.info("[%s] cena %d: foto de %s", job_id, i + 1, player["pessoa"])
+
             stock_clip_path = None
-            if news_frame is None and stock_query:
+            if news_frame is None and player_frame is None and stock_query:
                 stock_clip_path = search_stock_clip(stock_query, width, height, check=in_context)
 
             image_path = None
@@ -756,6 +796,12 @@ def run(
                 image_path.write_bytes(news_frame)
                 last_still = news_frame
                 scene_sources.append("noticia")
+            elif player_frame is not None:
+                image_path = work_dir / f"scene_{i}.png"
+                image_path.write_bytes(player_frame)
+                last_still = player_frame
+                same_photo_run = 0
+                scene_sources.append("jogador")
             elif stock_clip_path is None:
                 image_bytes = search_stock_photo(stock_query, width, height, check=in_context) if stock_query else None
                 if image_bytes is None:
@@ -786,12 +832,17 @@ def run(
                         scene_sources.append("ia")
                 else:
                     scene_sources.append("banco")
+                if channel.fallback_grayscale and scene_sources[-1] in ("ia", "banco"):
+                    image_bytes = _gray(image_bytes)
                 image_path = work_dir / f"scene_{i}.png"
                 image_path.write_bytes(image_bytes)
                 last_still = image_bytes
                 same_photo_run = 0
             else:
-                last_still = _clip_still(stock_clip_path) or last_still
+                still = _clip_still(stock_clip_path)
+                if still and channel.fallback_grayscale:
+                    still = _gray(still)  # repetido numa cena seguinte, não pode voltar colorido (job 424)
+                last_still = still or last_still
                 same_photo_run = 0
                 scene_sources.append("banco")
 
@@ -808,6 +859,7 @@ def run(
                     stat_overlay=scene.get("stat_overlay"),
                     impact_beat=bool(scene.get("impact_beat")),
                     video_path=stock_clip_path,
+                    grayscale=channel.fallback_grayscale and stock_clip_path is not None,
                 )
             finally:
                 # sem finally, um clipe baixado (10-20MB) vaza pro /tmp toda vez
@@ -842,11 +894,11 @@ def run(
             # futebol com clipe de banco/IA precisa de olho; vídeo só com
             # foto das matérias (do próprio assunto) dispensa
             strict_visual=channel.strict_visual and "ia" in scene_sources,
-            trusted_scenes={i + 1 for i, src in enumerate(scene_sources) if src in ("noticia", "repetida")},
+            trusted_scenes={i + 1 for i, src in enumerate(scene_sources) if src in ("noticia", "repetida", "jogador")},
         )
         # voz falando besteira não passa nem na última tentativa do dia —
         # não publicar é melhor que "Fala a é acento circunflexo" (job 414)
-        audio_problems = review_audio([s["narration"] for s in script["scenes"]], raw_video)
+        audio_problems = review_audio([s["narration"] for s in script["scenes"]], [n[0] for n in narrations])
         if audio_problems:
             raise ScriptRejected("áudio reprovado antes do upload: " + "; ".join(audio_problems))
         if qa_problems:
@@ -941,6 +993,10 @@ def run(
                 description += f"\n\nFonte das notícias:\n{fontes}"
             if creditos:
                 description += "\nFotos: " + "; ".join(creditos)
+
+        if player_credits:
+            # licença livre do Commons (CC BY/BY-SA) exige crédito do autor
+            description += "\nFotos dos jogadores: " + "; ".join(sorted(player_credits))
 
         if music_attribution:
             # a licença CC BY (assets/music/ATTRIBUTION.md) exige creditar a
