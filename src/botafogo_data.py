@@ -287,9 +287,9 @@ def build_recap_facts(event: dict, summary: dict) -> dict:
         }
 
     gols = [
-        {"minuto": ev.get("clock", {}).get("displayValue"), "descricao": ev.get("text")}
+        parse_goal(ev.get("text") or "", ev.get("clock", {}).get("displayValue"), (ev.get("type") or {}).get("text") or "")
         for ev in summary.get("keyEvents") or []
-        if (ev.get("type", {}).get("text") or "").lower().startswith(("goal", "penalty"))
+        if re.match(r"(own )?goal|penalty - scored", (ev.get("type", {}).get("text") or "").lower())
     ]
     if gols:
         facts["gols"] = gols
@@ -309,6 +309,124 @@ def build_recap_facts(event: dict, summary: dict) -> dict:
                 facts["destaques_botafogo"] = destaques
 
     return facts
+
+
+# lance do gol como a ESPN descreve ("left footed shot from the centre of
+# the box to the bottom left corner") -> português, pro roteiro e pro
+# cartão do gol (src/goal_card.py). Ordem importa: o mais específico antes.
+_GOL_ORIGEM = [
+    ("very close range", "na pequena área"),
+    ("six yard box", "na pequena área"),
+    ("penalty", "de pênalti"),
+    ("outside the box", "de fora da área"),
+    ("left side of the box", "do lado esquerdo da área"),
+    ("right side of the box", "do lado direito da área"),
+    ("centre of the box", "do meio da área"),
+    ("difficult angle on the left", "sem ângulo, pela esquerda"),
+    ("difficult angle on the right", "sem ângulo, pela direita"),
+    ("long range", "de muito longe"),
+]
+_GOL_DESTINO = [
+    ("top left corner", "no ângulo esquerdo"),
+    ("top right corner", "no ângulo direito"),
+    ("bottom left corner", "no canto esquerdo, rasteiro"),
+    ("bottom right corner", "no canto direito, rasteiro"),
+    ("high centre of the goal", "no alto, no meio do gol"),
+    ("centre of the goal", "no meio do gol"),
+]
+_GOL_JEITO = [
+    ("left footed", "chute de pé esquerdo"),
+    ("right footed", "chute de pé direito"),
+    ("header", "de cabeça"),
+]
+
+
+def parse_goal(text: str, minuto: str | None, tipo: str = "") -> dict:
+    """Gol do keyEvents da ESPN em campos — "Goal! Coritiba 1, Botafogo 1.
+    Danilo Santos (Botafogo) left footed shot from the centre of the box to
+    the centre of the goal. Assisted by Cristian Medina." Campo que a ESPN
+    não traz simplesmente não entra (o roteiro nunca descreve lance que a
+    fonte não descreve)."""
+    low = text.lower()
+    gol: dict = {"minuto": minuto}
+    m = re.search(r"([A-Za-zÀ-ÿ '-]+?) (\d+), ([A-Za-zÀ-ÿ '-]+?) (\d+)\.", text)
+    if m:
+        gol["placar_depois"] = f"{m[1].strip()} {m[2]} x {m[4]} {m[3].strip()}"
+    if "own goal" in low or tipo.lower().startswith("own goal"):
+        m = re.search(r"own goal by ([^,]+), ([^.]+)\.", text, re.IGNORECASE)
+        gol["gol_contra"] = True
+        if m:
+            gol["autor"], gol["time_do_autor"] = m[1].strip(), m[2].strip()
+        return gol
+    m = re.search(r"\.\s*([^.()]+?) \(([^)]+)\) (?:converts|left footed|right footed|header|shot)", text)
+    if m:
+        gol["autor"], gol["time"] = m[1].strip(), m[2].strip()
+    if "penalty" in low or tipo.lower().startswith("penalty"):
+        gol["penalti"] = True
+    for chave, lista in (("jeito", _GOL_JEITO), ("de_onde", _GOL_ORIGEM), ("onde_entrou", _GOL_DESTINO)):
+        trecho = low.split(" to the ")[0] if chave != "onde_entrou" else low.split(" to the ")[-1]
+        hit = next((pt for en, pt in lista if en in trecho), None)
+        if hit:
+            gol[chave] = hit
+    m = re.search(r"assisted by ([^.]+?)(?: with| following|\.|$)", text, re.IGNORECASE)
+    if m:
+        gol["assistencia"] = m.group(1).strip()
+    return gol
+
+
+def _norm(text: str) -> str:
+    import unicodedata
+
+    return "".join(c for c in unicodedata.normalize("NFD", text.lower()) if unicodedata.category(c) != "Mn")
+
+
+MATCH_PHOTOS_MAX = 8
+# foto que não é do lance: arte de estatística da ESPN, logo de portal,
+# print de app/ao vivo, thumb de vídeo (vem com tarja de emissora)
+_FOTO_NAO_JOGO = re.compile(r"stitcher|logo|share-30-anos|photobooth|video\.glbimg|placeholder", re.IGNORECASE)
+
+
+def match_photos(rival: str | None, kickoff: str | None) -> tuple[list[dict], list[dict]]:
+    """Fotos REAIS da partida pro pós-jogo: capas das matérias do Portal
+    publicadas depois do apito final que citam o adversário no título. Sem
+    isso o pós-jogo caía no banco de vídeos, que pra futebol traz clube
+    estrangeiro e até futebol feminino (13/10). Devolve (fotos, fontes)."""
+    from datetime import datetime, timedelta
+
+    if not rival or not kickoff:
+        return [], []
+    genericas = {"clube", "club", "sport", "esporte", "atletico", "america", "futebol", "regatas", "sociedade"}
+    chaves = {w for w in re.findall(r"[a-z]+", _norm(rival)) if len(w) >= 4 and w not in genericas}
+    if not chaves:
+        return [], []
+    inicio = datetime.fromisoformat(kickoff.replace("Z", "+00:00"))
+    janela = (inicio + timedelta(minutes=100), inicio + timedelta(hours=36))
+    items: list[dict] = []
+    for page in (1, 2, 3):  # a API devolve no máximo 50 por página
+        try:
+            resp = httpx.get(f"{PORTAL_API}/articles", params={"per_page": 50, "page": page}, timeout=_TIMEOUT)
+            resp.raise_for_status()
+            items += resp.json().get("items") or []
+        except Exception as exc:  # noqa: BLE001 — portal fora: pós-jogo segue sem foto
+            log.warning("Portal Botafogo falhou (fotos do jogo): %s", exc)
+            break
+    fotos, fontes = [], []
+    for art in items:
+        img, published = art.get("cover_image_url"), art.get("published_at")
+        if not img or not published or _FOTO_NAO_JOGO.search(img) or _outro_botafogo(art):
+            continue
+        quando = datetime.fromisoformat(published.replace("Z", "+00:00"))
+        if not janela[0] <= quando <= janela[1] or not chaves & set(re.findall(r"[a-z]+", _norm(art.get("title") or ""))):
+            continue
+        if not _portal_photo_ok(img, quando) or img in {f["url"] for f in fotos}:
+            continue
+        veiculo = _nome_veiculo(art.get("source_name"))
+        fotos.append({"url": img, "credito": veiculo, "jogo": True})
+        fontes.append({"titulo": f"{art['title']} ({veiculo})", "url": f"{PORTAL_SITE}/noticias/{art['slug']}"})
+        if len(fotos) == MATCH_PHOTOS_MAX:
+            break
+    log.info("pós-jogo: %d foto(s) do jogo no portal", len(fotos))
+    return fotos, fontes
 
 
 def build_preview_facts(event: dict, summary: dict | None) -> dict:
@@ -393,7 +511,9 @@ def next_pending_task(news_fallback: bool = True) -> dict | None:
 
         facts = build_recap_facts(escolhido, summary)
         placar = facts.get("placar", escolhido["name"])
-        return {"tipo": "pos-jogo", "titulo": f"{placar}: pós-jogo", "facts": facts}
+        rival = next((t for t in (escolhido.get("home"), escolhido.get("away")) if t and "botafogo" not in t.lower()), None)
+        fotos, fontes = match_photos(rival, escolhido.get("date"))
+        return {"tipo": "pos-jogo", "titulo": f"{placar}: pós-jogo", "facts": facts, "fotos": fotos, "fontes": fontes}
 
     from datetime import datetime, timedelta, timezone
 

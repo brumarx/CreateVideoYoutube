@@ -39,6 +39,9 @@ _RULES = """Responda NÃO (ok=false) se a imagem:
   rugby, basquete etc. é SEMPRE fora de contexto num vídeo de futebol;
 - mostra clube, time, escudo, camisa ou torcida IDENTIFICÁVEL diferente do
   que a cena cita (ex.: camisa do Barcelona num vídeo do Botafogo);
+- mostra MULHERES ou CRIANÇAS jogando/treinando numa cena sobre time
+  masculino profissional (só vale futebol feminino ou de base se a
+  narração falar de time feminino ou de base);
 - mostra pessoa/lugar/objeto específico que contradiz a narração, ou um
   assunto sem relação nenhuma com ela (ex.: papel em branco pra "escudo");
 - tem texto, logo ou marca em destaque que não tem a ver com a cena;

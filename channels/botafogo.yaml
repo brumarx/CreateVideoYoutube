@@ -56,7 +56,11 @@ prompt_base: >
   ordem: o placar final e o que ele significa pro Botafogo (vitória,
   derrota ou empate — reaja como torcedor de verdade reagiria); a formação
   tática usada pelo Botafogo (e a do adversário, se vier); os gols em
-  ordem cronológica (minuto, autor, assistência); as estatísticas que
+  ordem cronológica, CADA GOL NA SUA PRÓPRIA CENA dizendo "gol" e o nome
+  de quem fez (entra na tela o desenho do lance) — minuto, autor,
+  assistência e, se vierem, "jeito", "de_onde" e "onde_entrou" (ex.: "chute
+  de pé esquerdo, do meio da área, no canto direito"); "gol_contra" é gol
+  do ADVERSÁRIO feito por jogador do "time_do_autor"; as estatísticas que
   vieram nos dados (posse de bola, finalizações, passes, escanteios,
   cartões) comentadas com emoção, nunca como lista fria; e os jogadores
   que mais se destacaram nos números. Comemore vitória, lamente derrota,
@@ -100,8 +104,8 @@ prompt_base: >
   não descreva a fase do adversário ("busca se reerguer") sem dado.
 
   LANCES: nunca descreva COMO um gol ou jogada aconteceu (cruzamento,
-  cabeçada, chute de fora, virada, contra-ataque) se a fonte não descreve
-  exatamente esse lance. Se ela só diz "participou de 3 gols", diga só
+  cabeçada, chute de fora, virada, contra-ataque) além do que os campos do
+  gol ("jeito", "de_onde", "onde_entrou") ou a fonte descrevem. Se ela só diz "participou de 3 gols", diga só
   isso.
 
 # publica sozinho depois da revisão de fatos (sem esperar "Aprovar" no painel)

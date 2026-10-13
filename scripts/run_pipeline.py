@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.assemble import SFX_DIR, _ffprobe_duration, add_background_music, concat_scenes, render_scene
 from src.config import ChannelConfig
+from src.goal_card import goal_card
 from src.fact_check import BLOCKING_TYPES, feedback_for_rewrite, review_script
 from src.orchestrator import enqueue, update
 from src.people_photos import names_in, person_photo
@@ -114,6 +115,28 @@ def _words(text: str) -> set[str]:
 
 
 _FEMININO = {"feminino", "feminina", "femininas", "meninas", "mulheres", "gloriosas"}
+
+
+def _goal_for_scene(narration: str, gols: list[dict], usados: set[int]) -> int | None:
+    """Gol que ESTA cena narra (pós-jogo): cita quem fez E o minuto do gol ou
+    um verbo de gol — vira o cartão do gol (src/goal_card.py) em vez de
+    foto/banco. Só "gol" não basta: "Gabriel Batista no gol, Fernando
+    Marçal na zaga" (escalação) puxou o cartão do gol contra (job 452)."""
+    texto = narration.lower()
+    fala = _words(narration)
+    lance = re.search(r"\bgol (de|do|da|contra)\b|golaço|marc(ou|a)\b|empat(ou|a)\b|abriu o placar|balanç|\bvir(ou|ada)\b|descont", texto)
+    for idx, gol in enumerate(gols):
+        nome = _words(gol.get("autor") or "")
+        minuto = re.match(r"\d+", gol.get("minuto") or "")
+        no_minuto = bool(minuto and re.search(rf"\b{minuto.group(0)}\b", texto))
+        if idx not in usados and nome and nome & fala and (lance or no_minuto):
+            return idx
+    return None
+    for idx, gol in enumerate(gols):
+        nome = _words(gol.get("autor") or "")
+        if idx not in usados and nome and nome & fala:
+            return idx
+    return None
 
 
 def _news_photo_for_scene(narration: str, facts: dict | None, photos: list[dict]) -> dict | None:
@@ -672,6 +695,17 @@ def run(
 
             squad = elenco()
         player_credits: set[str] = set()
+        gols = [g for g in ((facts or {}).get("gols") or []) if isinstance(g, dict)]
+        gols_usados: set[int] = set()
+        # fotos REAIS do jogo (pós-jogo, ver botafogo_data.match_photos): em
+        # rodízio nas cenas sem foto própria, antes do banco de vídeos
+        match_photos = [f for f in news_photos if f.get("jogo")]
+        match_photo_uses = {f["url"]: 0 for f in match_photos}
+        # a visão reprovou foto real da partida pela camisa rosa (Outubro Rosa)
+        match_context = visual_context + (
+            "\nA imagem é uma FOTO REAL desta partida, da matéria de um jornal: uniforme "
+            "especial ou de cor diferente (ex.: camisa rosa do Outubro Rosa) é normal."
+        )
         for i, scene in enumerate(script["scenes"]):
             log.info("[%s] cena %d/%d", job_id, i + 1, len(script["scenes"]))
             audio_path, word_boundaries, scene_duration = narrations[i]
@@ -740,7 +774,12 @@ def run(
                         break
 
             news_frame = None
-            if i >= original_scene_count:
+            gol_idx = _goal_for_scene(scene["narration"], gols, gols_usados) if i < original_scene_count else None
+            if gol_idx is not None:
+                gols_usados.add(gol_idx)
+                news_frame = goal_card(gols[gol_idx], width, height)
+                log.info("[%s] cena %d: cartão do gol de %s", job_id, i + 1, gols[gol_idx].get("autor"))
+            elif i >= original_scene_count:
                 # cena de CTA (like/inscrição): cartão fixo do canal — a busca
                 # "thumbs up" no banco trouxe um polegar PRA BAIXO (job 259)
                 news_frame = title_card(channel.channel_title, width, height, channel.accent)
@@ -750,13 +789,24 @@ def run(
                     photo_streak = 0
                 elif player is not None:
                     pass  # cena sem foto própria de notícia que cita jogador: a foto dele
+                elif match_photos:
+                    # pós-jogo: fotos do jogo em rodízio (menos usada primeiro),
+                    # até 3 tentativas na visão antes de cair no banco
+                    for cand in sorted(match_photos, key=lambda f: match_photo_uses[f["url"]])[:3]:
+                        match_photo_uses[cand["url"]] += 1
+                        frame = photo_scene_frame(cand["url"], width, height)
+                        if frame is not None and matches_scene(frame, scene["narration"], match_context) is not False:
+                            news_frame = frame
+                            last_news_photo = None
+                            same_photo_run = 0
+                            break
                 elif last_news_photo is not None and photo_streak < 2:
                     # cena que continua a notícia anterior: no máximo 2 cenas
                     # seguidas — a camisa de Flamengo/Flu da notícia das bets
                     # ficou em 9 cenas, inclusive na agenda do Botafogo (job 239)
                     photo = last_news_photo
                     photo_streak += 1
-                if photo is None and not stock_query:
+                if news_frame is None and photo is None and not stock_query:
                     # abertura antes de qualquer notícia casar (ou continuidade
                     # esgotada), sem busca própria da cena: foto da 1ª
                     # notícia (o gancho é ela) em vez de clipe de banco, que

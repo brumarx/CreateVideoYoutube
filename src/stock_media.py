@@ -92,6 +92,10 @@ _OFF_TOPIC = re.compile(
     r"neymar|beko|jersey|crest|badge|emblem",
     re.IGNORECASE,
 )
+# futebol feminino/infantil num vídeo do time profissional masculino (vídeo
+# do Botafogo de 13/10 saiu com mulheres jogando) — só barra quando a busca
+# não pediu isso
+_OTHER_CATEGORY = re.compile(r"wom[ae]n|girls?|female|ladies|lady|kids?|child|children|boys?|youth|junior", re.IGNORECASE)
 # o filtro acima só vale pra busca de esporte — "badge" de polícia ou
 # "american flag" num vídeo de política/curiosidade são legítimos
 _SPORTS_QUERY = re.compile(r"soccer|football|stadium|goal|ball|fans|team|player|match|jersey|shield|crest|coach|referee", re.IGNORECASE)
@@ -108,6 +112,8 @@ def _rank_candidates(query: str, items: list[dict], kind: str, describe) -> list
     recent = set(_load_recent().get(kind, []))
     if _SPORTS_QUERY.search(query):
         items = [i for i in items if not _OFF_TOPIC.search(describe(i) or "")]
+        if not _OTHER_CATEGORY.search(query):
+            items = [i for i in items if not _OTHER_CATEGORY.search(describe(i) or "")]
 
     def score(item: dict) -> tuple[int, int, int]:
         # inédito vem ANTES de relevância: com relevância na frente, a mesma

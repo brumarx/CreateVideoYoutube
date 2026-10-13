@@ -159,6 +159,15 @@ def _strip_accents(text: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
 
 
+def _caption_margin(width: int, height: int) -> int:
+    """Distância da legenda até a borda de baixo. 8% ficava atrás do título,
+    do nome do canal e dos botões no Shorts e era cortada no player do app
+    (vídeo vertical aparece recortado fora da tela cheia) — a legenda só se
+    via inteira em tela cheia (13/10). Vertical: no terço de baixo, acima da
+    interface; horizontal: acima da barra de progresso/controles."""
+    return int(height * (0.30 if height > width else 0.13))
+
+
 def _caption_filter(narration: str, duration: float, width: int, height: int) -> str:
     font_size = min(width, height) // 16
     # calculado a partir do RODAPÉ (não do topo) — uma fração fixa da
@@ -166,7 +175,7 @@ def _caption_filter(narration: str, duration: float, width: int, height: int) ->
     # (16:9, mais baixo/achatado que o vertical): a mesma % de cima pra
     # baixo sobra bem menos espaço embaixo numa tela mais baixa. Margem
     # fixa de baixo funciona igual nos dois formatos.
-    margin_bottom = int(height * 0.08)
+    margin_bottom = _caption_margin(width, height)
     y = height - margin_bottom - font_size
     font = ImageFont.truetype(WATERMARK_FONT, font_size)
     # margem de 9% de cada lado — sobra segura medida na largura REAL do
@@ -244,7 +253,7 @@ def _build_ass_captions(
     vários `drawtext` encadeados do esquema antigo (_caption_filter), que
     fica só como fallback pra quando não vier tempo real nenhum."""
     font_size = min(width, height) // 16
-    margin_v = int(height * 0.08)
+    margin_v = _caption_margin(width, height)
     font = ImageFont.truetype(WATERMARK_FONT, font_size)
     max_width = width * 0.82
     # mesma cor de destaque em TODOS os canais (antes era o accent de cada
