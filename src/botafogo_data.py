@@ -220,6 +220,24 @@ def _roster_for(summary: dict, team_id: str = BOTAFOGO_ESPN_ID) -> dict | None:
     return None
 
 
+# nome da estatística dos destaques vem em inglês da ESPN — o roteiro
+# copiava ("Gabriel Batista fez 4 saves", vídeo r1BmNW1nzKQ)
+_CATEGORIA_PT = {
+    "saves": "defesas",
+    "totalShots": "finalizações",
+    "shotsOnTarget": "finalizações no alvo",
+    "accuratePasses": "passes certos",
+    "totalPasses": "passes",
+    "goals": "gols",
+    "goalAssists": "assistências",
+    "totalTackles": "desarmes",
+    "interceptions": "interceptações",
+    "totalClearance": "cortes",
+    "foulsCommitted": "faltas cometidas",
+    "wonCorners": "escanteios",
+}
+
+
 def build_recap_facts(event: dict, summary: dict) -> dict:
     facts: dict = {"tipo": "pos-jogo", "competicao": LEAGUES_NOME.get(event["liga_nome"], event["liga_nome"])}
 
@@ -302,7 +320,7 @@ def build_recap_facts(event: dict, summary: dict) -> dict:
                 if top:
                     destaques.append({
                         "jogador": top.get("athlete", {}).get("displayName"),
-                        "categoria": categoria.get("name"),
+                        "categoria": _CATEGORIA_PT.get(categoria.get("name"), categoria.get("name")),
                         "valor": top.get("displayValue"),
                     })
             if destaques:
