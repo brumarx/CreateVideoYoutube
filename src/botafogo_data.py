@@ -224,6 +224,7 @@ def _roster_for(summary: dict, team_id: str = BOTAFOGO_ESPN_ID) -> dict | None:
 # copiava ("Gabriel Batista fez 4 saves", vídeo r1BmNW1nzKQ)
 _CATEGORIA_PT = {
     "saves": "defesas",
+    "defensiveInterventions": "intervenções defensivas",
     "totalShots": "finalizações",
     "shotsOnTarget": "finalizações no alvo",
     "accuratePasses": "passes certos",
