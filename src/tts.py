@@ -117,6 +117,7 @@ def _for_speech(text: str, extra: dict[str, str] | None = None) -> tuple[str, li
     text = clean_markup(text)  # última barreira: nada de "asterisco" falado
     text = _apply_pronunciations(text, extra)
     text = _versus(text)
+    text = _money(text)
     return _CAPS_WORD.sub(caps, text), trocas
 
 
@@ -129,6 +130,25 @@ _CONFRONTO_X = re.compile(r"\b([A-ZÀ-Ý][\w-]*)\s+[xX×]\s+(?=[A-ZÀ-Ý])")
 
 def _versus(text: str) -> str:
     return _CONFRONTO_X.sub(r"\1 contra ", _PLACAR_X.sub(r"\1 a \2", text))
+
+
+# "€39 milhões" a voz lia "39 euros milhões" (teste com Whisper de 14/10):
+# moeda vai pro fim, como se fala — "39 milhões de euros"
+_MOEDAS = {"R$": ("real", "reais"), "US$": ("dólar", "dólares"), "U$": ("dólar", "dólares"),
+           "$": ("dólar", "dólares"), "€": ("euro", "euros"), "£": ("libra", "libras")}
+_MONEY = re.compile(
+    r"(R\$|US\$|U\$|\$|€|£)\s?(\d[\d.]*(?:,\d+)?)(?:\s+(mil|milh(?:ão|ões)|bilh(?:ão|ões)|trilh(?:ão|ões))\b)?"
+)
+
+
+def _money(text: str) -> str:
+    def falado(m: re.Match) -> str:
+        singular, plural = _MOEDAS[m[1]]
+        if m[3]:  # "3 mil libras", mas "3 milhões de libras"
+            return f"{m[2]} {m[3]} {'' if m[3] == 'mil' else 'de '}{plural}"
+        return f"{m[2]} {singular if m[2] == '1' else plural}"
+
+    return _MONEY.sub(falado, text)
 
 
 def _join_domains(word_boundaries: list[dict]) -> list[dict]:
