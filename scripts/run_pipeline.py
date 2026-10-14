@@ -25,6 +25,7 @@ import re
 import shutil
 import sys
 import subprocess
+import unicodedata
 from pathlib import Path
 
 from PIL import Image
@@ -204,7 +205,7 @@ _SENT_SPLIT = re.compile(r"(?<=[.!?])\s+")
 
 
 def _cut_flagged_sentences(
-    script: dict, problems: list[dict], max_cuts: int = 3, lenient: bool = False,
+    script: dict, problems: list[dict], max_cuts: int = 3, lenient: bool = False, min_score: float = 0.6,
 ) -> dict | None:
     """Roteiro sem as frases que a revisão apontou (cada `termo` é a
     afirmação curta do revisor — acha a frase que tem a maioria das palavras
@@ -213,7 +214,11 @@ def _cut_flagged_sentences(
     lenient (última tentativa do dia): pula o termo que não achou e corta
     quantas frases precisar, desde que sobrem pelo menos 2 cenas."""
     def words(text: str) -> set[str]:
-        return {w for w in re.findall(r"\w+", text.lower()) if len(w) > 3}
+        # sem acento e só o radical (5 letras): o revisor parafraseia a frase
+        # ("altera mando" x "alterar o mando", "judicial" x "Justiça" não, mas
+        # "decisão"/"decidiu" sim) — job 458 escapou do corte assim
+        text = unicodedata.normalize("NFKD", text.lower()).encode("ascii", "ignore").decode()
+        return {w[:5] for w in re.findall(r"\w+", text) if len(w) > 3}
 
     scenes = [_SENT_SPLIT.split(sc.get("narration", "")) for sc in script["scenes"]]
     to_cut: set[tuple[int, int]] = set()
@@ -229,7 +234,7 @@ def _cut_flagged_sentences(
                 score = len(term & words(sentence)) / len(term)
                 if score > best_score:
                     best, best_score = (si, ji), score
-        if best is None or best_score < 0.6:
+        if best is None or best_score < min_score:
             if lenient:
                 continue
             return None
@@ -266,6 +271,15 @@ def _forced_cut(script: dict, problems: list[dict], topic: str, facts, web_facts
         script = cut
         log.warning("[%s] última tentativa do dia: frases reprovadas cortadas (%d cenas)", job_id, len(script["scenes"]))
         problems = review_script(script, topic, facts, web_facts) or []
+    if problems:
+        # o que sobrou ainda vai pro ar: corta a frase mais parecida com cada
+        # ressalva mesmo com casamento fraco — melhor perder uma frase boa do
+        # que publicar a errada (job 458: jogo do NBB "na Tijuca" virou futebol)
+        cut = _cut_flagged_sentences(script, problems, lenient=True, min_score=0.34)
+        if cut is not None:
+            script = cut
+            log.warning("[%s] última tentativa do dia: ressalvas restantes cortadas no casamento fraco", job_id)
+            problems = review_script(script, topic, facts, web_facts) or []
     if problems:
         log.warning(
             "[%s] última tentativa do dia — publica com ressalvas da revisão: %s", job_id,

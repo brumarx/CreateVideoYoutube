@@ -871,6 +871,26 @@ def portal_task_from_slugs(slugs: list[str]) -> dict | None:
     return _portal_task(escolhidas) if escolhidas else None
 
 
+# notícia de outra modalidade do clube (job 458: clássico do NBB "pode ser
+# na Tijuca" virou jogo de futebol na narração) — vai marcada pro roteiro
+_MODALIDADES = [
+    ("basquete", re.compile(r"\b(nbb|basquete|basketball|fiba|liga de las am[eé]ricas|champions league das am[eé]ricas)\b", re.I)),
+    ("vôlei", re.compile(r"\b(v[oô]lei|volleyball|superliga)\b", re.I)),
+    ("futsal", re.compile(r"\bfutsal\b", re.I)),
+    ("futebol de areia", re.compile(r"\bbeach soccer|futebol de areia\b", re.I)),
+    ("polo aquático", re.compile(r"\bpolo aqu[aá]tico\b", re.I)),
+    ("e-sports", re.compile(r"\be-?sports?\b", re.I)),
+]
+
+
+def _modalidade(art: dict) -> str | None:
+    texto = f"{art.get('title') or ''} {art.get('excerpt') or ''}"
+    for nome, pattern in _MODALIDADES:
+        if pattern.search(texto):
+            return nome
+    return None
+
+
 def _portal_task(escolhidas: list[dict]) -> dict:
     from datetime import datetime
 
@@ -884,13 +904,16 @@ def _portal_task(escolhidas: list[dict]) -> dict:
             except Exception as exc:  # noqa: BLE001 — fica só com o resumo
                 log.warning("texto da matéria %s indisponível: %s", art["slug"], exc)
         veiculo = _nome_veiculo(art.get("source_name"))
-        noticias.append({
+        noticia = {
             "titulo": art["title"],
             "resumo": art.get("excerpt"),
             "texto": texto,
             "veiculo": veiculo,
             "publicado_em": art["published_at"],
-        })
+        }
+        if modalidade := _modalidade(art):
+            noticia["modalidade"] = modalidade
+        noticias.append(noticia)
         # link sempre pro portal (a página da matéria lá já credita e linka o
         # veículo original) — leva a audiência do canal pro botafogo.win
         fontes.append({"titulo": f"{art['title']} ({veiculo})", "url": f"{PORTAL_SITE}/noticias/{art['slug']}"})
