@@ -447,6 +447,30 @@ def _repetition_problem(script: dict) -> str | None:
     return None
 
 
+_CONECTIVO = re.compile(r"^(enquanto isso|além disso|ao mesmo tempo|por outro lado|nesse sentido|dessa forma),\s*", re.I)
+
+
+def _trim_muletas(script: dict) -> dict:
+    """Conectivo-muleta no começo de frase ("Enquanto isso, ...") fica só na
+    1ª vez; nas outras sai e a frase começa direto. Roteiro de reserva
+    (3 tentativas com repetição) saía com 4 "Enquanto isso" (15/10)."""
+    vistos: set[str] = set()
+    scenes = []
+    for sc in script.get("scenes", []):
+        frases = []
+        for f in _SENTENCE_SPLIT.split(sc.get("narration", "")):
+            m = _CONECTIVO.match(f)
+            if m:
+                chave = m[1].lower()
+                if chave in vistos and len(f) > m.end():
+                    resto = f[m.end():]
+                    f = resto[:1].upper() + resto[1:]
+                vistos.add(chave)
+            frases.append(f)
+        scenes.append({**sc, "narration": " ".join(frases)})
+    return {**script, "scenes": scenes}
+
+
 def _is_parseable_script(raw: str, required: set[str]) -> bool:
     """Validador passado pra `complete()` — rejeita na hora qualquer
     resposta que não vira roteiro utilizável, pra cascata de provedores já
@@ -669,7 +693,7 @@ def generate_script(
             if missing:
                 raise ValueError(f"JSON do roteiro sem campos {missing}: {script}")
 
-            script = _drop_llm_cta(_drop_repeated_scenes(script))
+            script = _trim_muletas(_drop_llm_cta(_drop_repeated_scenes(script)))
             news_problem = _news_order_problem(script, _news_count(facts)) if _news_count(facts) > 1 else None
             if news_problem:
                 filler_fallback = script
