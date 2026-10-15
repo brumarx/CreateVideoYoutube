@@ -543,9 +543,11 @@ _INDICACAO_STF = {
 }
 
 
-def _indicado_por(nome: str, tribunal: str) -> str | None:
+def _indicado_por(nome: str, tribunal: str, nomeado_por: str | None = None) -> str | None:
     if tribunal != "STF":
         return None
+    if nomeado_por:  # o banco já sabe (Wikidata)
+        return f"governo do PT ({nomeado_por})" if nomeado_por in ("Lula", "Dilma Rousseff") else nomeado_por
     plain = unicodedata.normalize("NFKD", nome.lower()).encode("ascii", "ignore").decode()
     plain = re.sub(r"\s+", " ", plain)
     for chave, quem in _INDICACAO_STF.items():
@@ -565,7 +567,7 @@ def maiores_salarios_magistrados(limit: int = 5, offset: int = 0) -> list[dict]:
             """
             SELECT m.nome, m.tribunal,
                    COALESCE(NULLIF(r.rendimento_liquido, 0), r.total_creditos - r.total_debitos) AS liquido,
-                   m.url_foto
+                   m.url_foto, m.nomeado_por, r.situacao
             FROM remuneracao_magistrados r
             JOIN magistrados m ON m.id = r.magistrado_id
             WHERE r.ano_mes = ?
@@ -577,7 +579,11 @@ def maiores_salarios_magistrados(limit: int = 5, offset: int = 0) -> list[dict]:
         ).fetchall()
     return [
         {"nome": r[0], "tribunal": r[1], "salario_liquido_mensal": round(r[2], 2), "mes": ano_mes, "foto_url": r[3],
-         **({"indicado_por": quem} if (quem := _indicado_por(r[0], r[1])) else {})}
+         # aposentado recebe aposentadoria, não salário da ativa: sem isso o
+         # revisor de fatos reprovava "Peluso recebe salário em 2026" (15/10)
+         "situacao": "aposentado (o valor é a aposentadoria paga pelo tribunal)"
+         if "APOSENTAD" in (r[5] or "").upper() else "na ativa",
+         **({"indicado_por": quem} if (quem := _indicado_por(r[0], r[1], r[4])) else {})}
         for r in rows
     ]
 
