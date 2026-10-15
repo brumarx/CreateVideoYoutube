@@ -27,6 +27,7 @@ import json
 import random
 import re
 import sqlite3
+import unicodedata
 from datetime import date
 from pathlib import Path
 
@@ -521,6 +522,39 @@ def maior_crescimento_patrimonio(limit: int = 5, offset: int = 0) -> list[dict]:
     ]
 
 
+# quem indicou cada ministro do STF (fato público, conferido) — vai junto
+# nos dados pro roteiro poder dizer "indicado por Lula" sem a revisão de
+# fatos reprovar; nome fora da lista fica sem o campo (não se chuta)
+_INDICACAO_STF = {
+    **{n: "governo do PT (Lula)" for n in (
+        "cezar peluso", "ayres britto", "joaquim barbosa", "eros grau", "ricardo lewandowski",
+        "carmen lucia", "menezes direito", "dias toffoli", "cristiano zanin", "flavio dino",
+    )},
+    **{n: "governo do PT (Dilma Rousseff)" for n in (
+        "luiz fux", "rosa weber", "teori zavascki", "barroso", "edson fachin",
+    )},
+    "alexandre de moraes": "Michel Temer",
+    "andre mendonca": "Jair Bolsonaro",
+    "nunes marques": "Jair Bolsonaro",
+    "gilmar mendes": "Fernando Henrique Cardoso",
+    "celso de mello": "José Sarney",
+    "marco aurelio": "Fernando Collor",
+    "ellen gracie": "Fernando Henrique Cardoso",
+}
+
+
+def _indicado_por(nome: str, tribunal: str) -> str | None:
+    if tribunal != "STF":
+        return None
+    plain = unicodedata.normalize("NFKD", nome.lower()).encode("ascii", "ignore").decode()
+    plain = re.sub(r"\s+", " ", plain)
+    for chave, quem in _INDICACAO_STF.items():
+        partes = chave.split()
+        if all(re.search(rf"\b{re.escape(w)}\b", plain) for w in partes):
+            return quem
+    return None
+
+
 def maiores_salarios_magistrados(limit: int = 5, offset: int = 0) -> list[dict]:
     """Maiores salários líquidos individuais entre STF, STJ e TCU no último
     mês com dado completo — TCU não preenche `rendimento_liquido` direto
@@ -542,7 +576,8 @@ def maiores_salarios_magistrados(limit: int = 5, offset: int = 0) -> list[dict]:
             (ano_mes, limit, offset),
         ).fetchall()
     return [
-        {"nome": r[0], "tribunal": r[1], "salario_liquido_mensal": round(r[2], 2), "mes": ano_mes, "foto_url": r[3]}
+        {"nome": r[0], "tribunal": r[1], "salario_liquido_mensal": round(r[2], 2), "mes": ano_mes, "foto_url": r[3],
+         **({"indicado_por": quem} if (quem := _indicado_por(r[0], r[1])) else {})}
         for r in rows
     ]
 
