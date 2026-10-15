@@ -145,6 +145,8 @@ fonte, ex.: "segundo declaração ao TSE" / "segundo dados abertos da
 Câmara"):
 {json.dumps(facts, ensure_ascii=False, indent=2)}
 """
+        if _news_count(facts):
+            facts_block += NEWS_STRUCTURE.format(n=_news_count(facts))
 
     web_facts_block = ""
     if web_facts:
@@ -252,6 +254,50 @@ def _extract_json(raw: str) -> dict:
 
 
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+
+# vídeo de várias notícias (portal do Botafogo, 15/10): o tema era a 1ª
+# manchete e o roteiro pulava de uma pra outra e voltava — "começa com o
+# Zorro e muda de assunto". Agora é um noticiário: abertura, uma notícia por
+# bloco na ordem da lista, sem misturar. O campo "noticia" de cada cena diz
+# qual ela narra (foto e manchete na tela saem dele, ver run_pipeline.py).
+NEWS_STRUCTURE = """
+ESTRUTURA OBRIGATÓRIA (são {n} notícias SEPARADAS, formato noticiário):
+- Cena 1 = abertura curta: diga quantas notícias tem hoje e cite as
+  principais numa frase só. "noticia": 0.
+- Depois, cada notícia no SEU bloco de cenas, NA ORDEM da lista
+  "noticias" (1 = a primeira da lista). Cada cena ganha o campo extra
+  "noticia" com esse número. Uma cena NUNCA fala de duas notícias, e
+  depois que um bloco termina ele não volta mais.
+- A 1ª cena de cada bloco começa anunciando a notícia ("Primeira notícia:",
+  "Segunda notícia:", ... "Última notícia:") e a manchete em poucas
+  palavras; não ligue uma notícia na outra como se fosse a mesma história.
+- O título do vídeo resume o DIA de notícias (ex.: "Botafogo hoje: X, Y e
+  mais"), nunca só a primeira notícia.
+"""
+
+
+def _news_count(facts: dict | None) -> int:
+    return len([n for n in (facts or {}).get("noticias") or [] if isinstance(n, dict)])
+
+
+def _news_order_problem(script: dict, n: int) -> str | None:
+    """Roteiro de várias notícias que mistura ou volta pra uma notícia já
+    encerrada — o vídeo vira uma história só, sem pé nem cabeça."""
+    vistos: list[int] = []
+    for scene in script.get("scenes", []):
+        k = scene.get("noticia")
+        if not isinstance(k, int) or not 0 <= k <= n:
+            return "cena sem o campo \"noticia\" (número da notícia que ela narra)"
+        if k == 0:
+            continue
+        if vistos and k != vistos[-1] and k in vistos:
+            return f"a notícia {k} voltou depois de outra já ter começado"
+        if not vistos or k != vistos[-1]:
+            vistos.append(k)
+    if vistos != sorted(vistos):
+        return "as notícias saíram fora da ordem da lista"
+    return None
 
 
 def _norm_sentence(text: str) -> str:
@@ -578,6 +624,15 @@ def generate_script(
                 raise ValueError(f"JSON do roteiro sem campos {missing}: {script}")
 
             script = _drop_llm_cta(_drop_repeated_scenes(script))
+            news_problem = _news_order_problem(script, _news_count(facts)) if _news_count(facts) > 1 else None
+            if news_problem:
+                filler_fallback = script
+                last_error = ValueError(news_problem)
+                log.warning("tentativa %d/3: notícias misturadas (%s), tentando de novo", attempt + 1, news_problem)
+                messages = [messages[0], {"role": "user", "content": messages[1]["content"]
+                                          + f"\n\nO roteiro anterior errou a ESTRUTURA: {news_problem}. Uma notícia "
+                                          "por bloco, na ordem da lista, cada cena com o campo \"noticia\"."}]
+                continue
             filler = _filler_phrase(script, topic)
             overused = None if filler else _overused_word(script, channel.channel_title)
             if overused:

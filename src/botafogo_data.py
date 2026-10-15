@@ -42,10 +42,12 @@ PREVIEW_HORIZON_DAYS = 5
 _TIMEOUT = 20
 
 # Dia sem jogo: vídeo de notícias recentes do clube (feed pt-BR da ESPN já
-# filtrado pelo time) — só notícia das últimas NEWS_MAX_AGE_HOURS, no máximo
-# NEWS_PER_VIDEO por vídeo, cada uma usada uma única vez.
+# filtrado pelo time) — só notícia publicada DEPOIS do último vídeo de
+# notícias (e nunca mais velha que NEWS_MAX_AGE_HOURS), no máximo
+# NEWS_PER_VIDEO por vídeo, cada uma usada uma única vez. Pedido do dono do
+# canal (15/10): ninguém quer saber de coisa velha.
 NEWS_FEED_URL = f"https://now.core.api.espn.com/v1/sports/news?lang=pt&region=br&limit=50&teams={BOTAFOGO_ESPN_ID}"
-NEWS_MAX_AGE_HOURS = 48
+NEWS_MAX_AGE_HOURS = 24
 NEWS_PER_VIDEO = 3
 NEWS_STORY_CHARS = 1800
 # foto de matéria só entra se foi publicada até N dias antes da matéria — a
@@ -645,7 +647,8 @@ def news_task() -> dict | None:
         return None
     state = _load_state()
     used = set(state.get("news", []))
-    limite = datetime.now(timezone.utc) - timedelta(hours=NEWS_MAX_AGE_HOURS)
+    recentes = _recent_titles(state)
+    limite = _news_since(state)
 
     escolhidas = []
     for art in data.get("headlines") or []:
@@ -655,6 +658,10 @@ def news_task() -> dict | None:
             continue
         if datetime.fromisoformat(published.replace("Z", "+00:00")) < limite:
             continue
+        headline = art.get("headline") or ""
+        if _is_duplicate(headline, escolhidas) or _is_duplicate(headline, recentes):
+            log.info("notícia repetida (mesma história): %s", headline)
+            continue
         escolhidas.append(art)
         if len(escolhidas) == NEWS_PER_VIDEO:
             break
@@ -662,6 +669,8 @@ def news_task() -> dict | None:
         return None
 
     state["news"] = sorted(used | {str(a["id"]) for a in escolhidas})
+    _remember_titles(state, [a.get("headline") or "" for a in escolhidas])
+    state["last_news_at"] = datetime.now(timezone.utc).isoformat()
     _save_state(state)
 
     noticias, fotos, fontes = [], [], []
@@ -686,25 +695,89 @@ def news_task() -> dict | None:
     facts = {"tipo": "noticias", "noticias": noticias, **_agenda()}
     return {
         "tipo": "noticias",
-        "titulo": f"Notícias do Botafogo: {escolhidas[0].get('headline')}",
+        "titulo": _news_topic([a.get("headline") or "" for a in escolhidas]),
         "facts": facts,
         "fotos": fotos,
         "fontes": fontes,
     }
 
 
+# palavra que aparece em quase toda manchete do clube não diz que é a mesma
+# história ("Botafogo" contava e ainda assim "Danilo elogia Tite" x "Danilo
+# projeta final contra a Chape" — a mesma entrevista — passavam, 15/10)
+_GENERIC_TITLE_WORDS = {
+    "botafogo", "fogão", "fogao", "glorioso", "alvinegro", "alvinegra", "estrela", "solitária",
+    "para", "pelo", "pela", "contra", "sobre", "após", "apos", "mais", "como", "diz", "afirma",
+}
+# manchetes já usadas ficam lembradas uns dias: a mesma história volta no dia
+# seguinte com outro título (e outro id), em outro veículo
+RECENT_TITLES_DAYS = 3
+
+
 def _title_words(title: str) -> set[str]:
+    return {w for w in re.findall(r"\w+", title.lower()) if len(w) > 3 and w not in _GENERIC_TITLE_WORDS}
 
-    return {w for w in re.findall(r"\w+", title.lower()) if len(w) > 3}
+
+def _subject(title: str) -> str | None:
+    """Protagonista da manchete: o nome próprio que a abre ("Danilo projeta…",
+    "Ex-Athletico e Botafogo, Eduardo Freeland…" não tem)."""
+    m = re.match(r"\s*([A-ZÀ-Ý][\wÀ-ÿ]+(?: [A-ZÀ-Ý][\wÀ-ÿ]+)?)\s+[a-zà-ÿ]", title)
+    if not m or m[1].lower() in _GENERIC_TITLE_WORDS:
+        return None
+    return m[1].lower()
 
 
-def _is_duplicate(title: str, chosen: list[dict]) -> bool:
+def _is_duplicate(title: str, chosen: list[dict] | list[str]) -> bool:
+    """Mesma história já escolhida (ou usada nos últimos dias): muitas
+    palavras próprias em comum, 2+ nomes em comum, ou o mesmo protagonista
+    abrindo a manchete."""
     words = _title_words(title)
+    subject = _subject(title)
     for other in chosen:
-        o = _title_words(other["title"])
-        if words and o and len(words & o) / min(len(words), len(o)) > PORTAL_DUP_OVERLAP:
+        other_title = other if isinstance(other, str) else other.get("title") or other.get("headline") or ""
+        o = _title_words(other_title)
+        if not words or not o:
+            continue
+        common = words & o
+        if len(common) / min(len(words), len(o)) > PORTAL_DUP_OVERLAP or len(common) >= 3:
+            return True
+        if subject and subject == _subject(other_title):
+            return True
+        names = {w for w in common if re.search(rf"\b{re.escape(w)}\b", other_title.lower())
+                 and re.search(rf"\b{w[0].upper()}{re.escape(w[1:])}\b", title)}
+        if len(names) >= 2:
             return True
     return False
+
+
+def _news_since(state: dict):
+    """Só entra notícia publicada depois do último vídeo de notícias (ESPN ou
+    portal) — e nunca mais velha que NEWS_MAX_AGE_HOURS, mesmo depois de dias
+    sem vídeo."""
+    from datetime import datetime, timedelta, timezone
+
+    limite = datetime.now(timezone.utc) - timedelta(hours=NEWS_MAX_AGE_HOURS)
+    try:
+        return max(limite, datetime.fromisoformat(state["last_news_at"]))
+    except (KeyError, ValueError, TypeError):
+        return limite
+
+
+def _recent_titles(state: dict) -> list[str]:
+    from datetime import date, timedelta
+
+    desde = (date.today() - timedelta(days=RECENT_TITLES_DAYS)).isoformat()
+    return [t["title"] for t in state.get("recent_titles", []) if t.get("date", "") >= desde]
+
+
+def _remember_titles(state: dict, titles: list[str]) -> None:
+    from datetime import date, timedelta
+
+    desde = (date.today() - timedelta(days=RECENT_TITLES_DAYS)).isoformat()
+    hoje = date.today().isoformat()
+    state["recent_titles"] = [t for t in state.get("recent_titles", []) if t.get("date", "") >= desde] + [
+        {"title": t, "date": hoje} for t in titles if t
+    ]
 
 
 def _portal_photo_ok(url: str, published) -> bool:
@@ -809,7 +882,8 @@ def portal_news_task(per_video: int = PORTAL_NEWS_PER_VIDEO) -> dict | None:
 
     state = _load_state()
     used = set(state.get("portal_news", []))
-    limite = datetime.now(timezone.utc) - timedelta(hours=NEWS_MAX_AGE_HOURS)
+    recentes = _recent_titles(state)
+    limite = _news_since(state)
 
     # matéria própria do portal primeiro: é a única com texto inteiro (as
     # agregadas só têm resumo) — rende o roteiro mais rico
@@ -826,7 +900,8 @@ def portal_news_task(per_video: int = PORTAL_NEWS_PER_VIDEO) -> dict | None:
             continue
         if datetime.fromisoformat(published.replace("Z", "+00:00")) < limite:
             continue
-        if _is_duplicate(title, escolhidas):
+        if _is_duplicate(title, escolhidas) or _is_duplicate(title, recentes):
+            log.info("portal: notícia repetida (mesma história): %s", title)
             continue
         if art.get("source_type") != "authored" and _is_video_or_promo(art):
             # descrição de vídeo do YouTube ("CUPOM GOSETOR", "Chave PIX",
@@ -848,6 +923,8 @@ def portal_news_task(per_video: int = PORTAL_NEWS_PER_VIDEO) -> dict | None:
         return None
 
     state["portal_news"] = sorted(used | {str(a["id"]) for a in escolhidas})
+    _remember_titles(state, [a["title"] for a in escolhidas])
+    state["last_news_at"] = datetime.now(timezone.utc).isoformat()
     _save_state(state)
     return _portal_task(escolhidas)
 
@@ -891,6 +968,16 @@ def _modalidade(art: dict) -> str | None:
     return None
 
 
+def _news_topic(titulos: list[str]) -> str:
+    """Tema do vídeo de notícias: TODAS as manchetes, não só a primeira —
+    com só a 1ª ("Zorro Alvinegro...", 15/10) o roteiro e o título viravam
+    a história dela e as outras entravam como desvio de assunto."""
+    titulos = [t for t in titulos if t]
+    if len(titulos) == 1:
+        return f"Notícias do Botafogo: {titulos[0]}"
+    return f"As {len(titulos)} notícias do Botafogo hoje: " + " | ".join(titulos)
+
+
 def _portal_task(escolhidas: list[dict]) -> dict:
     from datetime import datetime
 
@@ -924,7 +1011,7 @@ def _portal_task(escolhidas: list[dict]) -> dict:
 
     return {
         "tipo": "noticias",
-        "titulo": f"Notícias do Botafogo: {escolhidas[0]['title']}",
+        "titulo": _news_topic([a["title"] for a in escolhidas]),
         "facts": {"tipo": "noticias", "noticias": noticias, **_agenda()},
         "fotos": fotos,
         "fontes": fontes,

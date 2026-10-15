@@ -26,6 +26,7 @@ import shutil
 import sys
 import subprocess
 import unicodedata
+from functools import partial
 from pathlib import Path
 
 from PIL import Image
@@ -35,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.assemble import SFX_DIR, _ffprobe_duration, add_background_music, concat_scenes, render_scene
 from src.config import ChannelConfig
 from src.goal_card import goal_card
+from src.news_card import headline_card
 from src.fact_check import BLOCKING_TYPES, feedback_for_rewrite, review_script
 from src.orchestrator import enqueue, update
 from src.people_photos import names_in, person_photo
@@ -202,6 +204,33 @@ def _sized_for_facts(facts: dict, scenes: int | None, min_minutes: float, max_mi
 
 
 _SENT_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+_ORDINAIS = ["Primeira", "Segunda", "Terceira", "Quarta", "Quinta", "Sexta", "Sétima", "Oitava", "Nona", "Décima"]
+
+
+def _mark_news_blocks(script: dict, facts: dict | None) -> None:
+    """Vídeo de várias notícias: a 1ª cena de cada bloco ("noticia" do
+    roteiro, ver script_gen.NEWS_STRUCTURE) ganha a manchete pra tela
+    ("_manchete") e, se o roteiro não anunciou, "Segunda notícia:" na fala —
+    sem isso o vídeo de 15/10 emendava o Zorro nas outras notícias como se
+    fosse uma história só. Depois das revisões: o corte de frase pode ter
+    levado o anúncio junto."""
+    noticias = [n for n in (facts or {}).get("noticias") or [] if isinstance(n, dict)]
+    if len(noticias) < 2:
+        return
+    inicios, prev = [], None
+    for i, scene in enumerate(script["scenes"]):
+        k = scene.get("noticia")
+        if isinstance(k, int) and 1 <= k <= len(noticias) and k != prev:
+            inicios.append((i, k))
+        if isinstance(k, int) and k >= 1:
+            prev = k
+    for ordem, (i, k) in enumerate(inicios):
+        scene = script["scenes"][i]
+        scene["_manchete"] = {"ordem": ordem + 1, "total": len(inicios), "titulo": noticias[k - 1].get("titulo") or ""}
+        if "notícia" not in _SENT_SPLIT.split(scene["narration"], 1)[0].lower():
+            ordinal = "Última" if ordem and ordem == len(inicios) - 1 else _ORDINAIS[min(ordem, len(_ORDINAIS) - 1)]
+            scene["narration"] = f"{ordinal} notícia: {scene['narration']}"
 
 
 def _cut_flagged_sentences(
@@ -622,7 +651,7 @@ def run(
         script = fix_script(script, channel.language)
 
         if script_only:
-            # roteiro aprovado nas revisões, salvo pra uma pessoa (ou o Claude)
+            # roteiro aprovado nas revisões, salvo pra uma pessoa (ou um assistente)
             # ler ANTES de gastar 20-30 min renderizando; o comando de render
             # reusa exatamente este roteiro e estes dados
             (work_dir / "script.json").write_text(json.dumps(script, ensure_ascii=False, indent=2))
@@ -643,6 +672,8 @@ def run(
             update(job_id, status="script_ready")
             log.info("[%s] --script-only: roteiro em %s", job_id, work_dir / "script.json")
             return
+
+        _mark_news_blocks(script, facts)
 
         # bordão de entrada do canal — por código, igual ao CTA abaixo, pra
         # sair sempre igual; o gancho do LLM vem logo depois.
@@ -798,7 +829,14 @@ def run(
                 # "thumbs up" no banco trouxe um polegar PRA BAIXO (job 259)
                 news_frame = title_card(channel.channel_title, width, height, channel.accent)
             elif news_photos:
-                photo = _news_photo_for_scene(scene["narration"], facts, news_photos)
+                # o roteiro diz qual notícia a cena narra ("noticia"): foto
+                # DELA ou nenhuma — nunca a de outra notícia por palavra em comum
+                k = scene.get("noticia")
+                own = isinstance(k, int) and k >= 1
+                if own:
+                    photo = next((f for f in news_photos if f.get("noticia") == k - 1), None)
+                else:
+                    photo = _news_photo_for_scene(scene["narration"], facts, news_photos)
                 if photo is not None:
                     photo_streak = 0
                 elif player is not None:
@@ -814,13 +852,13 @@ def run(
                             last_news_photo = None
                             same_photo_run = 0
                             break
-                elif last_news_photo is not None and photo_streak < 2:
+                elif last_news_photo is not None and photo_streak < 2 and not own:
                     # cena que continua a notícia anterior: no máximo 2 cenas
                     # seguidas — a camisa de Flamengo/Flu da notícia das bets
                     # ficou em 9 cenas, inclusive na agenda do Botafogo (job 239)
                     photo = last_news_photo
                     photo_streak += 1
-                if news_frame is None and photo is None and not stock_query:
+                if news_frame is None and photo is None and not stock_query and not own:
                     # abertura antes de qualquer notícia casar (ou continuidade
                     # esgotada), sem busca própria da cena: foto da 1ª
                     # notícia (o gancho é ela) em vez de clipe de banco, que
@@ -850,6 +888,22 @@ def run(
                         player_credits.add(player["credito"])
                         log.info("[%s] cena %d: foto de %s", job_id, i + 1, player["pessoa"])
 
+            # começo de notícia: manchete na tela, por cima da foto (ou num
+            # cartão, se a notícia não tem foto — em vez de clipe de banco)
+            manchete = scene.get("_manchete") if i < original_scene_count else None
+            plain_frame = news_frame
+            if manchete:
+                card = partial(
+                    headline_card, kicker=f"NOTÍCIA {manchete['ordem']} DE {manchete['total']}",
+                    headline=manchete["titulo"], site=channel.website.split("//")[-1] if channel.website else "",
+                    width=width, height=height, accent=channel.accent,
+                )
+                if player_frame is not None and news_frame is None:
+                    player_frame = card(player_frame)
+                else:
+                    news_frame = card(news_frame)
+                log.info("[%s] cena %d: manchete da notícia %d", job_id, i + 1, manchete["ordem"])
+
             stock_clip_path = None
             if news_frame is None and player_frame is None and stock_query:
                 stock_clip_path = search_stock_clip(stock_query, width, height, check=in_context)
@@ -858,7 +912,8 @@ def run(
             if news_frame is not None:
                 image_path = work_dir / f"scene_{i}.png"
                 image_path.write_bytes(news_frame)
-                last_still = news_frame
+                # reserva sem a manchete: repetida em outra cena, mentiria o assunto
+                last_still = plain_frame if manchete else news_frame
                 scene_sources.append("noticia")
             elif player_frame is not None:
                 image_path = work_dir / f"scene_{i}.png"
