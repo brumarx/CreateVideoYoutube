@@ -97,6 +97,12 @@ topics:
   - "Como o DeepSeek democratizou o acesso a modelos de linguagem de ponta e o impacto prático na produtividade individual"
   - "Como usar o AlphaCode da DeepMind para gerar soluções de programação competitiva"
   - "Obsidian: como transformar seus anotações em um segundo cérebro usando IA, guia prático"
+  - "Como gerar vídeos realistas com o Sora da OpenAI e turbinar sua produção de conteúdo"
+  - "Como usar ferramentas de IA para analisar a viabilidade e os riscos de investir no Pi Network"
+  - "Claude Code: o passo a passo para automatizar a edição do seu próximo vídeo sem abrir o editor"
+  - "DALL-E 3: como usar o novo modelo de geração de imagens para criar conceitos visuais profissionais sem saber desenhar"
+  - "como reproduzir o visual do estúdio Ghibli nas suas imagens usando IA de geração"
+  - "ChatGPT 6 Astra: pode ele editar melhor que um editor de vídeo profissional? Teste prático"
 prompt_base: >
   Escreva um roteiro de tutorial prático no estilo de canais de tecnologia/
   produtividade do YouTube. O ângulo deste canal é PRÁTICO E ACIONÁVEL — o
