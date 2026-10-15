@@ -418,7 +418,8 @@ def _overused_word(script: dict, ignore: str = "") -> str | None:
 
 
 # começo de frase que vira muleta rápido (vídeo dos salários, 12/10)
-_MULETAS = {"enquanto isso", "será que", "mas será", "isso mostra", "isso significa", "mas o", "e o", "além disso"}
+_MULETAS = {"enquanto isso", "será que", "mas será", "isso mostra", "isso significa", "mas o", "e o", "além disso",
+           "você acha", "isso sai", "isso é", "quem paga", "é dinheiro"}
 _VALUE = re.compile(r"(?:R\$|US\$|€|£|\$)?\s?\d+(?:\.\d{3})*(?:,\d+)?(?:\s?%)?")
 
 
