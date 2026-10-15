@@ -384,6 +384,18 @@ _STOPWORDS = set(
 )
 
 
+# número por extenso e moeda não são "palavra repetida": valor dito por
+# extenso ("quarenta e quatro mil reais") repetia "quarenta"/"reais" à toa
+_NUMBER_WORDS = {
+    "zero", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "onze", "doze", "treze",
+    "quatorze", "catorze", "quinze", "dezesseis", "dezessete", "dezoito", "dezenove", "vinte", "trinta",
+    "quarenta", "cinquenta", "sessenta", "setenta", "oitenta", "noventa", "cento", "duzentos",
+    "trezentos", "quatrocentos", "quinhentos", "seiscentos", "setecentos", "oitocentos", "novecentos",
+    "milhão", "milhões", "bilhão", "bilhões", "trilhão", "trilhões", "real", "reais", "centavo",
+    "centavos", "dólar", "dólares", "euro", "euros", "libra", "libras", "vírgula",
+}
+
+
 def _overused_word(script: dict, ignore: str = "") -> str | None:
     """Palavra de conteúdo repetida demais no roteiro todo (mais de ~2,2% das
     palavras, mínimo 9 vezes): "cidade" 16x e "Pavlopetri" 12x em 476
@@ -398,7 +410,7 @@ def _overused_word(script: dict, ignore: str = "") -> str | None:
     skip = _STOPWORDS | set(re.findall(r"\w+", ignore.lower()))  # nome do canal ("Botafogo")
     counts: dict[str, int] = {}
     for w in words:
-        if len(w) > 3 and not w.isdigit() and w not in skip:
+        if len(w) > 3 and not w.isdigit() and w not in skip and w not in _NUMBER_WORDS:
             w = w[:-1] if w.endswith("s") and len(w) > 4 else w
             counts[w] = counts.get(w, 0) + 1
     word, n = max(counts.items(), key=lambda kv: kv[1], default=("", 0))
