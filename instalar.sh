@@ -66,23 +66,23 @@ cat <<'EOF'
  CONTA SUA — não dá (nem faz sentido) automatizar isso:
 ========================================================================
 
-1) Chaves grátis de LLM/imagem/vídeo — edite o .env e preencha o que
-   quiser usar (todas têm free tier, nenhuma pede cartão):
-     - Groq, Gemini, Cerebras, OpenRouter, Mistral, xAI (roteiro)
-     - Pollinations (imagem)                     — funciona até sem chave
-     - Pexels (vídeo/foto real, ver src/stock_media.py)
+1) Chaves grátis — edite o .env (todas têm free tier, nenhuma pede
+   cartão). Mínimo: 1 LLM (Groq ou Gemini) + Pexels. Lista completa,
+   com o link de cada uma: README.md, seção "Chaves grátis".
 
 2) YouTube Data API v3 (upload):
      a. Criar projeto em https://console.cloud.google.com
      b. Ativar "YouTube Data API v3"
-     c. Criar credencial OAuth tipo "Desktop app"
-     d. Salvar o JSON em credentials/client_secret.json
+     c. Tela de consentimento OAuth: adicionar seu e-mail como testador
+     d. Criar credencial OAuth tipo "App para computador"
+     e. Salvar o JSON em credentials/client_secret.json
 
 3) Por canal (repita pra cada channels/<nome>.yaml que quiser usar):
      .venv/bin/python3 scripts/auth_youtube.py --channel <nome>
 
 4) Testar sem publicar:
-     .venv/bin/python3 scripts/run_pipeline.py --channel <nome> --topic "..." --dry-run
+     .venv/bin/python3 scripts/run_pipeline.py --channel <nome> --script-only
+     .venv/bin/python3 scripts/run_pipeline.py --channel <nome> --no-upload
 
 5) Painel de administração:
      .venv/bin/python3 web/app.py
