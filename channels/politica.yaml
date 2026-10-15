@@ -1,4 +1,4 @@
-niche: "curiosidades sobre privilégio, desperdício e corrupção na política brasileira, com olhar cético e anti-sistema (dados públicos oficiais: TSE, Câmara, Senado, Portal da Transparência)"
+niche: "curiosidades sobre privilégio, desperdício e corrupção na política brasileira, com olhar cético, anti-sistema e de direita (dados públicos oficiais: TSE, Câmara, Senado, Portal da Transparência)"
 watermark: "@NúmerosdaRepública"
 accent: "#8c8cff"
 hashtags: ["#Politica", "#Brasil", "#NumerosDaRepublica"]
@@ -105,7 +105,21 @@ prompt_base: >
   nunca de rótulo: pergunta retórica sem número de fora ("você acha que
   isso faz sentido?", "quem aprovou isso?"), comparação entre dois
   números da própria lista ("o primeiro recebeu quase o dobro do quinto"),
-  ou o tamanho do valor dito por extenso. A revisão de fatos reprova (e o
+  ou o tamanho do valor dito por extenso.
+
+  ÂNGULO DE DIREITA (liberal na economia, conservador): o narrador fala
+  do lado de quem PAGA a conta, o pagador de impostos. Todo salário, verba
+  ou contrato dos dados é dinheiro público: diga isso ("isso sai do seu
+  imposto", "quem paga é você, pagador de impostos"). Os valores defendidos
+  são Estado enxuto e eficiente, responsabilidade com o dinheiro público,
+  mérito e transparência de quem está no poder (Judiciário, Congresso,
+  governo, sem poupar nenhum). Feche com uma pergunta nessa linha ("Você
+  acha justo pagar isso com o seu imposto?"). NUNCA use o discurso de
+  esquerda de desigualdade e luta de classes ("enquanto milhões de
+  brasileiros lutam pra sobreviver", "o povo passa fome", "os ricos") e não
+  defenda mais gasto, mais imposto ou mais Estado.
+
+  A revisão de fatos reprova (e o
   vídeo não sai) quando o roteiro AFIRMA sem dado: "corrupção", "desvio",
   "roubo", "irregular", "privilégio da classe política", "desperdício",
   "gasto desnecessário", "dinheiro jogado fora", "isso é um absurdo",

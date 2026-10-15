@@ -137,18 +137,45 @@ def _versus(text: str) -> str:
 _MOEDAS = {"R$": ("real", "reais"), "US$": ("dólar", "dólares"), "U$": ("dólar", "dólares"),
            "$": ("dólar", "dólares"), "€": ("euro", "euros"), "£": ("libra", "libras")}
 _MONEY = re.compile(
-    r"(R\$|US\$|U\$|\$|€|£)\s?(\d[\d.]*(?:,\d+)?)(?:\s+(mil|milh(?:ão|ões)|bilh(?:ão|ões)|trilh(?:ão|ões))\b)?"
+    r"(R\$|US\$|U\$|\$|€|£)\s?(\d+(?:\.\d{3})*(?:,\d+)?)"
+    r"(?:\s+(mil|milh(?:ão|ões)|bilh(?:ão|ões)|trilh(?:ão|ões)|mi|bi|tri)\b)?"
 )
+_ABREV = {"mi": ("milhão", "milhões"), "bi": ("bilhão", "bilhões"), "tri": ("trilhão", "trilhões")}
+_SYMBOL_LEFT = re.compile(r"R\$|US\$|U\$|€|£|\$")
 
 
 def _money(text: str) -> str:
+    """Valor com moeda do jeito que se fala: "R$ 44.695,96" -> "44.695 reais
+    e 96 centavos", "€39 milhões" -> "39 milhões de euros", "R$ 3 bi" -> "3
+    bilhões de reais". O vídeo dos salários (12/10) saiu falando "erre
+    dólar" — e no fim nenhum símbolo de moeda chega na voz (_no_symbols)."""
     def falado(m: re.Match) -> str:
         singular, plural = _MOEDAS[m[1]]
-        if m[3]:  # "3 mil libras", mas "3 milhões de libras"
-            return f"{m[2]} {m[3]} {'' if m[3] == 'mil' else 'de '}{plural}"
-        return f"{m[2]} {singular if m[2] == '1' else plural}"
+        numero, escala = m[2], m[3]
+        if escala in _ABREV:
+            um, varios = _ABREV[escala]
+            escala = um if numero == "1" else varios
+        if escala:  # "3 mil libras", mas "3 milhões de libras"
+            return f"{numero} {escala} {'' if escala == 'mil' else 'de '}{plural}"
+        inteiro, _, cents = numero.partition(",")
+        unidade = singular if inteiro == "1" else plural
+        cents = cents[:2].ljust(2, "0") if cents else ""
+        if cents and int(cents) > 0:
+            if inteiro == "0":
+                return f"{int(cents)} {'centavo' if int(cents) == 1 else 'centavos'}"
+            return f"{inteiro} {unidade} e {int(cents)} {'centavo' if int(cents) == 1 else 'centavos'}"
+        return f"{inteiro} {unidade}"
 
-    return _MONEY.sub(falado, text)
+    return _no_symbols(_MONEY.sub(falado, text))
+
+
+def _no_symbols(text: str) -> str:
+    """Trava final: símbolo de moeda que escapou da conversão (formato que
+    o regex não previu) vira o nome da moeda — a voz nunca lê "erre dólar"."""
+    def nome(m: re.Match) -> str:
+        log.warning("moeda fora do formato esperado na narração: %r", text[max(0, m.start() - 20):m.end() + 20])
+        return f" {_MOEDAS[m[0]][1]} "
+    return re.sub(r"\s{2,}", " ", _SYMBOL_LEFT.sub(nome, text)).strip()
 
 
 def _join_domains(word_boundaries: list[dict]) -> list[dict]:

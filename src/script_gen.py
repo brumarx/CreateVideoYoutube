@@ -391,14 +391,48 @@ def _overused_word(script: dict, ignore: str = "") -> str | None:
     words = [w for s in script.get("scenes", []) for w in re.findall(r"\w+", s.get("narration", "").lower())]
     if not words:
         return None
-    limit = max(9, len(words) / 45)
+    # "salário"/"salários" contam juntos; teto ~1 a cada 60 palavras (mín. 6):
+    # com 9 de mínimo, o vídeo dos salários do STF (12/10) falava "salário"
+    # frase sim, frase não — soava robô
+    limit = max(6, len(words) / 60)
     skip = _STOPWORDS | set(re.findall(r"\w+", ignore.lower()))  # nome do canal ("Botafogo")
     counts: dict[str, int] = {}
     for w in words:
         if len(w) > 3 and not w.isdigit() and w not in skip:
+            w = w[:-1] if w.endswith("s") and len(w) > 4 else w
             counts[w] = counts.get(w, 0) + 1
     word, n = max(counts.items(), key=lambda kv: kv[1], default=("", 0))
     return f"{word} ({n}x)" if n > limit else None
+
+
+# começo de frase que vira muleta rápido (vídeo dos salários, 12/10)
+_MULETAS = {"enquanto isso", "será que", "mas será", "isso mostra", "isso significa", "mas o", "e o", "além disso"}
+_VALUE = re.compile(r"(?:R\$|US\$|€|£|\$)?\s?\d+(?:\.\d{3})*(?:,\d+)?(?:\s?%)?")
+
+
+def _repetition_problem(script: dict) -> str | None:
+    """Vídeo que repete o mesmo valor ou a mesma muleta: o dos salários do
+    STF (12/10) disse "R$ 43.028,79" 3 vezes e abriu 7 frases com "Enquanto
+    isso" — soa como enrolação. Valor (4+ dígitos) em mais de 2 frases, ou o
+    mesmo começo de frase (2 palavras) 3+ vezes, reprova."""
+    frases = [f for sc in script.get("scenes", []) for f in _SENTENCE_SPLIT.split(sc.get("narration", "")) if f.strip()]
+    valores: dict[str, int] = {}
+    for f in frases:
+        for v in {re.sub(r"\D", "", m) for m in _VALUE.findall(f)}:
+            if len(v) >= 4 and not (len(v) == 4 and v.startswith(("19", "20"))):  # ano não conta
+                valores[v] = valores.get(v, 0) + 1
+    v, n = max(valores.items(), key=lambda kv: kv[1], default=("", 0))
+    if n > 2:
+        return f"o mesmo valor ({v}) aparece em {n} frases — cada valor no máximo 2 vezes"
+    inicios: dict[str, int] = {}
+    for f in frases:
+        w = re.findall(r"\w+", f.lower())[:2]
+        if len(w) == 2:
+            inicios[" ".join(w)] = inicios.get(" ".join(w), 0) + 1
+    ini, n = max(inicios.items(), key=lambda kv: kv[1], default=("", 0))
+    if n >= (3 if ini in _MULETAS else 5):
+        return f"{n} frases começam com \"{ini}\" — varie o começo das frases"
+    return None
 
 
 def _is_parseable_script(raw: str, required: set[str]) -> bool:
@@ -632,6 +666,15 @@ def generate_script(
                 messages = [messages[0], {"role": "user", "content": messages[1]["content"]
                                           + f"\n\nO roteiro anterior errou a ESTRUTURA: {news_problem}. Uma notícia "
                                           "por bloco, na ordem da lista, cada cena com o campo \"noticia\"."}]
+                continue
+            repeated = _repetition_problem(script)
+            if repeated:
+                filler_fallback = script
+                last_error = ValueError(repeated)
+                log.warning("tentativa %d/3: repetição (%s), tentando de novo", attempt + 1, repeated)
+                messages = [messages[0], {"role": "user", "content": messages[1]["content"]
+                                          + f"\n\nO roteiro anterior se repetiu: {repeated}. Cada dado é dito uma vez "
+                                          "(no máximo citado de novo numa comparação); sem frase-muleta."}]
                 continue
             filler = _filler_phrase(script, topic)
             overused = None if filler else _overused_word(script, channel.channel_title)
