@@ -158,6 +158,10 @@ class ChannelConfig:
     # "pronuncia" do roteiro: {"grafia": "como a voz deve falar"}. Chave
     # com maiúscula no meio ("vIA") só troca escrita exatamente assim.
     pronunciations: dict[str, str] = field(default_factory=dict)
+    # linha editorial do canal: frases de OPINIÃO e contexto verdadeiro que
+    # vão junto nos dados ("linha_editorial") — o revisor de fatos reprovava
+    # "isso sai do seu imposto" como fora da fonte (política, 15/10)
+    editorial_line: list[str] = field(default_factory=list)
 
     @staticmethod
     def load(name: str) -> "ChannelConfig":
@@ -200,4 +204,5 @@ class ChannelConfig:
             website_cta=data.get("website_cta", "🌐 Site"),
             greeting=data.get("greeting", ""),
             pronunciations={str(k): str(v) for k, v in (data.get("pronuncia") or {}).items()},
+            editorial_line=[str(x) for x in data.get("linha_editorial") or []],
         )

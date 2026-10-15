@@ -501,6 +501,8 @@ def run(
         scenes, min_minutes, max_minutes = _sized_for_facts(facts, scenes, min_minutes, max_minutes)
     if facts:
         facts = _fit_facts(facts)
+        if channel.editorial_line:
+            facts = {**facts, "linha_editorial": channel.editorial_line}
 
     job_id = enqueue(channel_name, topic)
     work_dir = Path(__file__).resolve().parent.parent / "output" / f"job_{job_id}"
@@ -596,6 +598,8 @@ def run(
                     from src.politica_data import random_fact_set
 
                     facts = random_fact_set()
+                    if channel.editorial_line:
+                        facts = {**facts, "linha_editorial": channel.editorial_line}
                     topic = facts["tema"]
                     web_facts = None
                     scenes, min_minutes, max_minutes = _sized_for_facts(facts, scenes, min_minutes, max_minutes)

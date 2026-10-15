@@ -104,7 +104,8 @@ prompt_base: >
   sistema funciona bem. MAS a provocação vem SEMPRE do número verdadeiro,
   nunca de rótulo: pergunta retórica sem número de fora ("você acha que
   isso faz sentido?", "quem aprovou isso?"), comparação entre dois
-  números da própria lista ("o primeiro recebeu quase o dobro do quinto"),
+  números da própria lista, dizendo os DOIS valores (nunca "o dobro",
+  "metade" ou "quase igual" — é conta, e a revisão confere),
   ou o tamanho do valor dito por extenso.
 
   ÂNGULO DE DIREITA (liberal na economia, conservador): o narrador fala
@@ -181,6 +182,17 @@ prompt_base: >
   campo "posicao_no_ranking". Se ele não vier, não diga "primeiro",
   "segundo" etc. Poucos dados rendem um vídeo mais curto, nunca um vídeo
   esticado com informação inventada.
+
+# opinião declarada do canal + contexto verdadeiro: vai junto nos dados e o
+# revisor de fatos aceita (variações também). Fato novo colado nelas não.
+linha_editorial:
+  - "Salário, aposentadoria, verba e contrato do poder público são pagos com dinheiro público, ou seja, com o imposto de quem trabalha."
+  - "Quem paga essa conta é você, pagador de impostos."
+  - "O canal defende Estado enxuto, corte de gastos e de privilégios, responsabilidade fiscal, privatização, reforma administrativa, menos imposto e fim do foro privilegiado."
+  - "Com menos Estado, sobra mais no bolso de quem trabalha."
+  - "Num Estado de Direito, decisão monocrática não pode substituir o colegiado."
+  - "É direito do cidadão cobrar transparência de quem decide sozinho. Quem fiscaliza o fiscal?"
+  - "Você acha justo pagar isso com o seu imposto?"
 
 # publica sozinho depois da revisão de fatos (sem esperar "Aprovar" no painel)
 require_approval: false

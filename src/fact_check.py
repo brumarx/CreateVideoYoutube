@@ -115,6 +115,9 @@ FONTES que a sustenta — com o MESMO sentido (ex.: "perde o goleiro" NÃO é
 sustentado por "ex-goleiro"; "terá de ajustar o elenco" NÃO é sustentado por
 "emprestado a outro clube"). Sem trecho que sustente, "trecho": null.
 Opinião/emoção de torcedor e chamadas ("deixa nos comentários") não entram.
+Frases que repetem ou variam a "linha_editorial" das FONTES são a opinião
+declarada do canal (ou contexto verdadeiro dela): não entram na checagem e
+NÃO são problema — mas número, nome ou fato novo colado nelas entra.
 
 """
 # Tema digitado ancorado em busca na internet (curiosidade, crônica, viral):
