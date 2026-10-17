@@ -15,7 +15,7 @@ import subprocess
 import unicodedata
 from pathlib import Path
 
-from PIL import ImageFont
+from PIL import Image, ImageFont
 
 TRANSITION_DURATION = 0.5  # segundos de crossfade entre cenas
 
@@ -26,6 +26,20 @@ VIDEO_HEIGHT = 1920
 
 MUSIC_DIR = Path(__file__).resolve().parent.parent / "assets" / "music"
 MUSIC_VOLUME_DB = -23  # bem baixo — não pode competir com a narração
+# Proporção da mídia x do vídeo acima disto (ex.: foto 16:9 num Short
+# 9:16 = 3,2x; 1:1 = 1,8x): recortar pro centro perderia mais de ~1/4 da
+# imagem — entra inteira sobre ela mesma desfocada (ver fit_frame).
+FIT_RATIO_LIMIT = 1.35
+# zoom máximo de quadro já montado (cartão com texto, foto encaixada): o
+# 1,3x da imagem cheia comia o texto das bordas ("Botafogo W" no fim do Short)
+GENTLE_ZOOM = 1.06
+
+
+def _ratio_off(media_w: int, media_h: int, width: int, height: int) -> bool:
+    a, b = media_w / max(media_h, 1), width / height
+    return max(a, b) / min(a, b) > FIT_RATIO_LIMIT
+
+
 # volume final: padrão do YouTube. Ele só ABAIXA vídeo alto, nunca sobe o
 # baixo — os nossos saíam entre -23 e -27 LUFS (amix ainda cortava metade),
 # tocando ~10 dB abaixo de qualquer outro vídeo.
@@ -319,6 +333,7 @@ def render_scene(
     video_path: Path | None = None,
     chapter_banner: dict | None = None,
     grayscale: bool = False,
+    composed: bool = False,
 ) -> Path:
     """Renderiza uma cena: zoom lento na imagem, sincronizado com a duração
     do áudio. `width`/`height` permitem vertical (Shorts, padrão) ou
@@ -334,7 +349,9 @@ def render_scene(
     (opcional, ver src/script_gen.py) grava uma barra comparativa animada
     quando a cena citar 2 valores reais comparáveis (ex.: posse de bola).
     `chapter_banner` (só formato longo, ver _chapter_banner_filter) marca o
-    início de cada capítulo na tela.
+    início de cada capítulo na tela. `composed`: quadro já montado no
+    tamanho do vídeo (cartão com texto, foto encaixada) — zoom só leve,
+    pra não cortar o que está perto da borda.
 
     `video_path` (opcional, ver src/stock_media.py): filmagem REAL de banco
     de vídeo em vez de imagem estática — fica muito mais viva na tela que
@@ -347,6 +364,14 @@ def render_scene(
             caption, word_boundaries, stat_overlay, impact_beat, chapter_banner, grayscale,
         )
     duration = _ffprobe_duration(audio_path)
+    with Image.open(image_path) as img:
+        if _ratio_off(img.width, img.height, width, height):
+            # imagem fora da proporção do vídeo (IA que devolveu quadrado,
+            # foto 16:9 num Short): inteira, sem recortar o centro
+            from .thumbnail import fit_frame
+            image_path = output_path.with_name(output_path.stem + "_fit.png")
+            fit_frame(img, width, height).save(image_path)
+            composed = True
     # 24 (não 30) fps — 20% menos frames pra codificar em CPU fraca (Pi 5,
     # sem encoder de vídeo por hardware nesse modelo) sem ficar perceptível
     # pra conteúdo narrado/foto (sem movimento rápido de verdade).
@@ -365,7 +390,10 @@ def render_scene(
     # da cena quebra a monotonia sem cortar cena nem gastar reencode extra
     # (mesmo filtro zoompan, só muda a taxa por uma janela curta de frames).
     zoom_expr = "min(zoom+0.0007,1.3)"
-    if duration > 8.0:
+    if composed:
+        # chega no máximo só no fim da cena (continua mexendo o tempo todo)
+        zoom_expr = f"min(zoom+{(GENTLE_ZOOM - 1) / frames:.6f},{GENTLE_ZOOM})"
+    elif duration > 8.0:
         mid = frames // 2
         window = max(int(fps * 0.35), 3)
         zoom_expr = f"min(zoom+if(between(on,{mid - window},{mid + window}),0.006,0.0007),1.3)"
@@ -375,7 +403,10 @@ def render_scene(
         # gerada não vier exatamente na proporção certa.
         f"scale={upscale_w}:{upscale_h}:force_original_aspect_ratio=increase,"
         f"crop={upscale_w}:{upscale_h},"
-        f"zoompan=z='{zoom_expr}':d={frames}:s={width}x{height}:fps={fps}"
+        # x/y centralizados: sem eles o zoom ancora no canto de cima à
+        # esquerda e o lado direito do quadro some
+        f"zoompan=z='{zoom_expr}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+        f":d={frames}:s={width}x{height}:fps={fps}"
     )
     filter_complex += _overlay_filter_suffix(
         duration, width, height, watermark, list_number, accent, caption,
@@ -583,6 +614,24 @@ def _render_scene_from_video(
     duration = _ffprobe_duration(audio_path)
     fps = 24
     filter_v = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps={fps}"
+    try:
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
+             "-of", "csv=p=0", str(video_path)], capture_output=True, text=True, check=True,
+        )
+        clip_w, clip_h = (int(v) for v in probe.stdout.split()[0].split(",")[:2])
+    except (subprocess.CalledProcessError, ValueError, IndexError):
+        clip_w, clip_h = width, height
+    if _ratio_off(clip_w, clip_h, width, height):
+        # clipe deitado num Short (ou o contrário): inteiro no meio, sobre
+        # ele mesmo desfocado — desfoque em 1/4 do tamanho, barato no Pi
+        filter_v = (
+            f"split[bg][fg];"
+            f"[bg]scale={width // 4}:{height // 4}:force_original_aspect_ratio=increase,"
+            f"crop={width // 4}:{height // 4},boxblur=8,eq=brightness=-0.25,scale={width}:{height}[bgb];"
+            f"[fg]scale={width}:{height}:force_original_aspect_ratio=decrease[fgs];"
+            f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2,fps={fps}"
+        )
     if grayscale:
         filter_v += ",hue=s=0"  # antes da legenda/selo, que seguem coloridos
     filter_v += _overlay_filter_suffix(

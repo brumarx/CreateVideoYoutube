@@ -89,15 +89,11 @@ def _compose_person_photo(photo: Image.Image, width: int, height: int) -> Image.
     return canvas
 
 
-def photo_scene_frame(url: str, width: int, height: int) -> bytes | None:
-    """Foto real de notícia (paisagem, ~16:9) como quadro de cena: foto
-    inteira nítida, encaixada pela largura/altura sem cortar nada, sobre a
-    mesma foto desfocada/escurecida preenchendo o resto — no Short vertical,
-    cortar uma foto 16:9 pro centro sobrava só um terço dela. PNG, ou None
-    se não baixou."""
-    photo = _fetch_real_photo(url)
-    if photo is None:
-        return None
+def fit_frame(photo: Image.Image, width: int, height: int) -> Image.Image:
+    """Imagem inteira nítida, encaixada pela largura/altura sem cortar nada,
+    sobre ela mesma desfocada/escurecida preenchendo o resto — no Short
+    vertical, cortar uma foto 16:9 pro centro sobrava só um terço dela."""
+    photo = photo.convert("RGB")
     ratio = photo.width / photo.height
     cover_w, cover_h = (int(height * ratio), height) if ratio > width / height else (width, int(width / ratio))
     bg = photo.resize((cover_w, cover_h))
@@ -106,8 +102,17 @@ def photo_scene_frame(url: str, width: int, height: int) -> bytes | None:
     bg = ImageEnhance.Brightness(bg).enhance(0.5)
     fit_w, fit_h = (width, int(width / ratio)) if ratio > width / height else (int(height * ratio), height)
     bg.paste(photo.resize((fit_w, fit_h)), ((width - fit_w) // 2, (height - fit_h) // 2))
+    return bg
+
+
+def photo_scene_frame(url: str, width: int, height: int) -> bytes | None:
+    """Foto real de notícia (paisagem, ~16:9) como quadro de cena, encaixada
+    inteira (ver fit_frame). PNG, ou None se não baixou."""
+    photo = _fetch_real_photo(url)
+    if photo is None:
+        return None
     out = io.BytesIO()
-    bg.save(out, format="PNG")
+    fit_frame(photo, width, height).save(out, format="PNG")
     return out.getvalue()
 
 
@@ -127,7 +132,8 @@ def title_card(label: str, width: int, height: int, accent: str = "#ffffff") -> 
     w = draw.textlength(label, font=font)
     # altura/9 no vertical (1080x1920) estoura a largura: "Fractal Curioso"
     # saía cortado nas bordas (Short ZEEU6fhq0KY)
-    while w > width * 0.86 and size > 32:
+    # e o zoom lento da cena (ver render_scene) ainda come as bordas
+    while w > width * 0.72 and size > 32:
         size = int(size * 0.9)
         font = _thumb_font(size)
         w = draw.textlength(label, font=font)

@@ -983,6 +983,8 @@ def run(
                     impact_beat=bool(scene.get("impact_beat")),
                     video_path=stock_clip_path,
                     grayscale=channel.fallback_grayscale and stock_clip_path is not None,
+                    # cartão (gol, manchete, canal) e foto encaixada: zoom leve
+                    composed=scene_sources[-1] in ("noticia", "jogador", "repetida"),
                 )
             finally:
                 # sem finally, um clipe baixado (10-20MB) vaza pro /tmp toda vez
