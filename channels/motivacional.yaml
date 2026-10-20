@@ -1,4 +1,4 @@
-niche: "histórias reais de superação de pessoas conhecidas (biografias com obstáculo, virada e lição prática)"
+niche: "histórias reais de superação de brasileiros conhecidos (atletas, artistas, escritores, empresários): um obstáculo concreto com número (rejeições, cirurgias, anos de espera), a virada e uma lição prática"
 watermark: "@ÂnguloInterno"
 accent: "#ff9248"
 hashtags: ["#Motivacional", "#DesenvolvimentoPessoal", "#AnguloInterno"]
@@ -20,11 +20,26 @@ long_min_minutes: 4
 long_max_minutes: 5
 long_form_scenes: 26
 viral_queries:
-  - "história de superação real"
-  - "biografia inspiradora"
-  - "de pobre a bilionário história real"
-  - "atleta que superou tudo"
-viral_share: 0.8
+  - "história de superação atleta brasileiro"
+  - "de favela a campeão história real"
+  - "artista brasileiro que passou fome antes da fama"
+  - "empresário brasileiro que faliu e recomeçou"
+viral_share: 0.3
+# série em teste: brasileiro + número + virada, no molde do "Cafu: 9
+# rejeições antes do penta" (o vídeo que mais rendeu no canal)
+prioridade:
+  ate: "2026-11-10"
+  temas:
+    - "Rebeca Andrade: 3 cirurgias no joelho antes do ouro olímpico"
+    - "Ronaldo Fenômeno: o joelho destruído em 2000 e os 8 gols na Copa de 2002"
+    - "Ítalo Ferreira: aprendeu a surfar numa tampa de isopor e virou campeão olímpico"
+    - "Carolina Maria de Jesus: a catadora de papel que virou best-seller com Quarto de Despejo"
+    - "Guga Kuerten: o tenista que dedicava cada título ao irmão com paralisia cerebral"
+    - "Marta: a menina de Dois Riachos que virou 6 vezes a melhor do mundo"
+    - "Vanderlei Cordeiro de Lima: agarrado no meio da maratona olímpica e mesmo assim no pódio"
+    - "Silvio Santos: de camelô nas ruas do Rio a dono de uma emissora de TV"
+    - "Rayssa Leal: a Fadinha do skate que virou medalhista olímpica aos 13 anos"
+    - "Machado de Assis: neto de escravizados, gago e epilético, fundou a Academia Brasileira de Letras"
 topics:
   - "a vida completa de Thomas Edison e os milhares de fracassos antes do sucesso"
   - "como Nelson Mandela saiu de 27 anos de prisão pra transformar um país"
@@ -100,6 +115,21 @@ prompt_base: >
   não sai. Se o tema não tiver uma história real conhecida, use exemplo
   explicitamente hipotético ("imagine alguém que...", "pense em você
   daqui a um ano").
+
+  BRASIL PRIMEIRO: o público é brasileiro — prefira sempre personagem
+  brasileiro. Cidade ou bairro de origem só se estiver nas fontes — chute
+  de lugar já saiu errado (a caminhada da Rebeca Andrade foi em Guarulhos,
+  não no Rio). Estrangeiro só se for muito conhecido aqui e o tema pedir.
+
+  TÍTULO: curto (até 55 caracteres), "Nome: número + obstáculo" — ex.:
+  "Cafu: 9 Rejeições Antes do Penta". Nunca "Como X transformou Y em uma
+  lição de Z", nunca "A lição oculta", "A virada de", "legado".
+
+  RITMO: cena 1 abre no PIOR momento da pessoa, com o número (a 9ª
+  peneira recusada, a 3ª cirurgia), não no nascimento. O meio mostra o
+  que ela fez de concreto pra virar (treino, decisão, gente que ajudou).
+  A lição final é UMA frase prática que quem assiste pode usar hoje —
+  nada de "acredite nos seus sonhos" ou "nunca desista".
 
 # publica sozinho depois da revisão de fatos (sem esperar "Aprovar" no painel)
 require_approval: false
