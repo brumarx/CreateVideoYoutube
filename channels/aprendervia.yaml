@@ -16,7 +16,7 @@ tts_voice_weights:
 scenes_per_video: 6
 upload_privacy: "public"
 uploads_per_day: 1
-daily_format: "long"
+daily_format: "short"
 short_min_minutes: 1
 short_max_minutes: 2
 long_min_minutes: 4

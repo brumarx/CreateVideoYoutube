@@ -497,11 +497,10 @@ def run(
         if topic is None:
             topic = task["titulo"]
         if not user_forced_format:
-            # prévia sempre curta, pós-jogo sempre longo; notícias do dia
-            # (botafogo.win) seguem o formato escolhido no painel
-            long_form = task["tipo"] == "pos-jogo" or (
-                task["tipo"] == "noticias" and channel.daily_format == "long"
-            )
+            # prévia sempre curta; pós-jogo e notícias seguem o formato do
+            # painel — pós-jogo longo tinha 1-3 views contra 100+ do curto
+            # (out/26), o canal todo passou pra curto
+            long_form = task["tipo"] != "pre-jogo" and channel.daily_format == "long"
     elif topic is None and channel.topics:
         # nunca repete um tema já usado — quando a lista fixa esgota, gera
         # um tema novo via LLM dentro do nicho do canal (ver src/topics.py).
