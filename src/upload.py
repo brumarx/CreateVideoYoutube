@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
+import time
 from pathlib import Path
 
 from google.auth.transport.requests import Request
@@ -14,6 +16,12 @@ from googleapiclient.http import MediaFileUpload
 from .config import ChannelConfig
 
 log = logging.getLogger("upload")
+
+# thumbnail que o YouTube recusou (canal sem verificação por telefone — o
+# aprendervia, 403 em todo upload): fica aqui e retry_pending_thumbnails
+# tenta de novo todo dia — a pasta do job é apagada depois do upload
+PENDING_THUMBS_DIR = Path(__file__).resolve().parent.parent / "data" / "pending_thumbnails"
+PENDING_THUMBS_MAX_AGE = 30 * 86400
 
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
@@ -102,6 +110,8 @@ def upload_video(
             # Canal sem verificação de telefone não pode setar thumbnail
             # customizada via API — não deve derrubar o upload em si.
             log.warning("não consegui setar a thumbnail de %s: %s", video_id, exc)
+            PENDING_THUMBS_DIR.mkdir(parents=True, exist_ok=True)
+            shutil.copy(thumbnail_path, PENDING_THUMBS_DIR / f"{channel.name}__{video_id}{thumbnail_path.suffix}")
 
     try:
         _add_to_channel_playlist(youtube, channel, video_id)
@@ -110,6 +120,33 @@ def upload_video(
         log.warning("não consegui adicionar %s à playlist: %s", video_id, exc)
 
     return video_id
+
+
+def retry_pending_thumbnails() -> int:
+    """Tenta de novo as thumbnails recusadas (ver PENDING_THUMBS_DIR) —
+    entra sozinha quando o canal for verificado. Devolve quantas subiram;
+    desiste das com mais de 30 dias."""
+    if not PENDING_THUMBS_DIR.exists():
+        return 0
+    done = 0
+    clients: dict[str, object] = {}
+    for thumb in sorted(PENDING_THUMBS_DIR.iterdir()):
+        channel_name, _, video_id = thumb.stem.partition("__")
+        if time.time() - thumb.stat().st_mtime > PENDING_THUMBS_MAX_AGE:
+            thumb.unlink(missing_ok=True)
+            continue
+        try:
+            if channel_name not in clients:
+                channel = ChannelConfig.load(channel_name)
+                clients[channel_name] = build("youtube", "v3", credentials=_load_credentials(channel.token_file))
+            clients[channel_name].thumbnails().set(videoId=video_id, media_body=MediaFileUpload(str(thumb))).execute()
+        except Exception as exc:  # noqa: BLE001 — continua pendente, tenta amanhã
+            log.info("thumbnail de %s (%s) ainda pendente: %s", video_id, channel_name, str(exc)[:120])
+            continue
+        thumb.unlink(missing_ok=True)
+        done += 1
+        log.info("thumbnail pendente enviada: %s (%s)", video_id, channel_name)
+    return done
 
 
 def after_upload_status(channel: ChannelConfig) -> str:

@@ -60,6 +60,10 @@ def main() -> None:
     )
     args = parser.parse_args()
     upload_pending(args.channel, args.status)
+    # thumbnail recusada no upload (canal sem verificação por telefone)
+    from src.upload import retry_pending_thumbnails
+
+    retry_pending_thumbnails()
 
 
 def upload_pending(channel_filter: str | None, status: str = "failed", limit: int | None = None) -> int:
