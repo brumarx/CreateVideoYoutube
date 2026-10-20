@@ -32,6 +32,7 @@ import logging
 import re
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -49,6 +50,9 @@ MIN_PHOTO_WIDTH = 800  # menor que isso fica borrado esticado em 1080p
 MIN_CLIP_SECONDS = 4
 MAX_TRIES = 4  # candidatos que a checagem visual olha antes de desistir
 SEGMENT_SECONDS = 20
+# tempo máximo de busca de vídeo real por cena: o servidor da Europeana
+# (Sound & Vision) levou mais de 2 min pra entregar um trecho de 20s
+CLIP_BUDGET_SECONDS = 150
 _NASA_API = "https://images-api.nasa.gov/search"
 _ARCHIVE_SEARCH = "https://archive.org/advancedsearch.php"
 _EUROPEANA_API = "https://api.europeana.eu/record/v2/search.json"
@@ -262,18 +266,18 @@ def _archive_url(cand: dict) -> str | None:
     return None
 
 
-def _duration(url: str) -> float:
+def _duration(url: str, timeout: float = 60) -> float:
     try:
         out = subprocess.run(
             ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", url],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True, text=True, timeout=max(timeout, 5),
         ).stdout.strip()
         return float(out or 0)
     except Exception:  # noqa: BLE001
         return 0.0
 
 
-def _segment(url: str, start: float) -> Path | None:
+def _segment(url: str, start: float, timeout: float = 180) -> Path | None:
     """~20s a partir de `start`, sem áudio, direto da URL (o filme inteiro
     pode ter centenas de MB). mkv aceita qualquer codec (webm/ogv/mp4)."""
     tmp = tempfile.NamedTemporaryFile(suffix=".mkv", delete=False)
@@ -283,7 +287,7 @@ def _segment(url: str, start: float) -> Path | None:
         subprocess.run(
             ["ffmpeg", "-v", "error", "-y", "-ss", f"{start:.1f}", "-i", url, "-t", str(SEGMENT_SECONDS),
              "-an", "-c:v", "copy", str(path)],
-            capture_output=True, timeout=180, check=True,
+            capture_output=True, timeout=max(timeout, 5), check=True,
         )
     except Exception as exc:  # noqa: BLE001
         log.warning("corte do vídeo falhou (%s): %s", url[-60:], exc)
@@ -310,8 +314,12 @@ def real_clip(subject: str, used: set[str], check: Callable[[bytes], bool | None
     Nunca levanta exceção."""
     if not subject:
         return None
+    deadline = time.monotonic() + CLIP_BUDGET_SECONDS
     cands = [c for c in _clip_candidates(subject) if c["title"] not in used and not _OWNED.search(c["credit"])]
     for cand in cands[:MAX_TRIES]:
+        if time.monotonic() >= deadline:
+            log.info("vídeo real pra %r: tempo esgotado, segue pra foto", subject)
+            return None
         if "manifest" in cand:
             url = _nasa_url(cand)
         elif "identifier" in cand:
@@ -320,14 +328,16 @@ def real_clip(subject: str, used: set[str], check: Callable[[bytes], bool | None
             url = cand["url"]
         if not url:
             continue
-        dur = _duration(url)
+        dur = _duration(url, deadline - time.monotonic())
         if dur < MIN_CLIP_SECONDS:
             continue
         # curto: do começo; longo (cinejornal): 2 pontos do meio — a
         # abertura costuma ser cartela de título
         starts = [0.0] if dur <= SEGMENT_SECONDS * 2 else [dur * 0.3, dur * 0.6]
         for start in starts:
-            path = _segment(url, start)
+            if time.monotonic() >= deadline:
+                break
+            path = _segment(url, start, deadline - time.monotonic())
             if path is None:
                 continue
             if check is not None:
