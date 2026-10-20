@@ -153,6 +153,12 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
         log.warning("[%s] %s: %s (job %d) — tentando de novo", channel_name, label, motivo, job_id)
         if status == "failed":
             update(job_id, status="retried")
+        facts_file = ROOT / "output" / f"job_{job_id}" / "facts.json"
+        if facts_file.exists():
+            # os dados da tentativa reprovada já saíram da fila (notícias do
+            # Botafogo, fato do politica): refaz com eles, não busca outros
+            base_cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name,
+                        "--facts-file", str(facts_file)]
 
 
 def _render_approved(channel_name: str) -> None:

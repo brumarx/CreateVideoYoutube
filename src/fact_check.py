@@ -40,7 +40,7 @@ def _review_prompt(script: dict, topic: str, facts: dict | None, web_facts: list
     narration = "\n".join(f"[cena {i + 1}] {s.get('narration', '')}" for i, s in enumerate(script.get("scenes", [])))
     sources = "NENHUMA — o roteiro foi escrito só com conhecimento geral."
     if facts:
-        sources = "DADOS REAIS fornecidos ao roteirista:\n" + json.dumps(facts, ensure_ascii=False, indent=2)
+        sources = "DADOS REAIS fornecidos ao roteirista:\n" + json.dumps(facts, ensure_ascii=False, separators=(",", ":"))
     elif web_facts:
         sources = "Trechos de pesquisa na internet fornecidos ao roteirista:\n" + "\n".join(
             f"- {f['titulo']}: {f['trecho']}" for f in web_facts

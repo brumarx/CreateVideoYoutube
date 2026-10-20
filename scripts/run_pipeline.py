@@ -211,7 +211,7 @@ def _news_photo_for_scene(narration: str, facts: dict | None, photos: list[dict]
 # ~11 mil tokens e o Groq (limite de 8 mil/min, um dos poucos modelos fortes
 # com cota sobrando) recusava — a cascata caía em modelo fraco que copiava a
 # fonte palavra por palavra (03/10, 8 tentativas reprovadas)
-FACTS_TEXT_BUDGET = 7000
+FACTS_TEXT_BUDGET = 5000
 
 
 def _fit_facts(facts: dict, budget: int = FACTS_TEXT_BUDGET) -> dict:
@@ -456,8 +456,14 @@ def run(
         # gravado pelo --script-only: fotos e links das matérias do Botafogo
         news_photos = facts.pop("_fotos", None) or []
         news_sources = facts.pop("_fontes", None) or []
+        # gravados em todo job com dados reais: a nova tentativa do daily_run
+        # refaz o mesmo vídeo (mesmo tema e formato) com os mesmos dados
+        saved_topic = facts.pop("_tema", None)
+        saved_long = facts.pop("_long", None)
         if topic is None:
-            topic = facts.get("tema") or facts.get("titulo")
+            topic = saved_topic or facts.get("tema") or facts.get("titulo")
+        if saved_long is not None and not user_forced_format:
+            long_form = saved_long
     elif channel_name == "politica" and (not long_form or fact_label):
         from src.politica_data import pick_fact_set, random_fact_set
 
@@ -538,6 +544,7 @@ def run(
     scenes = channel.long_form_scenes if long_form else list_count
     min_minutes = channel.long_min_minutes if long_form else channel.short_min_minutes
     max_minutes = channel.long_max_minutes if long_form else channel.short_max_minutes
+    source_facts = facts
     if long_form and facts:
         scenes, min_minutes, max_minutes = _sized_for_facts(facts, scenes, min_minutes, max_minutes)
     if facts:
@@ -548,6 +555,15 @@ def run(
     job_id = enqueue(channel_name, topic)
     work_dir = Path(__file__).resolve().parent.parent / "output" / f"job_{job_id}"
     work_dir.mkdir(parents=True, exist_ok=True)
+    if source_facts is not None:
+        # a seleção (notícias do Botafogo, fato do politica) já marcou estes
+        # dados como usados: roteiro reprovado na revisão e a 2ª tentativa
+        # não achava mais nada (Botafogo sem vídeo em 19 e 20/10). Daqui o
+        # daily_run reaproveita os mesmos dados (--facts-file)
+        (work_dir / "facts.json").write_text(json.dumps(
+            {**source_facts, "_fotos": news_photos, "_fontes": news_sources, "_tema": topic, "_long": long_form},
+            ensure_ascii=False, indent=2,
+        ))
     try:
 
         # Tema digitado por uma pessoa (não vindo da fila nem do banco interno)
@@ -709,9 +725,6 @@ def run(
                 # que sai curto não vira Short (Botafogo de 1:20 em 16:9)
                 render.append("--long" if long_form else "--no-long")
             if facts is not None:
-                (work_dir / "facts.json").write_text(json.dumps(
-                    {**facts, "_fotos": news_photos, "_fontes": news_sources}, ensure_ascii=False, indent=2,
-                ))
                 render += ["--facts-file", str(work_dir / "facts.json")]
             (work_dir / "render_cmd.json").write_text(json.dumps(render, ensure_ascii=False))
             update(job_id, status="script_ready")

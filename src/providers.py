@@ -194,16 +194,35 @@ def _rotator_for(keys: list[str]) -> KeyRotator:
     return _rotators[cache_id]
 
 
+# Groq grátis soma entrada + max_tokens no limite por minuto (8 mil no
+# gpt-oss): roteiro de 6,5 mil + 3 mil de max_tokens dava 413 em todas as
+# contas, sem gastar a cota do dia — encolhe max_tokens pra caber
+_TOO_LARGE_RE = re.compile(r"Request too large.*?\(TPM\): Limit (\d+), Requested (\d+)")
+# menos que isso não cabe nem um roteiro curto em JSON
+_MIN_FIT_TOKENS = 1024
+
+
 def _call_openai_compat(
     endpoint: str, api_key: str, model: str, messages: list[dict], max_tokens: int
 ) -> tuple[str | None, int | None]:
+    payload = {"model": model, "messages": messages, "temperature": 0.8, "max_tokens": max_tokens}
+    if "gpt-oss" in model:
+        # o raciocínio sai do mesmo max_tokens: no padrão o gpt-oss gastava
+        # os 3 mil pensando e devolvia o roteiro vazio (teste de 20/10)
+        payload["reasoning_effort"] = "low"
     try:
         resp = httpx.post(
             endpoint,
             headers={"Authorization": f"Bearer {api_key}"},
-            json={"model": model, "messages": messages, "temperature": 0.8, "max_tokens": max_tokens},
+            json=payload,
             timeout=60,
         )
+        m = _TOO_LARGE_RE.search(resp.text) if resp.status_code == 413 else None
+        if m:
+            fitted = max_tokens - (int(m.group(2)) - int(m.group(1))) - 64
+            if _MIN_FIT_TOKENS <= fitted < max_tokens:
+                log.info("%s (%s): max_tokens %d -> %d pra caber no limite por minuto", endpoint, model, max_tokens, fitted)
+                return _call_openai_compat(endpoint, api_key, model, messages, fitted)
         if resp.status_code != 200:
             log.warning("%s (%s) -> HTTP %s: %s", endpoint, model, resp.status_code, resp.text[:200])
             return None, resp.status_code
