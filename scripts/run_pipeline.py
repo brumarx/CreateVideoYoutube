@@ -40,6 +40,7 @@ from src.news_card import headline_card
 from src.fact_check import BLOCKING_TYPES, feedback_for_rewrite, review_script
 from src.orchestrator import enqueue, update
 from src.people_photos import names_in, person_photo
+from src.real_media import real_clip, real_photos
 from src.script_gen import chapter_titles, engagement_question, fix_dangling_hooks, generate_script
 from src.spellcheck import fix_script, fix_text
 from src.stock_media import search_stock_clip, search_stock_photo
@@ -744,6 +745,9 @@ def run(
 
             squad = elenco()
         player_credits: set[str] = set()
+        real_credits: list[str] = []  # Commons (src/real_media.py): crédito na descrição
+        real_used: set[str] = set()  # arquivo do Commons não repete no vídeo
+        real_found: list[str] = []  # assuntos que já deram foto (reserva de cena sem foto própria)
         gols = [g for g in ((facts or {}).get("gols") or []) if isinstance(g, dict)]
         gols_usados: set[int] = set()
         # fotos REAIS do jogo (pós-jogo, ver botafogo_data.match_photos): em
@@ -908,8 +912,47 @@ def run(
                     news_frame = card(news_frame)
                 log.info("[%s] cena %d: manchete da notícia %d", job_id, i + 1, manchete["ordem"])
 
+            # o que a cena cita pelo nome (Antikythera, Passo Dyatlov): vídeo
+            # e foto DE ARQUIVO do próprio assunto antes do banco genérico —
+            # o vídeo do Antikythera (job 527) não mostrou o mecanismo nenhuma vez
             stock_clip_path = None
-            if news_frame is None and player_frame is None and stock_query:
+            real_frame = None
+            real_clip_found = False
+            real_subject = (scene.get("real_subject") or "").strip() if channel.real_media else ""
+            if news_frame is None and player_frame is None and real_subject and i < original_scene_count:
+                real_context = visual_context + (
+                    f"\nA imagem é FOTO/VÍDEO REAL de arquivo (Wikimedia Commons) de '{real_subject}': "
+                    "foto antiga, preto e branco, granulada, de museu ou reconstrução do objeto é normal, "
+                    "e também o que é do MESMO caso (o local, outro achado do mesmo sítio, o museu onde está) "
+                    "— no job 533 as estátuas do naufrágio de Anticítera foram recusadas. Reprove se for "
+                    "quase só texto moderno (placa de museu, painel, legenda impressa)."
+                )
+
+                def real_check(image: bytes, _narration: str = scene["narration"], _ctx: str = real_context) -> bool | None:
+                    return matches_scene(image, _narration, _ctx)
+
+                clip = real_clip(real_subject, real_used, check=real_check)
+                if clip is not None:
+                    stock_clip_path = clip["path"]
+                    real_clip_found = True
+                    real_credits.append(clip["credit"])
+                else:
+                    # sem foto do assunto da cena (Arquimedes, job 533): outra
+                    # foto inédita de um assunto que já rendeu foto no vídeo,
+                    # em vez de repetir a anterior
+                    for subject in dict.fromkeys([real_subject, *list(dict.fromkeys(reversed(real_found)))[:2]]):
+                        for cand in real_photos(subject, real_used):
+                            frame = photo_scene_frame(cand["url"], width, height)
+                            if frame is not None and real_check(frame) is not False:
+                                real_used.add(cand["title"])
+                                real_credits.append(cand["credit"])
+                                real_found.append(subject)
+                                real_frame = frame
+                                log.info("[%s] cena %d: foto real de %r (%s)", job_id, i + 1, subject, cand["title"])
+                                break
+                        if real_frame is not None:
+                            break
+            if stock_clip_path is None and real_frame is None and news_frame is None and player_frame is None and stock_query:
                 stock_clip_path = search_stock_clip(stock_query, width, height, check=in_context)
 
             image_path = None
@@ -925,6 +968,12 @@ def run(
                 last_still = player_frame
                 same_photo_run = 0
                 scene_sources.append("jogador")
+            elif real_frame is not None:
+                image_path = work_dir / f"scene_{i}.png"
+                image_path.write_bytes(real_frame)
+                last_still = real_frame
+                same_photo_run = 0
+                scene_sources.append("arquivo")
             elif stock_clip_path is None:
                 image_bytes = search_stock_photo(stock_query, width, height, check=in_context) if stock_query else None
                 if image_bytes is None:
@@ -967,7 +1016,7 @@ def run(
                     still = _gray(still)  # repetido numa cena seguinte, não pode voltar colorido (job 424)
                 last_still = still or last_still
                 same_photo_run = 0
-                scene_sources.append("banco")
+                scene_sources.append("arquivo" if real_clip_found else "banco")
 
             # i < original_scene_count: a cena de CTA (adicionada por código,
             # depois das da LLM) nunca é uma das cenas numeradas da lista.
@@ -984,7 +1033,7 @@ def run(
                     video_path=stock_clip_path,
                     grayscale=channel.fallback_grayscale and stock_clip_path is not None,
                     # cartão (gol, manchete, canal) e foto encaixada: zoom leve
-                    composed=scene_sources[-1] in ("noticia", "jogador", "repetida"),
+                    composed=scene_sources[-1] in ("noticia", "jogador", "repetida") or real_frame is not None,
                 )
             finally:
                 # sem finally, um clipe baixado (10-20MB) vaza pro /tmp toda vez
@@ -1019,7 +1068,7 @@ def run(
             # futebol com clipe de banco/IA precisa de olho; vídeo só com
             # foto das matérias (do próprio assunto) dispensa
             strict_visual=channel.strict_visual and "ia" in scene_sources,
-            trusted_scenes={i + 1 for i, src in enumerate(scene_sources) if src in ("noticia", "repetida", "jogador")},
+            trusted_scenes={i + 1 for i, src in enumerate(scene_sources) if src in ("noticia", "repetida", "jogador", "arquivo")},
         )
         # voz falando besteira não passa nem na última tentativa do dia —
         # não publicar é melhor que "Fala a é acento circunflexo" (job 414)
@@ -1122,6 +1171,9 @@ def run(
         if player_credits:
             # licença livre do Commons (CC BY/BY-SA) exige crédito do autor
             description += "\nFotos dos jogadores: " + "; ".join(sorted(player_credits))
+
+        if real_credits:
+            description += "\nImagens de arquivo: " + "; ".join(dict.fromkeys(real_credits))
 
         if music_attribution:
             # a licença CC BY (assets/music/ATTRIBUTION.md) exige creditar a

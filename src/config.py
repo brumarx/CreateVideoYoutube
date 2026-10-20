@@ -150,6 +150,10 @@ class ChannelConfig:
     fallback_grayscale: bool = False
     # foto (Wikipédia) de quem a cena cita, do elenco do clube
     player_photos: bool = False
+    # foto/vídeo REAL do que a cena cita pelo nome (Wikimedia Commons, ver
+    # src/real_media.py) antes do banco de vídeo — o roteiro preenche
+    # "real_subject" por cena. Botafogo desliga: tem foto das notícias/jogo.
+    real_media: bool = True
     # bordão de entrada falado no começo de todo vídeo ("Fala, alvinegros!")
     # — inserido por CÓDIGO antes da 1ª cena, nunca pelo LLM (que é
     # proibido de abrir com saudação). Vazio = sem bordão.
@@ -201,6 +205,7 @@ class ChannelConfig:
             strict_visual=bool(data.get("strict_visual", False)),
             fallback_grayscale=bool(data.get("fallback_grayscale", False)),
             player_photos=bool(data.get("player_photos", False)),
+            real_media=bool(data.get("real_media", True)),
             website_cta=data.get("website_cta", "🌐 Site"),
             greeting=data.get("greeting", ""),
             pronunciations={str(k): str(v) for k, v in (data.get("pronuncia") or {}).items()},
