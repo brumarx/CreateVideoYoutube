@@ -228,6 +228,36 @@ def _parse_subject(raw: str) -> tuple[str, str] | None:
 LIST_RE = re.compile(r"^\s*\d{1,2}\s+\w+")
 
 
+# nome próprio de 2+ palavras ("Nelson Mandela", "Ada Lovelace"), com
+# conector no meio ("Ruth Bader Ginsburg", "Leonardo da Vinci")
+_NAME_RE = re.compile(r"\b[A-ZÀ-Ý][\wÀ-ÿ'-]+(?:\s+(?:d[aeo]s?\s+|de\s+la\s+)?[A-ZÀ-Ý][\wÀ-ÿ'-]+)+")
+
+
+# instituição/lugar volta em vários temas de propósito ("Portal da
+# Transparência", "Câmara dos Deputados") — só gente repete assunto
+_NOT_PERSON = {"portal", "camara", "senado", "supremo", "tribunal", "banco", "receita", "policia",
+               "ministerio", "governo", "congresso", "assembleia", "estado", "copa", "campeonato",
+               "rio", "sao", "santa", "nova", "cota", "conselho", "justica", "lei", "operacao"}
+
+
+def _names(topic: str) -> set[str]:
+    # 1ª palavra do tema é maiúscula por ser começo de frase ("Como Nelson")
+    body = topic.split(" ", 1)[1] if " " in topic else ""
+    names = {_norm(m.group()) for m in _NAME_RE.finditer(body)}
+    return {n for n in names if n.split()[0] not in _NOT_PERSON}
+
+
+def repeats_subject(topic: str, used: list[str]) -> bool:
+    """Mesmo protagonista de um tema já usado, com outras palavras: o
+    motivacional fez Nelson Mandela 4x em 7 dias (14-19/10) porque só o
+    texto idêntico era barrado."""
+    names = _names(topic)
+    if not names:
+        return False
+    usados = " | ".join(_norm(t) for t in used)
+    return any(n in usados for n in names)
+
+
 def _confirmed_topic(prompt: str, used: list[str], label: str, niche: str, tries: int = 3) -> str:
     """Pede assunto+tema ao LLM e só aceita o que a busca confirma; assunto
     não confirmado volta pro prompt como proibido. RuntimeError se nenhum
@@ -246,8 +276,9 @@ def _confirmed_topic(prompt: str, used: list[str], label: str, niche: str, tries
             log.warning("%s: tentativa %d/%d sem resposta válida (%s)", label, attempt + 1, tries, exc)
             continue
         subject, topic = _parse_subject(raw)  # type: ignore[misc]
-        if topic in used:
-            rejected.append(subject)
+        if topic in used or repeats_subject(topic, used):
+            log.warning("%s: %r repete assunto já usado — descartado", label, topic)
+            rejected.append(f"{subject} (já usado)")
             continue
         # assunto claramente fora do nicho do canal (polêmica dentro do
         # nicho vale — dá view)
@@ -346,7 +377,7 @@ def _try_viral_topic(channel_name: str, niche: str, queries: list[str], used: li
     except RuntimeError as exc:
         log.warning("[%s] LLM não gerou tema viral (%s) — usando a fila normal", channel_name, exc)
         return None
-    if topic in used:
+    if topic in used or repeats_subject(topic, used):
         return None
     log.info("[%s] tema viral: %s (inspirado em %d vídeos em alta)", channel_name, topic, len(viral))
     return topic
@@ -369,7 +400,7 @@ def pick_topic(
     used = state.setdefault(channel_name, [])
     used_set = set(used)
 
-    unused = [t for t in pool if t not in used_set]
+    unused = [t for t in pool if t not in used_set and not repeats_subject(t, used)]
     # série em teste (channel.active_priority_topics): na ordem, antes de tudo
     topic = next((t for t in priority or [] if t not in used_set), None)
     if topic is not None:
