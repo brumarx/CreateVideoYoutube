@@ -1,4 +1,4 @@
-niche: "tutoriais práticos de ferramentas de inteligência artificial (ChatGPT, geração de imagem, automação, produtividade)"
+niche: "IA grátis pra vida real do brasileiro: estudar (inglês, ENEM, concurso), conseguir emprego, economizar trocando programa pago por grátis e resolver tarefas do dia a dia no celular"
 watermark: "@AprendervIA"
 accent: "#34d399"
 hashtags: ["#IA", "#Tutorial", "#AprendervIA"]
@@ -23,11 +23,27 @@ long_min_minutes: 4
 long_max_minutes: 5
 long_form_scenes: 24
 viral_queries:
-  - "ChatGPT tutorial"
-  - "inteligência artificial como usar"
-  - "ferramenta de IA grátis"
-  - "prompt IA imagem"
-viral_share: 0.8
+  - "inteligência artificial grátis dicas"
+  - "IA para estudar"
+  - "IA para conseguir emprego"
+  - "ChatGPT no celular truques"
+viral_share: 0.3
+# série em teste: benefício concreto e grátis (estudo, emprego, economia),
+# no molde dos que renderam: inglês com IA (103), substitui programa pago
+# (51), Claude vs Adobe (70), currículo (26)
+prioridade:
+  ate: "2026-11-10"
+  temas:
+    - "Treine inglês conversando por voz com o ChatGPT 15 minutos por dia"
+    - "Revise seu currículo com IA de graça pra passar no filtro do RH"
+    - "Simule uma entrevista de emprego com IA antes da entrevista de verdade"
+    - "Corrija sua redação do ENEM com IA pelos 5 critérios oficiais"
+    - "Tire o fundo de qualquer foto de graça com IA, sem Photoshop"
+    - "Transforme áudio longo do WhatsApp em texto com IA"
+    - "Escreva aquele e-mail difícil (cobrança, reclamação, pedido de aumento) com IA em 1 minuto"
+    - "Monte um plano de estudos para concurso com IA a partir do edital"
+    - "Organize as contas do mês numa planilha grátis com ajuda da IA"
+    - "Traduza uma conversa em tempo real no celular com IA numa viagem"
 topics:
   - "como usar o ChatGPT para escrever textos melhores, passo a passo"
   - "como gerar imagens com inteligência artificial de graça"
@@ -130,6 +146,25 @@ prompt_base: >
   de forma que pareça propaganda paga — cite como referência factual (ex.:
   "o ChatGPT", "o Google"), nunca elogie ou recomende uma marca específica
   em excesso. Tom direto, didático e acessível pra quem não é técnico.
+
+  PÚBLICO: brasileiro comum, no celular, que nunca programou. Todo vídeo
+  resolve UM problema concreto da vida dele (estudar, emprego, dinheiro,
+  tarefa chata) com ferramenta GRÁTIS e conhecida (ChatGPT, Gemini,
+  Copilot, Canva). Diga quando algo é pago. Ferramenta de nicho gringa,
+  programação, trading e "renda passiva" não entram.
+
+  TÍTULO: o resultado que a pessoa ganha, curto (até 60 caracteres) —
+  ex.: "Aprenda Inglês em 30 Dias com IA", "7 IAs Grátis Que Substituem
+  Programas Pagos". Comparação/teste ("X vs Y", "Testei...") também
+  funciona. Nunca "Passo a Passo", "Guia Prático", "Definitivo" ou "2026"
+  no título.
+
+  NO CURTO: um resultado só, mostrado de verdade: cena 1 mostra o antes
+  (o problema) e promete o depois; o meio dá o pedido exato pra digitar
+  na IA, entre aspas, falado do jeito que se digita (ex.: "Revise meu
+  currículo pra esta vaga e liste as palavras-chave que faltam"), e onde
+  tocar; o fim mostra o resultado. Site pouco conhecido citado só porque
+  apareceu na busca não entra. Nada de lista de dicas soltas.
 
 # publica sozinho depois da revisão de fatos (sem esperar "Aprovar" no painel)
 require_approval: false
