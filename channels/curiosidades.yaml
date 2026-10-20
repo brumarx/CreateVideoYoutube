@@ -19,12 +19,14 @@ short_max_minutes: 2
 long_min_minutes: 4
 long_max_minutes: 5
 long_form_scenes: 30
+# buscas dos 3 filões que rendem — as genéricas ("curiosidades", "fatos
+# que você não sabia") traziam Budismo (33), Baby Shark (8), Habib's (4)
 viral_queries:
-  - "curiosidades"
+  - "megaprojetos"
+  - "megaprojects"
+  - "animais mais perigosos do mundo"
   - "mistérios não resolvidos"
-  - "fatos que você não sabia"
-  - "história bizarra"
-viral_share: 0.8
+viral_share: 0.5
 # série "país × problema impossível × solução real": Arábia Saudita (17/10)
 # 1.190 views e Israel (20/10) 567, contra mediana de 37 do canal — 2 de 2.
 # Sai 1 por dia, na ordem, antes de tudo; estendida até 20/11.
