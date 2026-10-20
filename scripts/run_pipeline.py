@@ -69,6 +69,32 @@ LONG_WIDTH, LONG_HEIGHT = 1920, 1080
 SHORTS_MAX_SECONDS = 170
 
 MAX_TOPIC_CHECKS = 3
+# acima disso a voz acelerada soa apressada: roteiro reprovado e refeito
+MAX_SPEEDUP = 1.2
+
+
+def _fit_short(narrations: list, total_seconds: float, job_id: int) -> list:
+    """Short acima de 3 min sai do feed de Shorts: no politica, vídeos de
+    3:05-3:34 tiveram 0-1 view e um de 2:56 teve 167 (out/26). Acelera a
+    narração (e as marcas das palavras da legenda) até MAX_SPEEDUP pra
+    caber em SHORTS_MAX_SECONDS; precisando de mais, reprova o roteiro."""
+    factor = total_seconds / SHORTS_MAX_SECONDS
+    if factor > MAX_SPEEDUP:
+        raise ScriptRejected(
+            f"roteiro longo demais pro Short ({total_seconds:.0f}s de narração, máximo {SHORTS_MAX_SECONDS}s)"
+        )
+    log.warning("[%s] narração com %.0fs passa do Short — acelerando %.2fx", job_id, total_seconds, factor)
+    fitted = []
+    for audio_path, words, _ in narrations:
+        fast = audio_path.with_name(audio_path.stem + "_fast.mp3")
+        subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-i", str(audio_path), "-filter:a", f"atempo={factor:.4f}", str(fast)],
+            check=True,
+        )
+        fast.replace(audio_path)
+        words = [{**w, "start": w["start"] / factor, "end": w["end"] / factor} for w in words or []]
+        fitted.append((audio_path, words, _ffprobe_duration(audio_path)))
+    return fitted
 
 # Vídeo de lista (ex.: "10 fatos sobre..."), só no formato curto: 1 cena =
 # 1 item, com selo de contagem regressiva gravado na cena (ver
@@ -785,6 +811,9 @@ def run(
             )
             narrations.append((audio_path, word_boundaries, _ffprobe_duration(audio_path)))
         total_seconds = sum(d for _, _, d in narrations)
+        if not long_form and total_seconds > SHORTS_MAX_SECONDS:
+            narrations = _fit_short(narrations, total_seconds, job_id)
+            total_seconds = sum(d for _, _, d in narrations)
         if long_form and not user_forced_format and total_seconds <= SHORTS_MAX_SECONDS:
             log.warning("[%s] roteiro longo saiu com %.0fs — publicando como Short vertical", job_id, total_seconds)
             long_form = False

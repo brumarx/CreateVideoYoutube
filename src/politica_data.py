@@ -708,6 +708,48 @@ FACT_FETCHERS = [
 ]
 
 
+# peso no sorteio do fato do dia, pelas views dos curtos (out/26): salários
+# do Judiciário 185/61/61, patrimônio 167, doadores 122, salto de
+# patrimônio 96, contratos (telefonia) 89; custo de um deputado 14 e
+# "padrões estranhos" 22-43. Fora daqui vale 1.
+FACT_WEIGHTS = {
+    "maiores salários entre STF, STJ e TCU": 4,
+    "comparação de quanto recebe um deputado vs um ministro de tribunal superior": 3,
+    "maiores patrimônios declarados ao TSE": 3,
+    "maiores doadores de campanha": 3,
+    "maior crescimento de patrimônio declarado entre candidaturas": 3,
+    "maiores contratos públicos federais": 2,
+    "maiores gastos em cartão corporativo": 2,
+    "ranking de gastos da cota parlamentar (CEAP)": 2,
+    "maiores despesas individuais da cota parlamentar": 2,
+    "estados com maior PIB (total)": 0.2,
+    "quanto custa manter um deputado federal por ano (soma oficial)": 0.3,
+}
+# fetcher que já usou todas as páginas só volta se nada mais tiver página
+# nova — senão o de peso alto repetia o mesmo ranking em 2 semanas
+_EXHAUSTED_WEIGHT = 0.05
+
+
+def _exhausted(label: str, anos: list, max_paginas: int, limit: int) -> bool:
+    used = set(_load_used().get(label, []))
+    return all(f"{ano}:{p * limit}" in used for ano in anos for p in range(max_paginas))
+
+
+def _weighted_order(limit: int) -> list:
+    """FACT_FETCHERS em ordem de sorteio ponderado, sem reposição."""
+    pool = list(FACT_FETCHERS)
+    weights = [
+        FACT_WEIGHTS.get(f[0], 1) * (_EXHAUSTED_WEIGHT if _exhausted(f[0], f[2], f[3], limit) else 1)
+        for f in pool
+    ]
+    order = []
+    while pool:
+        i = random.choices(range(len(pool)), weights=weights)[0]
+        order.append(pool.pop(i))
+        weights.pop(i)
+    return order
+
+
 def _load_used() -> dict:
     if STATE_FILE.exists():
         return json.loads(STATE_FILE.read_text())
@@ -761,8 +803,7 @@ def random_fact_set(limit: int = 5) -> dict:
     usada, e devolve os dados prontos pra virar contexto de roteiro. Tenta
     até 3 fetchers diferentes se o primeiro vier vazio (página sem dado
     suficiente pra essa combinação de ano/offset)."""
-    candidates = list(FACT_FETCHERS)
-    random.shuffle(candidates)
+    candidates = _weighted_order(limit)
     for label, fetcher, anos, max_paginas, aviso in candidates[:3]:
         ano, offset = _pick_page(label, anos, max_paginas, limit)
         kwargs = {"limit": limit, "offset": offset}
