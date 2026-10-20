@@ -358,6 +358,7 @@ def pick_topic(
     niche: str,
     viral_queries: list[str] | None = None,
     viral_share: float = 0.5,
+    priority: list[str] | None = None,
 ) -> str:
     """Escolhe um tema não usado ainda pra `channel_name` — fila única
     (curto e longo compartilham a mesma lista, já que só sai 1 vídeo/dia por
@@ -369,8 +370,11 @@ def pick_topic(
     used_set = set(used)
 
     unused = [t for t in pool if t not in used_set]
-    topic = None
-    if viral_queries and (not unused or random.random() < viral_share):
+    # série em teste (channel.active_priority_topics): na ordem, antes de tudo
+    topic = next((t for t in priority or [] if t not in used_set), None)
+    if topic is not None:
+        log.info("[%s] tema da série em teste: %s", channel_name, topic)
+    elif viral_queries and (not unused or random.random() < viral_share):
         topic = _try_viral_topic(channel_name, niche, viral_queries, used)
     if topic is None and unused:
         topic = random.choice(unused)

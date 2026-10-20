@@ -466,6 +466,7 @@ def run(
         topic = pick_topic(
             channel_name, channel.topics, channel.niche,
             viral_queries=channel.viral_queries, viral_share=channel.viral_share,
+            priority=channel.active_priority_topics,
         )
     elif topic is None:
         raise SystemExit(f"channels/{channel_name}.yaml não tem topics configurado e --topic não foi passado")
@@ -480,7 +481,7 @@ def run(
             log.warning("[%s] tema recusado (%s): %s", channel_name, problem, topic)
             if user_provided_topic or not channel.topics:
                 raise ScriptRejected(f"tema recusado: {problem}")
-            topic = pick_topic(channel_name, channel.topics, channel.niche)
+            topic = pick_topic(channel_name, channel.topics, channel.niche, priority=channel.active_priority_topics)
         else:
             raise ScriptRejected(f"{MAX_TOPIC_CHECKS} temas seguidos recusados")
 
@@ -618,7 +619,7 @@ def run(
                     # por outro da lista fixa, sem viral, e tenta 1 vez. No
                     # curto, só tema sem número (selo de lista já foi
                     # calculado pro tema original).
-                    novo = pick_topic(channel_name, channel.topics, channel.niche)
+                    novo = pick_topic(channel_name, channel.topics, channel.niche, priority=channel.active_priority_topics)
                     if long_form or not LIST_TOPIC_RE.match(novo):
                         topic, web_facts = novo, search_topic_facts(novo)
                         if list_count:

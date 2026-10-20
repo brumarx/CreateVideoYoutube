@@ -25,6 +25,19 @@ viral_queries:
   - "fatos que você não sabia"
   - "história bizarra"
 viral_share: 0.8
+# série em teste até 03/11: "país × problema impossível × solução real" —
+# "Zero Rios: Como a Arábia Saudita Bebe Água do Mar" (17/10) teve 1.189
+# views, 38x a mediana do canal. Sai 1 por dia, na ordem, antes dos virais.
+prioridade:
+  ate: "2026-11-03"
+  temas:
+    - "Como a Holanda vive até 7 metros abaixo do nível do mar sem afundar"
+    - "Como Singapura transforma esgoto em água potável (NEWater)"
+    - "Como o Japão constrói prédios que não caem em terremoto"
+    - "Como Dubai criou ilhas artificiais no meio do mar (Palm Jumeirah)"
+    - "Como a Islândia aquece casas e derrete neve das ruas com o calor dos vulcões"
+    - "Como Israel tirou água do deserto e virou exportador de tecnologia hídrica"
+    - "Como o Chile captura água da neblina no deserto do Atacama, o mais seco do mundo"
 topics:
   - "um recorde mundial real e bizarro pouco conhecido"
   - "um fato real e pouco conhecido sobre o oceano profundo"
@@ -131,6 +144,23 @@ topics:
   - "Os segredos enterrados em Oak Island: a busca por tesouros e mistérios"
   - "Headless Valley: O Mistério dos Cabeças Desaparecidas no Canadá"
   - "O Manuscrito Voynich: o livro ilustrado que desafiou criptógrafos de todo o mundo por quase um século sem nunca ser decifrado"
+  - "A Guerra dos Emus na Austrália: a curiosa campanha militar contra aves"
+  - "O que realmente aconteceu no Passo Dyatlov: a tragédia soviética que a ciência até hoje não consegue explicar"
+  - "O misterioso poço de Oak Island: a busca centenária por um tesouro que nenhum governo consegue explicar"
+  - "A proibição absoluta de computadores na saga de Dune: a solução bizarra de Frank Herbert para evitar uma IA como HAL 9000"
+  - "O desaparecimento de Amelia Earhart: teorias e evidências"
+  - "A bizarra proibição de computadores em Dune e a solução inédita de Frank Herbert"
+  - "Aokigahara: o 'Bosque da Morte' no Japão e a história real por trás da lenda"
+  - "A guerra dos emus na Austrália: o conflito militar bizarro que terminou com a derrota do exército"
+  - "O mistério do navio fantasma Mary Celeste: a tripulação que desapareceu sem deixar rastro"
+  - "Como a Arábia Saudita garante água potável num país com praticamente zero rios"
+  - "Oak Island: o poço misterioso e a busca por tesouros que desafiou gerações de especialistas"
+  - "Denver International Airport: a teoria da conspiração que assombra o aeroporto mais controverso do mundo"
+  - "O assassino em série Dennis Nilsen: o homem que viveu no meio do bairro sem ser descoberto por anos"
+  - "O enigma do Passo Dyatlov: a tragédia soviética que a ciência até a data de 18/10/2026 continua sem explicar"
+  - "Centralia: a cidade americana que está em chamas há mais de 60 anos"
+  - "Os segredos ocultos do Denver International Airport: a teoria da conspiração mais assustadora"
+  - "O mecanismo de Antikythera: a máquina grega de 2.000 anos que desafiou a história da tecnologia"
 prompt_base: >
   Escreva um roteiro envolvente no estilo de canais de curiosidades/histórias
   do YouTube (tipo Reddit stories / fatos incríveis). O ângulo deste canal é
