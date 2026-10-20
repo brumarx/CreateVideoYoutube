@@ -1,4 +1,4 @@
-niche: "curiosidades e histórias intrigantes (fatos pouco conhecidos, mistérios, eventos históricos)"
+niche: "curiosidades reais que chocam, em três filões: como um país resolveu um problema impossível (engenharia, água, clima, cidade), natureza brutal (animais e fenômenos extremos) e mistérios reais sem solução"
 watermark: "@FractalCurioso"
 accent: "#c084fc"
 hashtags: ["#Curiosidades", "#FatosCuriosos", "#FractalCurioso"]
@@ -25,11 +25,11 @@ viral_queries:
   - "fatos que você não sabia"
   - "história bizarra"
 viral_share: 0.8
-# série em teste até 03/11: "país × problema impossível × solução real" —
-# "Zero Rios: Como a Arábia Saudita Bebe Água do Mar" (17/10) teve 1.189
-# views, 38x a mediana do canal. Sai 1 por dia, na ordem, antes dos virais.
+# série "país × problema impossível × solução real": Arábia Saudita (17/10)
+# 1.190 views e Israel (20/10) 567, contra mediana de 37 do canal — 2 de 2.
+# Sai 1 por dia, na ordem, antes de tudo; estendida até 20/11.
 prioridade:
-  ate: "2026-11-03"
+  ate: "2026-11-20"
   temas:
     - "Como a Holanda vive até 7 metros abaixo do nível do mar sem afundar"
     - "Como Singapura transforma esgoto em água potável (NEWater)"
@@ -38,6 +38,16 @@ prioridade:
     - "Como a Islândia aquece casas e derrete neve das ruas com o calor dos vulcões"
     - "Como Israel tirou água do deserto e virou exportador de tecnologia hídrica"
     - "Como o Chile captura água da neblina no deserto do Atacama, o mais seco do mundo"
+    - "Como a Suíça tem abrigo antibomba para toda a população"
+    - "Como Veneza fecha o mar com comportas gigantes para não afundar"
+    - "Como a China ergueu um hospital inteiro em 10 dias em Wuhan"
+    - "Como o Catar resfriou estádios a céu aberto no deserto para a Copa"
+    - "Como a Dinamarca transforma lixo em energia numa usina com pista de esqui"
+    - "Como a Noruega guardou o dinheiro do petróleo no maior fundo soberano do mundo"
+    - "Como o Butão virou o país que absorve mais carbono do que emite"
+    - "Como a China planta uma muralha de árvores contra o avanço do deserto de Gobi"
+    - "Como a África planta uma Grande Muralha Verde contra o Saara"
+    - "Como Curitiba inventou o ônibus que o mundo inteiro copiou"
 topics:
   - "um recorde mundial real e bizarro pouco conhecido"
   - "um fato real e pouco conhecido sobre o oceano profundo"
@@ -184,6 +194,12 @@ prompt_base: >
   reprova e o vídeo não sai. Se o título promete N itens, entregue
   exatamente N; sem N casos reais que você conheça bem, entregue menos e
   não prometa N.
+
+  TÍTULO: curto (até 55 caracteres), com o fato concreto que choca — ex.:
+  "Zero Rios: Como a Arábia Saudita Bebe Água do Mar", "10 Mordidas de
+  Morte Certeira". Nunca vago ("Seu corpo está fazendo isso agora", "O
+  Objeto Perdido") nem com "que ninguém te contou", "a verdade sobre",
+  "segredos ocultos".
 
 # publica sozinho depois da revisão de fatos (sem esperar "Aprovar" no painel)
 require_approval: false
