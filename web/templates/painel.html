@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#edf0f3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)">
+<title>Estúdio — canais</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #edf0f3; --panel: #ffffff; --ink: #18202b; --muted: #5e6b7a; --line: #d5dbe2;
+    --on: #1f9d63; --warn: #c98a0b; --off: #d93a3f; --idle: #b4bdc7; --link: #2459c9;
+    --field: #f6f8fa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #12161c; --panel: #1a2028; --ink: #e7ecf1; --muted: #8d99a6; --line: #2a323d;
+      --on: #3dbe83; --warn: #e2a93b; --off: #f0595e; --idle: #3d4754; --link: #7fa8ff;
+      --field: #12161c;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: "Archivo", system-ui, sans-serif; font-size: 15px; line-height: 1.45;
+    padding: 0 16px calc(84px + env(safe-area-inset-bottom));
+  }
+  a { color: var(--link); }
+  main { max-width: 760px; margin: 0 auto; }
+  header.top { max-width: 760px; margin: 0 auto; padding: 20px 0 8px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  header.top h1 { font-size: 26px; font-weight: 800; font-stretch: 112%; letter-spacing: -0.01em; margin: 0; }
+  header.top .when { color: var(--muted); font-size: 13px; }
+  h2 { font-size: 19px; font-weight: 750; font-stretch: 108%; margin: 28px 0 10px; }
+  .hint { color: var(--muted); font-size: 13px; margin: -4px 0 12px; }
+  .num { font-variant-numeric: tabular-nums; font-stretch: 85%; }
+  :focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+
+  .toast { background: var(--panel); border-left: 4px solid var(--on); padding: 10px 14px; border-radius: 8px; margin: 8px 0 4px; font-size: 14px; }
+  .toast.bad { border-left-color: var(--off); }
+
+  /* luz de "no ar" de cada canal */
+  .lamp { width: 14px; height: 14px; border-radius: 50%; background: var(--idle); flex: none; }
+  .lamp.ok { background: var(--on); box-shadow: 0 0 0 4px color-mix(in srgb, var(--on) 22%, transparent); }
+  .lamp.busy { background: var(--warn); box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 22%, transparent); animation: pulse 1.6s ease-in-out infinite; }
+  .lamp.fail { background: var(--off); box-shadow: 0 0 0 4px color-mix(in srgb, var(--off) 22%, transparent); }
+  @keyframes pulse { 50% { opacity: .45; } }
+  @media (prefers-reduced-motion: reduce) { .lamp.busy { animation: none; } }
+
+  .board { display: grid; gap: 1px; background: var(--line); border-radius: 14px; overflow: hidden; border: 1px solid var(--line); }
+  .row { background: var(--panel); padding: 14px; display: grid; grid-template-columns: auto 1fr auto; gap: 4px 12px; align-items: center; }
+  .row .name { font-weight: 700; font-size: 16px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .row .name i { width: 4px; height: 16px; border-radius: 2px; flex: none; }
+  .row .state { grid-column: 2; color: var(--muted); font-size: 13px; }
+  .row .state.fail { color: var(--off); font-weight: 600; }
+  .row .thumb { grid-row: 1 / span 2; grid-column: 3; width: 92px; aspect-ratio: 16/9; border-radius: 6px; object-fit: cover; background: var(--line); display: block; }
+  .row .today { grid-column: 2 / span 2; display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+  .row .today a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .strip { grid-column: 1 / -1; display: grid; grid-template-columns: repeat({{ channels[0].grid|length if channels else 14 }}, 1fr); gap: 3px; margin-top: 8px; }
+  .strip span { height: 10px; border-radius: 2px; background: var(--idle); opacity: .55; }
+  .strip span.ok { background: var(--on); opacity: 1; }
+  .strip span.fail { background: var(--off); opacity: 1; }
+  .strip-legend { grid-column: 1 / -1; display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 10px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 0 16px; border-radius: 10px; border: 0; background: var(--ink); color: var(--paper); font: inherit; font-weight: 650; cursor: pointer; }
+  .btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .btn.good { background: var(--on); color: #fff; }
+  .btn.danger { background: transparent; color: var(--off); border: 1px solid color-mix(in srgb, var(--off) 45%, transparent); }
+  .btn.small { min-height: 34px; padding: 0 10px; font-size: 13px; }
+
+  /* filtros */
+  .filters { position: sticky; top: 0; z-index: 5; background: var(--paper); padding: 10px 0; display: grid; gap: 8px; }
+  .chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip { flex: none; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 999px; padding: 7px 13px; font: inherit; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .chip i { width: 8px; height: 8px; border-radius: 50%; }
+  .chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .filter-line { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .filter-line input[type=search] { grid-column: 1 / -1; }
+  input[type=search], input[type=text], input[type=number], select, textarea {
+    width: 100%; font: inherit; font-size: 16px; color: var(--ink); background: var(--field);
+    border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px;
+  }
+
+  .tally { color: var(--muted); font-size: 13px; margin: 2px 0 10px; }
+  .vgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .video { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; text-decoration: none; color: inherit; display: flex; flex-direction: column; }
+  .video img { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; background: var(--line); }
+  .video .body { padding: 10px 12px 12px; border-top: 3px solid var(--c); display: grid; gap: 4px; }
+  .video .views { font-size: 24px; font-weight: 800; font-stretch: 85%; line-height: 1; }
+  .video .views small { font-size: 12px; font-weight: 500; color: var(--muted); font-stretch: 100%; }
+  .video .title { font-size: 14px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .video .meta { font-size: 12px; color: var(--muted); }
+  .video.top .views { color: var(--on); }
+  @media (max-width: 599px) {
+    .vgrid { grid-template-columns: 1fr; gap: 8px; }
+    .video { flex-direction: row; border-left: 4px solid var(--c); }
+    .video img { width: 132px; flex: none; aspect-ratio: 16/9; align-self: center; margin: 8px 0 8px 8px; border-radius: 6px; }
+    .video .body { border-top: 0; padding: 8px 10px; align-content: center; min-width: 0; }
+    .video .views { font-size: 20px; }
+  }
+  .more { display: block; margin: 14px auto 0; }
+
+  .problem { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--c); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+  .problem .head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+  .problem .topic { font-weight: 600; font-size: 14px; margin: 2px 0 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .causes { display: grid; gap: 6px; margin-bottom: 14px; }
+  .cause { display: grid; grid-template-columns: 1fr auto; gap: 8px; font-size: 14px; position: relative; padding: 8px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .cause .bar { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--off) 14%, transparent); }
+  .cause span { position: relative; }
+  .problem .why { font-size: 13px; overflow-wrap: anywhere; }
+  .problem .why.clip { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+  .tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); }
+  .tag.failed, .tag.abandoned { color: var(--off); border-color: color-mix(in srgb, var(--off) 40%, transparent); }
+
+  /* canais */
+  details.ch { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; margin-bottom: 10px; }
+  details.ch > summary { list-style: none; cursor: pointer; padding: 14px; display: grid; grid-template-columns: auto 1fr auto; gap: 2px 12px; align-items: center; }
+  details.ch > summary::-webkit-details-marker { display: none; }
+  details.ch > summary .name { font-weight: 700; font-size: 16px; }
+  details.ch > summary .sub { grid-column: 2; color: var(--muted); font-size: 13px; }
+  details.ch > summary .chev { grid-row: 1 / span 2; grid-column: 3; color: var(--muted); transition: transform .2s; }
+  details.ch[open] > summary .chev { transform: rotate(90deg); }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .stats div { background: var(--panel); padding: 10px 12px; }
+  .stats b { display: block; font-size: 20px; font-weight: 800; font-stretch: 85%; }
+  .stats span { font-size: 12px; color: var(--muted); }
+  .section { padding: 14px; border-bottom: 1px solid var(--line); }
+  .section:last-child { border-bottom: 0; }
+  .section h3 { font-size: 14px; font-weight: 700; margin: 0 0 8px; }
+  .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 8px; }
+  .fields label, label.full { font-size: 12px; color: var(--muted); display: grid; gap: 3px; }
+  label.check { display: flex; align-items: center; gap: 8px; font-size: 14px; margin: 6px 0; }
+  label.check input { width: 20px; height: 20px; }
+  .topic-row { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; margin-bottom: 6px; }
+  .topic-row input.used { color: var(--muted); text-decoration: line-through; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .actions .btn { flex: 1; }
+  .facts { display: grid; gap: 6px; }
+  .facts .btn { justify-content: flex-start; text-align: left; height: auto; padding: 8px 12px; }
+
+  /* barra de navegação */
+  nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(4, 1fr); padding-bottom: env(safe-area-inset-bottom); }
+  nav.tabs button { background: none; border: 0; font: inherit; color: var(--muted); padding: 10px 4px 12px; display: grid; justify-items: center; gap: 2px; font-size: 12px; cursor: pointer; position: relative; }
+  nav.tabs button svg { width: 22px; height: 22px; }
+  nav.tabs button[aria-selected="true"] { color: var(--ink); font-weight: 700; }
+  nav.tabs .badge { position: absolute; top: 6px; left: calc(50% + 6px); background: var(--off); color: #fff; font-size: 10px; font-weight: 700; border-radius: 999px; padding: 0 5px; min-width: 16px; line-height: 16px; }
+  section.tab[hidden] { display: none; }
+  @media (min-width: 900px) {
+    nav.tabs { top: 0; bottom: auto; left: 50%; right: auto; transform: translateX(-50%); width: 760px; border: 1px solid var(--line); border-top: 0; border-radius: 0 0 14px 14px; }
+    body { padding-top: 64px; padding-bottom: 32px; }
+  }
+</style>
+</head>
+<body>
+{% macro fmt(n) %}{{ "{:,}".format(n or 0).replace(",", ".") }}{% endmacro %}
+<header class="top">
+  <h1>Estúdio</h1>
+  <span class="when">hoje, {{ today }}{% if running %}, gerando vídeo agora{% endif %}</span>
+</header>
+<main>
+  {% if flash %}<div class="toast {{ 'bad' if 'recusado' in flash or 'Não consegui' in flash }}" role="status">{{ flash }}</div>{% endif %}
+  {% if total_uploads > 5 %}<div class="toast bad">São {{ total_uploads }} vídeos por dia no total. A cota da API do YouTube só aguenta uns 5 uploads por dia, então os últimos canais da rodada vão falhar.</div>{% endif %}
+
+  <!-- HOJE -->
+  <section class="tab" id="tab-hoje">
+    {% if pending %}
+    <h2>Esperando sua aprovação</h2>
+    {% for j in pending %}
+    <div class="card">
+      <div class="hint" style="margin:0 0 4px;">{{ titles.get(j.channel, j.channel) }}</div>
+      <div style="font-weight:650;">{{ j.topic }}</div>
+      <div class="actions">
+        <a class="btn ghost small" href="https://youtu.be/{{ j.youtube_video_id }}" target="_blank" rel="noopener">Assistir</a>
+        <form method="post" action="{{ url_for('approve_job', job_id=j.id) }}" style="flex:1; display:flex;"><button class="btn good small" style="flex:1;">Publicar</button></form>
+        <form method="post" action="{{ url_for('reject_job', job_id=j.id) }}" style="flex:1; display:flex;"><button class="btn danger small" style="flex:1;">Deixar privado</button></form>
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <h2>Hoje nos canais</h2>
+    <div class="board">
+      {% for c in channels %}
+      <div class="row">
+        <span class="lamp {{ c.state }}" aria-hidden="true"></span>
+        <div class="name"><i style="background:{{ c.color }}"></i>{{ c.title }}</div>
+        {% if c.today_video %}
+        <a href="https://youtu.be/{{ c.today_video.vid }}" target="_blank" rel="noopener" aria-label="assistir o vídeo de hoje"><img class="thumb" loading="lazy" src="https://i.ytimg.com/vi/{{ c.today_video.vid }}/mqdefault.jpg" alt=""></a>
+        {% endif %}
+        <div class="state {{ c.state if c.state == 'fail' }}">{{ c.state_text }}</div>
+        {% if c.today_video %}
+        <div class="today"><a href="https://youtu.be/{{ c.today_video.vid }}" target="_blank" rel="noopener">{{ c.today_video.topic }}</a><span class="num">{{ fmt(c.today_video.views) }} views</span></div>
+        {% endif %}
+        <div class="strip" title="últimos {{ c.grid|length }} dias">
+          {% for g in c.grid %}<span class="{{ g.state }}" title="{{ g.label }}: {{ g.ups }} publicado(s), {{ g.fails }} falha(s)"></span>{% endfor %}
+        </div>
+        <div class="strip-legend"><span>{{ c.grid[0].label }}</span><span>{% if c.missed_days %}{{ c.missed_days }} dia(s) sem vídeo{% else %}todo dia com vídeo{% endif %}</span><span>hoje</span></div>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="hint" style="margin-top:8px;">Cada barrinha é um dia: verde saiu vídeo, vermelho falhou, cinza não rodou.</p>
+  </section>
+
+  <!-- VÍDEOS -->
+  <section class="tab" id="tab-videos" hidden>
+    <div class="filters">
+      <div class="chips" id="v-chips" role="group" aria-label="Canal">
+        <button class="chip" data-ch="" aria-pressed="true">Todos</button>
+        {% for c in channels|sort(attribute='title') %}<button class="chip" data-ch="{{ c.name }}" aria-pressed="false"><i style="background:{{ c.color }}"></i>{{ c.title }}</button>{% endfor %}
+      </div>
+      <div class="filter-line">
+        <input type="search" id="v-q" placeholder="Buscar no título" aria-label="Buscar no título">
+        <select id="v-days" aria-label="Período">
+          <option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="90">90 dias</option><option value="0">Tudo</option>
+        </select>
+        <select id="v-sort" aria-label="Ordem">
+          <option value="views">Mais vistos</option><option value="recent">Mais novos</option><option value="worst">Menos vistos</option>
+        </select>
+      </div>
+    </div>
+    <div class="tally" id="v-tally"></div>
+    <div class="vgrid" id="v-grid"></div>
+    <button class="btn ghost more" id="v-more" hidden>Mostrar mais</button>
+  </section>
+
+  <!-- PROBLEMAS -->
+  <section class="tab" id="tab-problemas" hidden>
+    <h2>Problemas</h2>
+    {% if causes_7d %}
+    <p class="hint">Por que as tentativas falharam nos últimos 7 dias:</p>
+    {% set maior = causes_7d[0][1] %}
+    <div class="causes">
+      {% for label, n in causes_7d %}<div class="cause"><i class="bar" style="width:{{ (100 * n / maior)|round }}%"></i><span>{{ label }}</span><span class="num"><b>{{ n }}</b></span></div>{% endfor %}
+    </div>
+    {% endif %}
+    <p class="hint">Cada tentativa que falhou, da mais nova pra mais velha. "Refeito" quer dizer que o sistema tentou de novo na mesma rodada.</p>
+    <div class="filters">
+      <div class="chips" id="p-chips" role="group" aria-label="Canal">
+        <button class="chip" data-ch="" aria-pressed="true">Todos</button>
+        {% for c in channels|sort(attribute='title') %}<button class="chip" data-ch="{{ c.name }}" aria-pressed="false"><i style="background:{{ c.color }}"></i>{{ c.title }}</button>{% endfor %}
+      </div>
+      <label class="check"><input type="checkbox" id="p-lost"> Só os que ficaram sem vídeo</label>
+    </div>
+    <div id="p-list">
+      {% for p in problems %}
+      <div class="problem" data-ch="{{ p.channel }}" data-lost="{{ 1 if p.status != 'retried' else 0 }}" style="--c:{{ colors.get(p.channel, '#888') }}">
+        <div class="head"><span>{{ titles.get(p.channel, p.channel) }}, {{ p.date_label }}, job {{ p.id }}</span>
+          <span class="tag {{ p.status }}">{{ {'failed': 'falhou', 'abandoned': 'abandonado', 'retried': 'refeito'}.get(p.status, p.status) }}</span></div>
+        <div class="topic">{{ p.topic }}</div>
+        <div class="why clip" title="toque pra ver tudo">{{ p.error or "sem mensagem de erro registrada" }}</div>
+      </div>
+      {% else %}
+      <p class="hint">Nenhuma falha registrada.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- CANAIS -->
+  <section class="tab" id="tab-canais" hidden>
+    <h2>Canais</h2>
+    {% for c in channels|sort(attribute='title') %}
+    <details class="ch" id="ch-{{ c.name }}">
+      <summary>
+        <span class="lamp {{ c.state }}" aria-hidden="true"></span>
+        <span class="name">{{ c.title }}</span>
+        <span class="chev" aria-hidden="true">›</span>
+        <span class="sub">{{ 'curto' if c.daily_format == 'short' else 'longo' }}, {{ c.uploads_per_day }} por dia, {{ c.topics_pending }} tema(s) na fila</span>
+      </summary>
+      <div class="stats">
+        <div><b class="num">{{ fmt(c.views_30d) }}</b><span>views em 30 dias</span></div>
+        <div><b class="num">{{ fmt(c.median_30d) }}</b><span>views num vídeo típico</span></div>
+        <div><b class="num">{{ c.videos_30d }}</b><span>vídeos em 30 dias</span></div>
+      </div>
+      {% if c.best %}<div class="section"><h3>Melhor vídeo</h3><a href="https://youtu.be/{{ c.best.vid }}" target="_blank" rel="noopener">{{ c.best.topic }}</a> <span class="num hint">({{ fmt(c.best.views) }} views)</span></div>{% endif %}
+
+      {% if c.token_status == "ok" %}
+      <form class="section" method="post">
+        <h3>Gerar um vídeo agora</h3>
+        <input type="text" name="topic" placeholder="Tema (vazio usa a fila do canal)" aria-label="Tema">
+        <p class="hint" style="margin:6px 0 0;">Tema digitado aqui é pesquisado na internet antes do roteiro.</p>
+        <div class="actions">
+          <button class="btn" formaction="{{ url_for('run_channel', channel=c.name, long=0) }}">Gerar curto</button>
+          <button class="btn ghost" formaction="{{ url_for('run_channel', channel=c.name, long=1) }}">Gerar longo</button>
+        </div>
+      </form>
+      {% else %}
+      <div class="section"><h3>Token do YouTube {{ 'ausente' if c.token_status == 'missing' else 'expirado' }}</h3><p class="hint" style="margin:0;">Rode <code>scripts/auth_youtube.py --channel {{ c.name }}</code> pra voltar a publicar.</p></div>
+      {% endif %}
+      {% if c.token_status == "ok" and not c.can_comment %}<div class="section"><p class="hint" style="margin:0;">O token não tem permissão de comentar, então o canal não posta a pergunta depois do upload. Rode <code>scripts/auth_youtube.py --channel {{ c.name }}</code>.</p></div>{% endif %}
+
+      {% if c.fact_labels %}
+      <div class="section">
+        <h3>Gerar com um fato real específico</h3>
+        <div class="facts">
+          {% for label in c.fact_labels %}
+          <form method="post" action="{{ url_for('run_channel', channel=c.name) }}"><input type="hidden" name="fact_label" value="{{ label }}"><button class="btn ghost small" style="width:100%;">{{ label }}</button></form>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <form class="section" method="post" action="{{ url_for('save_publishing', channel=c.name) }}">
+        <h3>Publicação</h3>
+        <div class="fields">
+          <label>Vídeos por dia<input type="number" min="0" max="6" step="1" name="uploads_per_day" value="{{ c.uploads_per_day }}"></label>
+          <label>Visibilidade
+            <select name="upload_privacy">
+              {% for opt, lbl in [("public", "Público"), ("unlisted", "Não listado"), ("private", "Privado")] %}<option value="{{ opt }}" {{ "selected" if c.upload_privacy == opt }}>{{ lbl }}</option>{% endfor %}
+            </select>
+          </label>
+        </div>
+        <label class="check"><input type="hidden" name="require_approval" value="0"><input type="checkbox" name="require_approval" value="1" {{ "checked" if c.require_approval }}> Esperar minha aprovação antes de publicar</label>
+        <button class="btn small">Salvar publicação</button>
+      </form>
+
+      <form class="section" method="post" action="{{ url_for('save_duration', channel=c.name) }}">
+        <h3>Formato e duração</h3>
+        <label class="full">Formato do vídeo diário
+          <select name="daily_format">
+            <option value="short" {{ "selected" if c.daily_format == "short" }}>Curto (vertical, Shorts)</option>
+            <option value="long" {{ "selected" if c.daily_format == "long" }}>Longo (16:9)</option>
+          </select>
+        </label>
+        <div class="fields" style="margin-top:8px;">
+          <label>Curto, mínimo (min)<input type="number" step="0.5" min="0.5" name="short_min_minutes" value="{{ c.short_min_minutes }}"></label>
+          <label>Curto, máximo (min)<input type="number" step="0.5" min="0.5" name="short_max_minutes" value="{{ c.short_max_minutes }}"></label>
+          <label>Longo, mínimo (min)<input type="number" step="0.5" min="1" name="long_min_minutes" value="{{ c.long_min_minutes }}"></label>
+          <label>Longo, máximo (min)<input type="number" step="0.5" min="1" name="long_max_minutes" value="{{ c.long_max_minutes }}"></label>
+        </div>
+        <button class="btn small">Salvar formato</button>
+      </form>
+
+      <form class="section" method="post" action="{{ url_for('save_voices', channel=c.name) }}">
+        <h3>Vozes</h3>
+        <p class="hint" style="margin:0 0 8px;">Uma voz é sorteada por vídeo, pelo peso. Peso 0 nunca sai.</p>
+        <div class="fields">
+          {% for v in c.voices %}<label>{{ v.nome }} ({{ v.genero }}){{ ", Azure" if v.azure }}<input type="number" min="0" step="1" name="w__{{ v.id }}" value="{{ v.peso }}"></label>{% endfor %}
+        </div>
+        <button class="btn small">Salvar vozes</button>
+      </form>
+
+      <details class="section">
+        <summary><b>Fila de temas</b> <span class="hint">({{ c.topics_pending }} de {{ c.topics|length }} ainda não usados)</span></summary>
+        <div style="margin-top:10px;">
+          {% for t in c.topics %}
+          <form class="topic-row" method="post" action="{{ url_for('update_topic', channel=c.name) }}">
+            <input type="hidden" name="index" value="{{ loop.index0 }}">
+            <input type="text" name="topic" value="{{ t }}" class="{{ 'used' if t in c.used_topics }}" aria-label="tema">
+            <button class="btn ghost small">Salvar</button>
+            <button class="btn danger small" formaction="{{ url_for('delete_topic', channel=c.name) }}">Tirar</button>
+          </form>
+          {% endfor %}
+          <form class="topic-row" style="grid-template-columns:1fr auto;" method="post" action="{{ url_for('add_topic', channel=c.name) }}">
+            <input type="text" name="topic" placeholder="Novo tema" required aria-label="novo tema">
+            <button class="btn small">Adicionar</button>
+          </form>
+          <p class="hint" style="margin:6px 0 0;">Tema riscado já virou vídeo. Lista ("N fatos sobre...") vai até 10 itens.{% if c.name == "politica" %} No curto, o canal usa um fato real do banco em vez desta fila.{% endif %}</p>
+        </div>
+      </details>
+
+      {% if c.uses_topic_queue %}
+      <details class="section">
+        <summary><b>Temas do que está viral</b> <span class="hint">({{ c.viral_share_pct }}% dos vídeos)</span></summary>
+        <form method="post" action="{{ url_for('save_viral', channel=c.name) }}" style="margin-top:10px;">
+          <p class="hint" style="margin:0 0 8px;">Busca os vídeos mais vistos do mês e cria um tema próprio com o mesmo assunto. Quando a fila acaba, todo tema vem daqui.</p>
+          <div class="fields"><label>% dos vídeos<input type="number" min="0" max="100" step="5" name="viral_share_pct" value="{{ c.viral_share_pct }}"></label></div>
+          <label class="full">Buscas no YouTube, uma por linha<textarea name="viral_queries" rows="4">{{ c.viral_queries|join("\n") }}</textarea></label>
+          <button class="btn small" style="margin-top:8px;">Salvar buscas</button>
+        </form>
+      </details>
+      {% endif %}
+
+      <details class="section">
+        <summary><b>Identidade e roteiro</b></summary>
+        <form method="post" action="{{ url_for('save_identity', channel=c.name) }}" style="margin-top:10px; display:grid; gap:8px;">
+          {% for key, label, value in c.identity_text %}<label class="full">{{ label }}<input type="text" name="{{ key }}" value="{{ value }}"></label>{% endfor %}
+          <div class="fields">
+            <label>Cenas (curto)<input type="number" min="3" max="40" step="1" name="scenes_per_video" value="{{ c.scenes_per_video }}"></label>
+            <label>Cenas (longo)<input type="number" min="6" max="60" step="1" name="long_form_scenes" value="{{ c.long_form_scenes }}"></label>
+            <label>Cor do canal<input type="color" name="accent" value="{{ c.accent }}" style="height:42px; padding:3px;"></label>
+          </div>
+          <label class="check"><input type="hidden" name="captions" value="0"><input type="checkbox" name="captions" value="1" {{ "checked" if c.captions }}> Legenda karaokê no vídeo</label>
+          <label class="full">Instruções de estilo do roteiro<textarea name="prompt_base" rows="8">{{ c.prompt_base }}</textarea></label>
+          <div><button class="btn small">Salvar identidade</button></div>
+        </form>
+      </details>
+    </details>
+    {% endfor %}
+    {% if not azure_ready %}<p class="hint">Mais vozes aparecem quando AZURE_SPEECH_KEYS estiver configurada.</p>{% endif %}
+  </section>
+</main>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" data-tab="hoje" aria-selected="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Hoje
+    {% set falhando = channels|selectattr('state', 'equalto', 'fail')|list|length %}{% if falhando %}<span class="badge">{{ falhando }}</span>{% endif %}
+  </button>
+  <button role="tab" data-tab="videos" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z" fill="currentColor"/></svg>Vídeos
+  </button>
+  <button role="tab" data-tab="problemas" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.01"/></svg>Problemas
+  </button>
+  <button role="tab" data-tab="canais" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="currentColor"/><circle cx="15" cy="12" r="2" fill="currentColor"/><circle cx="7" cy="18" r="2" fill="currentColor"/></svg>Canais
+  </button>
+</nav>
+
+<script>
+const VIDEOS = {{ videos|tojson }};
+const COLORS = {{ colors|tojson }};
+const TITLES = {{ titles|tojson }};
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
+
+// abas
+const tabs = document.querySelectorAll("nav.tabs button");
+function showTab(name) {
+  if (!document.getElementById("tab-" + name)) name = "hoje";
+  tabs.forEach(b => b.setAttribute("aria-selected", b.dataset.tab === name));
+  document.querySelectorAll("section.tab").forEach(s => s.hidden = s.id !== "tab-" + name);
+  store.set("tab", name);
+  history.replaceState(null, "", location.pathname + location.search + "#" + name);
+}
+tabs.forEach(b => b.addEventListener("click", () => { showTab(b.dataset.tab); scrollTo(0, 0); }));
+showTab(location.hash.slice(1) || store.get("tab") || "hoje");
+// depois de salvar um formulário, volta pro canal que estava aberto
+document.querySelectorAll("details.ch form").forEach(f => f.addEventListener("submit", () => store.set("openCh", f.closest("details.ch").id)));
+const openCh = store.get("openCh");
+if (openCh && document.getElementById(openCh) && location.search) { document.getElementById(openCh).open = true; }
+
+function chips(groupId, onChange) {
+  const group = document.getElementById(groupId);
+  group.addEventListener("click", e => {
+    const chip = e.target.closest(".chip"); if (!chip) return;
+    group.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", c === chip));
+    onChange(chip.dataset.ch);
+  });
+}
+
+// vídeos
+const fmt = n => (n ?? 0).toLocaleString("pt-BR");
+const vState = { ch: "", q: "", days: 30, sort: "views", limit: 24 };
+function renderVideos() {
+  const now = Date.now() / 1000;
+  const q = vState.q.trim().toLowerCase();
+  let list = VIDEOS.filter(v => (!vState.ch || v.channel === vState.ch)
+    && (!vState.days || v.ts >= now - vState.days * 86400)
+    && (!q || v.topic.toLowerCase().includes(q)));
+  const views = v => v.views ?? -1;
+  if (vState.sort === "views") list.sort((a, b) => views(b) - views(a));
+  else if (vState.sort === "worst") list.sort((a, b) => views(a) - views(b));
+  else list.sort((a, b) => b.ts - a.ts);
+  const vs = list.map(v => v.views ?? 0).sort((a, b) => a - b);
+  const median = vs.length ? vs[Math.floor(vs.length / 2)] : 0;
+  const total = vs.reduce((a, b) => a + b, 0);
+  document.getElementById("v-tally").textContent = list.length
+    ? `${list.length} vídeos, ${fmt(total)} views no total, ${fmt(median)} num vídeo típico`
+    : "Nenhum vídeo com esses filtros.";
+  const top = vs.length ? vs[Math.max(0, Math.floor(vs.length * 0.8))] : Infinity;
+  const grid = document.getElementById("v-grid");
+  grid.replaceChildren(...list.slice(0, vState.limit).map(v => {
+    const a = document.createElement("a");
+    a.className = "video" + (v.views && v.views >= top && v.views > median * 2 ? " top" : "");
+    a.href = "https://youtu.be/" + v.vid; a.target = "_blank"; a.rel = "noopener";
+    a.style.setProperty("--c", COLORS[v.channel] || "#888");
+    a.innerHTML = `<img loading="lazy" alt="" src="https://i.ytimg.com/vi/${v.vid}/mqdefault.jpg">
+      <div class="body"><div class="views num">${v.views == null ? "?" : fmt(v.views)} <small>views</small></div>
+      <div class="title"></div><div class="meta"></div></div>`;
+    a.querySelector(".title").textContent = v.topic;
+    a.querySelector(".meta").textContent = `${TITLES[v.channel] || v.channel}, ${v.date_label}`;
+    return a;
+  }));
+  document.getElementById("v-more").hidden = list.length <= vState.limit;
+}
+chips("v-chips", ch => { vState.ch = ch; vState.limit = 24; renderVideos(); });
+document.getElementById("v-q").addEventListener("input", e => { vState.q = e.target.value; renderVideos(); });
+document.getElementById("v-days").addEventListener("change", e => { vState.days = +e.target.value; renderVideos(); });
+document.getElementById("v-sort").addEventListener("change", e => { vState.sort = e.target.value; renderVideos(); });
+document.getElementById("v-more").addEventListener("click", () => { vState.limit += 24; renderVideos(); });
+renderVideos();
+
+// problemas
+const pState = { ch: "", lost: false };
+function renderProblems() {
+  document.querySelectorAll("#p-list .problem").forEach(p => {
+    p.hidden = (pState.ch && p.dataset.ch !== pState.ch) || (pState.lost && p.dataset.lost !== "1");
+  });
+}
+chips("p-chips", ch => { pState.ch = ch; renderProblems(); });
+document.getElementById("p-lost").addEventListener("change", e => { pState.lost = e.target.checked; renderProblems(); });
+document.querySelectorAll(".why.clip").forEach(w => w.addEventListener("click", () => w.classList.toggle("clip")));
+</script>
+</body>
+</html>

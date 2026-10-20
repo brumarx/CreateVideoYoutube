@@ -13,11 +13,12 @@ import subprocess
 import sys
 import textwrap
 import time
-from datetime import datetime
+import statistics
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import yaml
-from flask import Flask, redirect, render_template_string, request, url_for
+from flask import Flask, redirect, render_template, request, url_for
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -30,291 +31,6 @@ from src.politica_data import FACT_FETCHERS  # noqa: E402
 from src.topics import STATE_FILE as USED_TOPICS_FILE  # noqa: E402
 
 app = Flask(__name__)
-
-TEMPLATE = """
-<!doctype html>
-<html lang="pt-BR">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Painel — YouTube AI Pipeline</title>
-<style>
-  * { -webkit-tap-highlight-color: transparent; }
-  html { -webkit-text-size-adjust: 100%; }
-  body { font-family: system-ui, sans-serif; background: #0f1115; color: #e6e6e6; margin: 0; padding: 32px; }
-  h1 { font-size: 22px; margin-bottom: 4px; }
-  .sub { color: #9aa0a8; font-size: 13px; margin-bottom: 28px; }
-  .channels { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; margin-bottom: 36px; }
-  .card { background: #171a21; border: 1px solid #262b35; border-radius: 10px; padding: 18px; min-width: 0; }
-  .card h2 { font-size: 16px; margin: 0 0 6px; }
-  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 20px; margin-left: 6px; }
-  .ok { background: #16351f; color: #5fd685; }
-  .warn { background: #3a2a12; color: #e0a94f; }
-  .niche { color: #9aa0a8; font-size: 13px; margin: 6px 0 12px; }
-  .meta { font-size: 12px; color: #7d838c; }
-  form { margin-top: 12px; }
-  button { background: #2d6cdf; color: white; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; min-height: 34px; }
-  button:hover { background: #3d7bef; }
-  input, select, button { font-family: inherit; }
-  input[type=text], input[type=number], select { font-size: 16px; }
-  .table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 480px; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #262b35; }
-  th { color: #9aa0a8; font-weight: 500; }
-  a { color: #6ea8ff; }
-  .status-uploaded { color: #5fd685; }
-  .status-awaiting_approval { color: #e0a94f; }
-  .status-rejected, .status-retried { color: #7d838c; }
-  .status-failed, .status-error { color: #e05f5f; }
-  .flash { background: #16351f; color: #5fd685; padding: 10px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 13px; }
-  .durations { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
-  .durations label { flex: 1; min-width: 120px; font-size: 11px; color: #9aa0a8; }
-  .durations input { width: 100%; box-sizing: border-box; padding: 8px 6px; margin-top: 2px; background: #0f1115; border: 1px solid #262b35; border-radius: 6px; color: #e6e6e6; font-size: 16px; }
-  .save-link { background: none; border: none; color: #6ea8ff; font-size: 13px; cursor: pointer; padding: 6px 0; text-decoration: underline; min-height: 34px; }
-  details.topics { margin-top: 10px; font-size: 12px; }
-  details.topics summary { cursor: pointer; color: #9aa0a8; padding: 6px 0; }
-  details.topics summary:hover { color: #c7cbd1; }
-  .topic-edit { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; align-items: center; }
-  .topic-edit input[type=text] { flex: 1 1 100%; min-width: 0; box-sizing: border-box; padding: 7px 8px; background: #0f1115; border: 1px solid #262b35; border-radius: 6px; color: #c7cbd1; font-size: 14px; }
-  .topic-edit input[type=text].used { color: #55595f; text-decoration: line-through; }
-  .topic-edit button { padding: 7px 10px; font-size: 12px; min-height: 34px; }
-  .topic-edit button.danger { background: #3a1616; color: #e08f8f; }
-  .topic-edit button.danger:hover { background: #4a1c1c; }
-  .topic-add { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-  .topic-add input { flex: 1 1 100%; min-width: 0; box-sizing: border-box; padding: 7px 8px; background: #0f1115; border: 1px solid #262b35; border-radius: 6px; color: #e6e6e6; font-size: 14px; }
-  .topic-add button { padding: 7px 14px; font-size: 12px; min-height: 34px; }
-
-  @media (max-width: 600px) {
-    body { padding: 16px; }
-    h1 { font-size: 19px; }
-    .channels { grid-template-columns: 1fr; gap: 12px; }
-    .card { padding: 14px; }
-    button { width: 100%; }
-    .topic-edit button, .topic-add button { width: auto; }
-    table { font-size: 12px; min-width: 420px; }
-    th, td { padding: 8px 6px; }
-    td.topic-cell { white-space: normal; overflow-wrap: anywhere; }
-  }
-</style>
-</head>
-<body>
-  <h1>Pipeline de vídeos IA</h1>
-  <div class="sub">Roda todo dia às 10h via cron. Todo roteiro passa por revisão de fatos antes de virar vídeo; canais com aprovação ligada sobem privados e esperam você aprovar aqui.</div>
-
-  {% if flash %}<div class="flash">{{ flash }}</div>{% endif %}
-  {% if total_uploads > 5 %}<div class="flash" style="background:#3a2a12; color:#e0a94f;">Soma de vídeos/dia = {{ total_uploads }}. A cota da API do YouTube aguenta ~5 uploads/dia no total (1.700 unidades cada, limite 10.000) — os últimos canais da rodada vão falhar.</div>{% endif %}
-
-  {% if pending %}
-  <h1>Aguardando aprovação ({{ pending|length }})</h1>
-  <div class="sub">Estes vídeos já estão no YouTube como <b>privados</b>. Assista (logado na conta do canal) e aprove para publicar.</div>
-  <div class="channels">
-    {% for j in pending %}
-    <div class="card">
-      <div class="meta">{{ j.channel }} · job {{ j.id }}</div>
-      <h2 style="margin-top:4px;">{{ j.topic }}</h2>
-      <div class="meta" style="margin:6px 0 10px;">
-        <a href="https://youtu.be/{{ j.youtube_video_id }}" target="_blank">assistir</a> ·
-        <a href="https://studio.youtube.com/video/{{ j.youtube_video_id }}/edit" target="_blank">editar no Studio</a>
-      </div>
-      <div style="display:flex; gap:6px; flex-wrap:wrap;">
-        <form method="post" action="{{ url_for('approve_job', job_id=j.id) }}" style="flex:1; margin:0;"><button type="submit" style="width:100%; background:#1f7a45;">Aprovar e publicar</button></form>
-        <form method="post" action="{{ url_for('reject_job', job_id=j.id) }}" style="flex:1; margin:0;"><button type="submit" style="width:100%; background:#3a1616; color:#e08f8f;">Rejeitar (fica privado)</button></form>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  <div class="channels">
-    {% for c in channels %}
-    <div class="card">
-      <h2>{{ c.name }}
-        {% if c.token_status == "ok" %}<span class="badge ok">token OK</span>
-        {% elif c.token_status == "missing" %}<span class="badge warn">sem token</span>
-        {% else %}<span class="badge warn" title="rode scripts/auth_youtube.py --channel {{ c.name }}">token expirado</span>{% endif %}
-        {% if c.token_status == "ok" and not c.can_comment %}<span class="badge warn" title="token sem permissão de comentar: o canal não posta a pergunta depois do upload. Rode scripts/auth_youtube.py --channel {{ c.name }}">sem comentário</span>{% endif %}
-      </h2>
-      {% if c.youtube_handle %}
-      <div class="meta"><a href="https://www.youtube.com/{{ c.youtube_handle }}" target="_blank">youtube.com/{{ c.youtube_handle }}</a></div>
-      {% endif %}
-      <div class="niche">{{ c.niche }}</div>
-      <form method="post" action="{{ url_for('save_publishing', channel=c.name) }}">
-        <div class="durations">
-          <label>Vídeos por dia<input type="number" min="0" max="6" step="1" name="uploads_per_day" value="{{ c.uploads_per_day }}"></label>
-          <label>Privacidade
-            <select name="upload_privacy" style="width:100%; box-sizing:border-box; padding:8px 6px; margin-top:2px; background:#0f1115; border:1px solid #262b35; border-radius:6px; color:#e6e6e6; font-size:16px;">
-              {% for opt, lbl in [("public", "público"), ("unlisted", "não listado"), ("private", "privado")] %}
-              <option value="{{ opt }}" {{ "selected" if c.upload_privacy == opt }}>{{ lbl }}</option>
-              {% endfor %}
-            </select>
-          </label>
-        </div>
-        <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#c7cbd1; margin-top:4px;">
-          <input type="hidden" name="require_approval" value="0">
-          <input type="checkbox" name="require_approval" value="1" {{ "checked" if c.require_approval }} style="width:auto;"> exigir minha aprovação antes de publicar
-        </label>
-        <button type="submit" class="save-link">salvar publicação</button>
-      </form>
-
-      <form method="post" action="{{ url_for('save_duration', channel=c.name) }}">
-        <label style="display:block; font-size:11px; color:#9aa0a8; margin-top:6px;">Formato do cron diário
-          <select name="daily_format" style="width:100%; box-sizing:border-box; padding:8px 6px; margin-top:2px; background:#0f1115; border:1px solid #262b35; border-radius:6px; color:#e6e6e6;">
-            <option value="short" {{ "selected" if c.daily_format == "short" }}>Curto (vertical, Shorts)</option>
-            <option value="long" {{ "selected" if c.daily_format == "long" }}>Longo (16:9, documentário)</option>
-          </select>
-        </label>
-        <div class="durations">
-          <label>Short min (min)<input type="number" step="0.5" min="0.5" name="short_min_minutes" value="{{ c.short_min_minutes }}"></label>
-          <label>Short max (min)<input type="number" step="0.5" min="0.5" name="short_max_minutes" value="{{ c.short_max_minutes }}"></label>
-        </div>
-        <div class="durations">
-          <label>Longo min (min)<input type="number" step="0.5" min="1" name="long_min_minutes" value="{{ c.long_min_minutes }}"></label>
-          <label>Longo max (min)<input type="number" step="0.5" min="1" name="long_max_minutes" value="{{ c.long_max_minutes }}"></label>
-        </div>
-        <button type="submit" class="save-link">salvar duração e formato</button>
-      </form>
-
-      <form method="post" action="{{ url_for('save_voices', channel=c.name) }}">
-        <label style="display:block; font-size:11px; color:#9aa0a8; margin-top:10px;">Voz da narração (sorteada por vídeo, peso relativo — 0 = nunca)</label>
-        <div class="durations">
-          {% for v in c.voices %}
-          <label>{{ v.nome }} ({{ v.genero }}){% if v.azure %} · <span style="color:#6ea8ff;">Azure</span>{% endif %}<input type="number" min="0" step="1" name="w__{{ v.id }}" value="{{ v.peso }}"></label>
-          {% endfor %}
-        </div>
-        {% if not azure_ready %}<div style="font-size:11px; color:#7d838c;">mais vozes aparecem aqui quando AZURE_SPEECH_KEYS estiver no .env</div>{% endif %}
-        <button type="submit" class="save-link">salvar vozes</button>
-      </form>
-
-      <details class="topics">
-        <summary>Fila de temas ({{ c.topics_pending }} pendente(s) de {{ c.topics|length }})</summary>
-        {% for t in c.topics %}
-        <form class="topic-edit" method="post" action="{{ url_for('update_topic', channel=c.name) }}">
-          <input type="hidden" name="index" value="{{ loop.index0 }}">
-          <input type="text" name="topic" value="{{ t }}" class="{{ 'used' if t in c.used_topics }}">
-          <button type="submit" title="salvar edição">salvar</button>
-          <button type="submit" formaction="{{ url_for('delete_topic', channel=c.name) }}" class="danger" title="remover">remover</button>
-        </form>
-        {% endfor %}
-        <form class="topic-add" method="post" action="{{ url_for('add_topic', channel=c.name) }}">
-          <input type="text" name="topic" placeholder="Novo tema..." required>
-          <button type="submit">+</button>
-        </form>
-        <div style="font-size:11px; color:#7d838c; margin-top:6px;">temas de lista ("N fatos/coisas sobre...") são limitados a no máximo 10 itens — números maiores são ajustados sozinhos ao salvar.</div>
-        {% if c.name == "politica" %}
-        <div style="font-size:11px; color:#7d838c; margin-top:6px;">no formato curto, política ignora esta fila e usa sempre um fato real do banco de transparência — só o formato longo consome estes temas.</div>
-        {% endif %}
-      </details>
-
-      {% if c.uses_topic_queue %}
-      <details class="topics">
-        <summary>Temas virais do YouTube ({{ c.viral_share_pct }}% dos vídeos{{ "" if c.viral_queries else " — desligado, sem buscas" }})</summary>
-        <form method="post" action="{{ url_for('save_viral', channel=c.name) }}">
-          <div style="font-size:11px; color:#7d838c; margin: 4px 0 8px;">busca os vídeos mais vistos do mês com estas buscas e cria um tema original no mesmo gancho. Quando a fila de temas acaba, é sempre viral.</div>
-          <div class="durations">
-            <label>% dos vídeos com tema viral<input type="number" min="0" max="100" step="5" name="viral_share_pct" value="{{ c.viral_share_pct }}"></label>
-          </div>
-          <label style="display:block; font-size:11px; color:#9aa0a8;">Buscas no YouTube (uma por linha)
-            <textarea name="viral_queries" rows="4" style="width:100%; box-sizing:border-box; padding:8px; margin-top:2px; background:#0f1115; border:1px solid #262b35; border-radius:6px; color:#e6e6e6; font-size:14px; font-family:inherit;">{{ c.viral_queries|join("\n") }}</textarea>
-          </label>
-          <button type="submit" class="save-link">salvar temas virais</button>
-        </form>
-      </details>
-      {% endif %}
-
-      <details class="topics">
-        <summary>Identidade e roteiro do canal</summary>
-        <form method="post" action="{{ url_for('save_identity', channel=c.name) }}">
-          {% for key, label, value in c.identity_text %}
-          <label style="display:block; font-size:11px; color:#9aa0a8; margin-top:8px;">{{ label }}
-            <input type="text" name="{{ key }}" value="{{ value }}" style="width:100%; box-sizing:border-box; padding:8px; margin-top:2px; background:#0f1115; border:1px solid #262b35; border-radius:6px; color:#e6e6e6;">
-          </label>
-          {% endfor %}
-          <div class="durations">
-            <label>Cenas (curto)<input type="number" min="3" max="40" step="1" name="scenes_per_video" value="{{ c.scenes_per_video }}"></label>
-            <label>Cenas (longo)<input type="number" min="6" max="60" step="1" name="long_form_scenes" value="{{ c.long_form_scenes }}"></label>
-            <label>Cor de destaque<input type="color" name="accent" value="{{ c.accent }}" style="height:38px; padding:2px;"></label>
-          </div>
-          <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#c7cbd1; margin-top:6px;">
-            <input type="hidden" name="captions" value="0">
-            <input type="checkbox" name="captions" value="1" {{ "checked" if c.captions }} style="width:auto;"> legenda embutida estilo karaokê
-          </label>
-          <label style="display:block; font-size:11px; color:#9aa0a8; margin-top:8px;">Prompt do roteiro (instruções de estilo pro LLM)
-            <textarea name="prompt_base" rows="8" style="width:100%; box-sizing:border-box; padding:8px; margin-top:2px; background:#0f1115; border:1px solid #262b35; border-radius:6px; color:#e6e6e6; font-size:14px; font-family:inherit;">{{ c.prompt_base }}</textarea>
-          </label>
-          <button type="submit" class="save-link">salvar identidade e roteiro</button>
-        </form>
-      </details>
-
-      {% if c.fact_labels %}
-      <details class="topics">
-        <summary>Fatos reais do banco de dados ({{ c.fact_labels|length }} tipos — sorteado no formato curto)</summary>
-        <div style="font-size:11px; color:#7d838c; margin: 4px 0 8px;">estes não são editáveis (vêm de src/politica_data.py, não do yaml) — escolha um pra forçar esse fato específico numa rodada manual, em vez de sortear.</div>
-        {% for label in c.fact_labels %}
-        <form method="post" action="{{ url_for('run_channel', channel=c.name) }}" style="margin-bottom:4px;">
-          <input type="hidden" name="fact_label" value="{{ label }}">
-          <button type="submit" style="width:100%; text-align:left; padding:4px 6px; font-size:12px;">{{ label }}</button>
-        </form>
-        {% endfor %}
-      </details>
-      {% endif %}
-
-      {% if c.token_status == "ok" %}
-      <form method="post" style="margin-top:12px; padding:8px; border:1px solid #2a7a4a; border-radius:8px; background:#0f1a13;">
-        <label style="display:block; font-size:11px; color:#5fd88a; margin-bottom:4px; font-weight:600;">▶ RODAR AGORA (tema digitado aqui é buscado na internet antes de escrever)</label>
-        <input type="text" name="topic" placeholder="Tema (opcional — vazio sorteia da lista)"
-               style="width:100%; box-sizing:border-box; padding:8px; margin-bottom:8px; background:#0f1115; border:1px solid #2a7a4a; border-radius:6px; color:#e6e6e6; font-size:16px;">
-        <div style="display:flex; flex-wrap:wrap; gap:6px;">
-          <button type="submit" formaction="{{ url_for('run_channel', channel=c.name, long=0) }}" style="flex:1; min-width:120px;">Rodar short</button>
-          <button type="submit" formaction="{{ url_for('run_channel', channel=c.name, long=1) }}" style="flex:1; min-width:120px;">Rodar longo (16:9)</button>
-        </div>
-      </form>
-      {% endif %}
-    </div>
-    {% endfor %}
-  </div>
-
-  <h1>Jobs recentes</h1>
-  <div class="table-wrap">
-  <table>
-    <tr><th>ID</th><th>Data</th><th>Canal</th><th>Tópico</th><th>Status</th>
-      <th><a href="{{ url_for('index', sort=None if sort_views else 'views') }}">Views {{ '▼' if sort_views else '⇅' }}</a></th><th>Vídeo</th></tr>
-    {% for j in jobs %}
-    <tr>
-      <td>{{ j.id }}</td>
-      <td style="white-space:nowrap;">{{ j.date_label }}</td>
-      <td>{{ j.channel }}</td>
-      <td class="topic-cell">{{ j.topic }}</td>
-      <td class="status-{{ j.status }}">{{ j.status }}</td>
-      <td style="text-align:right; white-space:nowrap;">{% if j.views is not none %}{{ "{:,}".format(j.views).replace(",", ".") }}{% endif %}</td>
-      <td>{% if j.youtube_video_id %}<a href="https://youtu.be/{{ j.youtube_video_id }}" target="_blank">assistir</a>{% endif %}</td>
-    </tr>
-    {% endfor %}
-  </table>
-  </div>
-
-  <h1>Todos os vídeos no ar ({{ all_videos|length }}) — mais vistos primeiro</h1>
-  <p style="font-size:13px; color:#9aa3b2; margin:0 0 8px;">
-    {% for name, total in views_by_channel %}<span style="margin-right:14px;"><b>{{ name }}</b>: {{ "{:,}".format(total).replace(",", ".") }} views</span>{% endfor %}
-  </p>
-  <div class="table-wrap">
-  <table>
-    <tr><th>#</th><th>Data</th><th>Canal</th><th>Tópico</th><th>Views</th><th>Vídeo</th></tr>
-    {% for j in all_videos %}
-    <tr>
-      <td>{{ loop.index }}</td>
-      <td style="white-space:nowrap;">{{ j.date_label }}</td>
-      <td>{{ j.channel }}</td>
-      <td class="topic-cell">{{ j.topic }}</td>
-      <td style="text-align:right; white-space:nowrap;">{% if j.views is not none %}{{ "{:,}".format(j.views).replace(",", ".") }}{% endif %}</td>
-      <td><a href="https://youtu.be/{{ j.youtube_video_id }}" target="_blank">assistir</a></td>
-    </tr>
-    {% endfor %}
-  </table>
-  </div>
-</body>
-</html>
-"""
-
 
 # status do token por canal, com cache — checar de verdade exige um refresh
 # no Google (o arquivo existir não quer dizer nada: token de app OAuth em
@@ -436,6 +152,8 @@ def _load_channels() -> list[dict]:
         channels.append(
             {
                 "name": name,
+                "title": cfg.get("channel_title") or name,
+                "color": _visible_color(cfg.get("accent", "#888888")),
                 "youtube_handle": cfg.get("youtube_handle", ""),
                 "niche": cfg.get("niche", ""),
                 "uploads_per_day": cfg.get("uploads_per_day", 1),
@@ -490,48 +208,143 @@ IDENTITY_TEXT_FIELDS = (
 DURATION_FIELDS = ("short_min_minutes", "short_max_minutes", "long_min_minutes", "long_max_minutes")
 
 
+# status que ainda podem virar vídeo (rodando agora ou esperando o render)
+IN_PROGRESS = ("pending", "scripted", "narrated", "rendered", "script_ready", "script_approved")
+# falha que custou o vídeo (retried = tentativa substituída por outra)
+FAILED = ("failed", "abandoned")
+GRID_DAYS = 14
+
+
+def _local(created_at: str | None) -> datetime | None:
+    try:
+        return datetime.fromisoformat(created_at).astimezone() if created_at else None
+    except ValueError:
+        return None
+
+
+def _video(job, views: dict) -> dict:
+    when = _local(job.created_at)
+    return {
+        "id": job.id, "channel": job.channel, "topic": job.topic, "vid": job.youtube_video_id,
+        "views": views.get(job.youtube_video_id), "ts": when.timestamp() if when else 0,
+        "date_label": _date_label(job.created_at),
+    }
+
+
+def _visible_color(hex_color: str) -> str:
+    """Cor do canal como marcador no painel: quase branca (Botafogo,
+    #e5e5e5) some no tema claro — vira um cinza médio."""
+    try:
+        r, g, b = (int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
+    except ValueError:
+        return "#888888"
+    return "#8a939d" if 0.2126 * r + 0.7152 * g + 0.0722 * b > 200 else hex_color
+
+
+# motivo de falha por trecho da mensagem de erro (ordem importa: o 1º que
+# casar vence)
+FAILURE_CAUSES = (
+    ("Revisão de fatos reprovou o roteiro", ("revisão de fatos",)),
+    ("Revisão do vídeo pronto reprovou", ("revisão antes do upload", "revisão do vídeo", "revisão de áudio")),
+    ("Nenhuma IA respondeu (cota)", ("nenhum provedor", "llm respondeu")),
+    ("Tema recusado", ("tema recusado", "temas seguidos recusados")),
+    ("Upload no YouTube (token, cota)", ("invalid_grant", "upload", "quota", "uploadlimitexceeded")),
+    ("Imagem ou narração", ("imagem", "tts", "narração", "voz")),
+)
+
+
+def _failure_cause(error: str) -> str:
+    low = error.lower()
+    return next((label for label, keys in FAILURE_CAUSES if any(k in low for k in keys)), "Outros")
+
+
+def _channel_summary(c: dict, jobs: list, videos: list[dict], running: bool) -> dict:
+    """Situação de hoje, grade dos últimos GRID_DAYS dias e desempenho do canal."""
+    today = date.today()
+    mine = [j for j in jobs if j.channel == c["name"]]
+    by_day: dict[date, list] = {}
+    for j in mine:
+        when = _local(j.created_at)
+        if when:
+            by_day.setdefault(when.date(), []).append(j)
+    grid = []
+    for i in range(GRID_DAYS - 1, -1, -1):
+        d = today - timedelta(days=i)
+        day_jobs = by_day.get(d, [])
+        ups = sum(j.status == "uploaded" for j in day_jobs)
+        fails = sum(j.status in FAILED + ("retried",) for j in day_jobs)
+        state = "ok" if ups else ("fail" if fails else "none")
+        grid.append({"label": d.strftime("%d/%m"), "state": state, "ups": ups, "fails": fails})
+
+    today_jobs = by_day.get(today, [])
+    published = [j for j in today_jobs if j.status == "uploaded"]
+    pending = [j for j in today_jobs if j.status in IN_PROGRESS]
+    if published:
+        state, text = "ok", f"{len(published)} vídeo(s) no ar hoje"
+    elif pending and running:
+        state, text = "busy", "gerando o vídeo de hoje"
+    elif today_jobs:
+        state, text = "fail", "falhou hoje — veja em Problemas"
+    elif datetime.now().hour < 10:
+        state, text = "none", "roda às 10h"
+    else:
+        state, text = "fail", "nenhum vídeo hoje"
+    if c["token_status"] != "ok":
+        state, text = "fail", "token do YouTube expirado — rode auth_youtube.py"
+
+    mine_videos = [v for v in videos if v["channel"] == c["name"]]
+    cutoff = time.time() - 30 * 86400
+    last30 = [v["views"] for v in mine_videos if v["ts"] >= cutoff and v["views"] is not None]
+    today_video = next((v for v in mine_videos if v["id"] == published[0].id), None) if published else None
+    return {
+        **c, "state": state, "state_text": text, "grid": grid, "today_video": today_video,
+        "missed_days": sum(g["state"] != "ok" for g in grid[:-1]),
+        "videos_30d": len(last30), "views_30d": sum(last30),
+        "median_30d": round(statistics.median(last30)) if last30 else 0,
+        "best": max(mine_videos, key=lambda v: v["views"] or -1, default=None),
+    }
+
+
 @app.route("/")
 def index():
     channels = _load_channels()
-    raw_jobs = recent_jobs(limit=30)
+    raw_jobs = recent_jobs(limit=600)
     raw_published = published_jobs()
-    views = _video_views(raw_jobs + raw_published)
-    all_videos = [
-        {**vars(j), "views": views.get(j.youtube_video_id), "date_label": _date_label(j.created_at)}
-        for j in raw_published
-    ]
-    all_videos.sort(key=lambda j: j["views"] if j["views"] is not None else -1, reverse=True)
-    totals: dict[str, int] = {}
-    for j in all_videos:
-        totals[j["channel"]] = totals.get(j["channel"], 0) + (j["views"] or 0)
-    views_by_channel = sorted(totals.items(), key=lambda kv: kv[1], reverse=True)
-    jobs = [
-        {**vars(j), "views": views.get(j.youtube_video_id), "date_label": _date_label(j.created_at)}
-        for j in raw_jobs
-    ]
-    sort_views = request.args.get("sort") == "views"
-    if sort_views:
-        jobs.sort(key=lambda j: j["views"] if j["views"] is not None else -1, reverse=True)
-    any_public = any(c["upload_privacy"] == "public" for c in channels)
+    views = _video_views(raw_published)
+    videos = [_video(j, views) for j in raw_published]
+    running = _pipeline_already_running()
+    summaries = [_channel_summary(c, raw_jobs, videos, running) for c in channels]
+    summaries.sort(key=lambda c: {"fail": 0, "busy": 1, "none": 2, "ok": 3}[c["state"]])
+    colors = {c["name"]: c["color"] for c in channels}
+    titles = {c["name"]: c["title"] for c in channels}
+    problems = [
+        {"id": j.id, "channel": j.channel, "topic": j.topic, "status": j.status,
+         "error": (j.error or "").strip()[:1200], "date_label": _date_label(j.created_at)}
+        for j in raw_jobs if j.status in FAILED + ("retried",)
+    ][:150]
+    week_ago = datetime.now().astimezone() - timedelta(days=7)
+    causes: dict[str, int] = {}
+    for j in raw_jobs:
+        when = _local(j.created_at)
+        if j.status in FAILED + ("retried",) and when and when >= week_ago:
+            cause = _failure_cause(j.error or "")
+            causes[cause] = causes.get(cause, 0) + 1
+    causes_7d = sorted(causes.items(), key=lambda kv: kv[1], reverse=True)
     total_uploads = sum(int(c["uploads_per_day"] or 0) for c in channels)
-    if request.args.get("saved") == "1":
-        flash = "Configuração salva."
-    elif request.args.get("topic_added") == "1":
-        flash = "Tema adicionado à fila."
-    elif request.args.get("topic_error"):
+    flashes = {
+        "saved": "Configuração salva.", "topic_added": "Fila de temas atualizada.",
+        "approved": "Vídeo publicado.", "busy": "Já tem um vídeo sendo gerado. Espere ele terminar pra rodar outro.",
+        "started": "Vídeo começou a ser gerado. Leva uns 20 minutos.",
+    }
+    flash = next((msg for key, msg in flashes.items() if request.args.get(key) == "1"), None)
+    if request.args.get("topic_error"):
         flash = f"Tema recusado: {request.args['topic_error']}"
-    elif request.args.get("approved") == "1":
-        flash = "Vídeo publicado."
     elif request.args.get("approve_error"):
         flash = f"Não consegui publicar: {request.args['approve_error']}"
-    elif request.args.get("busy") == "1":
-        flash = "Já tem um vídeo sendo gerado agora — espere terminar antes de rodar outro (evita estourar a memória da máquina)."
-    else:
-        flash = None
-    return render_template_string(
-        TEMPLATE, channels=channels, jobs=jobs, sort_views=sort_views, all_videos=all_videos, views_by_channel=views_by_channel, any_public=any_public, flash=flash, total_uploads=total_uploads,
-        pending=jobs_with_status("awaiting_approval"),
-        azure_ready=bool(AZURE_SPEECH_KEYS),
+    return render_template(
+        "painel.html", channels=summaries, causes_7d=causes_7d, videos=videos, problems=problems, colors=colors, titles=titles,
+        flash=flash, total_uploads=total_uploads, running=running, today=date.today().strftime("%d/%m"),
+        pending=jobs_with_status("awaiting_approval"), azure_ready=bool(AZURE_SPEECH_KEYS),
     )
 
 
@@ -934,7 +747,7 @@ def run_channel(channel: str):
         cmd += ["--fact-label", fact_label]
 
     subprocess.Popen(cmd, cwd=ROOT)
-    return redirect(url_for("index"))
+    return redirect(url_for("index", started=1))
 
 
 if __name__ == "__main__":
