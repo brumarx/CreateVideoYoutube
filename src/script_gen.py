@@ -176,6 +176,15 @@ completar com suposição):
         'o aspecto concreto (\'Antikythera wreck\', \'National Archaeological Museum, Athens\'). null quando a cena '
         'não cita nada concreto com nome (reflexão, transição, conceito)."'
     ) if channel.real_media else ""
+    # canal sobre um país: busca de banco sem o país devolve Capitólio/Canadá
+    country_rule = (
+        f"\nREGRA CRÍTICA sobre o país: o canal é sobre o {channel.country}. Em \"stock_query\" de lugar, "
+        f"governo, cidade, polícia ou dinheiro, inclua o país (ex.: 'Brazil congress building', 'Brasilia aerial', "
+        f"'Brazilian real banknotes') — sem isso o banco devolve bandeira do Canadá e Capitólio americano."
+        + (" Em \"real_subject\", prefira o nome do lugar/órgão brasileiro ('National Congress of Brazil', "
+           "'Palácio do Planalto', 'Supreme Federal Court')." if channel.real_media else "")
+        + "\n"
+    ) if channel.country else ""
 
     return f"""{channel.prompt_base}
 
@@ -222,6 +231,7 @@ personagem com nome ("Maria, uma jovem profissional") — o narrador é o
 canal. Se o título ou o gancho promete um método, passos ou N casos, o
 roteiro ENTREGA cada um, concreto e na ordem — nunca só repete a promessa.
 
+{country_rule}
 REGRA CRÍTICA sobre "stock_query": priorize filmagem REAL sobre imagem
 gerada sempre que o assunto existe filmado de verdade — filmagem real de
 banco de vídeo (animal, paisagem, cidade, objeto, natureza, situação do

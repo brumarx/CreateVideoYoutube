@@ -6,6 +6,8 @@ youtube_handle: "@numerosdarepublica"
 channel_title: "Números da República"
 greeting: "Fala, galera!"
 language: "pt-BR"
+# vídeo é sobre o Brasil: bandeira/prédio/dinheiro de outro país é fora de contexto (src/config.py)
+pais: "Brasil"
 tts_voice_weights:
   pt-BR-AntonioNeural: 100
   pt-BR-FranciscaNeural: 0

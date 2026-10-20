@@ -101,15 +101,31 @@ _OTHER_CATEGORY = re.compile(r"wom[ae]n|girls?|female|ladies|lady|kids?|child|ch
 _SPORTS_QUERY = re.compile(r"soccer|football|stadium|goal|ball|fans|team|player|match|jersey|shield|crest|coach|referee", re.IGNORECASE)
 
 
+# canal sobre UM país (channel.country): candidato cujo slug/alt/tags cita
+# outro país sai antes da visão — vídeo de política saiu com bandeira do
+# Canadá (20/10)
+_FOREIGN = {
+    "Brasil": re.compile(
+        r"canad|ottawa|\busa\b|united[- ]states|america|\bus[- ]flag|capitol|washington|white[- ]house|"
+        r"\buk\b|britain|british|england|london|westminster|big[- ]ben|europe|\beu\b|german|berlin|france|french|paris|"
+        r"spain|spanish|italy|italian|\bindia\b|\bchina\b|chinese|japan|russia|mexic|argentin|australia|dollar|\beuro\b|"
+        r"\bpound|sterling",
+        re.IGNORECASE,
+    ),
+}
+
+
 def _normalize_query(query: str) -> str:
     return _FOOTBALL.sub("soccer", query)
 
 
-def _rank_candidates(query: str, items: list[dict], kind: str, describe) -> list[dict]:
+def _rank_candidates(query: str, items: list[dict], kind: str, describe, region: str = "") -> list[dict]:
     """Candidatos em ordem de preferência (relevância > 0, inédito, mais
     relevante), sem os de outro esporte/clube numa busca de esporte. Lista
     vazia se só sobrou candidato fora do tema."""
     recent = set(_load_recent().get(kind, []))
+    if region in _FOREIGN:
+        items = [i for i in items if not _FOREIGN[region].search(describe(i) or "")]
     if _SPORTS_QUERY.search(query):
         items = [i for i in items if not _OFF_TOPIC.search(describe(i) or "")]
         if not _OTHER_CATEGORY.search(query):
@@ -150,14 +166,18 @@ def _pick_best_file(video: dict, width: int, height: int) -> dict | None:
     return min(files, key=score)
 
 
-def search_stock_clip(query: str, width: int, height: int, check: Callable[[bytes], bool | None] | None = None) -> Path | None:
+def search_stock_clip(
+    query: str, width: int, height: int, check: Callable[[bytes], bool | None] | None = None, region: str = "",
+) -> Path | None:
     """Pexels e, sem nada no contexto, Pixabay (2º banco grátis)."""
-    return _pexels_clip(query, width, height, check) or _pixabay_clip(query, width, height, check)
+    return _pexels_clip(query, width, height, check, region) or _pixabay_clip(query, width, height, check, region)
 
 
-def search_stock_photo(query: str, width: int, height: int, check: Callable[[bytes], bool | None] | None = None) -> bytes | None:
+def search_stock_photo(
+    query: str, width: int, height: int, check: Callable[[bytes], bool | None] | None = None, region: str = "",
+) -> bytes | None:
     """Pexels e, sem nada no contexto, Pixabay (2º banco grátis)."""
-    return _pexels_photo(query, width, height, check) or _pixabay_photo(query, width, height, check)
+    return _pexels_photo(query, width, height, check, region) or _pixabay_photo(query, width, height, check, region)
 
 
 PIXABAY_VIDEO_URL = "https://pixabay.com/api/videos/"
@@ -189,10 +209,10 @@ def _passes(check, content: bytes, query: str) -> bool:
     return not (verdict is False or (verdict is None and _SPORTS_QUERY.search(query)))
 
 
-def _pixabay_clip(query: str, width: int, height: int, check) -> Path | None:
+def _pixabay_clip(query: str, width: int, height: int, check, region: str = "") -> Path | None:
     hits = _pixabay_hits(PIXABAY_VIDEO_URL, query, {})
     want_portrait = height > width
-    for hit in _rank_candidates(query, hits, "pixabay_video", lambda h: h.get("tags", ""))[:MAX_VISUAL_TRIES]:
+    for hit in _rank_candidates(query, hits, "pixabay_video", lambda h: h.get("tags", ""), region)[:MAX_VISUAL_TRIES]:
         files = [f for f in (hit.get("videos") or {}).values() if f.get("url") and (f.get("height") or 0) >= MIN_CLIP_HEIGHT]
         files = [f for f in files if ((f.get("height") or 0) > (f.get("width") or 0)) == want_portrait]
         if not files:
@@ -218,10 +238,10 @@ def _pixabay_clip(query: str, width: int, height: int, check) -> Path | None:
     return None
 
 
-def _pixabay_photo(query: str, width: int, height: int, check) -> bytes | None:
+def _pixabay_photo(query: str, width: int, height: int, check, region: str = "") -> bytes | None:
     orientation = "vertical" if height > width else "horizontal"
     hits = _pixabay_hits(PIXABAY_PHOTO_URL, query, {"image_type": "photo", "orientation": orientation})
-    for hit in _rank_candidates(query, hits, "pixabay_photo", lambda h: h.get("tags", ""))[:MAX_VISUAL_TRIES]:
+    for hit in _rank_candidates(query, hits, "pixabay_photo", lambda h: h.get("tags", ""), region)[:MAX_VISUAL_TRIES]:
         url = hit.get("largeImageURL") or hit.get("webformatURL")
         if not url:
             continue
@@ -239,7 +259,7 @@ def _pixabay_photo(query: str, width: int, height: int, check) -> bytes | None:
     return None
 
 
-def _pexels_clip(query: str, width: int, height: int, check: Callable[[bytes], bool | None] | None = None) -> Path | None:
+def _pexels_clip(query: str, width: int, height: int, check: Callable[[bytes], bool | None] | None = None, region: str = "") -> Path | None:
     """Busca um clipe real que combine com `query` (2-4 palavras em
     inglês, ver script_gen.py -> stock_query) e devolve o caminho local do
     arquivo baixado — ou None (sem chave configurada, sem resultado, ou
@@ -273,7 +293,7 @@ def _pexels_clip(query: str, width: int, height: int, check: Callable[[bytes], b
             log.info("pexels sem resultado pra: %r", query)
             return None
 
-        for chosen in _rank_candidates(query, videos, "video", lambda v: v.get("url", ""))[:MAX_VISUAL_TRIES]:
+        for chosen in _rank_candidates(query, videos, "video", lambda v: v.get("url", ""), region)[:MAX_VISUAL_TRIES]:
             picked = _pick_best_file(chosen, width, height)
             if not picked or not picked.get("link"):
                 continue
@@ -304,7 +324,7 @@ def _pexels_clip(query: str, width: int, height: int, check: Callable[[bytes], b
     return None
 
 
-def _pexels_photo(query: str, width: int, height: int, check: Callable[[bytes], bool | None] | None = None) -> bytes | None:
+def _pexels_photo(query: str, width: int, height: int, check: Callable[[bytes], bool | None] | None = None, region: str = "") -> bytes | None:
     """Busca uma FOTO real que combine com `query` e devolve os bytes da
     imagem — mesma interface de src.visuals.generate_image, pra ser
     intercambiável no lugar dela. Meio-termo da cascata: mais crível que
@@ -339,7 +359,7 @@ def _pexels_photo(query: str, width: int, height: int, check: Callable[[bytes], 
             log.info("pexels sem foto pra: %r", query)
             return None
 
-        for chosen in _rank_candidates(query, photos, "photo", lambda p: p.get("alt", ""))[:MAX_VISUAL_TRIES]:
+        for chosen in _rank_candidates(query, photos, "photo", lambda p: p.get("alt", ""), region)[:MAX_VISUAL_TRIES]:
             src = chosen.get("src", {})
             url = src.get("large2x") or src.get("original") or src.get("large")
             if not url:

@@ -732,6 +732,12 @@ def run(
             width, height = SHORT_WIDTH, SHORT_HEIGHT
 
         visual_context = f"Canal: {channel.channel_title} — {channel.niche}.\nTema do vídeo: {topic}."
+        if channel.country:
+            visual_context += (
+                f"\nO vídeo é sobre o {channel.country}: bandeira, prédio de governo, parlamento, placa de rua, "
+                f"viatura, dinheiro ou monumento identificável de OUTRO país é SEMPRE fora de contexto "
+                f"(ex.: bandeira do Canadá ou dos EUA, Capitólio americano, Parlamento de Londres)."
+            )
         scene_videos = []
         scene_durations = []
         last_news_photo: dict | None = None
@@ -953,7 +959,7 @@ def run(
                         if real_frame is not None:
                             break
             if stock_clip_path is None and real_frame is None and news_frame is None and player_frame is None and stock_query:
-                stock_clip_path = search_stock_clip(stock_query, width, height, check=in_context)
+                stock_clip_path = search_stock_clip(stock_query, width, height, check=in_context, region=channel.country)
 
             image_path = None
             if news_frame is not None:
@@ -975,7 +981,7 @@ def run(
                 same_photo_run = 0
                 scene_sources.append("arquivo")
             elif stock_clip_path is None:
-                image_bytes = search_stock_photo(stock_query, width, height, check=in_context) if stock_query else None
+                image_bytes = search_stock_photo(stock_query, width, height, check=in_context, region=channel.country) if stock_query else None
                 if image_bytes is None:
                     # imagem de IA sai do prompt da PRÓPRIA cena — no contexto
                     # por construção. Pede já no formato final do vídeo (pedir
