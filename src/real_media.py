@@ -14,17 +14,30 @@ Commons. Só arquivo hospedado no Commons entra — a imagem local da
 Wikipédia em inglês pode ser uso justo (logo, capa de filme) e não serve.
 Licença NC/ND fica de fora; o crédito do autor vai na descrição (CC BY/
 BY-SA exige). Grátis, sem chave.
+
+Vídeo real (pedido de 20/10: "o ideal são vídeos mais reais"), nessa
+ordem: Commons, NASA (domínio público — espaço, Terra vista de cima,
+fenômenos naturais), Europeana (cinejornal europeu, só reuso aberto: PD,
+CC0, CC BY/BY-SA) e Internet Archive SÓ em acervos de domínio público de
+verdade (Prelinger, Universal Newsreels, FedFlix/governo dos EUA): lá a
+licença é declarada por quem sobe, e desenho do Titanic aparecia como
+"domínio público" — Content ID derruba. Filme longo (cinejornal de 10
+min): corta um trecho de ~20s direto da URL (ffmpeg com -ss, sem baixar
+tudo) e a visão olha cada trecho.
 """
 from __future__ import annotations
 
+import html
 import logging
 import re
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import Callable
 
 import httpx
 
+from .config import EUROPEANA_API_KEY
 from .visual_check import frames_from_clip
 
 log = logging.getLogger("real_media")
@@ -34,8 +47,16 @@ _COMMONS_API = "https://commons.wikimedia.org/w/api.php"
 _ENWIKI_API = "https://en.wikipedia.org/w/api.php"
 MIN_PHOTO_WIDTH = 800  # menor que isso fica borrado esticado em 1080p
 MIN_CLIP_SECONDS = 4
-MAX_CLIP_BYTES = 80 * 1024 * 1024
 MAX_TRIES = 4  # candidatos que a checagem visual olha antes de desistir
+SEGMENT_SECONDS = 20
+_NASA_API = "https://images-api.nasa.gov/search"
+_ARCHIVE_SEARCH = "https://archive.org/advancedsearch.php"
+_EUROPEANA_API = "https://api.europeana.eu/record/v2/search.json"
+# acervos do Internet Archive que são domínio público de fato
+_ARCHIVE_COLLECTIONS = "prelinger OR universal_newsreels OR FedFlix OR nasa OR national_archives OR usnationalarchives"
+# cinejornal com dono que reivindica no Content ID (Fox Movietone, British
+# Pathé) — aparece como "domínio público" no Commons e dentro do Prelinger
+_OWNED = re.compile(r"movietone|path[eé]|\bfox\b|hearst|paramount", re.IGNORECASE)
 # licença que não permite uso comercial/derivado não entra
 _BAD_LICENSE = re.compile(r"\bNC\b|\bND\b|non-?commercial|no ?deriv|fair use", re.IGNORECASE)
 # mapa de localização, bandeira, brasão, ícone: não é foto do assunto
@@ -65,7 +86,7 @@ _search_cache: dict[tuple[str, str], list[dict]] = {}
 
 
 def _strip_html(text: str) -> str:
-    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", text or "")).strip()
+    return html.unescape(re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", text or ""))).strip()
 
 
 def _meta(info: dict) -> tuple[str, str]:
@@ -157,30 +178,164 @@ def real_photos(subject: str, used: set[str]) -> list[dict]:
     return [c for c in _search(subject, "photo") if c["title"] not in used][:MAX_TRIES]
 
 
+def _nasa_clips(subject: str) -> list[dict]:
+    try:
+        items = httpx.get(_NASA_API, headers=_UA, timeout=30, params={"q": subject, "media_type": "video"}).json()
+        items = items["collection"]["items"][:20]
+    except Exception as exc:  # noqa: BLE001
+        log.warning("nasa falhou: %s", exc)
+        return []
+    out = []
+    for item in items:
+        data = (item.get("data") or [{}])[0]
+        title = data.get("title", "")
+        if not _relevant(f"{title} {' '.join(data.get('keywords') or [])}", subject) or not item.get("href"):
+            continue
+        out.append({"title": f"NASA:{data.get('nasa_id')}", "manifest": item["href"],
+                    "credit": f"NASA ({title}, domínio público)"})
+    return out
+
+
+def _nasa_url(cand: dict) -> str | None:
+    try:
+        files = httpx.get(cand["manifest"], headers=_UA, timeout=30, follow_redirects=True).json()
+    except Exception:  # noqa: BLE001
+        return None
+    for size in ("~medium.mp4", "~small.mp4", "~large.mp4", "~orig.mp4"):
+        url = next((f for f in files if f.endswith(size)), None)
+        if url:
+            return url.replace("http://", "https://")
+    return None
+
+
+def _europeana_clips(subject: str) -> list[dict]:
+    try:
+        items = httpx.get(_EUROPEANA_API, headers=_UA, timeout=40, params={
+            "wskey": EUROPEANA_API_KEY, "query": subject, "media": "true", "qf": "TYPE:VIDEO",
+            "reusability": "open", "rows": 12, "profile": "rich",
+        }).json().get("items", [])
+    except Exception as exc:  # noqa: BLE001
+        log.warning("europeana falhou: %s", exc)
+        return []
+    out = []
+    for item in items:
+        title = (item.get("title") or [""])[0]
+        url = (item.get("edmIsShownBy") or [""])[0]
+        rights = (item.get("rights") or [""])[0]
+        if not url or _BAD_LICENSE.search(rights) or "/nc" in rights or "/nd" in rights:
+            continue
+        if not _relevant(title, subject) or not url.lower().split("?")[0].endswith((".mp4", ".webm", ".ogv", ".mov")):
+            continue
+        provider = (item.get("dataProvider") or item.get("provider") or ["Europeana"])[0]
+        out.append({"title": f"EU:{item.get('id')}", "url": url,
+                    "credit": f"{provider} via Europeana ({title}, {rights.rstrip('/').split('/')[-2] if '/' in rights else rights})"})
+    return out
+
+
+def _archive_clips(subject: str) -> list[dict]:
+    words = " ".join(re.findall(r"[A-Za-z0-9]+", subject))
+    try:
+        docs = httpx.get(_ARCHIVE_SEARCH, headers=_UA, timeout=40, params={
+            "q": f"title:({words}) AND mediatype:movies AND collection:({_ARCHIVE_COLLECTIONS})",
+            "fl[]": ["identifier", "title"], "rows": 15, "output": "json",
+        }).json()["response"]["docs"]
+    except Exception as exc:  # noqa: BLE001
+        log.warning("internet archive falhou: %s", exc)
+        return []
+    return [
+        {"title": f"IA:{d['identifier']}", "identifier": d["identifier"],
+         "credit": f"Internet Archive ({d.get('title')}, domínio público)"}
+        for d in docs
+        if _relevant(str(d.get("title", "")), subject) and not _OWNED.search(str(d.get("title", "")))
+    ]
+
+
+def _archive_url(cand: dict) -> str | None:
+    try:
+        files = httpx.get(f"https://archive.org/metadata/{cand['identifier']}", headers=_UA, timeout=30).json()["files"]
+    except Exception:  # noqa: BLE001
+        return None
+    for fmt in ("h.264", "512Kb MPEG4", "MPEG4", "h.264 IA"):
+        f = next((f for f in files if f.get("format") == fmt and f.get("name", "").endswith(".mp4")), None)
+        if f:
+            return f"https://archive.org/download/{cand['identifier']}/{f['name']}"
+    return None
+
+
+def _duration(url: str) -> float:
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", url],
+            capture_output=True, text=True, timeout=60,
+        ).stdout.strip()
+        return float(out or 0)
+    except Exception:  # noqa: BLE001
+        return 0.0
+
+
+def _segment(url: str, start: float) -> Path | None:
+    """~20s a partir de `start`, sem áudio, direto da URL (o filme inteiro
+    pode ter centenas de MB). mkv aceita qualquer codec (webm/ogv/mp4)."""
+    tmp = tempfile.NamedTemporaryFile(suffix=".mkv", delete=False)
+    tmp.close()
+    path = Path(tmp.name)
+    try:
+        subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", "-ss", f"{start:.1f}", "-i", url, "-t", str(SEGMENT_SECONDS),
+             "-an", "-c:v", "copy", str(path)],
+            capture_output=True, timeout=180, check=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("corte do vídeo falhou (%s): %s", url[-60:], exc)
+        path.unlink(missing_ok=True)
+        return None
+    if path.stat().st_size < 50_000:
+        path.unlink(missing_ok=True)
+        return None
+    return path
+
+
+def _clip_candidates(subject: str) -> list[dict]:
+    key = (subject.lower(), "clips")
+    if key not in _search_cache:
+        _search_cache[key] = (
+            _search(subject, "clip") + _nasa_clips(subject) + _europeana_clips(subject) + _archive_clips(subject)
+        )
+    return _search_cache[key]
+
+
 def real_clip(subject: str, used: set[str], check: Callable[[bytes], bool | None] | None = None) -> dict | None:
-    """Vídeo real de `subject` baixado e aprovado pela visão: {title, path,
-    credit} (marca `used`), ou None. Nunca levanta exceção."""
+    """Vídeo real de `subject` (Commons, NASA, Europeana, Internet Archive), trecho
+    aprovado pela visão: {title, path, credit} (marca `used`), ou None.
+    Nunca levanta exceção."""
     if not subject:
         return None
-    for cand in [c for c in _search(subject, "clip") if c["title"] not in used][:MAX_TRIES]:
-        try:
-            resp = httpx.get(cand["url"], headers=_UA, timeout=90, follow_redirects=True)
-            resp.raise_for_status()
-        except Exception as exc:  # noqa: BLE001
-            log.warning("download do vídeo do commons falhou (%s): %s", cand["title"], exc)
+    cands = [c for c in _clip_candidates(subject) if c["title"] not in used and not _OWNED.search(c["credit"])]
+    for cand in cands[:MAX_TRIES]:
+        if "manifest" in cand:
+            url = _nasa_url(cand)
+        elif "identifier" in cand:
+            url = _archive_url(cand)
+        else:
+            url = cand["url"]
+        if not url:
             continue
-        if len(resp.content) > MAX_CLIP_BYTES:
+        dur = _duration(url)
+        if dur < MIN_CLIP_SECONDS:
             continue
-        tmp = tempfile.NamedTemporaryFile(suffix=Path(cand["url"].split("?")[0]).suffix or ".webm", delete=False)
-        tmp.write(resp.content)
-        tmp.close()
-        path = Path(tmp.name)
-        if check is not None:
-            frames = frames_from_clip(path)
-            if frames is None or check(frames) is False:
-                path.unlink(missing_ok=True)
+        # curto: do começo; longo (cinejornal): 2 pontos do meio — a
+        # abertura costuma ser cartela de título
+        starts = [0.0] if dur <= SEGMENT_SECONDS * 2 else [dur * 0.3, dur * 0.6]
+        for start in starts:
+            path = _segment(url, start)
+            if path is None:
                 continue
-        used.add(cand["title"])
-        log.info("vídeo real (commons) pra %r: %s", subject, cand["title"])
-        return {**cand, "path": path}
+            if check is not None:
+                frames = frames_from_clip(path)
+                if frames is None or check(frames) is False:
+                    path.unlink(missing_ok=True)
+                    continue
+            used.add(cand["title"])
+            log.info("vídeo real pra %r: %s (a partir de %.0fs)", subject, cand["title"], start)
+            return {**cand, "path": path}
     return None

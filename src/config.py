@@ -54,6 +54,9 @@ PEXELS_API_KEYS = _keys("PEXELS_API_KEYS")
 PIXABAY_API_KEYS = _keys("PIXABAY_API_KEYS")  # 2º banco de vídeo/foto grátis
 CLOUDFLARE_AI_KEYS = _keys("CLOUDFLARE_AI_KEYS")
 TAVILY_API_KEYS = _keys("TAVILY_API_KEYS")
+# Europeana (filme europeu de arquivo, ver src/real_media.py): chave grátis
+# em pro.europeana.eu; sem ela usa a de demonstração pública (com limite)
+EUROPEANA_API_KEY = os.environ.get("EUROPEANA_API_KEY", "").strip() or "api2demo"
 # Azure AI Speech (vozes pt-BR extras, ver src/tts.py). Sem chave, voz da
 # Azure sorteada cai pro edge-tts grátis.
 AZURE_SPEECH_KEYS = _keys("AZURE_SPEECH_KEYS")
