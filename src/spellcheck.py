@@ -43,6 +43,22 @@ def _matches(text: str, language: str) -> list[dict] | None:
         return None
 
 
+def portuguese_words(words: list[str], language: str = "pt-BR") -> set[str]:
+    """Das `words`, as que o LanguageTool aceita como português — "Havana"
+    ganhava reescrita "Aavána" pra voz (20/10). Sem LanguageTool, vazio."""
+    if not words:
+        return set()
+    text = "\n".join(words)
+    matches = _matches(text, language)
+    if matches is None:
+        return set()
+    flagged = {
+        text[m["offset"]:m["offset"] + m["length"]].lower()
+        for m in matches if "MORFOLOGIK" in (m.get("rule") or {}).get("id", "")
+    }
+    return {w for w in words if not any(part.lower() in flagged for part in w.split())}
+
+
 def _match_case(original: str, replacement: str) -> str:
     """'Um Cidade' -> 'Uma Cidade': repete a caixa de cada palavra original."""
     if original.isupper():

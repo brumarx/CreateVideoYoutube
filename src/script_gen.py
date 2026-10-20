@@ -127,6 +127,13 @@ def current_date_rule() -> str:
     )
 
 
+_FOREIGN_FIELDS = """  "idioma": {"OPCIONAL — termo da narração em INGLÊS, ESPANHOL, FRANCÊS, ALEMÃO, ITALIANO ou HOLANDÊS (nome de ferramenta, empresa, pessoa, lugar, expressão), exatamente como está escrito na narração": "código do idioma: en, es, fr, de, it ou nl — ex.: \"Claude Code\": \"en\", \"Runway\": \"en\", \"Palm Jumeirah\": \"en\", \"Hindenburg\": \"de\", \"Mont Saint-Michel\": \"fr\". A voz fala esse termo com a pronúncia nativa. Palavra que já existe em português (Havana, Londres, Nova York, internet) NUNCA entra. Sem termo assim, {}"},
+  "pronuncia": {"OPCIONAL — só nome de OUTRO alfabeto/idioma (grego, russo, japonês, árabe, chinês etc.) que uma voz brasileira leria errado — inglês, espanhol, francês, alemão, italiano e holandês vão em \"idioma\", NUNCA aqui": "como se fala, escrito à portuguesa com acento na sílaba tônica — ex.: \"Pavlopetri\": \"Pavlopétri\", \"Dyatlov\": \"Diátlov\", \"Aokigahara\": \"Aokigahára\". Palavra portuguesa nunca entra. Sem nome assim, {}"},
+"""
+_PRONUNCIATION_FIELD = """  "pronuncia": {"OPCIONAL — só nomes estrangeiros/difíceis da narração (lugar, pessoa, espécie) que uma voz brasileira leria errado": "como se fala, escrito à portuguesa com acento na sílaba tônica — ex.: \"Pavlopetri\": \"Pavlopétri\", \"Wegener\": \"Véguener\", \"Mesosaurus\": \"Mesossáurus\". Palavra portuguesa comum nunca entra. Sem nome assim, {}"},
+"""
+
+
 def _prompt_for(
     channel: ChannelConfig,
     topic: str,
@@ -186,6 +193,10 @@ completar com suposição):
         + "\n"
     ) if channel.country else ""
 
+    # termo estrangeiro: voz nativa ("idioma") ou reescrita à portuguesa
+    # ("pronuncia") — ver ChannelConfig.native_foreign
+    pronunciation_fields = _FOREIGN_FIELDS if channel.native_foreign else _PRONUNCIATION_FIELD
+
     return f"""{channel.prompt_base}
 
 {current_date_rule()}
@@ -200,8 +211,7 @@ Gere um JSON com exatamente este formato:
 {{
   "title": "título chamativo, até 100 caracteres",
   "thumbnail_text": "gancho CURTÍSSIMO pra thumbnail, no máximo 4 palavras, em português correto (concordância certa, nenhuma palavra em inglês — saiu \"DOR É FUEL\" e \"A ÁLCOOL VERDADE\"), tipo manchete de banca de jornal — não é o título, é a frase que faz alguém parar de rolar o feed",
-  "pronuncia": {{"OPCIONAL — só nomes estrangeiros/difíceis da narração (lugar, pessoa, espécie) que uma voz brasileira leria errado": "como se fala, escrito à portuguesa com acento na sílaba tônica — ex.: \"Pavlopetri\": \"Pavlopétri\", \"Wegener\": \"Véguener\", \"Mesosaurus\": \"Mesossáurus\". Palavra portuguesa comum nunca entra. Sem nome assim, {{}}"}},
-  "thumbnail_image_prompt": "prompt em inglês pro momento MAIS visualmente marcante/dramático de toda a história (não precisa ser a cena 1) — close-up, alto contraste, cor vibrante, um único foco claro na imagem. Primeiro pergunte: essa história tem UM protagonista real específico e identificável (uma pessoa que existiu/existe de verdade, com nome — político, atleta, empresário, figura histórica, NÃO importa se o nome aparece literalmente neste prompt)? Se SIM: NUNCA um close no rosto, nem descrito de forma genérica ('a woman's face', 'a determined man') — o contexto (uniforme, número de peito, roupa de época, cargo) já entrega pra quem assiste que aquele rosto É pra ser ela, e a IA não sabe gerar o rosto real dela. Use em vez disso um close em mãos/objeto pessoal (crachá, número de peito, caneta, uniforme), uma silhueta de costas/longe, ou um símbolo/cenário forte relacionado à história. Se NÃO (a cena é sobre um personagem fictício, genérico, ou 'alguém' sem identidade real específica): aí sim pode descrever uma expressão facial EXAGERADA e genuína (chocada, olhos arregalados, boca aberta, maravilhada, com medo) — rosto humano com emoção forte é o maior fator isolado de clique em thumbnail. Se não tiver pessoa nenhuma, use um objeto/cenário com contraste visual forte numa composição que gere uma pergunta na cabeça de quem vê. Mesma regra das outras imagens: SEM texto, palavras, logos, botões ou UI",
+{pronunciation_fields}  "thumbnail_image_prompt": "prompt em inglês pro momento MAIS visualmente marcante/dramático de toda a história (não precisa ser a cena 1) — close-up, alto contraste, cor vibrante, um único foco claro na imagem. Primeiro pergunte: essa história tem UM protagonista real específico e identificável (uma pessoa que existiu/existe de verdade, com nome — político, atleta, empresário, figura histórica, NÃO importa se o nome aparece literalmente neste prompt)? Se SIM: NUNCA um close no rosto, nem descrito de forma genérica ('a woman's face', 'a determined man') — o contexto (uniforme, número de peito, roupa de época, cargo) já entrega pra quem assiste que aquele rosto É pra ser ela, e a IA não sabe gerar o rosto real dela. Use em vez disso um close em mãos/objeto pessoal (crachá, número de peito, caneta, uniforme), uma silhueta de costas/longe, ou um símbolo/cenário forte relacionado à história. Se NÃO (a cena é sobre um personagem fictício, genérico, ou 'alguém' sem identidade real específica): aí sim pode descrever uma expressão facial EXAGERADA e genuína (chocada, olhos arregalados, boca aberta, maravilhada, com medo) — rosto humano com emoção forte é o maior fator isolado de clique em thumbnail. Se não tiver pessoa nenhuma, use um objeto/cenário com contraste visual forte numa composição que gere uma pergunta na cabeça de quem vê. Mesma regra das outras imagens: SEM texto, palavras, logos, botões ou UI",
   "description": "descrição para o YouTube, 2-3 parágrafos, com contexto e call-to-action",
   "tags": ["tag1", "tag2", "..."],
   "mood": "clima geral do vídeo pra escolher a música de fundo certa — exatamente um destes valores: 'tenso' (denúncia grave, algo errado/perigoso, suspense), 'animado' (conquista, vitória, dica animadora, virada positiva), 'melancolico' (derrota, perda, resultado triste/decepcionante), 'calmo' (reflexivo, sem tensão nem euforia), 'neutro' (explicativo/factual, sem carga emocional forte definida). Escolha 1 só, o que domina o vídeo como um todo, não cena a cena.",

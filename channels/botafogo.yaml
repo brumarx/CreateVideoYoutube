@@ -8,6 +8,8 @@ fallback_grayscale: true
 player_photos: true
 # fica como está: fotos das notícias/jogo já são o visual real (src/real_media.py)
 real_media: false
+# nome de jogador estrangeiro à brasileira ("Ferrarêzi"), não na voz italiana
+voz_nativa_estrangeiros: false
 hashtags: ["#Botafogo", "#Fogao", "#EstrelaSolitaria"]
 youtube_handle: "@botafogowin"
 channel_title: "Botafogo WIN"

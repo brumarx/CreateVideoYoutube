@@ -106,6 +106,45 @@ def _chapter_label(narration: str, max_words: int = 6) -> str:
     return label[:1].upper() + label[1:] if label else "Continua"
 
 
+# reescrita à portuguesa que a voz não consegue ler: 3+ consoantes seguidas
+# fora dos encontros do português ("Procmt" pra "Prompt", "Jigsfild")
+_CONSONANTS = re.compile(r"[bcdfgjklmnpqstvwxz]{3,}", re.IGNORECASE)
+_OK_CLUSTER = re.compile(r"^[nmrls]?(?:[bcdfgptv][rl]|s[ptc])$|^(?:ns|rs)[bcdfgptv][rl]?$", re.IGNORECASE)
+
+
+def _speakable(respelling: str) -> bool:
+    plain = unicodedata.normalize("NFKD", respelling).encode("ascii", "ignore").decode()
+    plain = re.sub(r"nh|lh|ch|sh|qu|gu", "a", plain, flags=re.IGNORECASE)
+    return all(_OK_CLUSTER.match(c) for c in _CONSONANTS.findall(plain))
+
+
+def _foreign_terms(script: dict, pronunciations: dict[str, str]) -> tuple[dict[str, str], dict[str, str]]:
+    """Termos do campo "idioma" do roteiro (voz nativa, src/tts.py) e as
+    reescritas de "pronuncia" que sobram: nada de termo que está nos dois,
+    de grafia impronunciável ("Procmt") ou de palavra que já é português
+    ("Havana" virava "Aavána") — 20/10."""
+    from src.spellcheck import portuguese_words
+    from src.tts import FOREIGN_VOICES
+
+    narration = " ".join(sc.get("narration", "") for sc in script.get("scenes", [])).lower()
+    raw = script.get("idioma") if isinstance(script.get("idioma"), dict) else {}
+    foreign = {
+        k.strip(): v.strip().lower()[:2] for k, v in raw.items()
+        if isinstance(k, str) and isinstance(v, str) and 1 < len(k.strip()) <= 40 and len(k.split()) <= 4
+        and v.strip().lower()[:2] in FOREIGN_VOICES and k.strip().lower() in narration
+    }
+    pt = portuguese_words(sorted(set(foreign) | set(pronunciations)))
+    foreign = {k: v for k, v in foreign.items() if k not in pt}
+    folded = {k.lower() for k in foreign}
+    kept = {}
+    for k, v in pronunciations.items():
+        if k.lower() in folded or k in pt or not _speakable(v):
+            log.info("pronúncia descartada: %r -> %r", k, v)
+            continue
+        kept[k] = v
+    return foreign, kept
+
+
 def _gray(png: bytes) -> bytes:
     """Visual que não é do próprio assunto em preto e branco
     (channel.fallback_grayscale): no futebol, some a cor de outro clube."""
@@ -718,13 +757,20 @@ def run(
             if isinstance(k, str) and isinstance(v, str) and 2 < len(k) <= 40 and 0 < len(v) <= 50
             and k.lower() != v.lower()
         } if isinstance(script.get("pronuncia"), dict) else {}
+        foreign: dict[str, str] = {}
+        if channel.native_foreign:
+            foreign, pronunciations = _foreign_terms(script, pronunciations)
+            if foreign:
+                log.info("[%s] voz nativa: %s", job_id, foreign)
         pronunciations.update(channel.pronunciations)  # nome do canal ("Aprender vIA")
         if pronunciations:
             log.info("[%s] pronúncia: %s", job_id, pronunciations)
         narrations = []
         for i, scene in enumerate(script["scenes"]):
             audio_path = work_dir / f"scene_{i}.mp3"
-            _, word_boundaries = narrate(scene["narration"], audio_path, voice=tts_voice, pronunciations=pronunciations)
+            _, word_boundaries = narrate(
+                scene["narration"], audio_path, voice=tts_voice, pronunciations=pronunciations, foreign=foreign,
+            )
             narrations.append((audio_path, word_boundaries, _ffprobe_duration(audio_path)))
         total_seconds = sum(d for _, _, d in narrations)
         if long_form and not user_forced_format and total_seconds <= SHORTS_MAX_SECONDS:

@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import re
+import subprocess
 import time
 from pathlib import Path
 from typing import Callable
@@ -385,12 +386,20 @@ def _synthesize_azure(text: str, output_path: Path, voice: str) -> list[dict]:
 
 def narrate(
     text: str, output_path: Path, voice: str = DEFAULT_VOICE, pronunciations: dict[str, str] | None = None,
+    foreign: dict[str, str] | None = None,
 ) -> tuple[Path, list[dict]]:
     """Sintetiza `text` em áudio mp3 e devolve (caminho salvo, lista de
     palavras com tempo real `{"text", "start", "end"}` em segundos — vazia
     se o serviço não mandou WordBoundary por algum motivo; quem chamar deve
-    cair pra um fallback nesse caso, nunca assumir que sempre vem preenchida)."""
+    cair pra um fallback nesse caso, nunca assumir que sempre vem preenchida).
+
+    `foreign` ({"Claude Code": "en"}, ver FOREIGN_VOICES): termo narrado pela
+    voz nativa do idioma — nunca reescrito à portuguesa."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    foreign = {k: v for k, v in (foreign or {}).items() if v in FOREIGN_VOICES}
+    if foreign and pronunciations:
+        folded = {k.lower() for k in foreign}
+        pronunciations = {k: v for k, v in pronunciations.items() if k.lower() not in folded}
     text, spelling_back = _for_speech(text, pronunciations)
     if voice not in EDGE_VOICES:
         # voz só-Azure
@@ -427,7 +436,7 @@ def narrate(
                 else:
                     log.warning("edge-tts falhou (%s) — usando motor alternativo", exc)
                 break
-    words = _synthesize_fallback(text, output_path, voice)
+    words = _synthesize_fallback(text, output_path, voice, foreign)
     return output_path, _restore_spelling(_restore_punctuation(words, text), spelling_back, pronunciations)
 
 
@@ -439,6 +448,18 @@ def narrate(
 # mês UTC e para de usar o Google bem antes dos 4 mi.
 _EDGE_BLOCKED = False
 GOOGLE_VOICES = {"male": "pt-BR-Wavenet-B", "female": "pt-BR-Wavenet-A"}
+# termo estrangeiro na voz NATIVA do idioma, mesmo gênero (<voice> no SSML):
+# a voz pt-BR lia "Runway" como "Hanway" e a reescrita do roteiro saía
+# "Procmt" pra "Prompt" (20/10). Só alfabeto latino — japonês/russo/grego
+# recebem o nome transliterado e leriam mal; esses seguem com "pronuncia".
+FOREIGN_VOICES = {
+    "en": {"male": "en-US-Wavenet-D", "female": "en-US-Wavenet-F"},
+    "es": {"male": "es-ES-Wavenet-E", "female": "es-ES-Wavenet-F"},
+    "fr": {"male": "fr-FR-Wavenet-G", "female": "fr-FR-Wavenet-F"},
+    "de": {"male": "de-DE-Wavenet-H", "female": "de-DE-Wavenet-G"},
+    "it": {"male": "it-IT-Wavenet-F", "female": "it-IT-Wavenet-E"},
+    "nl": {"male": "nl-NL-Wavenet-G", "female": "nl-NL-Wavenet-F"},
+}
 GOOGLE_MONTHLY_CAP_BYTES = 2_500_000
 GOOGLE_USAGE_FILE = Path(__file__).resolve().parent.parent / "data" / "google_tts_usage.json"
 # só vozes "premade": voz da biblioteca (as brasileiras) exige plano pago
@@ -455,7 +476,7 @@ def _gender(voice: str) -> str:
 _job_engine: "Callable[[str, Path, str], list[dict]] | None" = None  # motor que narrou a 1ª cena: o resto do job fica nele
 
 
-def _synthesize_fallback(text: str, output_path: Path, voice: str) -> list[dict]:
+def _synthesize_fallback(text: str, output_path: Path, voice: str, foreign: dict[str, str] | None = None) -> list[dict]:
     """Job 398: cenas 0-4 no Google e 5-26 na ElevenLabs — a voz trocava no
     meio do vídeo e as taxas diferentes (24 kHz x 44,1 kHz) quebravam a
     junção das cenas (áudio de 561 s num vídeo de 305 s). Agora o job fica
@@ -468,7 +489,7 @@ def _synthesize_fallback(text: str, output_path: Path, voice: str) -> list[dict]
     errors = []
     for engine in engines:
         try:
-            words = engine(text, output_path, _gender(voice))
+            words = engine(text, output_path, _gender(voice), foreign)
         except Exception as exc:  # noqa: BLE001
             log.warning("%s falhou: %s", engine.__name__, exc)
             errors.append(f"{engine.__name__}: {exc}")
@@ -508,9 +529,53 @@ def _reserve_google_quota(n_bytes: int) -> None:
     GOOGLE_USAGE_FILE.write_text(json.dumps(usage))
 
 
-def _synthesize_google(text: str, output_path: Path, gender: str) -> list[dict]:
+def _audio_seconds(path: Path) -> float:
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+        capture_output=True, text=True, timeout=30,
+    ).stdout.strip()
+    return float(out or 0)
+
+
+def _foreign_spans(tokens: list[str], foreign: dict[str, str]) -> dict[int, str]:
+    """Índice do token -> idioma, pros termos de `foreign` achados no texto
+    (palavra inteira, sem pontuação, sem diferenciar maiúscula)."""
+    plain = [t.strip(".,;:!?…\"“”()'").lower() for t in tokens]
+    langs: dict[int, str] = {}
+    for term in sorted(foreign, key=lambda t: -len(t.split())):
+        words = [w.strip(".,;:!?…\"“”()'").lower() for w in term.split()]
+        for i in range(len(plain) - len(words) + 1):
+            if plain[i:i + len(words)] == words and not any(j in langs for j in range(i, i + len(words))):
+                langs.update({j: foreign[term] for j in range(i, i + len(words))})
+    return langs
+
+
+def _repair_times(starts: list[float], tokens: list[str], duration: float, first_foreign: int) -> list[float]:
+    """Depois de um <voice> o tempo das marcas do Google é lixo — e muda a
+    cada chamada pro mesmo texto: fora de ordem ("Runway" em 2,58 s entre
+    3,07 e 3,19), além do fim do áudio ("pegou" em 9,63 s num áudio de
+    6,9 s) ou empurrado (20/10). Vale o tempo real até o 1º termo
+    estrangeiro; dali em diante reparte o tempo que sobra pelo tamanho de
+    cada palavra."""
+    keep = min(first_foreign, len(starts))
+    begin = starts[keep] if keep < len(starts) and (not keep or starts[keep] >= starts[keep - 1]) else (
+        starts[keep - 1] + 0.3 if keep else 0.0
+    )
+    begin = min(begin, duration - 0.1)
+    rest = [len(t) + 1 for t in tokens[keep:]]
+    if not rest:
+        return starts
+    fixed, acc = starts[:keep], 0
+    for size in rest:
+        fixed.append(begin + (duration - begin) * acc / sum(rest))
+        acc += size
+    return fixed
+
+
+def _synthesize_google(text: str, output_path: Path, gender: str, foreign: dict[str, str] | None = None) -> list[dict]:
     """Google Cloud TTS v1beta1 com <mark> antes de cada palavra: o
-    timepoint de cada marca é o início real da palavra (karaokê)."""
+    timepoint de cada marca é o início real da palavra (karaokê). Termo de
+    `foreign` vai na voz nativa do idioma (FOREIGN_VOICES)."""
     global _google_disabled
     from xml.sax.saxutils import escape
 
@@ -528,7 +593,17 @@ def _synthesize_google(text: str, output_path: Path, gender: str) -> list[dict]:
     )
     creds.refresh(google.auth.transport.requests.Request())
     tokens = text.split()
-    ssml = "<speak>" + " ".join(f'<mark name="{i}"/>{escape(t)}' for i, t in enumerate(tokens)) + "</speak>"
+    langs = _foreign_spans(tokens, foreign or {})
+    parts: list[str] = []
+    for i, t in enumerate(tokens):
+        piece = f'<mark name="{i}"/>{escape(t)}'
+        lang = langs.get(i)
+        if lang and langs.get(i - 1) != lang:
+            piece = f'<voice name="{FOREIGN_VOICES[lang][gender]}">' + piece
+        if lang and langs.get(i + 1) != lang:
+            piece += "</voice>"
+        parts.append(piece)
+    ssml = "<speak>" + " ".join(parts) + "</speak>"
     _reserve_google_quota(len(ssml.encode()))
     resp = httpx.post(
         "https://texttospeech.googleapis.com/v1beta1/text:synthesize",
@@ -546,15 +621,20 @@ def _synthesize_google(text: str, output_path: Path, gender: str) -> list[dict]:
     resp.raise_for_status()
     data = resp.json()
     output_path.write_bytes(base64.b64decode(data["audioContent"]))
-    starts = [tp["timeSeconds"] for tp in data.get("timepoints", [])]
+    points = sorted(data.get("timepoints", []), key=lambda tp: int(tp["markName"]))
+    starts = [tp["timeSeconds"] for tp in points]
+    if langs:
+        order = [int(tp["markName"]) for tp in points]
+        first = next((k for k, idx in enumerate(order) if idx in langs), len(order))
+        starts = _repair_times(starts, [tokens[idx] for idx in order], _audio_seconds(output_path), first)
     words = []
     for i, start in enumerate(starts):
         end = starts[i + 1] if i + 1 < len(starts) else start + 0.4
-        words.append({"text": tokens[int(data["timepoints"][i]["markName"])].strip(".,;:!?…\"“”"), "start": start, "end": end})
+        words.append({"text": tokens[int(points[i]["markName"])].strip(".,;:!?…\"“”"), "start": start, "end": end})
     return words
 
 
-def _synthesize_eleven(text: str, output_path: Path, gender: str) -> list[dict]:
+def _synthesize_eleven(text: str, output_path: Path, gender: str, foreign: dict[str, str] | None = None) -> list[dict]:
     """ElevenLabs /with-timestamps: alinhamento por caractere -> palavras."""
     import base64
 

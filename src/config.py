@@ -166,6 +166,11 @@ class ChannelConfig:
     # [...]}): até a data, o sorteio pega o próximo tema da série antes dos
     # virais — o vídeo da Arábia Saudita (17/10) teve 38x a mediana do canal
     # e a fórmula precisa de repetição pra provar que não foi sorte
+    # termo em inglês/espanhol/francês... narrado pela voz nativa do idioma
+    # (src/tts.py -> FOREIGN_VOICES) em vez de reescrito à portuguesa
+    # ("Prompt" virava "Procmt"). Botafogo desliga: nome de jogador
+    # estrangeiro se fala à brasileira na narração de futebol.
+    native_foreign: bool = True
     priority_topics: list[str] = field(default_factory=list)
     priority_until: str = ""
 
@@ -227,6 +232,7 @@ class ChannelConfig:
             player_photos=bool(data.get("player_photos", False)),
             real_media=bool(data.get("real_media", True)),
             country=str(data.get("pais") or ""),
+            native_foreign=bool(data.get("voz_nativa_estrangeiros", True)),
             priority_topics=[str(t) for t in (data.get("prioridade") or {}).get("temas") or []],
             priority_until=str((data.get("prioridade") or {}).get("ate") or ""),
             website_cta=data.get("website_cta", "🌐 Site"),
