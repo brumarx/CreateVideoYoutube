@@ -108,6 +108,8 @@ MAX_LIST_ITEMS = 10
 FACT_CHECK_REWRITES = 2
 # rodadas do laço conserta → revisa por reprovação (ver o loop da revisão)
 MAX_REPAIR_ROUNDS = 5
+# rodadas de troca de imagem da cena reprovada na revisão do vídeo pronto
+VISUAL_FIX_ROUNDS = 2
 
 # Capítulos (timestamps na descrição, "0:00 ..." etc.) só no formato longo —
 # no curto (poucos minutos) não faz sentido. YouTube exige pelo menos 3
@@ -886,6 +888,9 @@ def run(
                 f"(ex.: bandeira do Canadá ou dos EUA, Capitólio americano, Parlamento de Londres)."
             )
         scene_videos = []
+        # remonta UMA cena com outra imagem (ver o conserto de visual depois
+        # da revisão do vídeo pronto)
+        scene_rerender: list = []
         scene_durations = []
         last_news_photo: dict | None = None
         photo_streak = 0  # cenas seguidas herdando a foto da notícia anterior
@@ -1197,32 +1202,70 @@ def run(
                     stock_clip_path.unlink(missing_ok=True)
             scene_videos.append(scene_video_path)
 
+            def _rerender(new_image: Path, _audio=audio_path, _out=scene_video_path, _num=list_number,
+                          _scene=scene, _words=word_boundaries) -> None:
+                render_scene(
+                    new_image, _audio, _out, width=width, height=height,
+                    watermark=channel.watermark, list_number=_num, accent=channel.accent,
+                    caption=_scene["narration"] if channel.captions else None,
+                    word_boundaries=_words if channel.captions else None,
+                    stat_overlay=_scene.get("stat_overlay"), impact_beat=bool(_scene.get("impact_beat")),
+                )
+            scene_rerender.append(_rerender)
+
         update(job_id, status="narrated")
 
         raw_video = work_dir / "raw.mp4"
-        # crossfade obriga reencodar o vídeo inteiro — caro numa CPU fraca sem
-        # encoder de hardware (Pi 5). Vale a pena pro curto (poucos minutos);
-        # no longo (15-20min) usa corte seco instantâneo (ver src/assemble.py).
-        concat_scenes(
-            scene_videos, raw_video, crossfade=not long_form, sfx_path=SFX_DIR / "whoosh.mp3",
-        )
-
         final_video = work_dir / "final.mp4"
-        _, music_attribution = add_background_music(raw_video, final_video, mood=script.get("mood"))
-        log.info("[%s] vídeo pronto: %s — revisando antes do upload", job_id, final_video)
-
         # revisão do vídeo MONTADO antes de subir (src/video_qa.py): frase
         # repetida, a mesma imagem no vídeo todo, cena fora de contexto. Em
         # 03/10 foram 16 vídeos apagados do YouTube depois de publicados.
-        # Reprovado: sem video_path (o retry_uploads nunca sobe) e exit 3
-        # (o daily_run tenta outro tema).
-        qa_problems = review_video(
-            [s["narration"] for s in script["scenes"]], scene_videos, visual_context,
-            # futebol com clipe de banco/IA precisa de olho; vídeo só com
-            # foto das matérias (do próprio assunto) dispensa
-            strict_visual=channel.strict_visual and "ia" in scene_sources,
-            trusted_scenes={i + 1 for i, src in enumerate(scene_sources) if src in ("noticia", "repetida", "jogador", "arquivo")},
-        )
+        # Cena fora de contexto é CONSERTADA: imagem nova só nela (conferida
+        # contra a narração), remonta e revisa de novo — antes o vídeo todo
+        # era descartado por uma imagem (job 600, 21/10: cena 6)
+        for visual_round in range(VISUAL_FIX_ROUNDS + 1):
+            # crossfade obriga reencodar o vídeo inteiro — caro numa CPU fraca
+            # sem encoder de hardware (Pi 5). Vale a pena pro curto; no longo
+            # usa corte seco instantâneo (ver src/assemble.py).
+            concat_scenes(
+                scene_videos, raw_video, crossfade=not long_form, sfx_path=SFX_DIR / "whoosh.mp3",
+            )
+            _, music_attribution = add_background_music(raw_video, final_video, mood=script.get("mood"))
+            log.info("[%s] vídeo pronto: %s — revisando antes do upload", job_id, final_video)
+            qa_problems = review_video(
+                [s["narration"] for s in script["scenes"]], scene_videos, visual_context,
+                # futebol com clipe de banco/IA precisa de olho; vídeo só com
+                # foto das matérias (do próprio assunto) dispensa
+                strict_visual=channel.strict_visual and "ia" in scene_sources,
+                trusted_scenes={i + 1 for i, src in enumerate(scene_sources) if src in ("noticia", "repetida", "jogador", "arquivo")},
+            )
+            bad = [int(m.group(1)) - 1 for p in qa_problems if (m := re.match(r"cena (\d+) fora de contexto", p))]
+            if not bad or len(bad) != len(qa_problems) or visual_round == VISUAL_FIX_ROUNDS:
+                break
+            for i in bad:
+                if not 0 <= i < len(scene_rerender):
+                    continue
+                narration = script["scenes"][i]["narration"]
+                image_bytes = None
+                for extra in ("", ", no people"):
+                    try:
+                        candidate = generate_image(script["scenes"][i]["image_prompt"] + extra, width=width, height=height)
+                    except Exception as exc:  # noqa: BLE001 — IA de imagem fora: tenta a próxima
+                        log.warning("[%s] cena %d: imagem nova falhou (%s)", job_id, i + 1, exc)
+                        continue
+                    if matches_scene(candidate, narration, visual_context) is not False:
+                        image_bytes = candidate
+                        break
+                if image_bytes is None:
+                    log.warning("[%s] cena %d: nenhuma imagem nova no contexto", job_id, i + 1)
+                    continue
+                if channel.fallback_grayscale:
+                    image_bytes = _gray(image_bytes)
+                image_path = work_dir / f"scene_{i}_fix.png"
+                image_path.write_bytes(image_bytes)
+                scene_rerender[i](image_path)
+                scene_sources[i] = "ia"
+                log.warning("[%s] cena %d fora de contexto — imagem trocada, remontando o vídeo", job_id, i + 1)
         # voz falando besteira não passa nem na última tentativa do dia —
         # não publicar é melhor que "Fala a é acento circunflexo" (job 414)
         audio_problems = review_audio([s["narration"] for s in script["scenes"]], [n[0] for n in narrations])
