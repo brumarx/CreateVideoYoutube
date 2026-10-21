@@ -303,9 +303,31 @@ ESTRUTURA OBRIGATÓRIA (são {n} notícias SEPARADAS, formato noticiário):
 - A 1ª cena de cada bloco começa anunciando a notícia ("Primeira notícia:",
   "Segunda notícia:", ... "Última notícia:") e a manchete em poucas
   palavras; não ligue uma notícia na outra como se fosse a mesma história.
-- O título do vídeo resume o DIA de notícias (ex.: "Botafogo hoje: X, Y e
-  mais"), nunca só a primeira notícia.
+- O título do vídeo é a manchete MAIS forte do dia, curta (até 50
+  caracteres), escrita como notícia única: "Júnior Santos Deixa o
+  Botafogo", "Justiça multa Textor". Nunca "X notícias", "hoje",
+  "notícias do dia" nem lista de assuntos.
 """
+
+# título de noticiário genérico: "5 notícias do Botafogo hoje" e "Botafogo
+# hoje: ..." caíram de 85 pra 3 views em 5 dias; manchete única no título
+# fez 124-240 (out/26)
+_GENERIC_NEWS_TITLE_RE = re.compile(r"\bnot[íi]cias?\b|\bhoje\b|\bdo dia\b", re.IGNORECASE)
+
+
+def _news_title_problem(script: dict, facts: dict | None) -> str | None:
+    title = str(script.get("title") or "")
+    if _GENERIC_NEWS_TITLE_RE.search(title):
+        return f"título genérico de noticiário ({title!r})"
+    if len(title) > 60:
+        return f"título longo demais ({len(title)} caracteres)"
+    # dia de jogo: "Botafogo x Vasco" (487) e "Botafogo x Coritiba" (374)
+    # foram os dois vídeos mais vistos do canal
+    hoje = (facts or {}).get("hoje")
+    for jogo in (facts or {}).get("proximos_jogos") or []:
+        if hoje and str(jogo.get("data") or "").startswith(hoje) and " x " not in title.lower():
+            return f"dia de jogo e o título não traz o confronto ({jogo.get('jogo')})"
+    return None
 
 
 def _news_count(facts: dict | None) -> int:
@@ -727,13 +749,16 @@ def generate_script(
 
             script = _trim_muletas(_drop_llm_cta(_drop_repeated_scenes(script)))
             news_problem = _news_order_problem(script, _news_count(facts)) if _news_count(facts) > 1 else None
+            news_problem = news_problem or (_news_title_problem(script, facts) if _news_count(facts) > 1 else None)
             if news_problem:
                 filler_fallback = script
                 last_error = ValueError(news_problem)
                 log.warning("tentativa %d/3: notícias misturadas (%s), tentando de novo", attempt + 1, news_problem)
                 messages = [messages[0], {"role": "user", "content": messages[1]["content"]
-                                          + f"\n\nO roteiro anterior errou a ESTRUTURA: {news_problem}. Uma notícia "
-                                          "por bloco, na ordem da lista, cada cena com o campo \"noticia\"."}]
+                                          + f"\n\nO roteiro anterior errou: {news_problem}. Uma notícia "
+                                          "por bloco, na ordem da lista, cada cena com o campo \"noticia\"; título = a "
+                                          "manchete mais forte, curta, sem \"notícias\"/\"hoje\" (em dia de jogo, "
+                                          "\"Botafogo x Adversário\" + gancho curto)."}]
                 continue
             repeated = _repetition_problem(script)
             if repeated:
