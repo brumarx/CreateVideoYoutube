@@ -1346,9 +1346,14 @@ def run(
             # 1ª linha = o que aparece antes do "...mais" — é onde o link
             # pro site próprio do canal realmente é clicado
             description = f"{channel.website_cta}: {channel.website}\n\n{description}"
-        if channel.extra_links:
-            # logo abaixo do site, ainda antes do "...mais" (ex.: loja do botafogo.win)
-            links = "\n".join(f"{l.get('texto', '🔗')}: {l['url']}" for l in channel.extra_links)
+        from src.affiliate import AMAZON_DISCLOSURE, amazon_line
+
+        amazon = amazon_line(script, channel)
+        top_links = [f"{l.get('texto', '🔗')}: {l['url']}" for l in channel.extra_links] + ([amazon] if amazon else [])
+        if top_links:
+            # logo abaixo do site, ainda antes do "...mais" (ex.: loja do
+            # botafogo.win, afiliado da Amazon)
+            links = "\n".join(top_links)
             head, sep, rest = description.partition("\n\n")
             description = f"{head}\n{links}{sep}{rest}" if channel.website else f"{links}\n\n{description}"
         if long_form:
@@ -1367,6 +1372,8 @@ def run(
             # link fixo pro site fonte dos dados — sempre gerado por código
             # (nunca pelo LLM), pra garantir que aponta pro lugar certo sempre.
             description += "\n\nFonte dos dados: https://brmx.org/politica/"
+        if amazon:
+            description += f"\n\n{AMAZON_DISCLOSURE}"
 
         if web_facts:
             # transparência: tema ancorado em busca real — lista as fontes

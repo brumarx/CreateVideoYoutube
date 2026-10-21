@@ -219,3 +219,10 @@ prioridade:
   ate: "2026-10-22"
   temas:
     - "Nikolas Ferreira: mais de 3 milhões de votos, o deputado federal mais votado da história do Brasil"
+
+# link de afiliado da Amazon no topo da descrição (src/affiliate.py); fixo: false = busca
+# ligada ao assunto de cada vídeo, com esta como reserva
+afiliado_amazon:
+  texto: "📚 Livros na Amazon"
+  busca: "livro política brasileira"
+  fixo: false

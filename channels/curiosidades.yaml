@@ -207,3 +207,10 @@ prompt_base: >
 
 # publica sozinho depois da revisão de fatos (sem esperar "Aprovar" no painel)
 require_approval: false
+
+# link de afiliado da Amazon no topo da descrição (src/affiliate.py); fixo: false = busca
+# ligada ao assunto de cada vídeo, com esta como reserva
+afiliado_amazon:
+  texto: "📚 Pra saber mais, na Amazon"
+  busca: "livro curiosidades do mundo"
+  fixo: false

@@ -147,6 +147,9 @@ class ChannelConfig:
     # outros links no topo da descrição, logo abaixo do site (ex.: a loja do
     # botafogo.win): [{"texto": "...", "url": "..."}]
     extra_links: list[dict] = field(default_factory=list)
+    # link de afiliado da Amazon na descrição (src/affiliate.py):
+    # {"texto": "...", "busca": "termo padrão", "fixo": false}. Vazio = sem
+    amazon_affiliate: dict = field(default_factory=dict)
     # canal onde imagem errada é grave (futebol: outro clube, futebol
     # americano): sem modelo de visão disponível, clipe de banco e imagem de
     # IA não entram, e a revisão final só aprova com a parte visual feita.
@@ -244,6 +247,7 @@ class ChannelConfig:
             priority_from=str((data.get("prioridade") or {}).get("de") or ""),
             website_cta=data.get("website_cta", "🌐 Site"),
             extra_links=[l for l in data.get("links_descricao") or [] if isinstance(l, dict) and l.get("url")],
+            amazon_affiliate=data.get("afiliado_amazon") or {},
             greeting=data.get("greeting", ""),
             pronunciations={str(k): str(v) for k, v in (data.get("pronuncia") or {}).items()},
             editorial_line=[str(x) for x in data.get("linha_editorial") or []],
