@@ -144,6 +144,9 @@ class ChannelConfig:
     website: str
     # texto que acompanha o link no topo da descrição
     website_cta: str
+    # outros links no topo da descrição, logo abaixo do site (ex.: a loja do
+    # botafogo.win): [{"texto": "...", "url": "..."}]
+    extra_links: list[dict] = field(default_factory=list)
     # canal onde imagem errada é grave (futebol: outro clube, futebol
     # americano): sem modelo de visão disponível, clipe de banco e imagem de
     # IA não entram, e a revisão final só aprova com a parte visual feita.
@@ -240,6 +243,7 @@ class ChannelConfig:
             priority_until=str((data.get("prioridade") or {}).get("ate") or ""),
             priority_from=str((data.get("prioridade") or {}).get("de") or ""),
             website_cta=data.get("website_cta", "🌐 Site"),
+            extra_links=[l for l in data.get("links_descricao") or [] if isinstance(l, dict) and l.get("url")],
             greeting=data.get("greeting", ""),
             pronunciations={str(k): str(v) for k, v in (data.get("pronuncia") or {}).items()},
             editorial_line=[str(x) for x in data.get("linha_editorial") or []],

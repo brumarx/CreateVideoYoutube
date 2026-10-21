@@ -1346,6 +1346,11 @@ def run(
             # 1ª linha = o que aparece antes do "...mais" — é onde o link
             # pro site próprio do canal realmente é clicado
             description = f"{channel.website_cta}: {channel.website}\n\n{description}"
+        if channel.extra_links:
+            # logo abaixo do site, ainda antes do "...mais" (ex.: loja do botafogo.win)
+            links = "\n".join(f"{l.get('texto', '🔗')}: {l['url']}" for l in channel.extra_links)
+            head, sep, rest = description.partition("\n\n")
+            description = f"{head}\n{links}{sep}{rest}" if channel.website else f"{links}\n\n{description}"
         if long_form:
             # timestamps calculados a partir da duração real de cada narração
             # (não estimados) — só faz sentido no documentário, o curto é curto

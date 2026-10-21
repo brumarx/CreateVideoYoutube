@@ -16,6 +16,10 @@ channel_title: "Botafogo WIN"
 website: "https://botafogo.win"
 greeting: "Fala, galera!"
 website_cta: "📰 Notícias completas do Fogão, em tempo real"
+# links logo abaixo do site no topo da descrição
+links_descricao:
+  - texto: "🛒 Loja do torcedor"
+    url: "https://botafogo.win/loja"
 language: "pt-BR"
 tts_voice_weights:
   pt-BR-AntonioNeural: 33
