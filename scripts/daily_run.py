@@ -50,6 +50,10 @@ EXIT_SCRIPT_REJECTED = 3
 # passou 27-30/09 sem vídeo, e falha passageira (TTS "No audio was received",
 # Pollinations fora, JSON malformado do LLM) perdia o dia direto.
 MAX_ATTEMPTS = 4
+# --no-upload: gera e renderiza tudo sem subir (vídeo fica "ready" e a rodada
+# seguinte publica ele no lugar de gerar outro) — pra testar fora do horário
+# sem gastar a cota do YouTube, que é uma só pros 5 canais
+NO_UPLOAD = "--no-upload" in sys.argv
 # a partir da última tentativa normal, o vídeo do dia SEMPRE sai
 # (--must-publish: revisões cortam frase/avisam em vez de descartar); repete
 # esse modo até MUST_PUBLISH_ATTEMPTS vezes se ainda cair (render, LLM fora)
@@ -121,6 +125,8 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
     politica, o curto usa sempre dado real do banco — o que mais passa na
     revisão)."""
     base_cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name, *extra]
+    if NO_UPLOAD:
+        base_cmd.append("--no-upload")
     total = MAX_ATTEMPTS + MUST_PUBLISH_ATTEMPTS - 1
     for attempt in range(1, total + 1):
         cmd = base_cmd
@@ -158,7 +164,7 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
             # os dados da tentativa reprovada já saíram da fila (notícias do
             # Botafogo, fato do politica): refaz com eles, não busca outros
             base_cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name,
-                        "--facts-file", str(facts_file)]
+                        "--facts-file", str(facts_file), *(["--no-upload"] if NO_UPLOAD else [])]
 
 
 def _render_approved(channel_name: str) -> None:
@@ -198,7 +204,7 @@ def run_channel(channel_name: str, cfg: dict) -> None:
     from retry_uploads import upload_pending
 
     _render_approved(channel_name)
-    ready = upload_pending(channel_name, "ready", limit=1)
+    ready = 0 if NO_UPLOAD else upload_pending(channel_name, "ready", limit=1)
 
     if channel_name == "botafogo":
         # 2 vídeos independentes: prévia/pós-jogo quando houver jogo (regras
@@ -231,7 +237,8 @@ def main() -> None:
     # vídeos já renderizados cujo upload falhou (hoje ou antes — ex. token
     # OAuth expirado e reautorizado depois). Roda no fim: upload que falhou
     # por token não gasta cota, então sobra cota pro reenvio.
-    subprocess.run([sys.executable, str(ROOT / "scripts" / "retry_uploads.py")], cwd=ROOT)
+    if not NO_UPLOAD:
+        subprocess.run([sys.executable, str(ROOT / "scripts" / "retry_uploads.py")], cwd=ROOT)
 
     log.info("rodada diária concluída")
 
