@@ -505,6 +505,15 @@ def run(
     # no longo, só usa quando fact_label foi passado explicitamente (senão
     # segue o design original: tema genérico de "como o sistema funciona",
     # sem grounding de um fato só pra sustentar 15-20min).
+    if topic is None and not facts_file and not fact_label and not botafogo_task and channel.active_priority_topics:
+        # série/tema agendado (bloco `prioridade` do yaml) vale pra todo
+        # canal, inclusive os que sorteiam dado do banco (politica: Nikolas
+        # agendado pra 22/10) — pick_topic marca como usado
+        from src.topics import _load as _used_topics
+
+        if any(t not in _used_topics().get(channel_name, []) for t in channel.active_priority_topics):
+            topic = pick_topic(channel_name, channel.topics, channel.niche, priority=channel.active_priority_topics)
+            user_provided_topic = True  # tema escolhido à mão: busca na internet e não é trocado
     if facts_file:
         # dados reais prontos em arquivo (mesmo formato do banco: {"tema",
         # "dados"} ou {"noticias"}) — o roteiro e a revisão usam exatamente

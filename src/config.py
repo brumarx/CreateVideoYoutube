@@ -173,10 +173,13 @@ class ChannelConfig:
     native_foreign: bool = True
     priority_topics: list[str] = field(default_factory=list)
     priority_until: str = ""
+    # `prioridade.de`: começa só nessa data (tema agendado pra um dia)
+    priority_from: str = ""
 
     @property
     def active_priority_topics(self) -> list[str]:
-        if not self.priority_until or date.today().isoformat() > self.priority_until:
+        today = date.today().isoformat()
+        if not self.priority_until or today > self.priority_until or today < self.priority_from:
             return []
         return self.priority_topics
     # bordão de entrada falado no começo de todo vídeo ("Fala, alvinegros!")
@@ -235,6 +238,7 @@ class ChannelConfig:
             native_foreign=bool(data.get("voz_nativa_estrangeiros", True)),
             priority_topics=[str(t) for t in (data.get("prioridade") or {}).get("temas") or []],
             priority_until=str((data.get("prioridade") or {}).get("ate") or ""),
+            priority_from=str((data.get("prioridade") or {}).get("de") or ""),
             website_cta=data.get("website_cta", "🌐 Site"),
             greeting=data.get("greeting", ""),
             pronunciations={str(k): str(v) for k, v in (data.get("pronuncia") or {}).items()},

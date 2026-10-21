@@ -210,3 +210,10 @@ linha_editorial:
 
 # publica sozinho depois da revisão de fatos (sem esperar "Aprovar" no painel)
 require_approval: false
+
+# tema agendado (vale antes do dado sorteado do banco): Nikolas no dia 22/10
+prioridade:
+  de: "2026-10-22"
+  ate: "2026-10-22"
+  temas:
+    - "Nikolas Ferreira: mais de 3 milhões de votos, o deputado federal mais votado da história do Brasil"
