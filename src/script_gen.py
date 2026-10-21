@@ -321,6 +321,13 @@ def _news_title_problem(script: dict, facts: dict | None) -> str | None:
         return f"título genérico de noticiário ({title!r})"
     if len(title) > 60:
         return f"título longo demais ({len(title)} caracteres)"
+    noticias = [n for n in (facts or {}).get("noticias") or [] if isinstance(n, dict)]
+    if any(not n.get("modalidade") for n in noticias):
+        from src.botafogo_data import modalidade_do_texto
+
+        if modalidade := modalidade_do_texto(title):
+            # job 554: "Flamengo vence Botafogo no NBB e ..." num canal de futebol
+            return f"título tirado da notícia de {modalidade}; use a manchete de futebol mais forte"
     # dia de jogo: "Botafogo x Vasco" (487) e "Botafogo x Coritiba" (374)
     # foram os dois vídeos mais vistos do canal
     hoje = (facts or {}).get("hoje")

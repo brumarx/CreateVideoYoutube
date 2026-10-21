@@ -916,11 +916,16 @@ def portal_news_task(per_video: int = PORTAL_NEWS_PER_VIDEO) -> dict | None:
             if not art["_texto"]:
                 log.info("portal: pulando notícia sem texto: %s", title)
                 continue
+        if _modalidade(art) and sum(1 for a in escolhidas if _modalidade(a)) >= MAX_OUTRA_MODALIDADE:
+            log.info("portal: já tem notícia de outro esporte no vídeo: %s", title)
+            continue
         escolhidas.append(art)
         if len(escolhidas) == per_video:
             break
     if not escolhidas:
         return None
+    # futebol primeiro: a ordem da lista é a ordem do vídeo (e a 1ª é o título)
+    escolhidas.sort(key=lambda a: _modalidade(a) is not None)
 
     state["portal_news"] = sorted(used | {str(a["id"]) for a in escolhidas})
     _remember_titles(state, [a["title"] for a in escolhidas])
@@ -960,12 +965,21 @@ _MODALIDADES = [
 ]
 
 
-def _modalidade(art: dict) -> str | None:
-    texto = f"{art.get('title') or ''} {art.get('excerpt') or ''}"
+# no máximo 1 notícia de outro esporte por vídeo, sempre a última: o canal é
+# de futebol, e no job 554 (21/10) as 2 matérias do mesmo Flamengo 81 x 71
+# do NBB entraram, a 1ª abriu o vídeo e virou o título
+MAX_OUTRA_MODALIDADE = 1
+
+
+def modalidade_do_texto(texto: str) -> str | None:
     for nome, pattern in _MODALIDADES:
         if pattern.search(texto):
             return nome
     return None
+
+
+def _modalidade(art: dict) -> str | None:
+    return modalidade_do_texto(f"{art.get('title') or ''} {art.get('excerpt') or ''}")
 
 
 def _news_topic(titulos: list[str]) -> str:
