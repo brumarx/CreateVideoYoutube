@@ -65,6 +65,7 @@ def upload_video(
     tags: list[str],
     thumbnail_path: Path | None = None,
     publish_at: str | None = None,  # ISO 8601 UTC, ex: "2026-09-08T12:00:00Z"
+    synthetic: bool = False,
 ) -> str:
     """Sobe o vídeo e devolve o videoId. Cota: ~1600 unidades por upload
     (limite padrão diário: 10000 unidades ≈ 6 uploads/dia por projeto)."""
@@ -72,6 +73,10 @@ def upload_video(
     youtube = build("youtube", "v3", credentials=creds)
 
     status = {"privacyStatus": channel.upload_privacy, "selfDeclaredMadeForKids": False}
+    if synthetic:
+        # imagem realista gerada por IA: o YouTube exige a declaração de
+        # "conteúdo alterado ou sintético" (sem ela, o vídeo pode ser removido)
+        status["containsSyntheticMedia"] = True
     if channel.require_approval:
         # sobe privado; vira público no "Aprovar" do painel (publish_video)
         status["privacyStatus"] = "private"

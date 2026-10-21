@@ -1438,6 +1438,8 @@ def run(
         # precisar gerar tudo de novo.
         upload_meta = {
             "long": long_form,
+            # alguma cena com imagem gerada por IA: declarar ao YouTube
+            "synthetic": "ia" in scene_sources,
             "title": script["title"],
             "description": description,
             "tags": script["tags"],
@@ -1463,6 +1465,7 @@ def run(
             tags=script["tags"],
             thumbnail_path=thumb_path,
             publish_at=publish_at,
+            synthetic=upload_meta["synthetic"],
         )
         update(job_id, status=after_upload_status(channel), youtube_video_id=video_id)
         log.info("[%s] publicado: https://youtu.be/%s", job_id, video_id)

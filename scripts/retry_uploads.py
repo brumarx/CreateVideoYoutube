@@ -93,6 +93,7 @@ def upload_pending(channel_filter: str | None, status: str = "failed", limit: in
                 tags=meta["tags"],
                 thumbnail_path=thumb if thumb.exists() else None,
                 publish_at=meta.get("publish_at"),
+                synthetic=bool(meta.get("synthetic")),
             )
         except RefreshError as exc:
             dead_tokens.add(channel_name)
