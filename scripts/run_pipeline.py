@@ -41,7 +41,9 @@ from src.fact_check import BLOCKING_TYPES, feedback_for_rewrite, review_script
 from src.orchestrator import enqueue, update
 from src.people_photos import names_in, person_photo
 from src.real_media import real_clip, real_photos
-from src.script_gen import chapter_titles, engagement_question, fix_dangling_hooks, generate_script, repair_script
+from src.script_gen import (
+    chapter_titles, engagement_question, fix_dangling_hooks, generate_script, refresh_packaging, repair_script,
+)
 from src.spellcheck import fix_script, fix_text
 from src.stock_media import search_stock_clip, search_stock_photo
 from src.thumbnail import make_thumbnail, photo_scene_frame, title_card
@@ -369,7 +371,7 @@ def _repair_loop(script: dict, problems: list[dict], topic: str, facts, web_fact
         fix_problems = review_script(fixed, topic, facts, web_facts)
         if fix_problems == []:
             log.warning("[%s] frases reprovadas consertadas com base nas fontes — aprovado na revisão seguinte", job_id)
-            return fixed
+            return {**fixed, "_edited": True}
         if fix_problems is None:
             return None
         log.info("[%s] roteiro consertado ainda reprovado: %s", job_id,
@@ -717,7 +719,7 @@ def run(
                     break
                 cut = _cut_flagged_sentences(script, problems)
                 if cut is not None and review_script(cut, topic, facts, web_facts) == []:
-                    script = cut
+                    script = {**cut, "_edited": True}
                     break
                 raise ScriptRejected(
                     "roteiro do arquivo reprovado na revisão de fatos: "
@@ -734,7 +736,7 @@ def run(
                 recheck = review_script(cut, topic, facts, web_facts)
                 if recheck == []:
                     log.warning("[%s] frases reprovadas cortadas do roteiro — aprovado na revisão seguinte", job_id)
-                    script = cut
+                    script = {**cut, "_edited": True}
                     break
                 log.info("[%s] roteiro cortado ainda reprovado: %s", job_id,
                          "; ".join(f"{p.get('tipo')}: {p.get('termo')}" for p in recheck or []) or "revisor fora")
@@ -769,7 +771,7 @@ def run(
                     # frases apontadas (até 3 rodadas de revisão), em vez de
                     # descartar o roteiro e passar o dia sem vídeo (botafogo
                     # 09/10: 4 notícias seguidas reprovadas, jobs 350-353)
-                    script = _forced_cut(script, problems or [], topic, facts, web_facts, job_id)
+                    script = {**_forced_cut(script, problems or [], topic, facts, web_facts, job_id), "_edited": True}
                     break
                 raise ScriptRejected(
                     "roteiro reprovado na revisão de fatos: "
@@ -779,6 +781,11 @@ def run(
                 channel, topic, facts, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes,
                 web_facts=web_facts, revision_feedback=feedback_for_rewrite(problems),
             )
+        if script.pop("_edited", False):
+            # conserto/corte mudou o que o vídeo narra: a descrição gerada
+            # junto com o roteiro prometia o que saiu (job 558)
+            script = refresh_packaging(script, channel, topic)
+            log.info("[%s] descrição refeita a partir do roteiro final", job_id)
         update(job_id, status="scripted")
         # pergunta de transição que a cena seguinte não responde (job 363)
         script = fix_dangling_hooks(script)

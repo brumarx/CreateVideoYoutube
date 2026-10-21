@@ -944,6 +944,91 @@ Responda só com JSON: {{"titulo": "título (o mesmo, se não foi apontado)", "c
     return {**script, "title": title, "scenes": scenes}
 
 
+def refresh_description(script: dict) -> str:
+    """Descrição refeita só com o que as cenas narram — depois de conserto
+    ou corte, a gerada junto com o roteiro prometia o que saiu (job 558,
+    21/10: "a política de felicidade, a constituição verde e os números"
+    num vídeo cortado pra 3 cenas). Sem IA, as 2 primeiras frases."""
+    narration = " ".join(sc.get("narration", "") for sc in script.get("scenes", []))
+    prompt = (
+        "Escreva a descrição de um vídeo do YouTube em português, 2 a 3 frases, SÓ com o que esta narração "
+        "conta — nada que ela não diga, sem hashtags, sem pedir like.\n\n"
+        f"TÍTULO: {script.get('title', '')}\nNARRAÇÃO: {narration}\n\nResponda só com a descrição."
+    )
+    try:
+        text = complete([{"role": "user", "content": prompt}], max_tokens=400, temperature=0.3,
+                        validate=lambda r: 40 <= len(r.strip()) <= 600)
+        allowed = _fact_tokens(narration + " " + str(script.get("title", "")), every_capital=True)
+        if not _fact_tokens(text) - allowed:
+            return text.strip()
+        log.warning("descrição nova trouxe fato fora da narração — usando o começo da narração")
+    except RuntimeError as exc:
+        log.warning("descrição: nenhum provedor respondeu (%s)", exc)
+    return " ".join(_SENTENCE_RE.split(narration)[:2]).strip()
+
+
+_TITLE_RULE_RE = re.compile(r"T[IÍ]TULO:(.*?)(?:\n\s*\n|$)", re.DOTALL)
+
+
+def _packaging_ok(data: dict, allowed: set[str]) -> bool:
+    title, thumb = str(data.get("titulo") or "").strip(), str(data.get("thumbnail_text") or "").strip()
+    return (
+        8 <= len(title) <= 70 and 0 < len(thumb.split()) <= 5
+        and not (_fact_tokens(title) | _fact_tokens(thumb)) - allowed
+    )
+
+
+def refresh_packaging(script: dict, channel: ChannelConfig, topic: str = "") -> dict:
+    """Depois de conserto ou corte (ver run_pipeline._repair_loop): descrição
+    refeita do que as cenas narram e, se o título ou o texto da thumbnail
+    citam número/nome que saiu da narração, os dois refeitos com a regra de
+    TÍTULO do canal — título e thumb são o que faz o vídeo ser clicado, e
+    prometer o que foi cortado engana quem clicou."""
+    script = {**script, "description": refresh_description(script)}
+    narration = " ".join(sc.get("narration", "") for sc in script.get("scenes", []))
+    allowed = _fact_tokens(narration + " " + topic, every_capital=True)
+    stale = [k for k in ("title", "thumbnail_text") if _fact_tokens(str(script.get(k) or "")) - allowed]
+    if not stale:
+        return script
+    rule = _TITLE_RULE_RE.search(channel.prompt_base or "")
+    prompt = (
+        "Crie o TÍTULO e o texto da THUMBNAIL de um vídeo curto do YouTube, em português. São o que faz a "
+        "pessoa clicar: título curto (até 55 caracteres) com o fato ou número mais forte, em português "
+        "correto e com palavras comuns (ex.: \"Catar: estádio gelado no meio do deserto\"); thumbnail com "
+        "no máximo 4 palavras, tipo manchete de banca, diferente do título (ex.: \"AR FRIO NO DESERTO\"). "
+        "Use SÓ fatos, números e nomes que estão na NARRAÇÃO.\n"
+        + (f"Regra de título do canal:{rule.group(1).strip()}\n" if rule else "")
+        + f"\nTEMA: {topic}\nTÍTULO ANTERIOR (citava algo que saiu do vídeo): {script.get('title', '')}\n"
+        f"NARRAÇÃO: {narration}\n\n"
+        'Responda só com JSON: {"titulo": "...", "thumbnail_text": "..."}'
+    )
+    from .topics import _SMALL_MODEL_RE  # import tardio: topics importa este módulo
+
+    try:
+        raw = complete(
+            [{"role": "user", "content": prompt}], max_tokens=300, temperature=0.5,
+            validate=lambda r: _repair_parse_packaging(r, allowed) is not None,
+            model_filter=lambda m: not _SMALL_MODEL_RE.search(m),
+        )
+        data = _repair_parse_packaging(raw, allowed)
+        log.warning("título/thumb citavam o que saiu do vídeo (%s) — refeitos: %r / %r",
+                    ", ".join(stale), data["titulo"], data["thumbnail_text"])
+        return {**script, "title": data["titulo"].strip(), "thumbnail_text": data["thumbnail_text"].strip()}
+    except RuntimeError as exc:
+        # troca só o que cita o que saiu: título vira o tema, thumb sem texto
+        log.warning("título/thumb: nenhum provedor respondeu (%s) — trocando só %s", exc, ", ".join(stale))
+        fallback = {"title": (topic or script.get("title", ""))[:70], "thumbnail_text": None}
+        return {**script, **{k: fallback[k] for k in stale}}
+
+
+def _repair_parse_packaging(raw: str, allowed: set[str]) -> dict | None:
+    try:
+        data = _extract_json(raw)
+    except ValueError:
+        return None
+    return data if _packaging_ok(data, allowed) else None
+
+
 def fix_dangling_hooks(script: dict) -> dict:
     """Pergunta de fim de cena que a cena seguinte não responde (job 363:
     "E quem vem do outro lado?" seguida do prazo da recuperação judicial)
