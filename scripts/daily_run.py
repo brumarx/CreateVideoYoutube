@@ -34,13 +34,15 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.config import ChannelConfig  # noqa: E402
 from src.orchestrator import DB_PATH, update  # noqa: E402
 from src.upload import UPLOAD_META_FILE  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("daily_run")
 
+
+# erro que é do ROTEIRO (não dá pra reaproveitar o script.json salvo)
+_SCRIPT_PROBLEMS = ("longo demais", "roteiro do arquivo", "revisão de fatos")
 
 # mesmo valor de scripts/run_pipeline.py -> EXIT_SCRIPT_REJECTED
 EXIT_SCRIPT_REJECTED = 3
@@ -164,19 +166,25 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
         log.warning("[%s] %s: %s (job %d) — tentando de novo", channel_name, label, motivo, job_id)
         if status == "failed":
             update(job_id, status="retried")
-        facts_file = ROOT / "output" / f"job_{job_id}" / "facts.json"
+        # o tema escolhido é o que vai pro YouTube: a tentativa seguinte
+        # refaz o MESMO tema (antes sorteava outro e jogava fora o roteiro já
+        # aprovado — curiosidades 21/10: 8 temas gastos, 1 virou vídeo)
+        work = ROOT / "output" / f"job_{job_id}"
+        facts_file, script_file = work / "facts.json", work / "script.json"
         if facts_file.exists():
             # os dados da tentativa reprovada já saíram da fila (notícias do
             # Botafogo, fato do politica): refaz com eles, não busca outros
-            base_cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name,
-                        "--facts-file", str(facts_file), *(["--no-upload"] if NO_UPLOAD else [])]
-        elif topic and topic in ChannelConfig.load(channel_name).active_priority_topics:
-            # tema da série em teste: refaz o mesmo tema em vez de queimar o
-            # próximo da série (curiosidades 21/10: 8 temas gastos numa noite,
-            # 1 virou vídeo)
-            base_cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name,
-                        "--topic", topic, *(["--no-upload"] if NO_UPLOAD else [])]
-
+            same = ["--facts-file", str(facts_file)]
+        elif topic:
+            same = ["--topic", topic]
+        else:
+            continue
+        if script_file.exists() and not any(k in (error or "") for k in _SCRIPT_PROBLEMS):
+            # roteiro já aprovado na revisão de fatos e o que reprovou veio
+            # depois (imagem, vídeo, áudio, render): refaz só essa parte
+            same += ["--script-file", str(script_file)]
+        base_cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name,
+                    *same, *(["--no-upload"] if NO_UPLOAD else [])]
 
 def _render_approved(channel_name: str) -> None:
     """Renderiza (sem publicar) o roteiro aprovado mais antigo do canal com

@@ -352,6 +352,31 @@ def _cut_flagged_sentences(
     return {**script, "scenes": new_scenes}
 
 
+def _repair_loop(script: dict, problems: list[dict], topic: str, facts, web_facts, job_id) -> dict | None:
+    """Laço conserta → revisa até a revisão vir limpa. O roteiro reescrito do
+    zero trocava 1 detalhe inventado por outros (21/10: curiosidades
+    555-557, 3 reescritas cada, sempre um detalhe novo sem fonte). O
+    conserto não pode trazer número/nome novo (trava em
+    script_gen.repair_script), então cada rodada só tira ou generaliza e o
+    laço converge; teto de MAX_REPAIR_ROUNDS, e sai antes se parou de mudar.
+    None se não chegou numa versão aprovada."""
+    fixed, fix_problems = script, problems
+    for _ in range(MAX_REPAIR_ROUNDS):
+        before = fixed
+        fixed = repair_script(fixed, fix_problems, facts, web_facts, topic)
+        if fixed is None or fixed["scenes"] == before["scenes"] and fixed.get("title") == before.get("title"):
+            return None
+        fix_problems = review_script(fixed, topic, facts, web_facts)
+        if fix_problems == []:
+            log.warning("[%s] frases reprovadas consertadas com base nas fontes — aprovado na revisão seguinte", job_id)
+            return fixed
+        if fix_problems is None:
+            return None
+        log.info("[%s] roteiro consertado ainda reprovado: %s", job_id,
+                 "; ".join(f"{p.get('tipo')}: {p.get('termo')}" for p in fix_problems))
+    return None
+
+
 def _forced_cut(script: dict, problems: list[dict], topic: str, facts, web_facts, job_id) -> dict:
     """Última tentativa do dia: corta as frases reprovadas e revisa de novo,
     até 3 rodadas. Não reprova nunca — sobra o roteiro com o máximo de
@@ -549,8 +574,13 @@ def run(
 
     # tema sem base em dado real (fila, viral, digitado): sem sentido ou fora
     # do nicho não vira vídeo. Da fila, troca por outro; digitado, recusa.
-    # (tema da série em teste foi escolhido à mão: não passa pela checagem)
-    if facts is None and topic not in channel.active_priority_topics:
+    # tema da série (escolhido à mão) e tema que já saiu da fila (refeito
+    # pelo daily_run com --topic, já checado quando foi escolhido) não
+    # passam de novo pela checagem
+    from src.topics import _load as _used_topics
+
+    already_picked = topic in channel.active_priority_topics or topic in _used_topics().get(channel_name, [])
+    if facts is None and not already_picked:
         for _ in range(MAX_TOPIC_CHECKS):
             problem = topic_problem(topic, channel.niche, strict=user_provided_topic)
             if problem is None:
@@ -657,6 +687,10 @@ def run(
                 "; ".join(f"{p.get('tipo')}: {p.get('termo')}" for p in problems),
             )
             if script_file:
+                fixed = _repair_loop(script, problems, topic, facts, web_facts, job_id)
+                if fixed is not None:
+                    script = fixed
+                    break
                 cut = _cut_flagged_sentences(script, problems)
                 if cut is not None and review_script(cut, topic, facts, web_facts) == []:
                     script = cut
@@ -666,27 +700,9 @@ def run(
                     + "; ".join(f"{p.get('termo')} ({p.get('motivo')})" for p in problems)
                 )
             # conserta as frases apontadas com base nas fontes ANTES de
-            # reescrever: o roteiro novo, escrito do zero, trocava 1 detalhe
-            # inventado por outros (21/10: curiosidades 555-557, 3 reescritas
-            # cada, sempre um detalhe novo sem fonte). Laço conserta → revisa
-            # até a revisão vir limpa; o conserto não pode trazer número/nome
-            # novo (trava no código), então cada rodada só tira ou generaliza
-            # e o laço converge. Teto de MAX_REPAIR_ROUNDS; parou de mudar,
-            # sai antes. Não deu: corta; só então reescreve.
-            fixed, fix_problems = script, problems
-            for _ in range(MAX_REPAIR_ROUNDS):
-                before = fixed
-                fixed = repair_script(fixed, fix_problems, facts, web_facts, topic)
-                if fixed is None or fixed["scenes"] == before["scenes"] and fixed.get("title") == before.get("title"):
-                    fixed = None
-                    break
-                fix_problems = review_script(fixed, topic, facts, web_facts)
-                if not fix_problems:
-                    break
-                log.info("[%s] roteiro consertado ainda reprovado: %s", job_id,
-                         "; ".join(f"{p.get('tipo')}: {p.get('termo')}" for p in fix_problems or []) or "revisor fora")
-            if fixed is not None and fix_problems == []:
-                log.warning("[%s] frases reprovadas consertadas com base nas fontes — aprovado na revisão seguinte", job_id)
+            # reescrever (ver _repair_loop)
+            fixed = _repair_loop(script, problems, topic, facts, web_facts, job_id)
+            if fixed is not None:
                 script = fixed
                 break
             cut = _cut_flagged_sentences(script, problems)
@@ -724,31 +740,6 @@ def run(
                     problems = review_script(script, topic, facts, None)
                     if problems == []:  # None = revisor fora do ar: não aprova
                         break
-                elif (channel.topics and facts is None and not user_provided_topic
-                      and topic not in channel.active_priority_topics):
-                    # demais canais: tema (quase sempre o viral — jobs
-                    # 142/151 do curiosidades) sem base confirmável → troca
-                    # por outro da lista fixa, sem viral, e tenta 1 vez. No
-                    # curto, só tema sem número (selo de lista já foi
-                    # calculado pro tema original).
-                    # Tema da série não troca: o job falha e o daily_run
-                    # refaz o mesmo tema (senão cada tentativa queimava 2).
-                    novo = pick_topic(channel_name, channel.topics, channel.niche, priority=channel.active_priority_topics)
-                    if long_form or not LIST_TOPIC_RE.match(novo):
-                        topic, web_facts = novo, search_topic_facts(novo)
-                        if list_count:
-                            # tema novo não é lista: sem selo 7, 6, 5... de
-                            # contagem regressiva (job 295, Short do oceano)
-                            list_count = scenes = None
-                        log.warning("[%s] tema reprovado — trocando por outro da fila: %s", job_id, topic)
-                        update(job_id, topic=topic)
-                        script = generate_script(
-                            channel, topic, None, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes,
-                            web_facts=web_facts,
-                        )
-                        problems = review_script(script, topic, None, web_facts)
-                        if problems == []:
-                            break
                 if must_publish:
                     # última tentativa do dia: o vídeo SEMPRE sai — corta as
                     # frases apontadas (até 3 rodadas de revisão), em vez de
@@ -769,6 +760,9 @@ def run(
         script = fix_dangling_hooks(script)
         # português revisado antes de narrar: a narração vira legenda na tela
         script = fix_script(script, channel.language)
+        # roteiro aprovado: se o vídeo reprovar depois (imagem, revisão
+        # final), o daily_run refaz só o vídeo com ele (--script-file)
+        (work_dir / "script.json").write_text(json.dumps(script, ensure_ascii=False, indent=2))
 
         if script_only:
             # roteiro aprovado nas revisões, salvo pra uma pessoa (ou um assistente)
