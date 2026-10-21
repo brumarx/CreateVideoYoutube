@@ -819,6 +819,113 @@ def random_fact_set(limit: int = 5) -> dict:
     return {"tema": FACT_FETCHERS[0][0], "dados": FACT_FETCHERS[0][1](limit=limit)}
 
 
+# partidos de direita: perfil deles é positivo (linha do canal); dos demais,
+# segue o tom fiscalizador de sempre
+PARTIDOS_DIREITA = {"PL", "NOVO", "PP", "REPUBLICANOS", "UNIÃO", "PRTB"}
+_ENFOQUE_DIREITA = (
+    "Vídeo de PERFIL POSITIVO: o parlamentar é alinhado à linha do canal. Destaque o que ele conquistou "
+    "e faz: votação, presença, proposições e pautas (das manchetes e propostas). Cota parlamentar e "
+    "gastos não entram. Feche com uma pergunta a favor dele (ex.: \"Você votaria nele de novo?\"), nunca "
+    "com \"você acha justo pagar isso com o seu imposto\". Urna é eletrônica: nada de \"cédula\". "
+    "Título: o feito mais forte dele com o número "
+    "(ex.: \"Nikolas: 3 milhões de votos, recorde do Brasil\"), sem R$ — a regra de título com valor "
+    "em reais não vale pra perfil."
+)
+_ENFOQUE_FISCAL = (
+    "Vídeo de PERFIL: apresente os números do parlamentar com o tom fiscalizador do canal. Título com "
+    "o número mais forte e quem."
+)
+
+
+def perfil_parlamentar(texto: str) -> dict | None:
+    """Dados do banco sobre o deputado citado em `texto` (tema digitado,
+    ex.: "Nikolas Ferreira: ..."), no mesmo formato de random_fact_set:
+    presença, proposições, votações, ranking do score e gasto da cota por
+    ano, mais as proposições de maior peso. None se ninguém do banco bater.
+    O banco não é atualizado todo dia: o pipeline junta busca na internet
+    pro que é recente (o "aviso" diz até quando vão os dados)."""
+    candidatos = _PROPER_NAME_RE.findall(texto)
+    if not candidatos:
+        return None
+    with _connect() as conn:
+        dep = None
+        for nome in sorted(candidatos, key=len, reverse=True):
+            dep = conn.execute(
+                "SELECT id, nome, sigla_partido, sigla_uf, data_nascimento, municipio_nasc FROM deputados"
+                " WHERE nome LIKE ? ORDER BY id_legislatura DESC LIMIT 1",
+                (f"%{nome}%",),
+            ).fetchone()
+            if dep:
+                break
+        if not dep:
+            return None
+        dep_id, nome, partido, uf, nascimento, municipio = dep
+        anos = []
+        for ano, pct, sessoes, presentes, props, ceap, rank in conn.execute(
+            "SELECT s.ano, p.pct_presenca, p.total_sessoes, p.sessoes_presentes, s.total_proposicoes,"
+            " s.total_ceap, s.rank_geral FROM score_politico s"
+            " LEFT JOIN presenca_deputados p ON p.deputado_id = s.deputado_id AND p.ano = s.ano"
+            " WHERE s.deputado_id = ? AND (p.sessoes_presentes > 0 OR s.total_proposicoes > 0) ORDER BY s.ano",
+            (dep_id,),
+        ):
+            total = conn.execute("SELECT COUNT(*) FROM score_politico WHERE ano = ?", (ano,)).fetchone()[0]
+            votos = conn.execute(
+                "SELECT n_total, n_sim, n_nao FROM resumo_votos WHERE deputado_id = ? AND ano = ?", (dep_id, ano),
+            ).fetchone()
+            anos.append({
+                "ano": ano,
+                "presenca_pct": round(pct or 0, 1),
+                "sessoes_presente": f"{presentes} de {sessoes}" if sessoes else None,
+                "proposicoes_apresentadas": props,
+                "votacoes": votos[0] if votos else None,
+                "ranking_geral": f"{rank}º de {total} parlamentares" if rank else None,
+                "cota_parlamentar_gasta": f"R$ {ceap:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if ceap else None,
+            })
+        principais, vistas = [], set()
+        for tipo, ano, ementa in conn.execute(
+            "SELECT tipo, ano, ementa FROM proposicoes_deputados WHERE deputado_id = ? ORDER BY peso DESC, ano DESC LIMIT 10",
+            (dep_id,),
+        ):
+            chave = (ementa or "")[:60]
+            if chave in vistas or len(principais) == 4:
+                continue
+            vistas.add(chave)
+            principais.append({"tipo": tipo, "ano": ano, "ementa": (ementa or "")[:150]})
+        # manchetes que o site junta da internet (Google Notícias) por
+        # político: é o que o banco tem de atual
+        manchetes = [
+            {"titulo": titulo, "data": (publicado or "")[:10]}
+            for titulo, publicado in conn.execute(
+                "SELECT titulo, publicado_em FROM noticias_politicos WHERE politico_id = ? AND casa = 'camara'"
+                " ORDER BY publicado_em DESC, id DESC LIMIT 6",
+                (dep_id,),
+            )
+        ]
+    if not anos:
+        return None
+    positivo = (partido or "").upper() in PARTIDOS_DIREITA
+    if positivo:
+        # perfil positivo sem gasto da cota: com o dado na mão, o molde do
+        # canal ("sai do seu imposto") virava crítica no vídeo de elogio
+        for ano in anos:
+            ano.pop("cota_parlamentar_gasta", None)
+    return {
+        "tipo": "perfil_parlamentar",
+        "tema": texto,
+        "dados": [{
+            "nome": nome, "partido": partido, "uf": uf, "nascimento": nascimento,
+            "cidade_natal": municipio, "por_ano": anos, "principais_proposicoes": principais,
+            "manchetes_recentes": manchetes,
+        }],
+        "enfoque": _ENFOQUE_DIREITA if positivo else _ENFOQUE_FISCAL,
+        "aviso": (
+            f"Dados do banco da Câmara (até {anos[-1]['ano']}, ano em curso parcial). manchetes_recentes "
+            "são só o título da matéria: use o fato do título, sem detalhe que ele não diz. Fato recente que "
+            "não está aqui só entra se estiver na PESQUISA REAL NA INTERNET."
+        ),
+    }
+
+
 _PROPER_NAME_RE = re.compile(
     r"\b[A-ZÀ-Ý][a-zà-ÿ]+(?:\s+(?:de|da|do|dos|das|e)\s+[A-ZÀ-Ý][a-zà-ÿ]+|\s+[A-ZÀ-Ý][a-zà-ÿ]+)+\b"
 )

@@ -658,7 +658,7 @@ def _split_items(text: str) -> list[str]:
     return [i for i in [*items, cur.strip()] if i]
 
 
-def recent_mistakes(channel_name: str, jobs: int = 8, max_items: int = 12) -> str:
+def recent_mistakes(channel_name: str, jobs: int = 8, max_items: int = 6) -> str:
     """Aprende com o que já foi reprovado: os motivos das últimas revisões
     (fatos e vídeo) deste canal, guardados no erro do job, entram no prompt
     pro LLM não repetir o mesmo tipo de erro (botafogo 09/10: 'jogo em casa'
@@ -889,10 +889,9 @@ def repair_script(
     detalhe sem fonte por outros (curiosidades 555-557, 21/10); cortar
     deixava buraco na história. None se o modelo não devolver o formato."""
     narrations = [str(sc.get("narration", "")) for sc in script["scenes"]]
-    if facts:
-        sources = json.dumps(facts, ensure_ascii=False, separators=(",", ":"))
-    elif web_facts:
-        sources = "\n".join(f"- {f['titulo']}: {f['trecho']}" for f in web_facts)
+    if facts or web_facts:
+        sources = json.dumps(facts, ensure_ascii=False, separators=(",", ":")) if facts else ""
+        sources += "\n".join(f"- {f['titulo']}: {f['trecho']}" for f in web_facts or [])
     else:
         sources = "(sem fontes: só conhecimento geral verdadeiro e amplamente conhecido)"
     apontados = "\n".join(f"- {p.get('termo', '')}: {p.get('motivo', '')}" for p in problems)

@@ -521,7 +521,16 @@ def run(
             topic = saved_topic or facts.get("tema") or facts.get("titulo")
         if saved_long is not None and not user_forced_format:
             long_form = saved_long
-    elif channel_name == "politica" and (not long_form or fact_label):
+    elif channel_name == "politica" and topic is not None and not fact_label and (
+        perfil := __import__("src.politica_data", fromlist=["perfil_parlamentar"]).perfil_parlamentar(topic)
+    ):
+        # tema sobre um parlamentar: dados dele no banco + internet (o banco
+        # não é de hoje) — ver politica_data.perfil_parlamentar
+        facts = perfil
+    elif channel_name == "politica" and (fact_label or (not long_form and topic is None)):
+        # tema digitado (ex.: um político específico) segue o tema com busca
+        # na internet — antes sorteava dado do banco e o roteiro saía sobre
+        # ele, ignorando o tema (job 594, 21/10)
         from src.politica_data import pick_fact_set, random_fact_set
 
         # --fact-label força um tema específico (teste manual/painel) em vez
@@ -646,8 +655,14 @@ def run(
         from src.web_search import search_topic_facts
 
         web_facts = None
-        if facts is None:
+        # perfil do banco (politica_data.perfil_parlamentar) busca também na
+        # internet: o banco não tem o que é recente
+        if facts is None or facts.get("tipo") == "perfil_parlamentar":
             web_facts = search_topic_facts(topic)
+            if web_facts and facts:
+                # junto com o perfil, 2 fontes curtas: banco + 4 páginas
+                # passava do limite por minuto do Groq (8,4 mil tokens, job 595)
+                web_facts = [{**f, "trecho": f["trecho"][:500]} for f in web_facts[:2]]
             if web_facts:
                 log.info("[%s] tema ancorado com %d fonte(s) da internet", job_id, len(web_facts))
             else:

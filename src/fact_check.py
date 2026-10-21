@@ -39,12 +39,16 @@ _SEARCHABLE = {"ferramenta_inexistente", "fato_nao_confirmado"}
 def _review_prompt(script: dict, topic: str, facts: dict | None, web_facts: list[dict] | None) -> str:
     narration = "\n".join(f"[cena {i + 1}] {s.get('narration', '')}" for i, s in enumerate(script.get("scenes", [])))
     sources = "NENHUMA — o roteiro foi escrito só com conhecimento geral."
+    web_block = "Trechos de pesquisa na internet fornecidos ao roteirista:\n" + "\n".join(
+        f"- {f['titulo']}: {f['trecho']}" for f in web_facts or []
+    )
     if facts:
         sources = "DADOS REAIS fornecidos ao roteirista:\n" + json.dumps(facts, ensure_ascii=False, separators=(",", ":"))
+        if web_facts:
+            # perfil do banco + internet (politica_data.perfil_parlamentar)
+            sources += "\n\n" + web_block
     elif web_facts:
-        sources = "Trechos de pesquisa na internet fornecidos ao roteirista:\n" + "\n".join(
-            f"- {f['titulo']}: {f['trecho']}" for f in web_facts
-        )
+        sources = web_block
 
     today = date.today().strftime("%d/%m/%Y")
     return f"""Você é revisor de fatos de um canal do YouTube. Revise o roteiro
@@ -295,7 +299,66 @@ def review_script(
             log.info("revisor não conhecia %r, mas a busca confirmou — ok", term)
             continue
         problems.append(p)
-    return problems + unknown
+    known = {**facts, "_internet": [f.get("trecho", "") for f in web_facts or []]} if facts else None
+    return problems + unknown + numbers_not_in_facts(script, known)
+
+
+# valor em reais ou com escala ("R$ 2.309.985,78", "11,8 milhões", "35%")
+_VALUE_RE = re.compile(
+    r"(R\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:,\d+)?)\s*(mil\b|milh(?:ão|ões)|bilh(?:ão|ões)|%)?",
+    re.IGNORECASE,
+)
+_SCALE = {"mil": 1e3, "milhão": 1e6, "milhões": 1e6, "bilhão": 1e9, "bilhões": 1e9}
+
+
+def _to_number(digits: str) -> float:
+    return float(digits.replace(".", "").replace(",", "."))
+
+
+def _fact_numbers(obj) -> list[float]:
+    if isinstance(obj, bool):
+        return []
+    if isinstance(obj, (int, float)):
+        return [float(obj)]
+    if isinstance(obj, dict):
+        return [n for v in obj.values() for n in _fact_numbers(v)]
+    if isinstance(obj, list):
+        return [n for v in obj for n in _fact_numbers(v)]
+    if isinstance(obj, str):
+        out = []
+        for m in _VALUE_RE.finditer(obj):
+            n = _to_number(m.group(2)) * _SCALE.get((m.group(3) or "").lower(), 1)
+            out.append(n)
+        return out
+    return []
+
+
+def numbers_not_in_facts(script: dict, facts: dict | None, tolerance: float = 0.05) -> list[dict]:
+    """Trava no código pra vídeo com DADOS REAIS: valor em reais, com escala
+    (mil/milhões) ou porcentagem na narração que não bate (±5%, pra caber
+    arredondamento) com nenhum número dos dados é conta ou número inventado.
+    Visto: "esses cinco pagamentos somam quase R$ 11,8 milhões" (a soma era
+    10,8) passou na revisão do modelo (job 594, 21/10)."""
+    if not facts:
+        return []
+    known = [n for n in _fact_numbers(facts) if n]
+    out = []
+    for scene in script.get("scenes", []):
+        text = scene.get("narration", "")
+        for m in _VALUE_RE.finditer(text):
+            money, digits, scale = m.group(1), m.group(2), (m.group(3) or "").lower()
+            if not (money or scale):
+                continue  # número solto (ano, posição, contagem): fica com o revisor
+            value = _to_number(digits) * _SCALE.get(scale, 1)
+            if scale == "%":
+                value = _to_number(digits)
+            if any(abs(value - k) <= tolerance * max(abs(k), 1) for k in known):
+                continue
+            out.append({
+                "tipo": "fora_da_fonte", "termo": m.group(0).strip(),
+                "motivo": "valor que não está nos dados (conta feita pelo roteiro ou número inventado) — cite só valores dos dados",
+            })
+    return out
 
 
 # nome próprio que não precisa de confirmação (aparece em qualquer roteiro)

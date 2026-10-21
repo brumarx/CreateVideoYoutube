@@ -204,6 +204,7 @@ _MIN_FIT_TOKENS = 1024
 
 def _call_openai_compat(
     endpoint: str, api_key: str, model: str, messages: list[dict], max_tokens: int, temperature: float = 0.8,
+    _fitted: bool = False,
 ) -> tuple[str | None, int | None]:
     payload = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
     if "gpt-oss" in model:
@@ -218,11 +219,15 @@ def _call_openai_compat(
             timeout=60,
         )
         m = _TOO_LARGE_RE.search(resp.text) if resp.status_code == 413 else None
-        if m:
+        if m and not _fitted:
+            # ajusta UMA vez: repetir só descia o max_tokens de 100 em 100
+            # (o consumo do minuto sobe a cada pedido) e a resposta cortada
+            # reprovava na validação (job 596, 21/10). Abaixo de 3/4 do
+            # pedido, o roteiro não cabe: vai pro próximo modelo/provedor
             fitted = max_tokens - (int(m.group(2)) - int(m.group(1))) - 64
-            if _MIN_FIT_TOKENS <= fitted < max_tokens:
+            if max(_MIN_FIT_TOKENS, max_tokens * 3 // 4) <= fitted < max_tokens:
                 log.info("%s (%s): max_tokens %d -> %d pra caber no limite por minuto", endpoint, model, max_tokens, fitted)
-                return _call_openai_compat(endpoint, api_key, model, messages, fitted, temperature)
+                return _call_openai_compat(endpoint, api_key, model, messages, fitted, temperature, _fitted=True)
         if resp.status_code != 200:
             log.warning("%s (%s) -> HTTP %s: %s", endpoint, model, resp.status_code, resp.text[:200])
             return None, resp.status_code
@@ -237,16 +242,28 @@ def _call_openai_compat(
 def _call_gemini(api_key: str, model: str, messages: list[dict], max_tokens: int, temperature: float = 0.8) -> str | None:
     prompt = "\n\n".join(m["content"] for m in messages)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    config = {"maxOutputTokens": max_tokens, "temperature": temperature}
+    if "flash" in model:
+        # o 2.5 "pensa" com o mesmo maxOutputTokens: gastava 572 de 600 e o
+        # JSON saía cortado (finishReason MAX_TOKENS) — toda resposta dele
+        # reprovava na validação (teste de 21/10)
+        config["thinkingConfig"] = {"thinkingBudget": 0}
     try:
         resp = httpx.post(
             url,
             headers={"x-goog-api-key": api_key},
-            json={
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature},
-            },
+            json={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": config},
             timeout=60,
         )
+        if resp.status_code == 400 and "thinking" in resp.text.lower():
+            # modelo que não aceita desligar o raciocínio: vai sem a opção
+            config.pop("thinkingConfig", None)
+            resp = httpx.post(
+                url,
+                headers={"x-goog-api-key": api_key},
+                json={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": config},
+                timeout=60,
+            )
         if resp.status_code != 200:
             log.warning("gemini (%s) -> HTTP %s: %s", model, resp.status_code, resp.text[:200])
             return None
