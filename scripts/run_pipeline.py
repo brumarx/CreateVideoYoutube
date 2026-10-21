@@ -543,7 +543,8 @@ def run(
 
     # tema sem base em dado real (fila, viral, digitado): sem sentido ou fora
     # do nicho não vira vídeo. Da fila, troca por outro; digitado, recusa.
-    if facts is None:
+    # (tema da série em teste foi escolhido à mão: não passa pela checagem)
+    if facts is None and topic not in channel.active_priority_topics:
         for _ in range(MAX_TOPIC_CHECKS):
             problem = topic_problem(topic, channel.niche, strict=user_provided_topic)
             if problem is None:
@@ -693,12 +694,15 @@ def run(
                     problems = review_script(script, topic, facts, None)
                     if problems == []:  # None = revisor fora do ar: não aprova
                         break
-                elif channel.topics and facts is None and not user_provided_topic:
+                elif (channel.topics and facts is None and not user_provided_topic
+                      and topic not in channel.active_priority_topics):
                     # demais canais: tema (quase sempre o viral — jobs
                     # 142/151 do curiosidades) sem base confirmável → troca
                     # por outro da lista fixa, sem viral, e tenta 1 vez. No
                     # curto, só tema sem número (selo de lista já foi
                     # calculado pro tema original).
+                    # Tema da série não troca: o job falha e o daily_run
+                    # refaz o mesmo tema (senão cada tentativa queimava 2).
                     novo = pick_topic(channel_name, channel.topics, channel.niche, priority=channel.active_priority_topics)
                     if long_form or not LIST_TOPIC_RE.match(novo):
                         topic, web_facts = novo, search_topic_facts(novo)

@@ -412,8 +412,9 @@ def pick_topic(
     elif topic is None:
         log.info("[%s] lista fixa de temas esgotada — pedindo tema novo ao LLM", channel_name)
         topic = _generate_new_topic(niche, used)
-    if topic not in pool:
+    if topic not in pool and topic not in (priority or []):
         # tema viral ou gerado na hora: grava no yaml pra aparecer no painel
+        # (o da série já aparece no bloco `prioridade`)
         _append_topic_to_yaml(channel_name, topic)
 
     used.append(topic)

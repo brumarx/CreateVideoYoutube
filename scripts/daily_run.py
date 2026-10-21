@@ -34,6 +34,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from src.config import ChannelConfig  # noqa: E402
 from src.orchestrator import DB_PATH, update  # noqa: E402
 from src.upload import UPLOAD_META_FILE  # noqa: E402
 
@@ -76,7 +77,7 @@ def _last_job(channel_name: str, after_id: int):
     """Job criado por esta tentativa (id maior que o último antes dela)."""
     with closing(sqlite3.connect(DB_PATH)) as conn:
         return conn.execute(
-            "SELECT id, status, video_path FROM jobs WHERE channel = ? AND id > ? ORDER BY id DESC LIMIT 1",
+            "SELECT id, status, video_path, topic FROM jobs WHERE channel = ? AND id > ? ORDER BY id DESC LIMIT 1",
             (channel_name, after_id),
         ).fetchone()
 
@@ -148,7 +149,7 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
             # nem criou job: erro de configuração, repetir não resolve
             log.error("[%s] %s falhou (exit %d) sem criar job — seguindo pros próximos", channel_name, label, rc)
             return
-        job_id, status, video_path = job
+        job_id, status, video_path, topic = job
         if video_path:
             log.error("[%s] %s: vídeo %d renderizado mas não publicado — fica pro retry_uploads", channel_name, label, job_id)
             return
@@ -165,6 +166,12 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
             # Botafogo, fato do politica): refaz com eles, não busca outros
             base_cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name,
                         "--facts-file", str(facts_file), *(["--no-upload"] if NO_UPLOAD else [])]
+        elif topic and topic in ChannelConfig.load(channel_name).active_priority_topics:
+            # tema da série em teste: refaz o mesmo tema em vez de queimar o
+            # próximo da série (curiosidades 21/10: 8 temas gastos numa noite,
+            # 1 virou vídeo)
+            base_cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name,
+                        "--topic", topic, *(["--no-upload"] if NO_UPLOAD else [])]
 
 
 def _render_approved(channel_name: str) -> None:
