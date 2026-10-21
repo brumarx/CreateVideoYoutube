@@ -245,6 +245,7 @@ def _visible_color(hex_color: str) -> str:
 # casar vence)
 FAILURE_CAUSES = (
     ("Revisão de fatos reprovou o roteiro", ("revisão de fatos",)),
+    ("Roteiro longo demais pro Short", ("longo demais pro short",)),
     ("Revisão do vídeo pronto reprovou", ("revisão antes do upload", "revisão do vídeo", "revisão de áudio")),
     ("Nenhuma IA respondeu (cota)", ("nenhum provedor", "llm respondeu")),
     ("Tema recusado", ("tema recusado", "temas seguidos recusados")),

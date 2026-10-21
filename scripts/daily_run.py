@@ -77,7 +77,7 @@ def _last_job(channel_name: str, after_id: int):
     """Job criado por esta tentativa (id maior que o último antes dela)."""
     with closing(sqlite3.connect(DB_PATH)) as conn:
         return conn.execute(
-            "SELECT id, status, video_path, topic FROM jobs WHERE channel = ? AND id > ? ORDER BY id DESC LIMIT 1",
+            "SELECT id, status, video_path, topic, error FROM jobs WHERE channel = ? AND id > ? ORDER BY id DESC LIMIT 1",
             (channel_name, after_id),
         ).fetchone()
 
@@ -149,11 +149,15 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
             # nem criou job: erro de configuração, repetir não resolve
             log.error("[%s] %s falhou (exit %d) sem criar job — seguindo pros próximos", channel_name, label, rc)
             return
-        job_id, status, video_path, topic = job
+        job_id, status, video_path, topic, error = job
         if video_path:
             log.error("[%s] %s: vídeo %d renderizado mas não publicado — fica pro retry_uploads", channel_name, label, job_id)
             return
-        motivo = "roteiro reprovado na revisão de fatos" if rc == EXIT_SCRIPT_REJECTED else f"falhou antes do render (exit {rc})"
+        # o motivo gravado no job: exit 3 é qualquer reprovação (tema, fatos,
+        # Short longo demais, áudio, vídeo), não só a revisão de fatos
+        motivo = (error or "").splitlines()[0][:160] if error else (
+            "roteiro reprovado" if rc == EXIT_SCRIPT_REJECTED else f"falhou antes do render (exit {rc})"
+        )
         if attempt == total:
             log.error("[%s] %s: %s — %d tentativas, sem vídeo hoje", channel_name, label, motivo, total)
             return
