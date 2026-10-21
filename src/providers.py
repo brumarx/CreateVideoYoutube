@@ -76,7 +76,7 @@ CLOUDFLARE_MODELS = [
 ]
 
 
-def _cloudflare_complete(entries, messages, max_tokens, ok, model_filter, validate):
+def _cloudflare_complete(entries, messages, max_tokens, ok, model_filter, validate, temperature=0.8):
     rotator = _rotator_for(entries)
     for entry in rotator.order():
         account, _, token = entry.partition(":")
@@ -87,7 +87,7 @@ def _cloudflare_complete(entries, messages, max_tokens, ok, model_filter, valida
         for model in CLOUDFLARE_MODELS:
             if model_filter is not None and not model_filter(model):
                 continue
-            result, status = _call_openai_compat(CLOUDFLARE_CHAT_URL.format(account=account), token, model, messages, max_tokens)
+            result, status = _call_openai_compat(CLOUDFLARE_CHAT_URL.format(account=account), token, model, messages, max_tokens, temperature)
             if ok(result):
                 log.info("resposta via cloudflare/%s", model)
                 return result
@@ -203,9 +203,9 @@ _MIN_FIT_TOKENS = 1024
 
 
 def _call_openai_compat(
-    endpoint: str, api_key: str, model: str, messages: list[dict], max_tokens: int
+    endpoint: str, api_key: str, model: str, messages: list[dict], max_tokens: int, temperature: float = 0.8,
 ) -> tuple[str | None, int | None]:
-    payload = {"model": model, "messages": messages, "temperature": 0.8, "max_tokens": max_tokens}
+    payload = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
     if "gpt-oss" in model:
         # o raciocínio sai do mesmo max_tokens: no padrão o gpt-oss gastava
         # os 3 mil pensando e devolvia o roteiro vazio (teste de 20/10)
@@ -222,7 +222,7 @@ def _call_openai_compat(
             fitted = max_tokens - (int(m.group(2)) - int(m.group(1))) - 64
             if _MIN_FIT_TOKENS <= fitted < max_tokens:
                 log.info("%s (%s): max_tokens %d -> %d pra caber no limite por minuto", endpoint, model, max_tokens, fitted)
-                return _call_openai_compat(endpoint, api_key, model, messages, fitted)
+                return _call_openai_compat(endpoint, api_key, model, messages, fitted, temperature)
         if resp.status_code != 200:
             log.warning("%s (%s) -> HTTP %s: %s", endpoint, model, resp.status_code, resp.text[:200])
             return None, resp.status_code
@@ -234,7 +234,7 @@ def _call_openai_compat(
         return None, None
 
 
-def _call_gemini(api_key: str, model: str, messages: list[dict], max_tokens: int) -> str | None:
+def _call_gemini(api_key: str, model: str, messages: list[dict], max_tokens: int, temperature: float = 0.8) -> str | None:
     prompt = "\n\n".join(m["content"] for m in messages)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     try:
@@ -243,7 +243,7 @@ def _call_gemini(api_key: str, model: str, messages: list[dict], max_tokens: int
             headers={"x-goog-api-key": api_key},
             json={
                 "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"maxOutputTokens": max_tokens},
+                "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature},
             },
             timeout=60,
         )
@@ -264,6 +264,7 @@ def complete(
     max_tokens: int = 4096,
     validate: Callable[[str], bool] | None = None,
     model_filter: Callable[[str], bool] | None = None,
+    temperature: float = 0.8,
 ) -> str:
     """Roda a cascata de provedores (com rodízio de chaves e descoberta
     dinâmica de modelo dentro de cada um) e devolve a primeira resposta não
@@ -311,7 +312,7 @@ def complete(
             for model in models:
                 if model_filter is not None and not model_filter(model):
                     continue
-                result, status = _call_openai_compat(chat_endpoint, api_key, model, messages, max_tokens)
+                result, status = _call_openai_compat(chat_endpoint, api_key, model, messages, max_tokens, temperature)
                 if _ok(result):
                     log.info("resposta via %s/%s", name, model)
                     return result  # type: ignore[return-value]
@@ -322,7 +323,7 @@ def complete(
                     break  # próxima chave, não adianta repetir modelos com a mesma
 
     if keys.cloudflare:
-        result = _cloudflare_complete(keys.cloudflare, messages, max_tokens, _ok, model_filter, validate)
+        result = _cloudflare_complete(keys.cloudflare, messages, max_tokens, _ok, model_filter, validate, temperature)
         if result is not None:
             return result
 
@@ -333,7 +334,7 @@ def complete(
             for model in models:
                 if model_filter is not None and not model_filter(model):
                     continue
-                result = _call_gemini(api_key, model, messages, max_tokens)
+                result = _call_gemini(api_key, model, messages, max_tokens, temperature)
                 if _ok(result):
                     log.info("resposta via gemini/%s", model)
                     return result  # type: ignore[return-value]

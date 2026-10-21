@@ -68,7 +68,9 @@ abaixo ANTES de ele virar vídeo. Aponte SÓ problemas concretos destes tipos:
   claramente apresentado como hipotético — "imagine que...", "pense em
   alguém que..." — não é problema. Afirmação geral sobre costume,
   comportamento ou sensação — "o bar vira refúgio", "no bar todo mundo fica
-  igual" — também NÃO é caso: caso é um acontecimento com quem/quando/onde.)
+  igual" — também NÃO é caso: caso é um acontecimento com quem/quando/onde.
+  Fato COM nome próprio — "Ronaldo marcou 8 gols na Copa de 2002", "o túnel
+  Sonnenberg" — NUNCA é caso_generico; se duvidar dele, é fato_nao_confirmado.)
 - "deboche": zomba, ridiculariza ou apelida pessoa real identificável
   (idade, aparência, desempenho — "aguardando a aposentadoria compulsória",
   "esse eu não lembro quem é", "voltou por saudade das churrascarias"),
@@ -89,6 +91,10 @@ abaixo ANTES de ele virar vídeo. Aponte SÓ problemas concretos destes tipos:
   era ex-jogador).
 {_fora_da_fonte_strict if facts else _fora_da_fonte_web if web_facts else ""}
 Opinião, tom, estilo e afirmações genéricas e verdadeiras NÃO são problema.
+O TEMA foi escolhido e conferido pelo editor: o que está escrito no próprio
+TEMA vale como fonte. Fato famoso de pessoa/lugar conhecido (títulos, gols e
+artilharias de Copa, medalhas, recordes, datas de conquistas) que você SABE
+que é verdadeiro é conhecimento geral, não problema.
 Não invente problema: se o roteiro está ok, devolva lista vazia.
 
 TEMA: {topic}
@@ -252,6 +258,9 @@ def review_script(
             # modelo pequeno aprovava "pesquisador Trent-Von Haesler" e
             # "o caso de Dobelle" inventados (job 306)
             model_filter=lambda m: not _SMALL_MODEL_RE.search(m),
+            # 0.8 (padrão, bom pra roteiro) fazia o revisor apontar frases
+            # diferentes a cada leitura do mesmo texto (teste de 21/10)
+            temperature=0.1,
         )
         raw_problems = _parse(raw)
     except RuntimeError as exc:
@@ -401,7 +410,9 @@ def feedback_for_rewrite(problems: list[dict]) -> str:
     return f"""
 REVISÃO DE FATOS DA VERSÃO ANTERIOR (reprovada — corrija TODOS estes pontos):
 {items}
-Remova ou troque o que foi apontado. Nunca cite ferramenta, produto,
+APAGUE o que foi apontado — não troque por outro número, medida, data ou
+detalhe que também não esteja nas fontes (é o que reprova a versão nova).
+Nunca cite ferramenta, produto,
 número, nome ou evento que você não tem certeza de que é real. Se o título
 prometia algo que não dá pra entregar com fatos reais, mude o título.
 """

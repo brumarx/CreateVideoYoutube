@@ -16,6 +16,7 @@ LLM) — nunca bloqueia nem quebra o pipeline por causa disso.
 from __future__ import annotations
 
 import logging
+import re
 
 import httpx
 
@@ -42,7 +43,70 @@ def search_topic_facts(query: str, max_results: int = 5) -> list[dict] | None:
     DuckDuckGo (grátis, sem chave)."""
     if not query:
         return None
-    return _tavily(query, max_results) or _duckduckgo(query, max_results)
+    facts = _tavily(query, max_results) or _duckduckgo(query, max_results)
+    return _enrich(facts, query) if facts else None
+
+
+# trecho por fonte depois de abrir a página: o resumo da busca (1-2 frases)
+# não sustentava quase nada e a revisão reprovava todo detalhe como
+# "fora_da_fonte" (21/10: Tavily sem cota desde 17/10, só DuckDuckGo).
+# 4 x 800 caracteres cabem no limite por minuto do Groq (prompt ~7 mil tokens)
+ENRICHED_SOURCES = 4
+ENRICHED_CHARS = 800
+_STOPWORDS = {
+    "como", "para", "pela", "pelo", "com", "sem", "que", "uma", "dos", "das", "nos", "nas", "por",
+    "mais", "seu", "sua", "the", "and", "how", "from", "with", "este", "esta", "isso", "toda", "todo",
+}
+
+
+def _keywords(text: str) -> set[str]:
+    import unicodedata
+
+    text = unicodedata.normalize("NFKD", text.lower()).encode("ascii", "ignore").decode()
+    return {w[:6] for w in re.findall(r"\w+", text) if len(w) > 3 and w not in _STOPWORDS}
+
+
+def _page_text(url: str) -> str:
+    try:
+        import trafilatura
+
+        resp = httpx.get(url, timeout=10, follow_redirects=True, headers={
+            "User-Agent": "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128 Safari/537.36",
+        })
+        resp.raise_for_status()
+        return trafilatura.extract(resp.text) or ""
+    except Exception as exc:  # noqa: BLE001 — página fora/bloqueando: fica o resumo da busca
+        log.info("página da fonte indisponível (%s): %s", url, exc)
+        return ""
+
+
+def _best_passage(text: str, keys: set[str], limit: int = ENRICHED_CHARS) -> str:
+    """Frases da página que mais falam do tema, na ordem original, até `limit`."""
+    sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+|\n+", text) if len(x.strip()) > 30]
+    ranked = sorted(range(len(sentences)), key=lambda i: -len(keys & _keywords(sentences[i])))
+    chosen, size = set(), 0
+    for i in ranked:
+        if not keys & _keywords(sentences[i]) or size + len(sentences[i]) > limit:
+            continue
+        chosen.add(i)
+        size += len(sentences[i]) + 1
+    return " ".join(sentences[i] for i in sorted(chosen))
+
+
+def _enrich(facts: list[dict], query: str) -> list[dict]:
+    """Troca o resumo da busca pelo trecho da página que mais fala do tema."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    facts = facts[:ENRICHED_SOURCES]
+    keys = _keywords(query)
+    with ThreadPoolExecutor(max_workers=len(facts)) as pool:
+        pages = list(pool.map(lambda f: _page_text(f["url"]), facts))
+    out = []
+    for f, page in zip(facts, pages):
+        passage = _best_passage(page, keys | _keywords(f["trecho"])) if page else ""
+        out.append({**f, "trecho": passage} if len(passage) > len(f["trecho"]) else f)
+    log.info("fontes abertas: %d de %d com trecho da página", sum(a is not b for a, b in zip(out, facts)), len(facts))
+    return out
 
 
 def _duckduckgo(query: str, max_results: int) -> list[dict] | None:
@@ -82,7 +146,8 @@ def _tavily(query: str, max_results: int) -> list[dict] | None:
                 },
                 timeout=20,
             )
-            if resp.status_code in (401, 403):
+            # 432 = cota do mês da chave acabou (as 2 desde 17/10)
+            if resp.status_code in (401, 403, 432):
                 rotator.ban(api_key)
                 continue
             resp.raise_for_status()

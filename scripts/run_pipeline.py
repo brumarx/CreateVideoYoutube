@@ -41,7 +41,7 @@ from src.fact_check import BLOCKING_TYPES, feedback_for_rewrite, review_script
 from src.orchestrator import enqueue, update
 from src.people_photos import names_in, person_photo
 from src.real_media import real_clip, real_photos
-from src.script_gen import chapter_titles, engagement_question, fix_dangling_hooks, generate_script
+from src.script_gen import chapter_titles, engagement_question, fix_dangling_hooks, generate_script, repair_script
 from src.spellcheck import fix_script, fix_text
 from src.stock_media import search_stock_clip, search_stock_photo
 from src.thumbnail import make_thumbnail, photo_scene_frame, title_card
@@ -104,6 +104,8 @@ LIST_TOPIC_RE = re.compile(r"^(\d+)\s")
 MAX_LIST_ITEMS = 10
 # reescritas do roteiro depois de reprovado na revisão de fatos
 FACT_CHECK_REWRITES = 2
+# rodadas do laço conserta → revisa por reprovação (ver o loop da revisão)
+MAX_REPAIR_ROUNDS = 5
 
 # Capítulos (timestamps na descrição, "0:00 ..." etc.) só no formato longo —
 # no curto (poucos minutos) não faz sentido. YouTube exige pelo menos 3
@@ -300,7 +302,7 @@ def _mark_news_blocks(script: dict, facts: dict | None) -> None:
 
 
 def _cut_flagged_sentences(
-    script: dict, problems: list[dict], max_cuts: int = 3, lenient: bool = False, min_score: float = 0.6,
+    script: dict, problems: list[dict], max_cuts: int | None = None, lenient: bool = False, min_score: float = 0.6,
 ) -> dict | None:
     """Roteiro sem as frases que a revisão apontou (cada `termo` é a
     afirmação curta do revisor — acha a frase que tem a maioria das palavras
@@ -316,6 +318,10 @@ def _cut_flagged_sentences(
         return {w[:5] for w in re.findall(r"\w+", text) if len(w) > 3}
 
     scenes = [_SENT_SPLIT.split(sc.get("narration", "")) for sc in script["scenes"]]
+    if max_cuts is None:
+        # até 1/4 das frases (mínimo 3): roteiro de 20 frases com 4 detalhes
+        # sem fonte ainda é um bom roteiro sem eles
+        max_cuts = max(3, sum(len(x) for x in scenes) // 4)
     to_cut: set[tuple[int, int]] = set()
     for p in problems:
         term = words(str(p.get("termo", "")))
@@ -659,21 +665,45 @@ def run(
                     "roteiro do arquivo reprovado na revisão de fatos: "
                     + "; ".join(f"{p.get('termo')} ({p.get('motivo')})" for p in problems)
                 )
+            # conserta as frases apontadas com base nas fontes ANTES de
+            # reescrever: o roteiro novo, escrito do zero, trocava 1 detalhe
+            # inventado por outros (21/10: curiosidades 555-557, 3 reescritas
+            # cada, sempre um detalhe novo sem fonte). Laço conserta → revisa
+            # até a revisão vir limpa; o conserto não pode trazer número/nome
+            # novo (trava no código), então cada rodada só tira ou generaliza
+            # e o laço converge. Teto de MAX_REPAIR_ROUNDS; parou de mudar,
+            # sai antes. Não deu: corta; só então reescreve.
+            fixed, fix_problems = script, problems
+            for _ in range(MAX_REPAIR_ROUNDS):
+                before = fixed
+                fixed = repair_script(fixed, fix_problems, facts, web_facts, topic)
+                if fixed is None or fixed["scenes"] == before["scenes"] and fixed.get("title") == before.get("title"):
+                    fixed = None
+                    break
+                fix_problems = review_script(fixed, topic, facts, web_facts)
+                if not fix_problems:
+                    break
+                log.info("[%s] roteiro consertado ainda reprovado: %s", job_id,
+                         "; ".join(f"{p.get('tipo')}: {p.get('termo')}" for p in fix_problems or []) or "revisor fora")
+            if fixed is not None and fix_problems == []:
+                log.warning("[%s] frases reprovadas consertadas com base nas fontes — aprovado na revisão seguinte", job_id)
+                script = fixed
+                break
+            cut = _cut_flagged_sentences(script, problems)
+            if cut is not None:
+                recheck = review_script(cut, topic, facts, web_facts)
+                if recheck == []:
+                    log.warning("[%s] frases reprovadas cortadas do roteiro — aprovado na revisão seguinte", job_id)
+                    script = cut
+                    break
+                log.info("[%s] roteiro cortado ainda reprovado: %s", job_id,
+                         "; ".join(f"{p.get('tipo')}: {p.get('termo')}" for p in recheck or []) or "revisor fora")
+            else:
+                log.info("[%s] não deu pra cortar só as frases apontadas — reescrevendo", job_id)
             if attempt == FACT_CHECK_REWRITES:
                 if not any(p.get("tipo") in BLOCKING_TYPES for p in problems):
                     log.warning("[%s] só sobraram ressalvas leves da revisão — segue pra aprovação", job_id)
                     break
-                # sobrou 1-3 frase(s) apontada(s) depois das reescritas (visto
-                # no Botafogo: roteiro inteiro descartado por "zona de
-                # classificação"): corta só essas frases e revisa de novo —
-                # aprovado só se a 2ª revisão vier limpa
-                cut = _cut_flagged_sentences(script, problems)
-                if cut is not None:
-                    recheck = review_script(cut, topic, facts, web_facts)
-                    if recheck == []:
-                        log.warning("[%s] frases reprovadas cortadas do roteiro — aprovado na 2ª revisão", job_id)
-                        script = cut
-                        break
                 if channel_name == "politica" and facts is None and not user_provided_topic:
                     # tema da fila/viral sem dado que sustente: em vez de
                     # passar o dia sem vídeo, troca por um fato REAL do banco

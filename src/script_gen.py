@@ -109,6 +109,8 @@ ACCURACY_RULES = """REGRAS DE PRECISÃO (obrigatórias — o roteiro passa por r
 - O título, o thumbnail_text e a descrição só podem prometer o que as cenas realmente narram. Nada de título sobre um assunto que o roteiro não cobre.
 - Tempo verbal de eventos: compare cada data com a DATA DE HOJE acima. Se a data de um jogo/evento é futura, fale no futuro ("vai enfrentar", "no dia 07/10"); se não houver data completa (dia E mês) nos dados, NÃO afirme se já aconteceu ou não — cite só o que a fonte diz.
 - Números, valores, placares, nomes e cargos: só os que aparecem nos DADOS REAIS/fontes. Na dúvida, deixe de fora em vez de arredondar, estimar ou completar.
+- Detalhe técnico, medida, capacidade, custo, data de inauguração, recorde ou "o primeiro do mundo" que NÃO está nas fontes: não use, mesmo que você ache que sabe. É o que mais reprova roteiro. Menos detalhe certo vale mais que muito detalhe sem fonte.
+- Não faça contas com os números das fontes (diferença, soma, média, "o dobro", "X vezes mais", "o maior", "o terceiro maior"): cite os valores como estão e deixe o espectador comparar. Conta feita pelo roteiro saiu errada ("quase o dobro" pra 1,12x) e reprova.
 - Possibilidade não é fato: se a fonte diz "pode", "deve", "negocia", "avalia", narre como possibilidade.
 - Não tire conclusão, consequência ou impacto que a fonte não diz. Leia a relação de cada pessoa com o assunto exatamente como está: "emprestado pelo clube X" = joga em OUTRO clube (não desfalca X agora); "ex-X" = já saiu antes (não é saída de agora).
 - Nunca acuse ninguém de irregularidade sem que a fonte diga isso com todas as letras."""
@@ -830,6 +832,117 @@ def generate_script(
 
 
 _SENTENCES = re.compile(r"(?<=[.!?])\s+")
+
+
+def _repair_parse(raw: str, n: int) -> dict | None:
+    try:
+        data = _extract_json(raw)
+    except ValueError:
+        return None
+    cenas = data.get("cenas")
+    if not isinstance(cenas, list) or len(cenas) != n or not all(isinstance(c, str) for c in cenas):
+        return None
+    return data
+
+
+_NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)*")
+_PROPER_RE = re.compile(r"(?<![.!?:]\s)(?<!^)\b[A-ZÀ-Ý][a-zà-ÿ]{3,}")
+_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
+
+
+_CAPITAL_RE = re.compile(r"\b[A-ZÀ-Ý][a-zà-ÿ]{3,}")
+
+
+def _fact_tokens(text: str, every_capital: bool = False) -> set[str]:
+    """Números e nomes próprios do texto — o que conta como "fato".
+    every_capital: conta também palavra maiúscula em começo de frase (pro
+    lado do que é PERMITIDO, onde sobrar é melhor que faltar)."""
+    nums = {n.replace(".", "").replace(",", "") for n in _NUMBER_RE.findall(text)}
+    names = {w.lower() for w in (_CAPITAL_RE if every_capital else _PROPER_RE).findall(text)}
+    return nums | names
+
+
+def _drop_new_facts(scenes: list[str], allowed: set[str]) -> tuple[list[str], set[str]]:
+    """Apaga do conserto a frase que traz número ou nome próprio que não
+    estava no roteiro, nas fontes nem no tema: o conserto só pode tirar ou
+    generalizar, nunca inventar — senão o laço conserta/revisa não acaba."""
+    novos: set[str] = set()
+    out = []
+    for text in scenes:
+        kept = []
+        for sentence in _SENTENCE_RE.split(text):
+            extra = _fact_tokens(sentence) - allowed
+            if extra:
+                novos |= extra
+            else:
+                kept.append(sentence)
+        out.append(" ".join(kept).strip())
+    return out, novos
+
+
+def repair_script(
+    script: dict, problems: list[dict], facts: dict | None = None, web_facts: list[dict] | None = None,
+    topic: str = "",
+) -> dict | None:
+    """Conserta SÓ as frases que a revisão de fatos apontou, com base nas
+    fontes, e mantém o resto do roteiro igual. Reescrever do zero trocava um
+    detalhe sem fonte por outros (curiosidades 555-557, 21/10); cortar
+    deixava buraco na história. None se o modelo não devolver o formato."""
+    narrations = [str(sc.get("narration", "")) for sc in script["scenes"]]
+    if facts:
+        sources = json.dumps(facts, ensure_ascii=False, separators=(",", ":"))
+    elif web_facts:
+        sources = "\n".join(f"- {f['titulo']}: {f['trecho']}" for f in web_facts)
+    else:
+        sources = "(sem fontes: só conhecimento geral verdadeiro e amplamente conhecido)"
+    apontados = "\n".join(f"- {p.get('termo', '')}: {p.get('motivo', '')}" for p in problems)
+    prompt = f"""Um roteiro de vídeo foi reprovado na revisão de fatos. Conserte SÓ os
+pontos apontados, usando as FONTES. Para cada ponto:
+- se as FONTES trazem a informação certa, troque pelo que elas dizem;
+- se não trazem, diga de forma mais geral o que elas sustentam, ou apague a
+  frase se ela não fizer falta.
+Não acrescente número, medida, data, nome ou detalhe que não esteja nas
+FONTES. Não mexa no que não foi apontado: mesmo tom, mesmo tamanho, mesmo
+número de cenas. Se o TÍTULO foi apontado, devolva um título novo.
+
+TÍTULO: {script.get("title", "")}
+
+PONTOS APONTADOS:
+{apontados}
+
+FONTES:
+{sources}
+
+CENAS (narração, na ordem):
+{json.dumps(narrations, ensure_ascii=False)}
+
+Responda só com JSON: {{"titulo": "título (o mesmo, se não foi apontado)", "cenas": ["narração da cena 1", "..."]}}
+— exatamente {len(narrations)} cenas, na mesma ordem."""
+    from .topics import _SMALL_MODEL_RE  # import tardio: topics importa este módulo
+
+    try:
+        raw = complete(
+            [{"role": "user", "content": prompt}], max_tokens=4000,
+            validate=lambda r: _repair_parse(r, len(narrations)) is not None,
+            model_filter=lambda m: not _SMALL_MODEL_RE.search(m), temperature=0.3,
+        )
+    except RuntimeError as exc:
+        log.warning("conserto do roteiro: nenhum provedor respondeu (%s)", exc)
+        return None
+    data = _repair_parse(raw, len(narrations))
+    allowed = _fact_tokens(
+        " ".join(narrations) + " " + sources + " " + topic + " " + str(script.get("title", "")), every_capital=True,
+    )
+    cenas, novos = _drop_new_facts(data["cenas"], allowed)
+    if novos:
+        log.warning("conserto tentou acrescentar fato novo (%s) — frase apagada", ", ".join(sorted(novos)))
+    scenes = [{**sc, "narration": text} for sc, text in zip(script["scenes"], cenas) if text]
+    if len(scenes) < 2:
+        return None
+    title = str(data.get("titulo") or "").strip()
+    if not title or _fact_tokens(title) - allowed:
+        title = script.get("title")
+    return {**script, "title": title, "scenes": scenes}
 
 
 def fix_dangling_hooks(script: dict) -> dict:
