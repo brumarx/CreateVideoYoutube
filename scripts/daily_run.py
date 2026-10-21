@@ -67,8 +67,11 @@ MUST_PUBLISH_ATTEMPTS = 3
 # de job que já terminou sem volta, depois de uns dias pra dar tempo de
 # investigar a falha. retry_uploads.py só reenvia "failed" (com
 # upload_meta.json), então "rendered" de dias atrás é execução que morreu
-# no meio e "dry_run" é teste — os dois também saem.
-CLEANUP_STATUSES = ("failed", "retried", "abandoned", "deleted", "uploaded", "rendered", "dry_run", "script_ready", "rendered_from_script")
+# no meio e "dry_run" é teste — os dois também saem. "scripted"/"narrated"
+# são etapas intermediárias como "rendered": parado nelas dias depois é
+# execução morta (pasta de 06/10 com 0,28 GB ficou esquecida). "pending" não
+# entra — é fila que o orchestrator ainda vai pegar.
+CLEANUP_STATUSES = ("failed", "retried", "abandoned", "deleted", "uploaded", "rendered", "dry_run", "script_ready", "rendered_from_script", "scripted", "narrated")
 CLEANUP_AFTER_DAYS = 3
 # upload que falhou (token OAuth vence a cada ~7 dias) fica com
 # upload_meta.json esperando o retry_uploads — guarda por mais tempo
@@ -232,6 +235,16 @@ def run_channel(channel_name: str, cfg: dict) -> None:
             _run_pipeline(channel_name, ["--botafogo-task", task], task)
         return
 
+    from datetime import date
+
+    from src.script_archive import weekday_index
+
+    if not ready and weekday_index(cfg.get("longo_semanal")) == date.today().weekday():
+        # longo semanal no lugar do Short do dia (a cota de upload é uma só
+        # pros 5 canais): compilação dos Shorts da semana; a última tentativa
+        # sai em curto, pro dia não ficar sem vídeo
+        _run_pipeline(channel_name, ["--long", "--compilation"], "longo semanal", fallback_short=True)
+        ready = 1
     for i in range(ready, uploads_per_day):
         # sem --long/--no-long: run_pipeline.py lê channels/<nome>.yaml ->
         # daily_format sozinho (fonte única de verdade, editável no painel —

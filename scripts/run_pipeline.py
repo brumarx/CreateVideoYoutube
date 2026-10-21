@@ -270,7 +270,9 @@ def _sized_for_facts(facts: dict, scenes: int | None, min_minutes: float, max_mi
     o roteirista a inventar (somas, comparações de fora, "corrupção") ou a
     repetir metade do vídeo (job 222) — e a revisão reprovava."""
     n = len(facts.get("dados") or facts.get("noticias") or [])
-    if not n or scenes is None:
+    if not n or scenes is None or facts.get("tipo") == "compilacao":
+        # compilação da semana: cada item é uma narração inteira — vale a
+        # duração de longo do canal (curto demais e o YouTube trata como Short)
         return scenes, min_minutes, max_minutes
     return min(scenes, 2 * n + 2), min(min_minutes, max(1.5, 0.35 * n)), min(max_minutes, max(3.0, 0.6 * n))
 
@@ -477,6 +479,7 @@ def run(
     script_only: bool = False,
     no_upload: bool = False,
     must_publish: bool = False,
+    compilation: bool = False,
 ) -> None:
     channel = ChannelConfig.load(channel_name)
     # guardado ANTES de qualquer auto-preenchimento abaixo — só um tema
@@ -509,6 +512,17 @@ def run(
     # no longo, só usa quando fact_label foi passado explicitamente (senão
     # segue o design original: tema genérico de "como o sistema funciona",
     # sem grounding de um fato só pra sustentar 15-20min).
+    # (--no-long da última tentativa do dia vence: aí sai um Short normal)
+    if compilation and long_form and topic is None and not facts_file:
+        # longo semanal: os Shorts da semana num vídeo só (fatos já revisados)
+        from src.script_archive import compilation_facts
+
+        facts = compilation_facts(channel_name)
+        if facts:
+            topic = facts["tema"]
+            log.info("[%s] longo semanal: compilação de %d Shorts da semana", channel_name, len(facts["dados"]))
+        else:
+            log.info("[%s] longo semanal: poucos Shorts guardados na semana — longo com tema da fila", channel_name)
     if topic is None and not facts_file and not fact_label and not botafogo_task and channel.active_priority_topics:
         # série/tema agendado (bloco `prioridade` do yaml) vale pra todo
         # canal, inclusive os que sorteiam dado do banco (politica: Nikolas
@@ -518,7 +532,9 @@ def run(
         if any(t not in _used_topics().get(channel_name, []) for t in channel.active_priority_topics):
             topic = pick_topic(channel_name, channel.topics, channel.niche, priority=channel.active_priority_topics)
             user_provided_topic = True  # tema escolhido à mão: busca na internet e não é trocado
-    if facts_file:
+    if facts is not None:
+        pass  # compilação da semana (acima)
+    elif facts_file:
         # dados reais prontos em arquivo (mesmo formato do banco: {"tema",
         # "dados"} ou {"noticias"}) — o roteiro e a revisão usam exatamente
         # estes dados (ex.: roteiro escrito à mão com --script-file)
@@ -1416,6 +1432,7 @@ def run(
         # rede), scripts/retry_uploads.py reenvia o vídeo já renderizado sem
         # precisar gerar tudo de novo.
         upload_meta = {
+            "long": long_form,
             "title": script["title"],
             "description": description,
             "tags": script["tags"],
@@ -1449,6 +1466,10 @@ def run(
         except Exception as exc:  # noqa: BLE001 — engajamento é bônus
             log.warning("[%s] não consegui comentar no vídeo: %s", job_id, exc)
 
+        # roteiro guardado pro longo semanal (compilação da semana)
+        from src.script_archive import archive
+
+        archive(channel_name, job_id, work_dir, video_id, long_form=long_form)
         # já está no YouTube — não precisa mais guardar os arquivos (vídeo longo
         # sozinho passa de 400MB, HD ia encher rápido rodando todo dia)
         shutil.rmtree(work_dir, ignore_errors=True)
@@ -1480,6 +1501,7 @@ def main() -> None:
     parser.add_argument("--script-file", default=None, help="JSON de roteiro pronto (mesmo formato do gerado) — pula a geração, mantém todas as revisões")
     parser.add_argument("--script-only", action="store_true", help="para depois do roteiro aprovado nas revisões; salva script.json/facts.json e o comando de render")
     parser.add_argument("--no-upload", action="store_true", help="renderiza e deixa 'ready' (com upload_meta) pro daily_run publicar")
+    parser.add_argument("--compilation", action="store_true", help="longo semanal: junta os Shorts publicados na semana (data/published_scripts) num vídeo longo; com menos de 3, longo com tema da fila")
     parser.add_argument("--must-publish", action="store_true", help="última tentativa do dia: revisões viram aviso (corta frases reprovadas) em vez de descartar o vídeo")
     parser.add_argument("--fact-label", default=None, help="só canal 'politica' no curto: força um tema específico de src.politica_data.FACT_FETCHERS em vez de sortear")
     args = parser.parse_args()
@@ -1489,7 +1511,7 @@ def main() -> None:
             args.channel, args.topic, args.dry_run, args.publish_at, long_form=args.long,
             fact_label=args.fact_label, botafogo_task=args.botafogo_task, script_file=args.script_file,
             facts_file=args.facts_file, script_only=args.script_only, no_upload=args.no_upload,
-            must_publish=args.must_publish,
+            must_publish=args.must_publish, compilation=args.compilation,
         )
     except ScriptRejected:
         sys.exit(EXIT_SCRIPT_REJECTED)

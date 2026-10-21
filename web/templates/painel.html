@@ -282,7 +282,7 @@
         <span class="lamp {{ c.state }}" aria-hidden="true"></span>
         <span class="name">{{ c.title }}</span>
         <span class="chev" aria-hidden="true">›</span>
-        <span class="sub">{{ 'curto' if c.daily_format == 'short' else 'longo' }}, {{ c.uploads_per_day }} por dia, {{ c.topics_pending }} tema(s) na fila</span>
+        <span class="sub">{{ 'curto' if c.daily_format == 'short' else 'longo' }}{% if c.weekly_long %}, longo semanal ({{ c.weekly_long }}){% endif %}, {{ c.uploads_per_day }} por dia, {{ c.topics_pending }} tema(s) na fila</span>
       </summary>
       <div class="stats">
         <div><b class="num">{{ fmt(c.views_30d) }}</b><span>views em 30 dias</span></div>

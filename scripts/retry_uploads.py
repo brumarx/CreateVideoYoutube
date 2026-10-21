@@ -112,6 +112,10 @@ def upload_pending(channel_filter: str | None, status: str = "failed", limit: in
                 post_comment(channel, video_id, meta["comment"])
             except Exception as exc:  # noqa: BLE001 — engajamento é bônus
                 log.warning("[%s] não consegui comentar no vídeo: %s", job_id, exc)
+        # roteiro guardado pro longo semanal (compilação da semana)
+        from src.script_archive import archive
+
+        archive(channel_name, job_id, work_dir, video_id, long_form=bool(meta.get("long")))
         shutil.rmtree(work_dir, ignore_errors=True)
     return uploaded
 

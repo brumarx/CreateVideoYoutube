@@ -14,6 +14,8 @@ scenes_per_video: 6
 upload_privacy: "public"
 uploads_per_day: 1
 daily_format: "short"
+# 1 longo por semana no lugar do Short do dia: compilação dos Shorts da semana
+longo_semanal: "quinta"
 short_min_minutes: 1
 short_max_minutes: 2
 long_min_minutes: 4

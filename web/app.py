@@ -201,6 +201,7 @@ def _load_channels() -> list[dict]:
                 "long_min_minutes": cfg.get("long_min_minutes", 15),
                 "long_max_minutes": cfg.get("long_max_minutes", 20),
                 "daily_format": cfg.get("daily_format", "short"),
+                "weekly_long": cfg.get("longo_semanal", ""),
                 "voices": _voice_options(cfg.get("tts_voice_weights", {})),
                 # política no formato curto ignora `topics` (lista acima) e
                 # sorteia um destes ~20 fatos reais do banco de transparência
