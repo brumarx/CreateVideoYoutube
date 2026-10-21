@@ -218,6 +218,9 @@
         <select id="v-days" aria-label="Período">
           <option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="90">90 dias</option><option value="0">Tudo</option>
         </select>
+        <select id="v-fmt" aria-label="Formato">
+          <option value="">Shorts e longos</option><option value="short">Só Shorts</option><option value="long">Só longos</option>
+        </select>
         <select id="v-sort" aria-label="Ordem">
           <option value="views">Mais vistos</option><option value="recent">Mais novos</option><option value="worst">Menos vistos</option>
         </select>
@@ -231,6 +234,16 @@
   <!-- PROBLEMAS -->
   <section class="tab" id="tab-problemas" hidden>
     <h2>Problemas</h2>
+    {% if system_problems %}
+    <p class="hint">Sistema (disco, limpeza, rodada diária):</p>
+    {% for s in system_problems %}
+    <div class="problem" style="--c:var(--off)">
+      <div class="head"><span>Sistema</span><span class="tag failed">atenção</span></div>
+      <div class="topic">{{ s.title }}</div>
+      <div class="why clip" title="toque pra ver tudo">{{ s.detail }}</div>
+    </div>
+    {% endfor %}
+    {% endif %}
     {% if causes_7d %}
     <p class="hint">Por que as tentativas falharam nos últimos 7 dias:</p>
     {% set maior = causes_7d[0][1] %}
@@ -276,6 +289,7 @@
         <div><b class="num">{{ fmt(c.median_30d) }}</b><span>views num vídeo típico</span></div>
         <div><b class="num">{{ c.videos_30d }}</b><span>vídeos em 30 dias</span></div>
       </div>
+      {% if c.youtube_handle %}<div class="section"><h3>Canal no YouTube</h3><a href="https://www.youtube.com/{{ c.youtube_handle }}" target="_blank" rel="noopener">youtube.com/{{ c.youtube_handle }}</a></div>{% endif %}
       {% if c.best %}<div class="section"><h3>Melhor vídeo</h3><a href="https://youtu.be/{{ c.best.vid }}" target="_blank" rel="noopener">{{ c.best.topic }}</a> <span class="num hint">({{ fmt(c.best.views) }} views)</span></div>{% endif %}
 
       {% if c.token_status == "ok" %}
@@ -447,13 +461,17 @@ function chips(groupId, onChange) {
 
 // vídeos
 const fmt = n => (n ?? 0).toLocaleString("pt-BR");
-const vState = { ch: "", q: "", days: 30, sort: "views", limit: 24 };
+const vState = { ch: "", q: "", days: 30, sort: "views", fmt: "", limit: 24 };
+const SHORT_MAX = 180;  // Short do YouTube vai até 3 minutos
+const isShort = v => v.seconds != null && v.seconds <= SHORT_MAX;
+const dur = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 function renderVideos() {
   const now = Date.now() / 1000;
   const q = vState.q.trim().toLowerCase();
   let list = VIDEOS.filter(v => (!vState.ch || v.channel === vState.ch)
     && (!vState.days || v.ts >= now - vState.days * 86400)
-    && (!q || v.topic.toLowerCase().includes(q)));
+    && (!q || v.topic.toLowerCase().includes(q))
+    && (!vState.fmt || (v.seconds != null && (vState.fmt === "short") === isShort(v))));
   const views = v => v.views ?? -1;
   if (vState.sort === "views") list.sort((a, b) => views(b) - views(a));
   else if (vState.sort === "worst") list.sort((a, b) => views(a) - views(b));
@@ -469,13 +487,14 @@ function renderVideos() {
   grid.replaceChildren(...list.slice(0, vState.limit).map(v => {
     const a = document.createElement("a");
     a.className = "video" + (v.views && v.views >= top && v.views > median * 2 ? " top" : "");
-    a.href = "https://youtu.be/" + v.vid; a.target = "_blank"; a.rel = "noopener";
+    a.href = (isShort(v) ? "https://youtube.com/shorts/" : "https://youtu.be/") + v.vid; a.target = "_blank"; a.rel = "noopener";
     a.style.setProperty("--c", COLORS[v.channel] || "#888");
     a.innerHTML = `<img loading="lazy" alt="" src="https://i.ytimg.com/vi/${v.vid}/mqdefault.jpg">
       <div class="body"><div class="views num">${v.views == null ? "?" : fmt(v.views)} <small>views</small></div>
       <div class="title"></div><div class="meta"></div></div>`;
     a.querySelector(".title").textContent = v.topic;
-    a.querySelector(".meta").textContent = `${TITLES[v.channel] || v.channel}, ${v.date_label}`;
+    const kind = v.seconds == null ? "" : `, ${isShort(v) ? "Short" : "longo"} de ${dur(v.seconds)}`;
+    a.querySelector(".meta").textContent = `${TITLES[v.channel] || v.channel}, ${v.date_label}${kind}`;
     return a;
   }));
   document.getElementById("v-more").hidden = list.length <= vState.limit;
@@ -484,6 +503,7 @@ chips("v-chips", ch => { vState.ch = ch; vState.limit = 24; renderVideos(); });
 document.getElementById("v-q").addEventListener("input", e => { vState.q = e.target.value; renderVideos(); });
 document.getElementById("v-days").addEventListener("change", e => { vState.days = +e.target.value; renderVideos(); });
 document.getElementById("v-sort").addEventListener("change", e => { vState.sort = e.target.value; renderVideos(); });
+document.getElementById("v-fmt").addEventListener("change", e => { vState.fmt = e.target.value; vState.limit = 24; renderVideos(); });
 document.getElementById("v-more").addEventListener("click", () => { vState.limit += 24; renderVideos(); });
 renderVideos();
 

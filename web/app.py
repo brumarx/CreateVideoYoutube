@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -95,6 +96,19 @@ def _can_comment(name: str) -> bool:
 # chamada (até 50 ids), barato, mas não precisa bater no Google a cada F5.
 _VIEWS_CACHE: dict[str, tuple[float, int]] = {}
 _VIEWS_CACHE_TTL = 900
+# duração em segundos (não muda — sem validade), vem na mesma chamada
+_DURATIONS: dict[str, int] = {}
+# Short do YouTube vai até 3 minutos
+SHORT_MAX_SECONDS = 180
+
+
+def _iso_seconds(value: str) -> int | None:
+    """PT1M5S -> 65."""
+    m = re.fullmatch(r"P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", value or "")
+    if not m:
+        return None
+    d, h, mi, se = (int(x or 0) for x in m.groups())
+    return ((d * 24 + h) * 60 + mi) * 60 + se
 
 
 def _video_views(jobs) -> dict[str, int]:
@@ -104,7 +118,8 @@ def _video_views(jobs) -> dict[str, int]:
     by_channel: dict[str, list[str]] = {}
     for j in jobs:
         vid = j.youtube_video_id
-        if vid and not (vid in _VIEWS_CACHE and now - _VIEWS_CACHE[vid][0] < _VIEWS_CACHE_TTL):
+        fresh = vid in _VIEWS_CACHE and now - _VIEWS_CACHE[vid][0] < _VIEWS_CACHE_TTL
+        if vid and not (fresh and vid in _DURATIONS):
             by_channel.setdefault(j.channel, []).append(vid)
     for name, ids in by_channel.items():
         if _token_status(name) != "ok":
@@ -117,10 +132,13 @@ def _video_views(jobs) -> dict[str, int]:
             creds = _load_credentials(ROOT / "credentials" / f"token_{name}.json")
             youtube = build("youtube", "v3", credentials=creds, cache_discovery=False)
             for i in range(0, len(ids), 50):
-                resp = youtube.videos().list(part="statistics", id=",".join(ids[i:i + 50])).execute()
+                resp = youtube.videos().list(part="statistics,contentDetails", id=",".join(ids[i:i + 50])).execute()
                 for item in resp.get("items", []):
                     views = int(item.get("statistics", {}).get("viewCount", 0))
                     _VIEWS_CACHE[item["id"]] = (now, views)
+                    seconds = _iso_seconds(item.get("contentDetails", {}).get("duration", ""))
+                    if seconds is not None:
+                        _DURATIONS[item["id"]] = seconds
         except Exception as exc:  # noqa: BLE001 — cota/rede: mostra sem views
             app.logger.warning("views do canal %s indisponíveis: %s", name, exc)
     return {vid: v for vid, (_, v) in _VIEWS_CACHE.items()}
@@ -227,6 +245,7 @@ def _video(job, views: dict) -> dict:
     return {
         "id": job.id, "channel": job.channel, "topic": job.topic, "vid": job.youtube_video_id,
         "views": views.get(job.youtube_video_id), "ts": when.timestamp() if when else 0,
+        "seconds": _DURATIONS.get(job.youtube_video_id),
         "date_label": _date_label(job.created_at),
     }
 
@@ -306,6 +325,67 @@ def _channel_summary(c: dict, jobs: list, videos: list[dict], running: bool) -> 
     }
 
 
+# Problemas da máquina, não de um vídeo: a limpeza do daily_run.py guarda pasta
+# de job no máximo RETRY_KEEP_DAYS (14) — mais velha que isso é estado que a
+# limpeza não conhece (já aconteceu: "narrated" de 06/10 esquecida). Fila e
+# aprovação ficam de fora, essas esperam de propósito.
+STALE_JOB_DAYS = 15
+WAITING_STATUSES = ("pending", "awaiting_approval", "script_approved")
+OUTPUT_WARN_GB = 8
+DISK_FREE_WARN_PCT = 10
+DAILY_RUN_LOG = ROOT / "logs" / "daily_run.log"
+
+
+def _dir_size(path: Path) -> int:
+    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+
+
+def _system_problems(statuses: dict[int, str]) -> list[dict]:
+    problems = []
+    cutoff = time.time() - STALE_JOB_DAYS * 86400
+    stale, stale_bytes, total_bytes = [], 0, 0
+    for job_dir in (ROOT / "output").glob("job_*"):
+        try:
+            job_id = int(job_dir.name.removeprefix("job_"))
+        except ValueError:
+            continue
+        size = _dir_size(job_dir)
+        total_bytes += size
+        status = statuses.get(job_id) or (getattr(get_job(job_id), "status", None) or "sem registro")
+        if job_dir.stat().st_mtime < cutoff and status not in WAITING_STATUSES:
+            stale.append(f"job {job_id} ({status})")
+            stale_bytes += size
+    if stale:
+        problems.append({
+            "title": f"{len(stale)} pasta(s) de job esquecida(s) em output/ ({stale_bytes / 1e9:.1f} GB)",
+            "detail": f"Mais de {STALE_JOB_DAYS} dias e a limpeza diária não apagou — status que ela não conhece: " + ", ".join(sorted(stale)[:20]),
+        })
+    if total_bytes > OUTPUT_WARN_GB * 1e9:
+        problems.append({
+            "title": f"output/ com {total_bytes / 1e9:.1f} GB",
+            "detail": f"Acima de {OUTPUT_WARN_GB} GB — normal é ficar só com os vídeos dos últimos dias.",
+        })
+    try:
+        last_run = next((line[:19] for line in reversed(DAILY_RUN_LOG.read_text(errors="ignore").splitlines()[-400:])
+                         if "rodada diária concluída" in line), None)
+    except OSError:
+        last_run = None
+    last_dt = datetime.strptime(last_run, "%Y-%m-%d %H:%M:%S") if last_run else None
+    if not last_dt or datetime.now() - last_dt > timedelta(hours=26):
+        problems.append({
+            "title": "Rodada diária (e a limpeza) não terminou nas últimas 26h",
+            "detail": f"Última conclusão: {last_dt.strftime('%d/%m %H:%M') if last_dt else 'não encontrada'} — veja logs/daily_run.log.",
+        })
+    disk = shutil.disk_usage(ROOT)
+    free_pct = 100 * disk.free / disk.total
+    if free_pct < DISK_FREE_WARN_PCT:
+        problems.append({
+            "title": f"Disco quase cheio: {free_pct:.0f}% livre ({disk.free / 1e9:.0f} GB)",
+            "detail": "Pouco espaço pode fazer o render falhar no meio.",
+        })
+    return problems
+
+
 @app.route("/")
 def index():
     channels = _load_channels()
@@ -323,6 +403,7 @@ def index():
          "error": (j.error or "").strip()[:1200], "date_label": _date_label(j.created_at)}
         for j in raw_jobs if j.status in FAILED + ("retried",)
     ][:150]
+    system_problems = _system_problems({j.id: j.status for j in raw_jobs})
     week_ago = datetime.now().astimezone() - timedelta(days=7)
     causes: dict[str, int] = {}
     for j in raw_jobs:
@@ -343,7 +424,7 @@ def index():
     elif request.args.get("approve_error"):
         flash = f"Não consegui publicar: {request.args['approve_error']}"
     return render_template(
-        "painel.html", channels=summaries, causes_7d=causes_7d, videos=videos, problems=problems, colors=colors, titles=titles,
+        "painel.html", channels=summaries, causes_7d=causes_7d, videos=videos, problems=problems, system_problems=system_problems, colors=colors, titles=titles,
         flash=flash, total_uploads=total_uploads, running=running, today=date.today().strftime("%d/%m"),
         pending=jobs_with_status("awaiting_approval"), azure_ready=bool(AZURE_SPEECH_KEYS),
     )
