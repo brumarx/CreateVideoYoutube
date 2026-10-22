@@ -54,6 +54,13 @@ _PREFERRED_MODELS = {
     "mistral": ["mistral-medium-latest", "mistral-small-latest", "magistral-medium-latest"],
 }
 
+# Modelo mais inteligente de cada provedor: tentado em TODAS as chaves do
+# rodízio antes de qualquer outro modelo (ver complete)
+_STRONG_MODELS = {
+    "groq": ["openai/gpt-oss-120b"],
+    "cerebras": ["gpt-oss-120b"],
+}
+
 # (nome, atributo em LLMKeys, endpoint de chat, endpoint de listagem de modelos)
 OPENAI_COMPAT_PROVIDERS = [
     ("xai", "xai", "https://api.x.ai/v1/chat/completions", "https://api.x.ai/v1/models"),
@@ -121,7 +128,7 @@ def _fetch_models(provider: str, list_url: str, api_key: str) -> list[str]:
             if provider == "openrouter":
                 all_ids = [m for m in all_ids if m.endswith(":free")]
             chat = [m for m in all_ids if _is_chat_model(m)]
-            preferred = [m for m in _PREFERRED_MODELS.get(provider, []) if m in chat]
+            preferred = [m for m in _STRONG_MODELS.get(provider, []) + _PREFERRED_MODELS.get(provider, []) if m in chat]
             models = (preferred + [m for m in chat if m not in preferred])[:_MAX_MODEL_CANDIDATES]
         else:
             log.warning("%s /models -> HTTP %s", provider, resp.status_code)
@@ -322,22 +329,37 @@ def complete(
         if not provider_keys:
             continue
         rotator = _rotator_for(provider_keys)
-        for api_key in rotator.order():
-            models = _fetch_models(name, models_endpoint, api_key)
-            if not models:
-                continue
-            for model in models:
-                if model_filter is not None and not model_filter(model):
+        order = rotator.order()
+        # 1ª passada: o modelo forte (_STRONG_MODELS) em TODAS as chaves; só
+        # depois os outros modelos, chave por chave. Antes cada chave tentava
+        # os modelos na ordem do /models e o qwen3.8-27b (que inventou
+        # "camisa 9" no teste de 22/10) respondia 70% de tudo — o gpt-oss-120b
+        # só via a vez quando o qwen falhava (pedido do dono, 22/10)
+        passes = [(m, order) for m in _STRONG_MODELS.get(name, [])] + [(None, order)]
+        too_large: set[str] = set()  # 413 é igual em toda chave (limite por minuto do modelo)
+        for only, pass_keys in passes:
+            for api_key in pass_keys:
+                if api_key in rotator._banned:
                     continue
-                result, status = _call_openai_compat(chat_endpoint, api_key, model, messages, max_tokens, temperature)
-                if _ok(result):
-                    log.info("resposta via %s/%s", name, model)
-                    return result  # type: ignore[return-value]
-                if result and validate is not None:
-                    log.warning("resposta de %s/%s não passou na validação, tentando próximo modelo", name, model)
-                if status in (401, 403):
-                    rotator.ban(api_key)
-                    break  # próxima chave, não adianta repetir modelos com a mesma
+                models = _fetch_models(name, models_endpoint, api_key)
+                for model in models:
+                    if (only is not None and model != only) or (only is None and model in _STRONG_MODELS.get(name, [])):
+                        continue
+                    if model in too_large or (model_filter is not None and not model_filter(model)):
+                        continue
+                    result, status = _call_openai_compat(chat_endpoint, api_key, model, messages, max_tokens, temperature)
+                    if _ok(result):
+                        log.info("resposta via %s/%s", name, model)
+                        return result  # type: ignore[return-value]
+                    if result and validate is not None:
+                        log.warning("resposta de %s/%s não passou na validação, tentando próximo modelo", name, model)
+                    if status == 413:
+                        too_large.add(model)
+                    if status in (401, 402, 403):
+                        # 402 = "pagamento exigido" (Cerebras, 22/10): custo
+                        # zero, nunca paga — a chave sai do rodízio
+                        rotator.ban(api_key)
+                        break  # próxima chave, não adianta repetir modelos com a mesma
 
     if keys.cloudflare:
         result = _cloudflare_complete(keys.cloudflare, messages, max_tokens, _ok, model_filter, validate, temperature)
