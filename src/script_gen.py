@@ -218,7 +218,7 @@ Gere um JSON com exatamente este formato:
   "tags": ["tag1", "tag2", "..."],
   "mood": "clima geral do vídeo pra escolher a música de fundo certa — exatamente um destes valores: 'tenso' (denúncia grave, algo errado/perigoso, suspense), 'animado' (conquista, vitória, dica animadora, virada positiva), 'melancolico' (derrota, perda, resultado triste/decepcionante), 'calmo' (reflexivo, sem tensão nem euforia), 'neutro' (explicativo/factual, sem carga emocional forte definida). Escolha 1 só, o que domina o vídeo como um todo, não cena a cena.",
   "scenes": [
-    {{"narration": "texto que o narrador vai falar nesta cena", "image_prompt": "prompt em inglês, só cenário/objetos/atmosfera — SEM texto, palavras, logos, botões ou UI, e SEM jogador/atleta de uniforme ou escudo de time (vira jogador falso que parece real)", "stock_query": "3 a 5 palavras em inglês pra buscar filmagem REAL — amarrada num detalhe CONCRETO desta cena (lugar, objeto, ação), nunca a categoria genérica (ruim: 'soccer stadium'; bom, se a cena fala de gol sofrido: 'goalkeeper diving missed save'). NUNCA nome de pessoa real, NUNCA escudo/camisa/uniforme/logo/bandeira de time (o banco só tem clubes estrangeiros); futebol é 'soccer', nunca 'football'. Cena abstrata/conceitual que não existe filmada: null (nunca 'symbolic shot' ou 'related to the story').", "impact_beat": "true APENAS na cena do momento mais chocante/decisivo de todo o vídeo (o gol, o número mais absurdo, a virada) — no máximo 1 cena `true` no roteiro inteiro; todas as outras, false ou omita.", "stat_overlay": "OPCIONAL, deixe null na grande maioria das cenas — só preencha quando ESTA cena citar, no texto da narração, 2 valores comparáveis específicos vindos de DADOS REAIS (ex.: posse de bola de cada time, % de aprovação, participação em votos) — formato exato: {{\"label\": \"o que está sendo comparado\", \"a_label\": \"nome do 1º\", \"a_value\": numero, \"b_label\": \"nome do 2º\", \"b_value\": numero, \"unit\": \"% se for porcentagem, senão a unidade por extenso (pontos, gols, finalizações)\"}}. NUNCA invente ou estime os valores — só use quando estiverem literalmente nos DADOS REAIS."{real_subject_field}}}
+    {{"narration": "texto que o narrador vai falar nesta cena", "image_prompt": "prompt em inglês, só cenário/objetos/atmosfera — SEM texto, palavras, logos, botões ou UI, e SEM jogador/atleta de uniforme ou escudo de time (vira jogador falso que parece real)", "stock_query": "3 a 5 palavras em inglês pra buscar filmagem REAL — amarrada num detalhe CONCRETO desta cena (lugar, objeto, ação), nunca a categoria genérica (ruim: 'soccer stadium'; bom, se a cena fala de gol sofrido: 'goalkeeper diving missed save'). NUNCA nome de pessoa real, NUNCA escudo/camisa/uniforme/logo/bandeira de time (o banco só tem clubes estrangeiros); futebol é 'soccer', nunca 'football'. Cena abstrata/conceitual que não existe filmada: null (nunca 'symbolic shot' ou 'related to the story').", "impact_beat": "true APENAS na cena do momento mais chocante/decisivo de todo o vídeo (o gol, o número mais absurdo, a virada) — no máximo 1 cena `true` no roteiro inteiro; todas as outras, false ou omita.", "stat_overlay": "OPCIONAL, deixe null na grande maioria das cenas — só preencha quando ESTA cena citar, no texto da narração, 2 valores comparáveis específicos vindos de DADOS REAIS (ex.: posse de bola de cada time, % de aprovação, participação em votos) — formato exato: {{\"label\": \"o que está sendo comparado\", \"a_label\": \"nome do 1º\", \"a_value\": numero, \"b_label\": \"nome do 2º\", \"b_value\": numero, \"unit\": \"% se for porcentagem, senão a unidade por extenso (pontos, gols, finalizações)\"}}. NUNCA invente ou estime os valores — só use quando estiverem literalmente nos DADOS REAIS. Nunca posição/ranking (lugar menor é melhor e a barra mostraria o contrário). Rótulos em português com acento (\"posição\", \"milhões\")."{real_subject_field}}}
   ]
 }}
 
@@ -901,7 +901,8 @@ pontos apontados, usando as FONTES. Para cada ponto:
 - se não trazem, diga de forma mais geral o que elas sustentam, ou apague a
   frase se ela não fizer falta.
 Não acrescente número, medida, data, nome ou detalhe que não esteja nas
-FONTES. Não mexa no que não foi apontado: mesmo tom, mesmo tamanho, mesmo
+FONTES. Ao generalizar, não deixe frase vaga que não diz nada ("Ele
+participou das partidas", "teve papel importante") — apague a frase. Não mexa no que não foi apontado: mesmo tom, mesmo tamanho, mesmo
 número de cenas. Se o TÍTULO foi apontado, devolva um título novo.
 
 TÍTULO: {script.get("title", "")}
@@ -1027,6 +1028,132 @@ def _repair_parse_packaging(raw: str, allowed: set[str]) -> dict | None:
     except ValueError:
         return None
     return data if _packaging_ok(data, allowed) else None
+
+
+def _close_repeats(script: dict, ignore: str = "") -> list[str]:
+    """Palavra de conteúdo repetida na MESMA frase ou na frase seguinte
+    ("participou das partidas... papel nas partidas", "decidiu seu futuro,
+    ele decidiu seu futuro" — Ronaldo, 22/10). Nome próprio e termo do
+    tema/título não contam. Devolve as palavras, na ordem."""
+    import unicodedata
+
+    def fold(w: str) -> str:
+        return unicodedata.normalize("NFKD", w.lower()).encode("ascii", "ignore").decode()
+
+    skip = {fold(w) for w in re.findall(r"\w+", ignore)}
+    found: list[str] = []
+    prev: set[str] = set()
+    for sc in script.get("scenes", []):
+        for sentence in _SENTENCE_SPLIT.split(sc.get("narration", "")):
+            cur: set[str] = set()
+            for w in re.findall(r"\w+", sentence):
+                lw = w.lower()
+                if (len(lw) < 5 or w[:1].isupper() or lw in _STOPWORDS or lw in _NUMBER_WORDS
+                        or lw.isdigit() or fold(lw) in skip):
+                    continue
+                stem = fold(lw)[:6]  # "partidas"/"partida", "recuperação"/"recuperar"
+                if stem in cur or stem in prev:
+                    found.append(lw)
+                cur.add(stem)
+            prev = cur
+    return found
+
+
+MAX_CLOSE_REPEATS = 2
+
+
+def vary_close_repeats(script: dict, topic: str = "") -> dict:
+    """Roteiro com palavra repetida em frases vizinhas (comum depois do
+    conserto da revisão de fatos, que generaliza: "participou das
+    partidas", "papel importante nas partidas") passa por UMA reescrita
+    leve: troca a palavra repetida por sinônimo/pronome ou apaga a frase
+    vaga. Mesma trava do conserto (_drop_new_facts): nenhum número ou nome
+    novo. Sem LLM, segue como está."""
+    repeats = _close_repeats(script, topic + " " + str(script.get("title", "")))
+    if len(repeats) <= MAX_CLOSE_REPEATS:
+        return script
+    narrations = [str(sc.get("narration", "")) for sc in script["scenes"]]
+    prompt = f"""Este roteiro de vídeo em português repete palavras em frases vizinhas
+e soa robótico ao ser narrado. Palavras repetidas: {", ".join(dict.fromkeys(repeats))}.
+Reescreva SÓ as frases com repetição: troque a palavra repetida por sinônimo,
+pronome ou outra construção, junte duas frases curtas, ou apague a frase vaga
+que não acrescenta nada (ex.: "Ele participou das partidas do torneio").
+Não acrescente número, data, nome ou fato; não mude o sentido; mantenha o resto
+igual, o mesmo tom e o mesmo número de cenas.
+
+CENAS (narração, na ordem):
+{json.dumps(narrations, ensure_ascii=False)}
+
+Responda só com JSON: {{"cenas": ["narração da cena 1", "..."]}} — exatamente {len(narrations)} cenas."""
+    try:
+        raw = complete(
+            [{"role": "user", "content": prompt}], max_tokens=4000, temperature=0.3,
+            validate=lambda r: _repair_parse(r, len(narrations)) is not None,
+        )
+    except RuntimeError as exc:
+        log.warning("variação de palavras repetidas: nenhum provedor respondeu (%s) — segue sem", exc)
+        return script
+    allowed = _fact_tokens(" ".join(narrations) + " " + topic + " " + str(script.get("title", "")), every_capital=True)
+    cenas, novos = _drop_new_facts(_repair_parse(raw, len(narrations))["cenas"], allowed)
+    if novos:
+        log.warning("variação tentou acrescentar fato novo (%s) — frase apagada", ", ".join(sorted(novos)))
+    scenes = [{**sc, "narration": text} for sc, text in zip(script["scenes"], cenas) if text.strip()]
+    if len(scenes) < max(2, len(narrations) - 1):
+        return script
+    new = {**script, "scenes": scenes}
+    log.info("palavras repetidas em frases vizinhas: %d -> %d (%s)", len(repeats),
+             len(_close_repeats(new, topic + " " + str(script.get("title", "")))), ", ".join(dict.fromkeys(repeats)))
+    return new
+
+
+# posição/ranking: lugar menor é MELHOR, a barra maior mostrava o pior
+# ("2024 57 posicao" x "2025 158 posicao", vídeo do Nikolas, 22/10)
+_RANKING = re.compile(r"posi[cç][aã]o|coloca[cç][aã]o|ranking|\blugar|\d+\s*[ºª°]", re.I)
+_NUM_FALADO = re.compile(r"(\d+(?:\.\d{3})*(?:,\d+)?)\s*(milh(?:ão|ões)|bilh(?:ão|ões)|mil\b)?", re.I)
+_ESCALA = {"mil": 1e3, "milhão": 1e6, "milhões": 1e6, "bilhão": 1e9, "bilhões": 1e9}
+
+
+def _spoken_numbers(text: str) -> list[float]:
+    nums = []
+    for m in _NUM_FALADO.finditer(text):
+        n = float(m[1].replace(".", "").replace(",", "."))
+        nums += [n, n * _ESCALA.get((m[2] or "").lower(), 1)]
+    return nums
+
+
+def clean_stat_overlays(script: dict) -> dict:
+    """Barra comparativa só com o que a cena FALA: os 2 valores têm de
+    estar na narração da cena (o cartão do Nikolas, 22/10, mostrou Eduardo
+    Bolsonaro 1,8 milhão sem a narração citar), nada de ranking, e rótulo
+    com acento. Fora disso a cena sai sem barra — nunca inventada."""
+    from .spellcheck import restore_accents
+
+    for scene in script.get("scenes") or []:
+        ov = scene.get("stat_overlay")
+        if not ov:
+            continue
+        try:
+            values = [float(ov["a_value"]), float(ov["b_value"])]
+            textos = [str(ov.get(k) or "") for k in ("label", "a_label", "b_label", "unit")]
+        except (KeyError, TypeError, ValueError):
+            scene["stat_overlay"] = None
+            continue
+        spoken = _spoken_numbers(scene.get("narration", ""))
+
+        def dito(v: float) -> bool:
+            return any(abs(n - v * k) <= 0.02 * max(abs(v * k), 1) for n in spoken for k in (1, 1e3, 1e6, 1e9))
+
+        motivo = (
+            "ranking/posição" if any(_RANKING.search(t) for t in textos)
+            else "valor que a cena não fala" if not all(dito(v) for v in values) else None
+        )
+        if motivo:
+            log.warning("barra comparativa tirada (%s): %s", motivo, ov)
+            scene["stat_overlay"] = None
+            continue
+        label, a_label, b_label, unit = restore_accents(textos)
+        scene["stat_overlay"] = {**ov, "label": label, "a_label": a_label, "b_label": b_label, "unit": unit}
+    return script
 
 
 def fix_dangling_hooks(script: dict) -> dict:

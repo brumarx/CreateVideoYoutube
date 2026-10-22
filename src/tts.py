@@ -116,10 +116,119 @@ def _for_speech(text: str, extra: dict[str, str] | None = None) -> tuple[str, li
     from .spellcheck import clean_markup
 
     text = clean_markup(text)  # última barreira: nada de "asterisco" falado
+    text = _ABREVIACAO.sub(lambda m: _ABREVIACOES[m[0]], text)
     text = _apply_pronunciations(text, extra)
     text = _versus(text)
+    text = _barra(text)
     text = _money(text)
+    text = _numero_feminino(text, trocas)
     return _CAPS_WORD.sub(caps, text), trocas
+
+
+# sigla que a voz expande por conta própria: "CV" saía "curriculum vitae"
+# (aprendervia, 22/10). Fala (e legenda) a palavra que se usa no Brasil.
+_ABREVIACOES = {"CV": "currículo", "CVs": "currículos"}
+_ABREVIACAO = re.compile(r"\b(?:" + "|".join(sorted(_ABREVIACOES, key=len, reverse=True)) + r")\b")
+
+# "23/24" a voz lia como fração ("vinte e três vinte e quatro avos") num
+# placar (Botafogo). Temporada "2023/24" vira "2023 e 2024"; data "15/10"
+# fica como está; fração de verdade (1/2, 3/4) também; o resto é placar.
+_BARRA = re.compile(r"(?<![\d/.,])(\d{1,4})/(\d{1,4})(?![\d/.,]\d)")
+
+
+def _barra(text: str) -> str:
+    def falado(m: re.Match) -> str:
+        a, b = int(m[1]), int(m[2])
+        if len(m[1]) == 4 and len(m[2]) in (2, 4):  # temporada
+            fim = b if len(m[2]) == 4 else a // 100 * 100 + b
+            return f"{a} e {fim}" if fim == a + 1 else m[0]
+        if len(m[1]) == 4 or len(m[2]) == 4:
+            return m[0]
+        if 1 <= a <= 31 and 1 <= b <= 12:
+            return m[0]  # data ou fração pequena: a voz já lê certo
+        return f"{a} a {b}"
+
+    return _BARRA.sub(falado, text)
+
+
+# Número antes de palavra feminina: "22 propostas" saiu "vinte e dois
+# propostas" (Números da República, 22/10) — o Google narra palavra por
+# palavra (<mark> entre elas) e não vê o substantivo. Vai por extenso,
+# concordando; a legenda volta pro número (_restore_spelling).
+_UNIDADES = ("zero um dois três quatro cinco seis sete oito nove dez onze doze treze quatorze quinze "
+             "dezesseis dezessete dezoito dezenove").split()
+_DEZENAS = "_ _ vinte trinta quarenta cinquenta sessenta setenta oitenta noventa".split()
+_CENTENAS = "_ cento duzentos trezentos quatrocentos quinhentos seiscentos setecentos oitocentos novecentos".split()
+
+
+def _ate_mil(n: int, fem: bool) -> str:
+    if n < 20:
+        word = _UNIDADES[n]
+        return {"um": "uma", "dois": "duas"}.get(word, word) if fem else word
+    if n < 100:
+        resto = n % 10
+        return _DEZENAS[n // 10] + (f" e {_ate_mil(resto, fem)}" if resto else "")
+    if n == 100:
+        return "cem"
+    centena = _CENTENAS[n // 100]
+    if fem and n >= 200:
+        centena = centena[:-2] + "as"  # duzentas, quinhentas
+    resto = n % 100
+    return centena + (f" e {_ate_mil(resto, fem)}" if resto else "")
+
+
+def _extenso(n: int, fem: bool) -> str:
+    """Cardinal por extenso até 999.999 (feminino: "vinte e duas mil")."""
+    milhar, resto = divmod(n, 1000)
+    if not milhar:
+        return _ate_mil(resto, fem)
+    texto = "mil" if milhar == 1 else f"{_ate_mil(milhar, fem)} mil"
+    if not resto:
+        return texto
+    return f"{texto} {'e ' if resto < 100 or resto % 100 == 0 else ''}{_ate_mil(resto, fem)}"
+
+
+# terminação de feminino com exceções masculinas comuns (o dia, o
+# problema, o planeta); "-ista" (o/a jornalista) fica com a voz
+_MASC_EM_A = {"dia", "dias", "mapa", "mapas", "planeta", "planetas", "cometa", "cometas", "pirata", "piratas",
+              "astronauta", "astronautas", "atleta", "atletas", "papa", "papas", "guarda", "guardas", "sofá", "sofás",
+              "pijama", "pijamas", "clima", "climas", "idioma", "idiomas", "fantasma", "fantasmas", "enigma",
+              "enigmas", "dogma", "dogmas", "paradigma", "paradigmas", "goleiro"}
+_FEM_SEM_A = {"vez", "vezes", "mulher", "mulheres", "noite", "noites", "tarde", "tardes", "parte", "partes", "lei",
+              "leis", "fonte", "fontes", "morte", "mortes", "sede", "sedes", "rede", "redes", "classe", "classes",
+              "chave", "chaves", "nave", "naves", "ave", "aves", "mãe", "mães", "ponte", "pontes", "torre", "torres",
+              "ordem", "ordens", "nuvem", "nuvens", "flor", "flores", "cor", "cores", "dor", "dores", "mão", "mãos"}
+_NAO_SUBSTANTIVO = {"a", "as", "à", "às", "da", "das", "na", "nas", "para", "pra", "contra", "nenhuma", "cada",
+                    "uma", "outra", "outras", "toda", "todas", "sua", "suas", "nossa", "essa", "dessa", "nessa"}
+_NUM_ANTES_DE_PALAVRA = re.compile(r"(?<![\w.,/])(\d{1,3}(?:\.\d{3})?)(\s+mil)?\s+([a-zà-ú]+)(?![\w])")
+
+
+def _feminina(palavra: str) -> bool:
+    w = palavra.lower()
+    if len(w) < 3 or w in _NAO_SUBSTANTIVO or w in _MASC_EM_A:
+        return False
+    if w in _FEM_SEM_A:
+        return True
+    if w.endswith(("ista", "istas", "ema", "emas", "oma", "omas", "grama", "gramas")):
+        return False
+    return w.endswith(("a", "as", "ção", "ções", "são", "sões", "dade", "dades", "agem", "agens", "ã", "ãs"))
+
+
+def _numero_feminino(text: str, trocas: list) -> str:
+    def falado(m: re.Match) -> str:
+        n = int(m[1].replace(".", ""))
+        if m[2]:
+            if n >= 1000:
+                return m[0]
+            n *= 1000
+        if not _feminina(m[3]) or _extenso(n, True) == _extenso(n, False):
+            return m[0]
+        numero = m[1] + (" mil" if m[2] else "")
+        falada = _extenso(n, True)
+        trocas.append(("numero", falada, numero))
+        return f"{falada} {m[3]}"
+
+    return _NUM_ANTES_DE_PALAVRA.sub(falado, text)
 
 
 # "Botafogo x Vasco" a voz lia "Botafogo xis Vasco"; placar "2 x 1" vira
@@ -145,11 +254,33 @@ _ABREV = {"mi": ("milhão", "milhões"), "bi": ("bilhão", "bilhões"), "tri": (
 _SYMBOL_LEFT = re.compile(r"R\$|US\$|U\$|€|£|\$")
 
 
+def _decimal(value: float) -> str:
+    """44.7 -> "44,7", 45.0 -> "45" (uma casa, vírgula, sem ",0")."""
+    return f"{value:.1f}".replace(".", ",").removesuffix(",0")
+
+
+def _arredondado(value: float, singular: str, plural: str) -> str:
+    """Valor grande sem centavos, arredondado do jeito que se fala: "R$
+    44.695,96" -> "44,7 mil reais", "R$ 3.119.281" -> "3,1 milhões de
+    reais". Ler até os centavos soava robô (pedido do dono, 22/10, vídeos
+    do Números da República). Abaixo de 1.000, sem centavos a partir de 100;
+    preço pequeno (R$ 3,50) continua com centavos."""
+    for limite, um, varios in ((1e9, "bilhão", "bilhões"), (1e6, "milhão", "milhões")):
+        if value >= limite:
+            numero = _decimal(value / limite)
+            return f"{numero} {um if numero == '1' else varios} de {plural}"
+    if value >= 1000:
+        numero = _decimal(value / 1000)
+        return f"{'' if numero == '1' else numero + ' '}mil {plural}"
+    inteiro = round(value)
+    return f"{inteiro} {singular if inteiro == 1 else plural}"
+
+
 def _money(text: str) -> str:
-    """Valor com moeda do jeito que se fala: "R$ 44.695,96" -> "44.695 reais
-    e 96 centavos", "€39 milhões" -> "39 milhões de euros", "R$ 3 bi" -> "3
-    bilhões de reais". O vídeo dos salários (12/10) saiu falando "erre
-    dólar" — e no fim nenhum símbolo de moeda chega na voz (_no_symbols)."""
+    """Valor com moeda do jeito que se fala: "R$ 44.695,96" -> "44,7 mil
+    reais" (ver _arredondado), "€39 milhões" -> "39 milhões de euros", "R$ 3
+    bi" -> "3 bilhões de reais". O vídeo dos salários (12/10) saiu falando
+    "erre dólar" — e no fim nenhum símbolo de moeda chega na voz (_no_symbols)."""
     def falado(m: re.Match) -> str:
         singular, plural = _MOEDAS[m[1]]
         numero, escala = m[2], m[3]
@@ -159,6 +290,9 @@ def _money(text: str) -> str:
         if escala:  # "3 mil libras", mas "3 milhões de libras"
             return f"{numero} {escala} {'' if escala == 'mil' else 'de '}{plural}"
         inteiro, _, cents = numero.partition(",")
+        valor = int(inteiro.replace(".", "")) + int(cents[:2].ljust(2, "0") if cents else 0) / 100
+        if valor >= 100:
+            return _arredondado(valor, singular, plural)
         unidade = singular if inteiro == "1" else plural
         cents = cents[:2].ljust(2, "0") if cents else ""
         if cents and int(cents) > 0:
@@ -254,11 +388,34 @@ def _join_multiword(word_boundaries: list[dict], extra: dict[str, str] | None) -
     return out
 
 
+def _join_numbers(word_boundaries: list[dict], trocas: list) -> list[dict]:
+    """Número dito por extenso (_numero_feminino: "vinte e duas") volta pra
+    1 palavra na legenda ("22"), na ordem em que apareceu no texto."""
+    pendentes = [(t[1].split(), t[2]) for t in trocas if len(t) == 3]
+    if not pendentes:
+        return word_boundaries
+    out: list[dict] = []
+    i = 0
+    while i < len(word_boundaries):
+        if pendentes:
+            falada, numero = pendentes[0]
+            window = word_boundaries[i:i + len(falada)]
+            if [w["text"].strip(".,;:!?").lower() for w in window] == falada:
+                tail = re.search(r"[.,;:!?]*$", window[-1]["text"])[0]
+                out.append({**window[0], "text": numero + tail, "end": window[-1].get("end", window[0].get("end"))})
+                pendentes.pop(0)
+                i += len(falada)
+                continue
+        out.append(word_boundaries[i])
+        i += 1
+    return out
+
+
 def _restore_spelling(
     word_boundaries: list[dict], trocas: list[tuple[str, str]] | None = None, extra: dict[str, str] | None = None,
 ) -> list[dict]:
-    word_boundaries = _join_multiword(_join_domains(word_boundaries), extra)
-    pendentes = list(trocas or [])
+    word_boundaries = _join_numbers(_join_multiword(_join_domains(word_boundaries), extra), trocas or [])
+    pendentes = [t for t in trocas or [] if len(t) == 2]
     back = {**{v.lower(): k for k, v in (extra or {}).items()}, **_SPELLING_BACK}
     for w in word_boundaries:
         core = w["text"].strip(".,;:!?")

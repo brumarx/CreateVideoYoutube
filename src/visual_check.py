@@ -52,7 +52,12 @@ _RULES = """Responda NÃO (ok=false) se a imagem:
   cena sobre dinheiro brasileiro, reais ou gasto público do Brasil;
 - mostra o ROSTO de uma pessoa em destaque numa cena que cita uma pessoa
   real pelo nome (político, jogador, técnico) — quem assiste acha que é
-  ela, e não é. Silhueta, mãos ou pessoa de costas estão OK.
+  ela, e não é. Silhueta, mãos ou pessoa de costas estão OK;
+- mostra JOGO PROFISSIONAL de verdade (transmissão de TV, estádio cheio,
+  uniformes de clube) numa cena sobre um atleta real citado pelo nome —
+  quem assiste procura o atleta e acha outro jogador famoso (cena do
+  Ronaldo Fenômeno com lance de jogo do Real Madrid, 22/10). Bola, campo
+  vazio, treino amador ou torcida genérica estão OK.
 Imagem genérica mas coerente com o assunto e o clima da cena (estádio sem
 clube identificável, bola, torcida genérica, pessoa num escritório numa
 cena sobre trabalho) está OK."""

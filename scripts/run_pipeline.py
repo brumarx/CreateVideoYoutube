@@ -42,7 +42,8 @@ from src.orchestrator import enqueue, update
 from src.people_photos import names_in, person_photo
 from src.real_media import real_clip, real_photos
 from src.script_gen import (
-    chapter_titles, engagement_question, fix_dangling_hooks, generate_script, refresh_packaging, repair_script,
+    chapter_titles, clean_stat_overlays, engagement_question, fix_dangling_hooks, generate_script, refresh_packaging,
+    repair_script, vary_close_repeats,
 )
 from src.spellcheck import fix_script, fix_text
 from src.stock_media import search_stock_clip, search_stock_photo
@@ -807,8 +808,12 @@ def run(
         update(job_id, status="scripted")
         # pergunta de transição que a cena seguinte não responde (job 363)
         script = fix_dangling_hooks(script)
+        # palavra repetida em frases vizinhas ("partidas", "futuro" — 22/10)
+        script = vary_close_repeats(script, topic)
         # português revisado antes de narrar: a narração vira legenda na tela
         script = fix_script(script, channel.language)
+        # barra comparativa só com valor falado na cena, sem ranking (22/10)
+        script = clean_stat_overlays(script)
         # roteiro aprovado: se o vídeo reprovar depois (imagem, revisão
         # final), o daily_run refaz só o vídeo com ele (--script-file)
         (work_dir / "script.json").write_text(json.dumps(script, ensure_ascii=False, indent=2))

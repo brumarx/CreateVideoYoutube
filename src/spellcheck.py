@@ -395,3 +395,26 @@ def align_names(text: str, names: list[str]) -> str:
         log.info("nome corrigido pela narração: %r -> %r", word, right)
         return right.upper() if word.isupper() else right
     return re.sub(r"\w+", fix, text)
+
+
+def restore_accents(texts: list[str], language: str = "pt-BR") -> list[str]:
+    """Palavra que o modelo escreveu sem acento ("posicao", "milhoes" no
+    cartão do vídeo do Nikolas, 22/10) ganha o acento — só quando a 1ª
+    sugestão do LanguageTool é a MESMA palavra acentuada; nunca troca
+    palavra. Uma chamada pra lista toda; sem LanguageTool, volta igual."""
+    if not any(texts):
+        return texts
+    joined = "\n".join(texts)
+    matches = _matches(joined, language)
+    if not matches:
+        return texts
+    out = joined
+    for m in sorted(matches, key=lambda m: m["offset"], reverse=True):
+        if "MORFOLOGIK" not in (m.get("rule") or {}).get("id", "") or not m.get("replacements"):
+            continue
+        word = joined[m["offset"]:m["offset"] + m["length"]]
+        best = m["replacements"][0]["value"]
+        if best != word and _fold(best) == _fold(word):
+            out = out[:m["offset"]] + _match_case(word, best) + out[m["offset"] + m["length"]:]
+    parts = out.split("\n")
+    return parts if len(parts) == len(texts) else texts

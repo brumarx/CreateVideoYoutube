@@ -65,13 +65,14 @@ def _escape_drawtext(text: str) -> str:
     # (’), que não é caractere especial pra ffmpeg nenhum.
     text = text.replace("'", "’")
     text = text.replace("\\", "\\\\").replace(":", "\\:")
-    # bug confirmado do próprio ffmpeg: qualquer texto com acento (Ó, Ã, Á,
-    # Ú etc.) sai com o ÚLTIMO caractere cortado (visto na prática: a marca
-    # d'água "@NúmerosdaRepública" saiu "@NúmerosdaRepúbli" no vídeo
-    # publicado — a legenda já tinha sido corrigida, mas a marca d'água
-    # usava esta mesma função sem passar por _strip_accents). Centralizado
-    # aqui pra proteger todo uso de drawtext, não só a legenda.
-    return _strip_accents(text)
+    # bug do próprio ffmpeg (6.1): texto com acento sai com o fim cortado —
+    # 1 caractere a menos por byte extra do UTF-8 (a marca d'água
+    # "@NúmerosdaRepública" saía "@NúmerosdaRepúbli"). Antes tirávamos os
+    # acentos ("posicao", "milhoes" no cartão do Nikolas, 22/10); agora o
+    # texto ganha no fim 1 ponto por byte extra — é exatamente o que o
+    # ffmpeg corta, e o text_w (alinhamento à direita) sai certo. Conferido
+    # com textfile= também: o corte é no desenho, não no parser.
+    return text + "." * (len(text.encode()) - len(text))
 
 
 def _list_number_filter(number: int, height: int, accent: str) -> str:
@@ -446,7 +447,8 @@ def _fmt_stat(value: float, unit: str) -> str:
             n = value / limit
             num = f"{n:.0f}" if round(n, 1).is_integer() else f"{n:.1f}".replace(".", ",")
             text = f"{num} {singular if num == '1' else plural}"
-            return f"R$ {text}" if money else f"{text} {unit}".rstrip()
+            # "3,1 milhões de votos", não "3,1 milhões votos"
+            return f"R$ {text}" if money else f"{text} de {unit}" if unit else text
     if abs(value) >= 1000:
         num = f"{value:,.0f}".replace(",", ".")
     elif float(value).is_integer():
@@ -456,20 +458,33 @@ def _fmt_stat(value: float, unit: str) -> str:
     return f"R$ {num}" if money else f"{num} {unit}".rstrip()
 
 
-def _stat_bar_filter(overlay: dict, width: int, height: int, accent: str) -> str:
-    """Barra comparativa animada (ex.: posse de bola, 2 valores 0-100) —
-    cresce da esquerda pra direita no primeiro segundo da cena. Só ativa
-    quando o roteiro citou 2 valores comparáveis vindos de DADOS REAIS (ver
-    script_gen.py -> "stat_overlay"), nunca inventado ou estimado."""
-    bar_w = int(width * 0.6)
-    bar_h = max(height // 45, 14)
-    x0 = (width - bar_w) // 2
-    label_font = max(height // 38, 18)
-    label_gap = label_font // 4  # espaço entre o texto do rótulo e a barra dele
-    row_gap = bar_h // 2  # espaço entre o fim de uma barra e o rótulo da próxima
-    row_height = label_font + label_gap + bar_h + row_gap
-    y0 = int(height * 0.2)  # abaixo do selo "PARTE X DE Y" (canto superior)
+def _fit_text(text: str, font: int, max_w: int) -> str:
+    """Corta com "…" o que não cabe em `max_w` px (DejaVu Bold ~0,62 da
+    altura por caractere) — "Nikolas Ferreira 3,1 milhões vo" saía cortado
+    na borda da tela (politica, 22/10)."""
+    max_chars = max(int(max_w / (font * 0.6)), 4)
+    return text if len(text) <= max_chars else text[: max_chars - 1].rstrip() + "…"
 
+
+def _stat_bar_filter(overlay: dict, width: int, height: int, accent: str) -> str:
+    """Cartão comparativo animado: fundo escuro translúcido, título (o que
+    está sendo comparado) na cor de destaque e, em cada linha, nome à
+    esquerda, valor à direita e a barra embaixo, crescendo no primeiro
+    segundo. A versão antiga (texto solto sobre a foto, sem título, cortado
+    na borda) ficou feia no vídeo do Nikolas (22/10). Só ativa quando o
+    roteiro citou 2 valores comparáveis vindos de DADOS REAIS (ver
+    script_gen.clean_stat_overlays), nunca inventado ou estimado."""
+    # tudo proporcional ao cartão: no Short ocupa 86% da largura; no longo
+    # (16:9) fica do tamanho de quem assiste no celular, centralizado
+    card_w = int(min(width * 0.86, height))
+    card_x = (width - card_w) // 2
+    pad = card_w // 20
+    inner_w = card_w - 2 * pad
+    x0 = card_x + pad
+    title_font = max(card_w // 29, 16)
+    row_font = max(card_w // 22, 18)
+    bar_h = max(card_w // 34, 12)
+    title = str(overlay.get("label") or "").strip()
     # "%" só quando o valor É percentual — pontos na tabela saíam como
     # "Botafogo 35% / Vasco 31%". Sem unidade, a barra é relativa ao maior.
     unit = str(overlay.get("unit") or "").strip()
@@ -477,31 +492,55 @@ def _stat_bar_filter(overlay: dict, width: int, height: int, accent: str) -> str
     is_pct = unit == "%" or (not unit and bool(re.search(r"posse|%|porcent|percent|aprova", str(overlay.get("label") or ""), re.I)))
     scale = 100.0 if is_pct else max(float(overlay["a_value"]), float(overlay["b_value"]), 1e-9)
 
-    def bar_and_label(label_y: int, label: str, value: float, color_hex: str) -> str:
-        bar_y = label_y + label_font + label_gap
-        target_w = max(int(bar_w * min(float(value) / scale, 1.0)), 1)
+    def value_text(value: float) -> str:
         if is_pct:
-            number = f"{float(value):.0f}" if float(value).is_integer() else f"{float(value):.1f}".replace(".", ",")
-            text = _escape_drawtext(f"{label} {number}%")
-        else:
-            text = _escape_drawtext(f"{label} {_fmt_stat(float(value), unit)}")
+            return (f"{value:.0f}" if value.is_integer() else f"{value:.1f}".replace(".", ",")) + "%"
+        return _fmt_stat(value, unit)
+
+    # nome + valor mais longo da linha: fonte diminui até 72% pra caber
+    # inteiro, e só então o nome é cortado com "…"
+    longest = max(
+        len(str(overlay[f"{k}_label"]).strip()) + len(value_text(float(overlay[f"{k}_value"]))) + 2 for k in "ab"
+    )
+    row_font = max(min(row_font, int(inner_w / (longest * 0.6))), int(row_font * 0.72))
+    gap = row_font // 3
+    row_height = row_font + gap + bar_h + int(row_font * 0.9)
+    card_y = int(height * 0.3)  # abaixo do selo de lista / "PARTE X DE Y" (canto superior)
+    y = card_y + pad
+    if title:
+        y += title_font + int(title_font * 0.9)
+    card_h = (y - card_y) + 2 * row_height - int(row_font * 0.9) + pad
+
+    def text(t: str, size: int, color: str, x: str, ty: int) -> str:
         # expansion=none é obrigatório aqui — o rótulo sempre tem um '%'
         # (percentual), e o parser de expansão do drawtext (%{...}) trata
         # um '%' sozinho como início de sintaxe quebrada ("Stray % near")
         # e SOME o texto inteiro sem erro nenhum no processo (achado
         # testando esta função: "Botafogo 50%" nunca aparecia no vídeo).
         return (
-            f",drawtext=fontfile='{WATERMARK_FONT}':text='{text}':expansion=none:"
-            f"fontsize={label_font}:fontcolor=white:borderw=2:bordercolor=black:"
-            f"x={x0}:y={label_y}"
-            f",drawbox=x={x0}:y={bar_y}:w={bar_w}:h={bar_h}:color=white@0.25:t=fill"
-            f",drawbox=x={x0}:y={bar_y}:w='min(t/0.8,1)*{target_w}':h={bar_h}:color=0x{color_hex}@0.9:t=fill"
+            f",drawtext=fontfile='{WATERMARK_FONT}':text='{_escape_drawtext(t)}':expansion=none:"
+            f"fontsize={size}:fontcolor={color}:shadowx=2:shadowy=2:shadowcolor=black@0.6:x={x}:y={ty}"
         )
 
-    return (
-        bar_and_label(y0, overlay["a_label"], overlay["a_value"], accent.lstrip("#"))
-        + bar_and_label(y0 + row_height, overlay["b_label"], overlay["b_value"], "999999")
-    )
+    def row(label_y: int, label: str, value: float, color_hex: str) -> str:
+        bar_y = label_y + row_font + gap
+        target_w = max(int(inner_w * min(value / scale, 1.0)), 1)
+        number = value_text(value)
+        name = _fit_text(str(label).strip(), row_font, inner_w - int(len(number) * row_font * 0.6) - row_font)
+        return (
+            text(name, row_font, "white", str(x0), label_y)
+            + text(number, row_font, f"0x{color_hex}", f"{x0 + inner_w}-text_w", label_y)
+            + f",drawbox=x={x0}:y={bar_y}:w={inner_w}:h={bar_h}:color=white@0.18:t=fill"
+            + f",drawbox=x={x0}:y={bar_y}:w='min(t/0.8,1)*{target_w}':h={bar_h}:color=0x{color_hex}@0.95:t=fill"
+        )
+
+    out = f",drawbox=x={card_x}:y={card_y}:w={card_w}:h={card_h}:color=black@0.55:t=fill"
+    out += f",drawbox=x={card_x}:y={card_y}:w=6:h={card_h}:color=0x{accent.lstrip('#')}@0.95:t=fill"
+    if title:
+        out += text(_fit_text(title.upper(), title_font, inner_w), title_font, f"0x{accent.lstrip('#')}", str(x0), card_y + pad)
+    out += row(y, overlay["a_label"], float(overlay["a_value"]), accent.lstrip("#"))
+    out += row(y + row_height, overlay["b_label"], float(overlay["b_value"]), "d9d9d9")
+    return out
 
 
 def _impact_sfx_args(video_filter: str, impact_beat: bool) -> tuple[list[str], list[str]] | None:
