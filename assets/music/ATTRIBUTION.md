@@ -9,7 +9,6 @@ descrição de todo vídeo que usar a faixa.
 | Arquivo | Atribuição |
 |---|---|
 | morning.mp3 | "Morning" Kevin MacLeod (incompetech.com) — Licensed under Creative Commons: By Attribution 4.0 License |
-| evening.mp3 | "Evening" Kevin MacLeod (incompetech.com) — Licensed under Creative Commons: By Attribution 4.0 License |
 | deep_relaxation.mp3 | "Deep Relaxation" Kevin MacLeod (incompetech.com) — Licensed under Creative Commons: By Attribution 4.0 License |
 | study_and_relax.mp3 | "Study And Relax" Kevin MacLeod (incompetech.com) — Licensed under Creative Commons: By Attribution 4.0 License |
 
@@ -24,3 +23,9 @@ que as faixas do Kevin MacLeod acima não cobriam bem.
 |---|---|---|
 | tense_suspense.mp3 | "Tense Suspense" por leberch — https://pixabay.com/music/suspense-tense-suspense-375422/ | Registrado (uso legal, mas pode gerar reivindicação de monetização automática no YouTube — ver `pixabay.com/service/faq` sobre Content ID) |
 | animado_motivational.mp3 | "Inspirational Cinematic Motivational Music" por SigmaMusicArt — https://pixabay.com/music/modern-classical-inspirational-cinematic-motivational-music-379731/ | Registrado (mesma observação acima) |
+
+## Retiradas
+
+| Arquivo | Motivo |
+|---|---|
+| evening.mp3 (em `assets/music_retiradas/`) | 25/10/2026: reivindicada no Content ID por Audiam (Publishing), "Melody or lyrics" — Short bloqueado no mundo todo apesar da CC BY |

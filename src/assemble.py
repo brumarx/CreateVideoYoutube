@@ -817,7 +817,6 @@ def concat_scenes(
 # causa de um parse errado.
 TRACK_ATTRIBUTION = {
     "morning.mp3": '"Morning" Kevin MacLeod (incompetech.com) — Licensed under Creative Commons: By Attribution 4.0 License',
-    "evening.mp3": '"Evening" Kevin MacLeod (incompetech.com) — Licensed under Creative Commons: By Attribution 4.0 License',
     "deep_relaxation.mp3": '"Deep Relaxation" Kevin MacLeod (incompetech.com) — Licensed under Creative Commons: By Attribution 4.0 License',
     "study_and_relax.mp3": '"Study And Relax" Kevin MacLeod (incompetech.com) — Licensed under Creative Commons: By Attribution 4.0 License',
     "tense_suspense.mp3": '"Tense Suspense" by leberch (Pixabay)',
@@ -831,11 +830,19 @@ TRACK_ATTRIBUTION = {
 # baixadas 2026-09-21) cobrem os climas que faltavam.
 TRACK_MOOD = {
     "morning.mp3": "neutro",
-    "evening.mp3": "melancolico",
     "deep_relaxation.mp3": "calmo",
     "study_and_relax.mp3": "neutro",
     "tense_suspense.mp3": "tenso",
     "animado_motivational.mp3": "animado",
+}
+
+# Clima sem faixa própria cai no vizinho mais próximo antes do sorteio geral
+# (nunca música animada sob derrota). "evening.mp3" (melancolico) saiu em
+# 25/10/2026: Audiam reivindicou a "Evening" do Kevin MacLeod no Content ID
+# ("Melody or lyrics") e bloqueou no mundo todo o Short pós-jogo Botafogo 0x3
+# Internacional — faixa reivindicada fica em assets/music_retiradas/, fora do glob.
+MOOD_FALLBACK = {
+    "melancolico": "calmo",
 }
 
 
@@ -866,6 +873,8 @@ def add_background_music(
         return output_path, None
 
     candidates = [t for t in tracks if TRACK_MOOD.get(t.name) == mood] if mood else []
+    if not candidates and mood in MOOD_FALLBACK:
+        candidates = [t for t in tracks if TRACK_MOOD.get(t.name) == MOOD_FALLBACK[mood]]
     track = random.choice(candidates or tracks)
     attribution = TRACK_ATTRIBUTION.get(track.name)
     duration = _ffprobe_duration(video_path)
