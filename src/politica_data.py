@@ -717,6 +717,52 @@ def comparacao_judiciario_legislativo(limit: int = 5, offset: int = 0) -> list[d
     return items[offset : offset + limit]
 
 
+AVISO_MUNDO = (
+    "Comparação do site com parlamentos de outros países (valores aproximados em dólar, compilados pelo "
+    "politica-br.org): aqui os OUTROS PAÍSES ESTÃO NOS DADOS e podem ser comparados — só com os campos "
+    "da lista, sem conta nova. salario_x_salario_medio = quantas vezes o salário do parlamentar cabe no "
+    "salário médio do país. O Brasil é o protagonista; diga sempre de qual país é cada número. Os "
+    "valores estão em DÓLAR: escreva sempre \"US$\", nunca \"R$\", e não converta pra real."
+)
+
+
+def brasil_vs_mundo(limit: int = 5, offset: int = 0) -> list[dict]:
+    """O parlamentar brasileiro (salário em dólar, em salários médios e
+    mínimos do país, orçamento do parlamento) ao lado de outros países,
+    dos que pagam proporcionalmente menos pros que pagam mais — o gancho de
+    país da série do Fractal com dado real (tabela parlamentar_mundial)."""
+    cols = (
+        "nome_pais, salario_mensal_usd, salario_x_salario_medio, salario_x_min_wage,"
+        " orcamento_parlamento_usd_milhoes, n_total, mandato_anos"
+    )
+    with _connect() as conn:
+        br = conn.execute(f"SELECT {cols} FROM parlamentar_mundial WHERE iso2 = 'BR'").fetchone()
+        outros = conn.execute(
+            f"SELECT {cols} FROM parlamentar_mundial WHERE iso2 != 'BR' AND salario_x_salario_medio > 0"
+            " ORDER BY salario_x_salario_medio, nome_pais LIMIT ? OFFSET ?",
+            (limit - 1, offset),
+        ).fetchall()
+    if not br or not outros:
+        return []
+    # valor já com "US$" escrito: com o número solto, o roteiro de teste
+    # (27/10) disse "R$ 12 mil" pro salário de US$ 12 mil
+    def usd(v: float) -> str:
+        return f"US$ {v:,.0f}".replace(",", ".")
+
+    return [
+        {
+            "pais": r[0], "salario_parlamentar_por_mes": usd(r[1]),
+            "salario_x_salario_medio": f"{r[2]:g} vezes o salário médio de lá".replace(".", ","),
+            "salario_x_salario_minimo": f"{r[3]:g} vezes o salário mínimo de lá".replace(".", ","),
+            "orcamento_do_parlamento_por_ano": (
+                f"US$ {r[4] / 1000:.1f} bilhões" if r[4] >= 1000 else f"US$ {r[4]:g} milhões"
+            ).replace(".", ","),
+            "parlamentares": r[5], "mandato_anos": r[6],
+        }
+        for r in [br, *outros]
+    ]
+
+
 # linhas por vídeo: o 1º é o protagonista, os outros só contraste — com 5,
 # o roteiro virava lista lida ("Fulano R$ X, Beltrano R$ Y...", 13-83 views)
 FATOS_POR_VIDEO = 3
@@ -745,6 +791,7 @@ FACT_FETCHERS = [
     ("total arrecadado em campanha por partido", total_arrecadacao_por_partido, [2018, 2022], 3, None),
     ("total gasto por candidatos numa eleição", total_gasto_eleicoes, [2018, 2022], 1, None),
     ("comparação de quanto recebe um deputado vs um ministro de tribunal superior", comparacao_judiciario_legislativo, [None], 1, None),
+    ("parlamentar brasileiro comparado com o de outros países", brasil_vs_mundo, [None], 6, AVISO_MUNDO),
 ]
 
 
@@ -753,6 +800,7 @@ FACT_FETCHERS = [
 # patrimônio 96, contratos (telefonia) 89; custo de um deputado 14 e
 # "padrões estranhos" 22-43. Fora daqui vale 1.
 FACT_WEIGHTS = {
+    "parlamentar brasileiro comparado com o de outros países": 4,
     "maiores salários entre STF, STJ e TCU": 4,
     "comparação de quanto recebe um deputado vs um ministro de tribunal superior": 3,
     "maiores patrimônios declarados ao TSE": 3,
@@ -985,34 +1033,112 @@ _PERFIL_EM_ALTA_LABEL = "perfil em alta"
 _PERFIL_REPETE_DIAS = 60
 
 
+def perfil_senador(senador_id: int) -> dict | None:
+    """Como perfil_parlamentar, pro Senado: presença, autorias, ranking do
+    score e cota por ano (score_senadores), matérias de que é autor
+    principal e manchetes recentes. Direita sem o gasto da cota (perfil
+    positivo), demais com ele."""
+    with _connect() as conn:
+        sen = conn.execute(
+            "SELECT nome, sigla_partido, sigla_uf, data_nascimento, estado_nascimento, formacao, url_foto"
+            " FROM senadores WHERE id = ?",
+            (senador_id,),
+        ).fetchone()
+        if not sen:
+            return None
+        nome, partido, uf, nascimento, estado_nasc, formacao, foto = sen
+        anos = []
+        for ano, pct, autorias, ceap, rank in conn.execute(
+            "SELECT ano, pct_presenca, total_autorias, total_ceap, rank_geral FROM score_senadores"
+            " WHERE senador_id = ? ORDER BY ano",
+            (senador_id,),
+        ).fetchall():
+            total = conn.execute("SELECT COUNT(*) FROM score_senadores WHERE ano = ?", (ano,)).fetchone()[0]
+            anos.append({
+                "ano": ano,
+                "presenca_pct": round(pct or 0, 1),
+                "materias_de_autoria": autorias,
+                "ranking_geral": f"{rank}º de {total} senadores" if rank else None,
+                "cota_parlamentar_gasta": f"R$ {ceap:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if ceap else None,
+            })
+        autor_principal = [
+            {"tipo": sig, "quantidade": n}
+            for sig, n in conn.execute(
+                "SELECT materia_sig, COUNT(*) FROM autorias_senadores WHERE senador_id = ? AND is_principal = 1"
+                " GROUP BY materia_sig ORDER BY COUNT(*) DESC LIMIT 4",
+                (senador_id,),
+            ).fetchall()
+        ]
+        manchetes = [
+            {"titulo": titulo, "data": (publicado or "")[:10]}
+            for titulo, publicado in conn.execute(
+                "SELECT titulo, publicado_em FROM noticias_politicos WHERE politico_id = ? AND casa = 'senado'"
+                " ORDER BY publicado_em DESC, id DESC LIMIT 6",
+                (senador_id,),
+            ).fetchall()
+        ]
+    if not anos and not manchetes:
+        return None
+    positivo = (partido or "").upper() in PARTIDOS_DIREITA
+    if positivo:
+        for ano in anos:
+            ano.pop("cota_parlamentar_gasta", None)
+    return {
+        "tipo": "perfil_parlamentar",
+        "tema": nome,
+        "dados": [{
+            "nome": nome, "cargo": "senador", "partido": partido, "uf": uf, "nascimento": nascimento,
+            "estado_natal": estado_nasc, "formacao": formacao, "por_ano": anos,
+            "materias_como_autor_principal": autor_principal, "manchetes_recentes": manchetes,
+            "foto_url": foto or None,
+        }],
+        "pagina": f"{SITE_URL}/senador/{senador_id}",
+        "enfoque": _ENFOQUE_DIREITA if positivo else _ENFOQUE_FISCAL,
+        "aviso": (
+            f"Dados do banco do Senado (até {anos[-1]['ano'] if anos else 'hoje'}, ano em curso parcial). "
+            "manchetes_recentes são só o título da matéria: use o fato do título, sem detalhe que ele não diz. "
+            "Fato recente que não está aqui só entra se estiver na PESQUISA REAL NA INTERNET."
+        ),
+    }
+
+
 def perfil_em_alta() -> dict | None:
-    """Perfil (perfil_parlamentar) do deputado em exercício com mais
-    manchetes nos últimos 30 dias (tabela noticias_politicos, que o site
-    junta do Google Notícias), pulando quem já saiu nos últimos 60 dias.
-    None se ninguém servir."""
+    """Perfil do deputado ou senador em exercício com mais manchetes nos
+    últimos 30 dias (tabela noticias_politicos, que o site junta do Google
+    Notícias), pulando quem já saiu nos últimos 60 dias. None se ninguém
+    servir. Estado: "<id>:<data>" deputado, "s<id>:<data>" senador."""
     state = _load_used()
     hoje = date.today()
     recentes = {
-        int(e.split(":")[0]) for e in state.get(_PERFIL_EM_ALTA_LABEL, [])
+        e.split(":")[0] for e in state.get(_PERFIL_EM_ALTA_LABEL, [])
         if (hoje - date.fromisoformat(e.split(":")[1])).days < _PERFIL_REPETE_DIAS
     }
+    desde = (hoje - timedelta(days=30)).isoformat()
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT d.id, d.nome, d.sigla_partido, d.sigla_uf, COUNT(*) AS n FROM noticias_politicos n"
+            "SELECT 'camara', d.id, d.nome, d.sigla_partido, d.sigla_uf, COUNT(*) AS n FROM noticias_politicos n"
             " JOIN deputados d ON d.id = n.politico_id"
             " AND d.id_legislatura = (SELECT MAX(id_legislatura) FROM deputados)"
             " WHERE n.casa = 'camara' AND n.publicado_em >= ?"
-            " GROUP BY d.id, d.nome, d.sigla_partido, d.sigla_uf ORDER BY n DESC LIMIT 15",
-            ((hoje - timedelta(days=30)).isoformat(),),
+            " GROUP BY d.id, d.nome, d.sigla_partido, d.sigla_uf"
+            " UNION ALL"
+            " SELECT 'senado', s.id, s.nome, s.sigla_partido, s.sigla_uf, COUNT(*) AS n FROM noticias_politicos n"
+            " JOIN senadores s ON s.id = n.politico_id AND s.em_exercicio = 1"
+            " WHERE n.casa = 'senado' AND n.publicado_em >= ?"
+            " GROUP BY s.id, s.nome, s.sigla_partido, s.sigla_uf"
+            " ORDER BY n DESC LIMIT 20",
+            (desde, desde),
         ).fetchall()
-    for dep_id, nome, partido, uf, _n in rows:
-        if dep_id in recentes:
+    for casa, pid, nome, partido, uf, _n in rows:
+        chave = f"s{pid}" if casa == "senado" else str(pid)
+        if chave in recentes:
             continue
-        perfil = perfil_parlamentar(nome, deputado_id=dep_id)
+        perfil = perfil_senador(pid) if casa == "senado" else perfil_parlamentar(nome, deputado_id=pid)
         if not perfil:
             continue
-        perfil["tema"] = f"{nome} ({partido}-{uf}): o deputado federal que está nas manchetes"
-        state.setdefault(_PERFIL_EM_ALTA_LABEL, []).append(f"{dep_id}:{hoje.isoformat()}")
+        cargo = "o senador" if casa == "senado" else "o deputado federal"
+        perfil["tema"] = f"{nome} ({partido}-{uf}): {cargo} que está nas manchetes"
+        state.setdefault(_PERFIL_EM_ALTA_LABEL, []).append(f"{chave}:{hoje.isoformat()}")
         _save_used(state)
         return perfil
     return None
