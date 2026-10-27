@@ -200,6 +200,9 @@ class ChannelConfig:
     # vão junto nos dados ("linha_editorial") — o revisor de fatos reprovava
     # "isso sai do seu imposto" como fora da fonte (política, 15/10)
     editorial_line: list[str] = field(default_factory=list)
+    # bordão do canal com teto de frases no vídeo ({"imposto": 2}): o prompt
+    # pedia "no máximo 2 vezes" e o vídeo da cota (26/10) disse "imposto" em 4
+    word_caps: dict[str, int] = field(default_factory=dict)
 
     @staticmethod
     def load(name: str) -> "ChannelConfig":
@@ -251,4 +254,5 @@ class ChannelConfig:
             greeting=data.get("greeting", ""),
             pronunciations={str(k): str(v) for k, v in (data.get("pronuncia") or {}).items()},
             editorial_line=[str(x) for x in data.get("linha_editorial") or []],
+            word_caps={str(k).lower(): int(v) for k, v in (data.get("bordao_max") or {}).items()},
         )

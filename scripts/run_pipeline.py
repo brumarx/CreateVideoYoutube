@@ -1376,7 +1376,10 @@ def run(
         if channel_name == "politica":
             # link fixo pro site fonte dos dados — sempre gerado por código
             # (nunca pelo LLM), pra garantir que aponta pro lugar certo sempre.
-            description += "\n\nFonte dos dados: https://brmx.org/politica/"
+            # Perfil aponta direto pra página do deputado.
+            from src.politica_data import SITE_URL
+
+            description += f"\n\nFonte dos dados: {(facts or {}).get('pagina') or SITE_URL + '/'}"
         if amazon:
             description += f"\n\n{AMAZON_DISCLOSURE}"
 

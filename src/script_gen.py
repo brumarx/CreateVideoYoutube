@@ -485,6 +485,18 @@ _MULETAS = {"enquanto isso", "será que", "mas será", "isso mostra", "isso sign
 _VALUE = re.compile(r"(?:R\$|US\$|€|£|\$)?\s?\d+(?:\.\d{3})*(?:,\d+)?(?:\s?%)?")
 
 
+def _word_cap_problem(script: dict, caps: dict[str, int]) -> str | None:
+    """Bordão do canal (channels/<nome>.yaml -> bordao_max) em mais frases
+    que o teto: conta frases que contêm a palavra (prefixo: "imposto" pega
+    "impostos")."""
+    frases = [f.lower() for sc in script.get("scenes", []) for f in _SENTENCE_SPLIT.split(sc.get("narration", ""))]
+    for palavra, teto in caps.items():
+        n = sum(1 for f in frases if re.search(rf"\b{re.escape(palavra)}", f))
+        if n > teto:
+            return f"\"{palavra}\" aparece em {n} frases — no máximo {teto}"
+    return None
+
+
 def _repetition_problem(script: dict) -> str | None:
     """Vídeo que repete o mesmo valor ou a mesma muleta: o dos salários do
     STF (12/10) disse "R$ 43.028,79" 3 vezes e abriu 7 frases com "Enquanto
@@ -769,7 +781,7 @@ def generate_script(
                                           "manchete mais forte, curta, sem \"notícias\"/\"hoje\" (em dia de jogo, "
                                           "\"Botafogo x Adversário\" + gancho curto)."}]
                 continue
-            repeated = _repetition_problem(script)
+            repeated = _repetition_problem(script) or _word_cap_problem(script, channel.word_caps)
             if repeated:
                 filler_fallback = script
                 last_error = ValueError(repeated)

@@ -26,14 +26,17 @@ from __future__ import annotations
 import json
 import random
 import re
-import sqlite3
 import unicodedata
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = Path("/var/www/html/politica/data/politica.db")
+# o site (politica-br.org) migrou pro Postgres (schema `dados`, sincronizado
+# pelo ETL); o SQLite antigo sai de uso. DSN em ~/.politica.env (POL_PG_DSN)
+PG_ENV_FILE = Path.home() / ".politica.env"
 STATE_FILE = ROOT / "data" / "used_political_facts.json"
+# site dos dados (migrou de brmx.org/politica em 26/10): link da descrição
+SITE_URL = "https://politica-br.org"
 
 # O maior patrimônio de parlamentar verificado externamente (fora desta
 # base) é ~R$239,7 milhões (Oriovisto Guimarães). Valores bem acima disso
@@ -67,7 +70,7 @@ AVISO_CRESCIMENTO = (
 )
 
 
-def _last_complete_year(conn: sqlite3.Connection, table: str, column: str = "ano") -> int:
+def _last_complete_year(conn: _PgConn, table: str, column: str = "ano") -> int:
     """MAX(ano) da tabela, mas nunca o ano corrente em andamento — um total
     de "gastos do ano" com o ano ainda não terminado passaria a impressão
     errada de ranking anual completo quando é só parcial (até hoje)."""
@@ -79,13 +82,46 @@ def _last_complete_year(conn: sqlite3.Connection, table: str, column: str = "ano
     return max_ano
 
 
-def _connect() -> sqlite3.Connection:
-    if not DB_PATH.exists():
-        raise FileNotFoundError(f"Banco de política não encontrado: {DB_PATH}")
-    return sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+class _PgConn:
+    """Conexão Postgres com a cara da do sqlite3 que este módulo usava
+    (`conn.execute(sql, params).fetchone()`, `with conn:`): placeholder
+    `?` vira `%s` e LIKE vira ILIKE (o LIKE do sqlite ignorava caixa).
+    Somente leitura."""
+
+    def __init__(self, dsn: str):
+        import psycopg
+
+        from psycopg.types.numeric import FloatLoader
+
+        self._conn = psycopg.connect(dsn, options="-c search_path=dados -c default_transaction_read_only=on")
+        # numeric vem como Decimal, que o json.dumps dos dados não aceita
+        self._conn.adapters.register_loader("numeric", FloatLoader)
+
+    def execute(self, sql: str, params: tuple = ()):
+        sql = re.sub(r"\bLIKE\b", "ILIKE", sql.replace("%", "%%").replace("?", "%s"))
+        cur = self._conn.cursor()
+        cur.execute(sql, params)
+        return cur
+
+    def __enter__(self) -> "_PgConn":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._conn.close()
 
 
-def _last_complete_month(conn: sqlite3.Connection) -> str:
+def _pg_dsn() -> str:
+    for linha in PG_ENV_FILE.read_text().splitlines():
+        if linha.startswith("POL_PG_DSN="):
+            return linha.split("=", 1)[1].strip()
+    raise RuntimeError(f"POL_PG_DSN não encontrado em {PG_ENV_FILE}")
+
+
+def _connect() -> _PgConn:
+    return _PgConn(_pg_dsn())
+
+
+def _last_complete_month(conn: _PgConn) -> str:
     """Último ano_mes (YYYY-MM) de remuneracao_magistrados com dado
     realmente importado pras 3 cortes (STF/STJ/TCU) — cada corte importa
     com atraso diferente (visto na prática: um mês só com TCU, sem STF/STJ
@@ -119,7 +155,7 @@ def top_ceap_spenders(ano: int | None = None, limit: int = 5, offset: int = 0) -
             ano = _last_complete_year(conn, "despesas_deputados")
         rows = conn.execute(
             """
-            SELECT d.nome, d.sigla_partido, d.sigla_uf, SUM(e.valor_liquido) AS total, d.url_foto
+            SELECT MAX(d.nome), MAX(d.sigla_partido), MAX(d.sigla_uf), SUM(e.valor_liquido) AS total, MAX(d.url_foto)
             FROM despesas_deputados e
             JOIN deputados d ON d.id = e.deputado_id
             WHERE e.ano = ?
@@ -169,12 +205,12 @@ def top_patrimonio(ano: int = 2022, limit: int = 5, offset: int = 0) -> list[dic
     with _connect() as conn:
         rows = conn.execute(
             """
-            SELECT c.nm_candidato, c.ds_cargo, c.sg_partido, c.sg_uf, SUM(b.vr_bem) AS total
+            SELECT MAX(c.nm_candidato), MAX(c.ds_cargo), MAX(c.sg_partido), MAX(c.sg_uf), SUM(b.vr_bem) AS total
             FROM bens_candidatos b
             JOIN candidatos c ON c.sq_candidato = b.sq_candidato
             WHERE b.ano_eleicao = ?
             GROUP BY b.sq_candidato
-            HAVING total < ?
+            HAVING SUM(b.vr_bem) < ?
             ORDER BY total DESC
             LIMIT ? OFFSET ?
             """,
@@ -224,7 +260,7 @@ def top_cartao_corporativo(ano: int | None = None, limit: int = 5, offset: int =
             ano = _last_complete_year(conn, "cartao_corporativo")
         rows = conn.execute(
             """
-            SELECT nome_portador, politico_tipo, orgao, SUM(valor) AS total
+            SELECT nome_portador, politico_tipo, MAX(orgao), SUM(valor) AS total
             FROM cartao_corporativo
             WHERE ano = ? AND nome_portador NOT IN ('SIGILOSO', '') AND nome_portador IS NOT NULL
             GROUP BY nome_portador, politico_tipo
@@ -248,7 +284,7 @@ def top_emendas(ano: int | None = None, limit: int = 5, offset: int = 0) -> list
             ano = _last_complete_year(conn, "emendas_parlamentares")
         rows = conn.execute(
             """
-            SELECT em.autor_nome, em.autor_partido, em.autor_uf, SUM(em.valor_pago) AS total, d.url_foto
+            SELECT MAX(em.autor_nome), MAX(em.autor_partido), MAX(em.autor_uf), SUM(em.valor_pago) AS total, MAX(d.url_foto)
             FROM emendas_parlamentares em
             LEFT JOIN deputados d ON d.id = em.deputado_id
             WHERE em.ano = ? AND em.deputado_id IS NOT NULL AND em.autor_partido != ''
@@ -311,7 +347,7 @@ def top_fornecedores_campanha(ano: int | None = None, limit: int = 5, offset: in
             ano = 2022
         rows = conn.execute(
             """
-            SELECT nome_forn, desc_cnae, SUM(total_pago) AS total
+            SELECT nome_forn, MAX(desc_cnae), SUM(total_pago) AS total
             FROM campanha_despesas
             WHERE ano_eleicao = ? AND nome_forn NOT IN ('', 'NAO INFORMADO') AND nome_forn IS NOT NULL
             GROUP BY nome_forn
@@ -490,8 +526,8 @@ def maior_crescimento_patrimonio(limit: int = 5, offset: int = 0) -> list[dict]:
         rows = conn.execute(
             """
             WITH pat AS (
-                SELECT c.nr_cpf_cand AS cpf, c.nm_candidato AS nome, c.ds_cargo AS cargo,
-                       b.ano_eleicao AS ano, SUM(b.vr_bem) AS total
+                SELECT MAX(c.nr_cpf_cand) AS cpf, MAX(c.nm_candidato) AS nome, MAX(c.ds_cargo) AS cargo,
+                       MAX(b.ano_eleicao) AS ano, SUM(b.vr_bem) AS total
                 FROM bens_candidatos b
                 JOIN candidatos c ON c.sq_candidato = b.sq_candidato
                 WHERE c.nr_cpf_cand != '' AND c.nr_cpf_cand IS NOT NULL
@@ -651,7 +687,7 @@ def comparacao_judiciario_legislativo(limit: int = 5, offset: int = 0) -> list[d
         magistrados_rows = conn.execute(
             """
             SELECT m.tribunal,
-                   ROUND(AVG(COALESCE(NULLIF(r.rendimento_liquido, 0), r.total_creditos - r.total_debitos)) * 12, 2)
+                   ROUND((AVG(COALESCE(NULLIF(r.rendimento_liquido, 0), r.total_creditos - r.total_debitos)) * 12)::numeric, 2)
             FROM remuneracao_magistrados r JOIN magistrados m ON m.id = r.magistrado_id
             WHERE r.ano_mes = ?
               AND COALESCE(NULLIF(r.rendimento_liquido, 0), r.total_creditos - r.total_debitos) > 0
@@ -680,6 +716,10 @@ def comparacao_judiciario_legislativo(limit: int = 5, offset: int = 0) -> list[d
     items.sort(key=lambda i: i["recebimento_liquido_anual"], reverse=True)
     return items[offset : offset + limit]
 
+
+# linhas por vídeo: o 1º é o protagonista, os outros só contraste — com 5,
+# o roteiro virava lista lida ("Fulano R$ X, Beltrano R$ Y...", 13-83 views)
+FATOS_POR_VIDEO = 3
 
 # (label, fetcher, kwargs_extra, anos_possiveis|None, max_paginas, aviso|None)
 # anos_possiveis=None -> fetcher decide o ano sozinho (não aceita/precisa do
@@ -780,7 +820,7 @@ def _pick_page(label: str, anos: list[int | None], max_paginas: int, limit: int)
     return ano, offset
 
 
-def pick_fact_set(label: str, limit: int = 5) -> dict:
+def pick_fact_set(label: str, limit: int = FATOS_POR_VIDEO) -> dict:
     """Como random_fact_set(), mas força um fetcher específico pelo label em
     vez de sortear — usado quando o painel (ou um teste manual) quer um tema
     específico de política em vez de deixar aleatório."""
@@ -798,11 +838,14 @@ def pick_fact_set(label: str, limit: int = 5) -> dict:
     raise ValueError(f"Nenhum fetcher de política com o label {label!r}")
 
 
-def random_fact_set(limit: int = 5) -> dict:
+def random_fact_set(limit: int = FATOS_POR_VIDEO) -> dict:
     """Escolhe aleatoriamente um dos temas acima, numa página ainda não
     usada, e devolve os dados prontos pra virar contexto de roteiro. Tenta
     até 3 fetchers diferentes se o primeiro vier vazio (página sem dado
-    suficiente pra essa combinação de ano/offset)."""
+    suficiente pra essa combinação de ano/offset). Na maior parte dos dias
+    (PERFIL_EM_ALTA_SHARE) sai o perfil de quem está nas manchetes."""
+    if random.random() < PERFIL_EM_ALTA_SHARE and (perfil := perfil_em_alta()):
+        return perfil
     candidates = _weighted_order(limit)
     for label, fetcher, anos, max_paginas, aviso in candidates[:3]:
         ano, offset = _pick_page(label, anos, max_paginas, limit)
@@ -821,45 +864,52 @@ def random_fact_set(limit: int = 5) -> dict:
 
 # partidos de direita: perfil deles é positivo (linha do canal); dos demais,
 # segue o tom fiscalizador de sempre
-PARTIDOS_DIREITA = {"PL", "NOVO", "PP", "REPUBLICANOS", "UNIÃO", "PRTB"}
+PARTIDOS_DIREITA = {"PL", "NOVO", "PP", "REPUBLICANOS", "UNIÃO", "PRTB", "MISSÃO"}
 _ENFOQUE_DIREITA = (
     "Vídeo de PERFIL POSITIVO: o parlamentar é alinhado à linha do canal. Destaque o que ele conquistou "
     "e faz: votação, presença, proposições e pautas (das manchetes e propostas). Cota parlamentar e "
     "gastos não entram. Feche com uma pergunta a favor dele (ex.: \"Você votaria nele de novo?\"), nunca "
     "com \"você acha justo pagar isso com o seu imposto\". Urna é eletrônica: nada de \"cédula\". "
+    "Conte como HISTÓRIA, não relatório: nada de percorrer ano a ano (\"Em 2023... Em 2024... Em 2025...\"); "
+    "escolha os 2 ou 3 números mais fortes e a manchete mais recente. "
     "Título: o feito mais forte dele com o número "
     "(ex.: \"Nikolas: 3 milhões de votos, recorde do Brasil\"), sem R$ — a regra de título com valor "
     "em reais não vale pra perfil."
 )
 _ENFOQUE_FISCAL = (
-    "Vídeo de PERFIL: apresente os números do parlamentar com o tom fiscalizador do canal. Título com "
-    "o número mais forte e quem."
+    "Vídeo de PERFIL: apresente os números do parlamentar com o tom fiscalizador do canal. Conte como "
+    "HISTÓRIA (quem é, por que está nas manchetes, o número que mais chama atenção), não relatório ano a "
+    "ano. Título com o número mais forte e quem."
 )
 
 
-def perfil_parlamentar(texto: str) -> dict | None:
+def perfil_parlamentar(texto: str, deputado_id: int | None = None) -> dict | None:
     """Dados do banco sobre o deputado citado em `texto` (tema digitado,
     ex.: "Nikolas Ferreira: ..."), no mesmo formato de random_fact_set:
     presença, proposições, votações, ranking do score e gasto da cota por
     ano, mais as proposições de maior peso. None se ninguém do banco bater.
+    `deputado_id` pula a busca pelo nome (perfil_em_alta: nome de uma
+    palavra só, "Zucco", não casa com _PROPER_NAME_RE).
     O banco não é atualizado todo dia: o pipeline junta busca na internet
     pro que é recente (o "aviso" diz até quando vão os dados)."""
     candidatos = _PROPER_NAME_RE.findall(texto)
-    if not candidatos:
+    if not candidatos and deputado_id is None:
         return None
+    _COLS = "SELECT id, nome, sigla_partido, sigla_uf, data_nascimento, municipio_nasc, url_foto FROM deputados"
     with _connect() as conn:
         dep = None
+        if deputado_id is not None:
+            dep = conn.execute(f"{_COLS} WHERE id = ? ORDER BY id_legislatura DESC LIMIT 1", (deputado_id,)).fetchone()
         for nome in sorted(candidatos, key=len, reverse=True):
-            dep = conn.execute(
-                "SELECT id, nome, sigla_partido, sigla_uf, data_nascimento, municipio_nasc FROM deputados"
-                " WHERE nome LIKE ? ORDER BY id_legislatura DESC LIMIT 1",
-                (f"%{nome}%",),
-            ).fetchone()
             if dep:
                 break
+            dep = conn.execute(
+                f"{_COLS} WHERE nome LIKE ? ORDER BY id_legislatura DESC LIMIT 1",
+                (f"%{nome}%",),
+            ).fetchone()
         if not dep:
             return None
-        dep_id, nome, partido, uf, nascimento, municipio = dep
+        dep_id, nome, partido, uf, nascimento, municipio, foto = dep
         anos = []
         for ano, pct, sessoes, presentes, props, ceap, rank in conn.execute(
             "SELECT s.ano, p.pct_presenca, p.total_sessoes, p.sessoes_presentes, s.total_proposicoes,"
@@ -915,8 +965,9 @@ def perfil_parlamentar(texto: str) -> dict | None:
         "dados": [{
             "nome": nome, "partido": partido, "uf": uf, "nascimento": nascimento,
             "cidade_natal": municipio, "por_ano": anos, "principais_proposicoes": principais,
-            "manchetes_recentes": manchetes,
+            "manchetes_recentes": manchetes, "foto_url": foto or None,
         }],
+        "pagina": f"{SITE_URL}/deputado/{dep_id}",
         "enfoque": _ENFOQUE_DIREITA if positivo else _ENFOQUE_FISCAL,
         "aviso": (
             f"Dados do banco da Câmara (até {anos[-1]['ano']}, ano em curso parcial). manchetes_recentes "
@@ -924,6 +975,47 @@ def perfil_parlamentar(texto: str) -> dict | None:
             "não está aqui só entra se estiver na PESQUISA REAL NA INTERNET."
         ),
     }
+
+
+# perfil de quem está nas manchetes: o do Nikolas (22/10) fez 1.104 views
+# contra 13-245 dos rankings de 5 nomes desconhecidos — gente que o público
+# já procura, contada como história (a fórmula da série de países do Fractal)
+PERFIL_EM_ALTA_SHARE = 0.6
+_PERFIL_EM_ALTA_LABEL = "perfil em alta"
+_PERFIL_REPETE_DIAS = 60
+
+
+def perfil_em_alta() -> dict | None:
+    """Perfil (perfil_parlamentar) do deputado em exercício com mais
+    manchetes nos últimos 30 dias (tabela noticias_politicos, que o site
+    junta do Google Notícias), pulando quem já saiu nos últimos 60 dias.
+    None se ninguém servir."""
+    state = _load_used()
+    hoje = date.today()
+    recentes = {
+        int(e.split(":")[0]) for e in state.get(_PERFIL_EM_ALTA_LABEL, [])
+        if (hoje - date.fromisoformat(e.split(":")[1])).days < _PERFIL_REPETE_DIAS
+    }
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT d.id, d.nome, d.sigla_partido, d.sigla_uf, COUNT(*) AS n FROM noticias_politicos n"
+            " JOIN deputados d ON d.id = n.politico_id"
+            " AND d.id_legislatura = (SELECT MAX(id_legislatura) FROM deputados)"
+            " WHERE n.casa = 'camara' AND n.publicado_em >= ?"
+            " GROUP BY d.id, d.nome, d.sigla_partido, d.sigla_uf ORDER BY n DESC LIMIT 15",
+            ((hoje - timedelta(days=30)).isoformat(),),
+        ).fetchall()
+    for dep_id, nome, partido, uf, _n in rows:
+        if dep_id in recentes:
+            continue
+        perfil = perfil_parlamentar(nome, deputado_id=dep_id)
+        if not perfil:
+            continue
+        perfil["tema"] = f"{nome} ({partido}-{uf}): o deputado federal que está nas manchetes"
+        state.setdefault(_PERFIL_EM_ALTA_LABEL, []).append(f"{dep_id}:{hoje.isoformat()}")
+        _save_used(state)
+        return perfil
+    return None
 
 
 _PROPER_NAME_RE = re.compile(

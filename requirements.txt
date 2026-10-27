@@ -12,3 +12,4 @@ azure-cognitiveservices-speech>=1.40
 rembg[cpu]>=2.0  # recorte do sujeito na thumbnail (opcional: sem ele, foto inteira)
 trafilatura>=1.12  # texto da matéria original quando o portal só manda o título
 ddgs>=9.0  # busca DuckDuckGo grátis (reserva da Tavily)
+psycopg[binary]>=3.2

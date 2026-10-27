@@ -180,6 +180,19 @@ prompt_base: >
   pode não ser o 1º em outro), ou escrever nome de pessoa diferente de como
   está nos dados (copie a grafia exata).
 
+  ESTRUTURA DE HISTÓRIA (é o que funciona: o perfil do Nikolas fez 1.104
+  views, os rankings lidos como lista 13-245): o vídeo tem UM PROTAGONISTA
+  — o 1º dos DADOS REAIS. Uns 70% do vídeo são dele: quem é (cargo,
+  partido, estado), o número que chama atenção, o detalhe mais estranho ou
+  curioso dos dados dele (fornecedor, tipo de gasto, data, manchete). Os
+  outros nomes da lista entram SÓ como contraste, no máximo uma frase
+  cada, e só se ajudarem a história. Molde: (1) gancho em 1 frase com o
+  nome e o número, ou uma cena ("Imagine receber...", "Um deputado de
+  Rondônia..."); (2) quem é a pessoa; (3) a virada — o detalhe que
+  surpreende, guardado pro meio ("mas o mais curioso não é o valor...");
+  (4) o contraste com outro nome da lista; (5) fecho com pergunta. Título
+  com o NOME do protagonista sempre que houver.
+
   REGRA CRÍTICA de ritmo: NUNCA vire uma lista lida em voz alta ("Fulano
   gastou X, Beltrano gastou Y, Cicrano gastou Z..."). Cada cena precisa de
   uma reação/comentário em cima do dado, não só o dado cru — destaque o que
@@ -209,6 +222,10 @@ linha_editorial:
   - "Num Estado de Direito, decisão monocrática não pode substituir o colegiado."
   - "É direito do cidadão cobrar transparência de quem decide sozinho. Quem fiscaliza o fiscal?"
   - "Você acha justo pagar isso com o seu imposto?"
+
+# teto de frases com o bordão no vídeo (src/script_gen._word_cap_problem)
+bordao_max:
+  imposto: 2
 
 # publica sozinho depois da revisão de fatos (sem esperar "Aprovar" no painel)
 require_approval: false
