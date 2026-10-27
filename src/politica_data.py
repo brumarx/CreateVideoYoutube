@@ -763,6 +763,95 @@ def brasil_vs_mundo(limit: int = 5, offset: int = 0) -> list[dict]:
     ]
 
 
+# conflitos_interesse do site: só os tipos SEM casamento por nome entram no
+# canal — sócio confirmado pelo CPF na Receita, e o mesmo fornecedor
+# (CNPJ/CPF) pago pela campanha e depois pela cota. Os por nome/sobrenome
+# (SOCIO_NOME_*, FAMILIAR_PROVAVEL, SOCIO_DIRETO, DOADOR_SOCIO) e
+# parentesco_assessores ficam fora: homônimo viraria acusação falsa.
+_CARGO_CASA = {"camara": "deputado federal", "senado": "senador", "governador": "governador",
+               "ministro": "ministro do governo federal", "magistrado": "ministro de tribunal superior"}
+
+AVISO_SOCIOS = (
+    "Sociedade confirmada no registro de sócios da Receita Federal pelo CPF do político (e nome completo "
+    "igual). SER SÓCIO DE EMPRESA NÃO É ILEGAL nem irregular: diga isso no vídeo. Nada de insinuar "
+    "favorecimento, conflito, uso do cargo ou que a empresa recebeu dinheiro público — os dados não dizem. "
+    "O assunto é o tamanho e o tipo do negócio de quem está no poder. As empresas são PRIVADAS: o dinheiro "
+    "delas não é do contribuinte — neste vídeo NÃO use a linha do pagador de impostos (nada de \"seu "
+    "imposto\", \"quem paga é você\"), e não feche com \"é justo pagar com seu imposto\". Feche com "
+    "pergunta sobre o fato (ex.: \"Quem faz as leis deveria ter tantos negócios?\", \"Você sabia que "
+    "seu deputado era empresário?\"). Fora nome, cargo, partido e empresas, não diga nada sobre a pessoa "
+    "(eleição, coligação, trajetória). Sócio NÃO é administrador: nunca diga que \"administra\", "
+    "\"gerencia\" ou \"comanda\" as empresas. Cada empresa/ramo é SÓ da pessoa em cuja linha ela está "
+    "nos dados — não misture os negócios de um com os de outro."
+)
+AVISO_CEAP_CAMPANHA = (
+    "Mesmo fornecedor (mesmo CNPJ/CPF) pago primeiro com dinheiro da campanha e, depois da eleição, com a "
+    "cota parlamentar (dinheiro público). NÃO É ILEGAL usar o mesmo fornecedor: diga isso no vídeo; o "
+    "ponto é que a relação comercial da campanha continuou paga pelo contribuinte. Sem insinuar desvio, "
+    "favorecimento ou irregularidade. Fornecedor pessoa física aparece sem nome — não tente nomear."
+)
+
+
+def politicos_socios_empresas(limit: int = 5, offset: int = 0) -> list[dict]:
+    """Políticos (deputado, senador, governador, ministro, magistrado) com
+    mais empresas em que constam como sócios na Receita, casados pelo CPF
+    (SOCIO_CPF_CONFIRMADO) com nome 100% igual — ex.: Dal Barreto, sócio de
+    114 empresas, quase todas postos de combustível."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT nome_politico, MAX(sigla_partido), MAX(sigla_uf), casa, COUNT(DISTINCT cnpj) AS n,"
+            " MAX(politico_id) FROM conflitos_interesse"
+            " WHERE tipo_conflito = 'SOCIO_CPF_CONFIRMADO' AND descricao LIKE '%Sobreposição de nome: 100%'"
+            " GROUP BY nome_politico, casa ORDER BY n DESC, nome_politico LIMIT ? OFFSET ?",
+            (limit, offset),
+        ).fetchall()
+        itens = []
+        for nome, partido, uf, casa, n, pid in rows:
+            empresas = [
+                e for (e,) in conn.execute(
+                    "SELECT DISTINCT nome_empresa FROM conflitos_interesse WHERE tipo_conflito = 'SOCIO_CPF_CONFIRMADO'"
+                    " AND nome_politico = ? AND casa = ? ORDER BY nome_empresa LIMIT 6",
+                    (nome, casa),
+                ).fetchall()
+            ]
+            foto = None
+            if casa in ("camara", "senado"):
+                tabela = "deputados" if casa == "camara" else "senadores"
+                row = conn.execute(f"SELECT url_foto FROM {tabela} WHERE id = ? LIMIT 1", (pid,)).fetchone()
+                foto = row[0] if row else None
+            itens.append({
+                "nome": nome, "cargo": _CARGO_CASA.get(casa, casa), "partido": partido, "uf": uf or None,
+                "empresas_como_socio": n, "exemplos_de_empresas": empresas, "foto_url": foto,
+            })
+    return itens
+
+
+def fornecedor_campanha_e_cota(limit: int = 5, offset: int = 0) -> list[dict]:
+    """Parlamentar que pagou o mesmo fornecedor com dinheiro da campanha e,
+    eleito, com a cota (CEAP_CAMPANHA), pelo valor pago com a cota."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT c.nome_politico, c.sigla_partido, c.sigla_uf, c.casa, c.nome_empresa, c.valor_secundario,"
+            " c.total_pago, c.n_despesas, d.url_foto FROM conflitos_interesse c"
+            " LEFT JOIN (SELECT id, MAX(url_foto) AS url_foto FROM deputados GROUP BY id) d"
+            " ON d.id = c.politico_id AND c.casa = 'camara'"
+            " WHERE c.tipo_conflito = 'CEAP_CAMPANHA' AND c.total_pago > 0"
+            " ORDER BY c.total_pago DESC, c.id LIMIT ? OFFSET ?",
+            (limit, offset),
+        ).fetchall()
+    return [
+        {
+            "nome": r[0], "cargo": _CARGO_CASA.get(r[3], r[3]), "partido": r[1], "uf": r[2],
+            # pessoa física vem com CPF mascarado: gente comum não vira nome em vídeo
+            "fornecedor": "um fornecedor pessoa física" if "***" in (r[4] or "") else r[4],
+            "pago_com_dinheiro_da_campanha": round(r[5] or 0, 2),
+            "pago_depois_com_a_cota_parlamentar": round(r[6], 2),
+            "despesas_na_cota": r[7], "foto_url": r[8],
+        }
+        for r in rows
+    ]
+
+
 # linhas por vídeo: o 1º é o protagonista, os outros só contraste — com 5,
 # o roteiro virava lista lida ("Fulano R$ X, Beltrano R$ Y...", 13-83 views)
 FATOS_POR_VIDEO = 3
@@ -792,6 +881,8 @@ FACT_FETCHERS = [
     ("total gasto por candidatos numa eleição", total_gasto_eleicoes, [2018, 2022], 1, None),
     ("comparação de quanto recebe um deputado vs um ministro de tribunal superior", comparacao_judiciario_legislativo, [None], 1, None),
     ("parlamentar brasileiro comparado com o de outros países", brasil_vs_mundo, [None], 6, AVISO_MUNDO),
+    ("políticos sócios de mais empresas (confirmado pelo CPF na Receita)", politicos_socios_empresas, [None], 8, AVISO_SOCIOS),
+    ("fornecedor pago pela campanha e depois pela cota parlamentar", fornecedor_campanha_e_cota, [None], 8, AVISO_CEAP_CAMPANHA),
 ]
 
 
@@ -800,6 +891,8 @@ FACT_FETCHERS = [
 # patrimônio 96, contratos (telefonia) 89; custo de um deputado 14 e
 # "padrões estranhos" 22-43. Fora daqui vale 1.
 FACT_WEIGHTS = {
+    "políticos sócios de mais empresas (confirmado pelo CPF na Receita)": 3,
+    "fornecedor pago pela campanha e depois pela cota parlamentar": 3,
     "parlamentar brasileiro comparado com o de outros países": 4,
     "maiores salários entre STF, STJ e TCU": 4,
     "comparação de quanto recebe um deputado vs um ministro de tribunal superior": 3,
