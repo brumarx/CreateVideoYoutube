@@ -423,6 +423,7 @@ def make_thumbnail(
     accent: str = "#ffffff",
     real_photo_url: str | None = None,
     fallback_frame: Path | None = None,
+    fallback_photo_urls: list[str] | None = None,
 ) -> Path:
     """`hook_text` deve ser curto (2-4 palavras); `*palavra*` marca o que
     vai em amarelo. `real_photo_url` (foto OFICIAL de deputado/senador/
@@ -439,17 +440,27 @@ def make_thumbnail(
             raw = generate_image(prompt, width=THUMB_WIDTH, height=THUMB_HEIGHT)
             photo = Image.open(io.BytesIO(raw)).convert("RGB")
         except Exception:
+            # IA de imagem fora: foto real de uma das notícias antes do frame.
+            # Só depois da IA — a notícia que não casa com o título pode ser
+            # outra ("PAULINHO VOLTOU" com foto do time feminino)
+            for url in fallback_photo_urls or []:
+                photo = _fetch_real_photo(url)
+                if photo is not None:
+                    log.info("thumbnail com foto de notícia (IA de imagem fora): %s", url)
+                    break
+        if photo is None:
             # Pollinations fora (402/500) derrubava o job DEPOIS do vídeo
             # pronto — em 03/10 os 3 vídeos do dia morreram aqui. Um frame
             # do próprio vídeo é melhor que nenhum vídeo publicado.
             if fallback_frame is None or not fallback_frame.exists():
-                raise
+                raise RuntimeError("thumbnail sem imagem: IA, fotos das notícias e frame indisponíveis")
             photo = Image.open(fallback_frame).convert("RGB")
     img = _cutout_composite(photo, _hex_to_rgb(accent)) or _background(photo)
 
-    img = ImageEnhance.Contrast(img).enhance(1.2)
-    img = ImageEnhance.Color(img).enhance(1.45)
-    img = img.filter(ImageFilter.UnsharpMask(radius=2, percent=120, threshold=3))
+    # realce moderado: 1.2/1.45 deixava a cor artificial e comia detalhe
+    img = ImageEnhance.Contrast(img).enhance(1.10)
+    img = ImageEnhance.Color(img).enhance(1.20)
+    img = img.filter(ImageFilter.UnsharpMask(radius=1.5, percent=100, threshold=4))
     img = img.convert("RGBA")
 
     # escurece só o lado do texto (gradiente horizontal) — o resto da imagem
@@ -465,9 +476,14 @@ def make_thumbnail(
 
     block_w = int(W * TEXT_BLOCK_RATIO)
     block = _render_text_block(hook_text, block_w, int(H * 0.78))
-    block = block.rotate(TEXT_TILT_DEG, resample=Image.BICUBIC, expand=True)
-    bx = 26
-    by = max(20, (H - block.height) // 2)
+    block = block.rotate(TEXT_TILT_DEG, resample=Image.Resampling.BICUBIC, expand=True)
+    # inclinado, o bloco cresce e podia vazar da borda: reduz até caber
+    margin_x = margin_y = 24
+    scale = min(1.0, (W - 2 * margin_x) / block.width, (H - 2 * margin_y) / block.height)
+    if scale < 1.0:
+        block = block.resize((max(1, int(block.width * scale)), max(1, int(block.height * scale))), Image.Resampling.LANCZOS)
+    bx = margin_x  # lado esquerdo (o escurecido); a pessoa fica na direita
+    by = max(margin_y, (H - block.height) // 2)
     img.alpha_composite(block, (bx, by))
 
     # vinheta: escurece os cantos e puxa o olho pro centro. A moldura na cor

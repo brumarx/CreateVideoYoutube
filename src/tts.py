@@ -47,10 +47,47 @@ PRONUNCIATIONS = {
     "recuam": "recúam",
     # inteligência artificial: "IA" a voz lia "ia" (verbo ir) — sigla em
     # maiúsculas só troca escrita assim (ver _is_mixed_case), o verbo fica
-    "IA": "I A",
-    "IAs": "I Ás",
+    "IA": "IÁ",
+    "IAs": "IÁs",
 }
 _SPELLING_BACK = {v.lower(): k for k, v in PRONUNCIATIONS.items()}
+
+_BRAZILIAN_STATES = {
+    "AC": "Acre",
+    "AL": "Alagoas",
+    "AP": "Amapá",
+    "AM": "Amazonas",
+    "BA": "Bahia",
+    "CE": "Ceará",
+    "DF": "Distrito Federal",
+    "ES": "Espírito Santo",
+    "GO": "Goiás",
+    "MA": "Maranhão",
+    "MT": "Mato Grosso",
+    "MS": "Mato Grosso do Sul",
+    "MG": "Minas Gerais",
+    "PA": "Pará",
+    "PB": "Paraíba",
+    "PR": "Paraná",
+    "PE": "Pernambuco",
+    "PI": "Piauí",
+    "RJ": "Rio de Janeiro",
+    "RN": "Rio Grande do Norte",
+    "RS": "Rio Grande do Sul",
+    "RO": "Rondônia",
+    "RR": "Roraima",
+    "SC": "Santa Catarina",
+    "SP": "São Paulo",
+    "SE": "Sergipe",
+    "TO": "Tocantins",
+}
+# partido-UF ("PT-BA", "MISSÃO-SP") — a voz lia o hífen; sai "PT Bahia"
+_STATE_ABBREVIATION = re.compile(r"\b([A-ZÀ-Ý]{2,})-(%s)\b" % "|".join(_BRAZILIAN_STATES))
+
+
+def _state_abbreviation_pronunciations(text: str) -> dict[str, str]:
+    return {m[0]: f"{m[1]} {_BRAZILIAN_STATES[m[2]]}" for m in _STATE_ABBREVIATION.finditer(text)}
+
 
 # PALAVRA INTEIRA EM MAIÚSCULAS (5+ letras) a voz costuma soletrar: nome de
 # veículo ("O GLOBO", "LANCE!", "NETVASCO") ou ênfase do roteiro ("QUE SE
@@ -553,6 +590,10 @@ def narrate(
     `foreign` ({"Claude Code": "en"}, ver FOREIGN_VOICES): termo narrado pela
     voz nativa do idioma — nunca reescrito à portuguesa."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    pronunciations = {
+        **(pronunciations or {}),
+        **_state_abbreviation_pronunciations(text),
+    }
     foreign = {k: v for k, v in (foreign or {}).items() if v in FOREIGN_VOICES}
     if foreign and pronunciations:
         folded = {k.lower() for k in foreign}

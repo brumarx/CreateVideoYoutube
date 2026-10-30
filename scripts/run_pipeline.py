@@ -1343,6 +1343,7 @@ def run(
         make_thumbnail(
             thumb_prompt, thumb_text, thumb_path, accent=channel.accent, real_photo_url=real_photo_url,
             fallback_frame=fallback_frame,
+            fallback_photo_urls=[photo["url"] for photo in news_photos if photo.get("url")] if not real_photo_url else None,
         )
         update(job_id, thumbnail_path=str(thumb_path))
         log.info("[%s] thumbnail pronta: %s", job_id, thumb_path)
