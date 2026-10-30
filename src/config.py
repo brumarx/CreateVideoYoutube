@@ -33,6 +33,10 @@ def _keys(env_var: str) -> list[str]:
     return [p for p in parts if p]
 
 
+def _as_list(value) -> list:
+    return value if isinstance(value, list) else [value]
+
+
 @dataclass
 class LLMKeys:
     xai: list[str] = field(default_factory=lambda: _keys("XAI_API_KEYS"))
@@ -188,10 +192,14 @@ class ChannelConfig:
         if not self.priority_until or today > self.priority_until or today < self.priority_from:
             return []
         return self.priority_topics
-    # bordão de entrada falado no começo de todo vídeo ("Fala, alvinegros!")
-    # — inserido por CÓDIGO antes da 1ª cena, nunca pelo LLM (que é
-    # proibido de abrir com saudação). Vazio = sem bordão.
-    greeting: str = ""
+    # bordão de entrada falado no começo de todo vídeo ("Fala, Fogão!") —
+    # inserido por CÓDIGO antes da 1ª cena, nunca pelo LLM (que é proibido
+    # de abrir com saudação). Cada canal tem o seu: todos abriam com "Fala,
+    # galera!" (30/10). Lista no yaml = sorteia um por vídeo. Vazio = sem.
+    greetings: list[str] = field(default_factory=list)
+    # CTA falado do site no fim do vídeo, "{site}" vira o domínio. Vazio =
+    # o padrão de notícias ("As notícias completas... estão no site ...")
+    website_speech: str = ""
     # pronúncia fixa do canal (nome da marca etc.), mesmo formato do
     # "pronuncia" do roteiro: {"grafia": "como a voz deve falar"}. Chave
     # com maiúscula no meio ("vIA") só troca escrita exatamente assim.
@@ -251,7 +259,8 @@ class ChannelConfig:
             website_cta=data.get("website_cta", "🌐 Site"),
             extra_links=[l for l in data.get("links_descricao") or [] if isinstance(l, dict) and l.get("url")],
             amazon_affiliate=data.get("afiliado_amazon") or {},
-            greeting=data.get("greeting", ""),
+            greetings=[str(g) for g in _as_list(data.get("greeting")) if g],
+            website_speech=str(data.get("website_fala") or ""),
             pronunciations={str(k): str(v) for k, v in (data.get("pronuncia") or {}).items()},
             editorial_line=[str(x) for x in data.get("linha_editorial") or []],
             word_caps={str(k).lower(): int(v) for k, v in (data.get("bordao_max") or {}).items()},

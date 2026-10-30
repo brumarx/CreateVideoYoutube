@@ -233,19 +233,22 @@ def top_score_politico(ano: int | None = None, limit: int = 5, offset: int = 0) 
             ano = _last_complete_year(conn, "score_politico")
         rows = conn.execute(
             """
-            SELECT d.nome, d.sigla_partido, d.sigla_uf, s.score_total, s.pct_presenca, s.total_proposicoes, d.url_foto
+            SELECT d.nome, d.sigla_partido, d.sigla_uf, s.score_total, s.pct_presenca, s.total_proposicoes, d.url_foto,
+                   s.rank_geral
             FROM score_politico s
             JOIN deputados d ON d.id = s.deputado_id
-            WHERE s.ano = ?
-            ORDER BY s.score_total DESC
+            WHERE s.ano = ? AND s.rank_geral IS NOT NULL
+            ORDER BY s.rank_geral, lower(public.unaccent(d.nome)), d.id
             LIMIT ? OFFSET ?
             """,
             (ano, limit, offset),
         ).fetchall()
     return [
         {
-            "nome": r[0], "partido": r[1], "uf": r[2], "score": round(r[3], 1),
-            "pct_presenca": round(r[4], 1), "total_proposicoes": r[5], "ano": ano, "foto_url": r[6],
+            # o site publica 2 casas e empates dividem a posição (etl/regras.py); presença sem dado fica None, não 0
+            "posicao_no_ranking": r[7], "nome": r[0], "partido": r[1], "uf": r[2], "score": round(r[3], 1),
+            "pct_presenca": round(r[4], 1) if r[4] is not None else None, "total_proposicoes": r[5], "ano": ano,
+            "foto_url": r[6],
         }
         for r in rows
     ]
@@ -270,9 +273,13 @@ def top_cartao_corporativo(ano: int | None = None, limit: int = 5, offset: int =
             (ano, limit, offset),
         ).fetchall()
     return [
-        {"nome": r[0], "cargo": r[1], "orgao": r[2], "total_gasto": round(r[3], 2), "ano": ano}
+        {"nome": r[0], "portador": _PORTADOR_CARTAO.get(r[1], r[1]), "orgao": r[2], "total_gasto": round(r[3], 2), "ano": ano}
         for r in rows
     ]
+
+
+# `politico_tipo` do cartão é código do ETL — o roteiro dizia "cargo orgao_federal"
+_PORTADOR_CARTAO = {"presidencia": "servidor da Presidência da República", "orgao_federal": "servidor de órgão federal"}
 
 
 def top_emendas(ano: int | None = None, limit: int = 5, offset: int = 0) -> list[dict]:
@@ -403,21 +410,23 @@ def sancoes_recentes(limit: int = 5, offset: int = 0) -> list[dict]:
 
 
 def condenacoes_tcu(limit: int = 5, offset: int = 0) -> list[dict]:
-    """Condenações do TCU (Tribunal de Contas da União) — decisão final do
-    órgão, não suspeita."""
+    """Empresas declaradas inidôneas/impedidas pelo TCU — decisão final do
+    órgão, não suspeita. A tabela virou isso no ETL de out/26: processo
+    vazio e prazo 0 em todas; a data de fim fica em `situacao` e o nome de
+    MEI vem com o CNPJ na frente ("31.982.299 EDUARDO ...")."""
     with _connect() as conn:
         rows = conn.execute(
             """
-            SELECT nome, tipo_sancao, processo, prazo_inab_anos
+            SELECT regexp_replace(nome, '^[0-9./-]+\\s+', ''), tipo_sancao, data_transito, situacao
             FROM tcu_condenados
             WHERE nome != ''
-            ORDER BY nome
+            ORDER BY to_date(data_transito, 'DD/MM/YYYY') DESC NULLS LAST, id
             LIMIT ? OFFSET ?
             """,
             (limit, offset),
         ).fetchall()
     return [
-        {"nome": r[0], "sancao": r[1], "processo": r[2], "anos_inabilitado": r[3]}
+        {"empresa": r[0], "sancao": r[1], "decisao_em": r[2], "vale_ate": r[3]}
         for r in rows
     ]
 
@@ -434,6 +443,7 @@ def suspeitas_patrimonio(limit: int = 5, offset: int = 0) -> list[dict]:
             LEFT JOIN deputados d ON d.id = sp.deputado_id
             LEFT JOIN senadores s ON s.id = sp.senador_id
             WHERE sp.severidade = 'ALTA' AND COALESCE(d.nome, s.nome) IS NOT NULL
+              AND sp.flag NOT IN ('CEAP_SUPERA_PAT', 'PAT_ZERO_CEAP', 'FORNECEDOR_SANCIONADO')
             ORDER BY sp.id
             LIMIT ? OFFSET ?
             """,
@@ -491,25 +501,61 @@ def custo_anual_deputado(ano: int | None = None, limit: int = 5, offset: int = 0
     return items[offset : offset + limit]
 
 
+# flags da cota que contam história; desde out/26 o score 100 vai também pra
+# "despesa em fim de semana", "valor redondo" e "LATAM em 6 meses" (milhares,
+# triviais). Combustível vem com km e voltas ao mundo, refeição com Big Macs.
+_FLAGS_CEAP = ("COMBUSTIVEL_KM_OUTLIER", "ALIMENTACAO_TICKET_MEDIO_ATIPICO", "DUPLICATA", "OUTLIER_VALOR")
+
+
+def _numero_br(texto: str) -> str:
+    """O ETL escreve número ora à inglesa ("R$ 94,963", "2.7x"), ora à
+    brasileira — o roteiro leu R$ 94,963 como 94 reais. Padroniza: milhar
+    com ponto, decimal com vírgula, "x" vira "vezes"."""
+    texto = re.sub(r"(\d),(\d{3})(?!\d)", r"\1.\2", texto)
+    texto = re.sub(r"(\d)\.(\d)\s?[x×]", r"\1,\2 vezes", texto)
+    texto = re.sub(r"(\d)\s?[x×](?=\s)", r"\1 vezes", texto)
+    texto = re.sub(r"(?<![\d.])(\d+)\.(\d)(?!\d)", r"\1,\2", texto)
+    texto = re.sub(r"(R\$\s?\d+)\.(\d{2})(?!\d)", r"\1,\2", texto)  # "R$ 23.90"
+    texto = re.sub(r"\s*\(z=[^)]*\)", "", texto)  # desvio-padrão: jargão que a voz leria "sigma"
+    return texto.replace("~", "cerca de ")
+
+
 def suspeitas_ceap(limit: int = 5, offset: int = 0) -> list[dict]:
     """Padrões estatísticos fora do comum em despesas da cota parlamentar
-    (score de risco mais alto) — ver AVISO_SUSPEITA no prompt."""
+    (deputados e senadores), um por parlamentar e tipo — ver AVISO_SUSPEITA
+    no prompt."""
     with _connect() as conn:
         rows = conn.execute(
-            """
-            SELECT d.nome, d.sigla_partido, sc.descricao, sc.score_risco, sc.ano
-            FROM suspeitas_ceap sc
-            JOIN deputados d ON d.id = sc.deputado_id
-            WHERE sc.score_risco >= 20
-            ORDER BY sc.score_risco DESC
+            f"""
+            SELECT *, row_number() OVER (PARTITION BY flag ORDER BY score_risco DESC, nome) AS rn FROM (
+                SELECT DISTINCT ON (COALESCE(d.nome, s.nome), sc.flag)
+                       COALESCE(d.nome, s.nome) AS nome, COALESCE(d.sigla_partido, s.sigla_partido), sc.casa,
+                       sc.descricao, sc.valor, sc.nome_fornecedor, sc.ano, sc.score_risco, sc.flag
+                FROM suspeitas_ceap sc
+                LEFT JOIN deputados d ON d.id = sc.deputado_id
+                LEFT JOIN senadores s ON s.id = sc.senador_id
+                WHERE sc.flag IN ({",".join("?" * len(_FLAGS_CEAP))})
+                  AND (sc.severidade = 'ALTA' OR sc.flag LIKE '%_OUTLIER' OR sc.flag LIKE '%_ATIPICO')
+                  AND COALESCE(d.nome, s.nome) IS NOT NULL
+                ORDER BY COALESCE(d.nome, s.nome), sc.flag, sc.score_risco DESC, sc.ano DESC, sc.id
+            ) t
+            ORDER BY rn, array_position(ARRAY[{",".join("?" * len(_FLAGS_CEAP))}]::text[], flag)
             LIMIT ? OFFSET ?
             """,
-            (limit, offset),
+            (*_FLAGS_CEAP, *_FLAGS_CEAP, limit, offset),
         ).fetchall()
-    return [
-        {"nome": r[0], "partido": r[1], "padrao_detectado": r[2], "score_risco": r[3], "ano": r[4]}
-        for r in rows
-    ]
+    out = []
+    for r in rows:
+        fato = {
+            "nome": r[0], "partido": r[1], "cargo": "senador" if r[2] == "senado" else "deputado federal",
+            "padrao_detectado": _numero_br(r[3]), "ano": r[6],
+        }
+        if r[8] in ("DUPLICATA", "OUTLIER_VALOR"):
+            # padrão de UMA nota; os outros são total do ano — a nota de R$ 50
+            # que vinha junto parecia o gasto todo
+            fato |= {"fornecedor": r[5], "valor_da_despesa": f"R$ {r[4]:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")}
+        out.append(fato)
+    return out
 
 
 def maior_crescimento_patrimonio(limit: int = 5, offset: int = 0) -> list[dict]:
@@ -871,7 +917,7 @@ FACT_FETCHERS = [
     ("fornecedores que mais receberam de campanhas eleitorais", top_fornecedores_campanha, [2018, 2022], 6, None),
     ("estados com maior PIB (total)", top_pib_estados, [2021, 2022, 2023], 3, None),
     ("sanções federais mais recentes contra empresas (CEIS/CNEP)", sancoes_recentes, [None], 8, None),
-    ("condenações do TCU", condenacoes_tcu, [None], 6, None),
+    ("empresas declaradas inidôneas pelo TCU (proibidas de contratar com o governo)", condenacoes_tcu, [None], 6, None),
     ("padrões estatísticos incomuns entre patrimônio e gastos", suspeitas_patrimonio, [None], 6, AVISO_SUSPEITA),
     ("padrões estatísticos incomuns na cota parlamentar", suspeitas_ceap, [None], 6, AVISO_SUSPEITA),
     ("quanto custa manter um deputado federal por ano (soma oficial)", custo_anual_deputado, [None], 1, None),
@@ -1059,13 +1105,13 @@ def perfil_parlamentar(texto: str, deputado_id: int | None = None) -> dict | Non
             " WHERE s.deputado_id = ? AND (p.sessoes_presentes > 0 OR s.total_proposicoes > 0) ORDER BY s.ano",
             (dep_id,),
         ):
-            total = conn.execute("SELECT COUNT(*) FROM score_politico WHERE ano = ?", (ano,)).fetchone()[0]
+            total = conn.execute("SELECT COUNT(rank_geral) FROM score_politico WHERE ano = ?", (ano,)).fetchone()[0]
             votos = conn.execute(
                 "SELECT n_total, n_sim, n_nao FROM resumo_votos WHERE deputado_id = ? AND ano = ?", (dep_id, ano),
             ).fetchone()
             anos.append({
                 "ano": ano,
-                "presenca_pct": round(pct or 0, 1),
+                "presenca_pct": round(pct, 1) if pct is not None else None,
                 "sessoes_presente": f"{presentes} de {sessoes}" if sessoes else None,
                 "proposicoes_apresentadas": props,
                 "votacoes": votos[0] if votos else None,
@@ -1146,10 +1192,10 @@ def perfil_senador(senador_id: int) -> dict | None:
             " WHERE senador_id = ? ORDER BY ano",
             (senador_id,),
         ).fetchall():
-            total = conn.execute("SELECT COUNT(*) FROM score_senadores WHERE ano = ?", (ano,)).fetchone()[0]
+            total = conn.execute("SELECT COUNT(rank_geral) FROM score_senadores WHERE ano = ?", (ano,)).fetchone()[0]
             anos.append({
                 "ano": ano,
-                "presenca_pct": round(pct or 0, 1),
+                "presenca_pct": round(pct, 1) if pct is not None else None,
                 "materias_de_autoria": autorias,
                 "ranking_geral": f"{rank}º de {total} senadores" if rank else None,
                 "cota_parlamentar_gasta": f"R$ {ceap:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if ceap else None,

@@ -14,7 +14,10 @@ hashtags: ["#Botafogo", "#Fogao", "#EstrelaSolitaria"]
 youtube_handle: "@botafogowin"
 channel_title: "Botafogo WIN"
 website: "https://botafogo.win"
-greeting: "Fala, galera!"
+# bordão próprio do canal (sorteado por vídeo) — não mais o "Fala, galera!" de todos
+greeting:
+  - "Fala, Fogão!"
+  - "Olá, alvinegros de plantão!"
 website_cta: "📰 Notícias completas do Fogão, em tempo real"
 # links logo abaixo do site no topo da descrição
 links_descricao:

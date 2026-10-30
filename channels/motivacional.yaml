@@ -4,7 +4,7 @@ accent: "#ff9248"
 hashtags: ["#Motivacional", "#DesenvolvimentoPessoal", "#AnguloInterno"]
 youtube_handle: "@angulointerno"
 channel_title: "Ângulo Interno"
-greeting: "Fala, pessoal!"
+greeting: "Respira fundo e vem comigo!"
 language: "pt-BR"
 tts_voice_weights:
   pt-BR-AntonioNeural: 33
@@ -130,7 +130,9 @@ prompt_base: >
   RITMO: cena 1 abre no PIOR momento da pessoa, com o número (a 9ª
   peneira recusada, a 3ª cirurgia), não no nascimento. O meio mostra o
   que ela fez de concreto pra virar (treino, decisão, gente que ajudou).
-  A lição final é UMA frase prática que quem assiste pode usar hoje —
+  A história é do PASSADO: narre no passado ("tinha 13 anos", "chegou a
+  Tóquio", "ganhou a prata"), nunca no presente histórico ("ela chega",
+  "sente o peso"). A lição final é UMA frase prática que quem assiste pode usar hoje —
   nada de "acredite nos seus sonhos" ou "nunca desista".
 
 # publica sozinho depois da revisão de fatos (sem esperar "Aprovar" no painel)

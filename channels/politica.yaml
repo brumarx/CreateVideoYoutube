@@ -4,7 +4,17 @@ accent: "#8c8cff"
 hashtags: ["#Politica", "#Brasil", "#NumerosDaRepublica"]
 youtube_handle: "@numerosdarepublica"
 channel_title: "Números da República"
-greeting: "Fala, galera!"
+greeting: "Fala, fiscal da República!"
+# leva o público pro site dos dados, como o Botafogo faz com o botafogo.win:
+# 1ª linha da descrição (perfil aponta pra página do parlamentar), comentário
+# fixado e CTA falado no fim
+website: "https://politica-br.org"
+website_cta: "📊 Ficha completa de cada deputado e senador"
+website_fala: "A ficha completa de cada deputado e senador, com todos os números, está no site {site}."
+# o hífen e o ponto a voz lia mal ("política traço bê érre") — fala-se
+# "Política BR ponto órgui" (Whisper confere "politica.br.org"); a legenda volta pra grafia do domínio
+pronuncia:
+  politica-br.org: "Política BR ponto órgui"
 language: "pt-BR"
 # vídeo é sobre o Brasil: bandeira/prédio/dinheiro de outro país é fora de contexto (src/config.py)
 pais: "Brasil"

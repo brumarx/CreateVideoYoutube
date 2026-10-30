@@ -4,7 +4,7 @@ accent: "#34d399"
 hashtags: ["#IA", "#Tutorial", "#AprendervIA"]
 youtube_handle: "@aprendervia"
 channel_title: "Aprender vIA"
-greeting: "Olá, galera!"
+greeting: "Bora aprender com IA!"
 # "vIA" = via IA: sem isso a voz lia só "via" (conector); legenda mostra "vIA"
 pronuncia:
   vIA: "via I-A"
@@ -165,7 +165,11 @@ prompt_base: >
   (o problema) e promete o depois; o meio dá o pedido exato pra digitar
   na IA, entre aspas, falado do jeito que se digita (ex.: "Revise meu
   currículo pra esta vaga e liste as palavras-chave que faltam"), e onde
-  tocar; o fim mostra o resultado. Site pouco conhecido citado só porque
+  tocar; o fim mostra o resultado. Nunca dite fórmula, código ou
+  comando (=SOMA($C$2:C2), =SE(...), atalho com símbolo): a voz lê "igual
+  soma cifrão cê" e ninguém copia de ouvido. O pedido é pra IA ESCREVER a
+  fórmula ("Peça: Escreva a fórmula do Google Sheets que soma o saldo
+  acumulado da coluna C") e o vídeo diz onde colar o que ela devolveu. Site pouco conhecido citado só porque
   apareceu na busca não entra. Nada de lista de dicas soltas.
 
 # publica sozinho depois da revisão de fatos (sem esperar "Aprovar" no painel)

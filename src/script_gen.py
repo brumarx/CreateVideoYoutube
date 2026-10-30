@@ -108,6 +108,7 @@ SYSTEM_PROMPT = (
 ACCURACY_RULES = """REGRAS DE PRECISÃO (obrigatórias — o roteiro passa por revisão de fatos e é descartado se violar):
 - O título, o thumbnail_text e a descrição só podem prometer o que as cenas realmente narram. Nada de título sobre um assunto que o roteiro não cobre.
 - Tempo verbal de eventos: compare cada data com a DATA DE HOJE acima. Se a data de um jogo/evento é futura, fale no futuro ("vai enfrentar", "no dia 07/10"); se não houver data completa (dia E mês) nos dados, NÃO afirme se já aconteceu ou não — cite só o que a fonte diz.
+- O que JÁ ACONTECEU (carreira, medalha, infância, obra, decisão) se narra no PASSADO: "ganhou", "chegou a Tóquio", "tinha 13 anos", "treinava". Nada de presente histórico ("ela chega", "sente o peso", "o skate que a levará") — soa como se fosse hoje (Rayssa Leal, 30/10). Presente só pro que é verdade agora; "Imagine..." só como hipótese de quem assiste.
 - Números, valores, placares, nomes e cargos: só os que aparecem nos DADOS REAIS/fontes. Na dúvida, deixe de fora em vez de arredondar, estimar ou completar.
 - Detalhe técnico, medida, capacidade, custo, data de inauguração, recorde ou "o primeiro do mundo" que NÃO está nas fontes: não use, mesmo que você ache que sabe. É o que mais reprova roteiro. Menos detalhe certo vale mais que muito detalhe sem fonte.
 - Não faça contas com os números das fontes (diferença, soma, média, "o dobro", "X vezes mais", "o maior", "o terceiro maior"): cite os valores como estão e deixe o espectador comparar. Conta feita pelo roteiro saiu errada ("quase o dobro" pra 1,12x) e reprova.
@@ -522,6 +523,18 @@ def _repetition_problem(script: dict) -> str | None:
     return None
 
 
+# fórmula de planilha / referência de célula ditada na narração: "=SOMA($C$2:C2)"
+# saiu "igual soma cifrão cê" (Aprender vIA, 30/10) — o pedido é pra IA escrever
+_FORMULA = re.compile(r"=\s*[A-ZÀ-Ý]{2,}\s*\(|\$[A-Z]{1,2}\$?\d|\b[A-Z]{1,2}\d+:[A-Z]{1,2}\d+\b")
+
+
+def _formula_problem(script: dict) -> str | None:
+    for sc in script.get("scenes", []):
+        if m := _FORMULA.search(sc.get("narration", "")):
+            return f"fórmula ditada na narração ({m[0]}...)"
+    return None
+
+
 _CONECTIVO = re.compile(r"^(enquanto isso|além disso|ao mesmo tempo|por outro lado|nesse sentido|dessa forma),\s*", re.I)
 
 
@@ -789,6 +802,16 @@ def generate_script(
                 messages = [messages[0], {"role": "user", "content": messages[1]["content"]
                                           + f"\n\nO roteiro anterior se repetiu: {repeated}. Cada dado é dito uma vez "
                                           "(no máximo citado de novo numa comparação); sem frase-muleta."}]
+                continue
+            formula = _formula_problem(script)
+            if formula:
+                filler_fallback = script
+                last_error = ValueError(formula)
+                log.warning("tentativa %d/3: %s, tentando de novo", attempt + 1, formula)
+                messages = [messages[0], {"role": "user", "content": messages[1]["content"]
+                                          + f"\n\nO roteiro anterior tinha {formula}. A voz não lê fórmula: em vez "
+                                          "de ditar, mostre o pedido pra IA escrever a fórmula (ex.: \"Peça: Escreva a "
+                                          "fórmula que soma a coluna de valores\") e onde colar a resposta."}]
                 continue
             filler = _filler_phrase(script, topic)
             overused = None if filler else _overused_word(script, channel.channel_title)

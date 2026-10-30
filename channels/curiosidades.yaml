@@ -4,7 +4,7 @@ accent: "#c084fc"
 hashtags: ["#Curiosidades", "#FatosCuriosos", "#FractalCurioso"]
 youtube_handle: "@fractalcurioso"
 channel_title: "Fractal Curioso"
-greeting: "Olá, galera!"
+greeting: "E aí, mente curiosa!"
 language: "pt-BR"
 tts_voice_weights:
   pt-BR-AntonioNeural: 100

@@ -842,9 +842,9 @@ def run(
 
         # bordão de entrada do canal — por código, igual ao CTA abaixo, pra
         # sair sempre igual; o gancho do LLM vem logo depois.
-        if channel.greeting and script["scenes"]:
+        if channel.greetings and script["scenes"]:
             first = script["scenes"][0]
-            first["narration"] = f"{channel.greeting} {first['narration']}"
+            first["narration"] = f"{random.choice(channel.greetings)} {first['narration']}"
 
         # CTA falado (like + se inscrever) — gerado por CÓDIGO, nunca pelo LLM,
         # pra nunca faltar. Antes só existia um link na descrição, que quase
@@ -854,8 +854,9 @@ def run(
         original_scene_count = len(script["scenes"])
         script["scenes"].append({
             "narration": (
-                f"As notícias completas, com todos os detalhes, estão no site "
-                f"{channel.website.split('//')[-1]}. Deixa o like e se inscreve no canal pra não perder o próximo."
+                (channel.website_speech or "As notícias completas, com todos os detalhes, estão no site {site}.")
+                .format(site=channel.website.split("//")[-1])
+                + " Deixa o like e se inscreve no canal pra não perder o próximo."
                 if channel.website else
                 f"Se esse vídeo te ajudou, deixa o like e se inscreve no {channel.channel_title} pra não perder o próximo."
             ),
@@ -1350,7 +1351,8 @@ def run(
         if channel.website:
             # 1ª linha = o que aparece antes do "...mais" — é onde o link
             # pro site próprio do canal realmente é clicado
-            description = f"{channel.website_cta}: {channel.website}\n\n{description}"
+            # perfil de parlamentar: direto na página dele no politica-br.org
+            description = f"{channel.website_cta}: {(facts or {}).get('pagina') or channel.website}\n\n{description}"
         from src.affiliate import AMAZON_DISCLOSURE, amazon_line
 
         amazon = amazon_line(script, channel)
