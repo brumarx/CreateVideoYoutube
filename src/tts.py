@@ -49,6 +49,12 @@ PRONUNCIATIONS = {
     # maiúsculas só troca escrita assim (ver _is_mixed_case), o verbo fica
     "IA": "IÁ",
     "IAs": "IÁs",
+    # a voz do Google (reserva do edge-tts) leu "força criátiva" no
+    # Ângulo Interno de 31/10 — o "cria" puxava a tônica; o acento a prende no "ti"
+    "criativa": "criatíva",
+    "criativas": "criatívas",
+    "criativo": "criatívo",
+    "criativos": "criatívos",
 }
 _SPELLING_BACK = {v.lower(): k for k, v in PRONUNCIATIONS.items()}
 

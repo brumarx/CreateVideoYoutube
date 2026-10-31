@@ -13,12 +13,14 @@ a parte visual e loga.
 """
 from __future__ import annotations
 
+import base64
 import io
 import json
 import logging
 import re
 import subprocess
 import tempfile
+import time
 import unicodedata
 from pathlib import Path
 
@@ -146,12 +148,52 @@ def _plain_words(text: str) -> list[str]:
     return re.findall(r"[a-z0-9]+", no_accents)
 
 
-def transcribe(video: Path) -> str | None:
-    """Narração do vídeo em texto, ou None sem chave/cota (free tier: o
-    Groq recusa com 429 ao estourar, nunca cobra)."""
-    keys = LLMKeys().groq
-    if not keys:
-        return None
+_WHISPER_MODELS = (_WHISPER_MODEL, "whisper-large-v3")  # cotas separadas no Groq
+_CF_WHISPER_URL = "https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/openai/whisper-large-v3-turbo"
+# 31/10: 429 em todas as chaves do Groq e o Ângulo Interno subiu sem
+# ninguém ouvir a fala ("criátiva"). A cota do Groq é por minuto/hora:
+# espera e tenta de novo antes de desistir — e sem transcrição não publica
+_TRANSCRIBE_ROUNDS = 4
+_TRANSCRIBE_WAIT = 75
+
+
+def _transcribe_once(audio: bytes) -> str | None:
+    for model in _WHISPER_MODELS:
+        for key in LLMKeys().groq:
+            try:
+                resp = httpx.post(
+                    _WHISPER_URL, headers={"Authorization": f"Bearer {key}"}, timeout=180,
+                    data={"model": model, "language": "pt", "temperature": "0", "response_format": "text"},
+                    files={"file": ("voz.mp3", audio, "audio/mpeg")},
+                )
+                if resp.status_code == 200:
+                    return resp.text
+                log.warning("transcrição groq (%s): HTTP %d %s", model, resp.status_code, resp.text[:120])
+            except httpx.HTTPError as exc:
+                log.warning("transcrição groq falhou: %s", exc)
+    # reserva: Whisper do Cloudflare Workers AI (grátis, teto diário de neurons)
+    for entry in LLMKeys().cloudflare:
+        account, _, token = entry.partition(":")
+        if not token:
+            continue
+        try:
+            resp = httpx.post(
+                _CF_WHISPER_URL.format(account=account), headers={"Authorization": f"Bearer {token}"}, timeout=180,
+                json={"audio": base64.b64encode(audio).decode(), "language": "pt"},
+            )
+            if resp.status_code == 200:
+                text = (resp.json().get("result") or {}).get("text")
+                if text:
+                    return text
+            log.warning("transcrição cloudflare: HTTP %d %s", resp.status_code, resp.text[:120])
+        except (httpx.HTTPError, ValueError) as exc:
+            log.warning("transcrição cloudflare falhou: %s", exc)
+    return None
+
+
+def transcribe(video: Path, rounds: int = _TRANSCRIBE_ROUNDS) -> str | None:
+    """Narração do vídeo em texto, ou None se nenhum serviço grátis
+    respondeu em `rounds` rodadas (free tier: 429 ao estourar, nunca cobra)."""
     with tempfile.TemporaryDirectory() as tmp:
         audio = Path(tmp) / "voz.mp3"
         # mono 16 kHz 32 kbps: 20 min ~ 5 MB, abaixo do limite de 25 MB
@@ -161,18 +203,14 @@ def transcribe(video: Path) -> str | None:
         )
         if not audio.exists():
             return None
-        for key in keys:
-            try:
-                resp = httpx.post(
-                    _WHISPER_URL, headers={"Authorization": f"Bearer {key}"}, timeout=180,
-                    data={"model": _WHISPER_MODEL, "language": "pt", "temperature": "0", "response_format": "text"},
-                    files={"file": ("voz.mp3", audio.read_bytes(), "audio/mpeg")},
-                )
-                if resp.status_code == 200:
-                    return resp.text
-                log.warning("transcrição groq: HTTP %d %s", resp.status_code, resp.text[:120])
-            except httpx.HTTPError as exc:
-                log.warning("transcrição groq falhou: %s", exc)
+        data = audio.read_bytes()
+    for attempt in range(rounds):
+        text = _transcribe_once(data)
+        if text is not None:
+            return text
+        if attempt + 1 < rounds:
+            log.warning("transcrição sem cota agora — nova tentativa em %ds (%d/%d)", _TRANSCRIBE_WAIT, attempt + 1, rounds)
+            time.sleep(_TRANSCRIBE_WAIT)
     return None
 
 
@@ -200,8 +238,8 @@ def review_audio(narrations: list[str], scene_audios: list[Path]) -> list[str]:
     for audio in scene_audios:
         text = transcribe(audio)
         if text is None:
-            log.warning("revisão do áudio indisponível (sem transcrição) — seguindo sem ela")
-            return []
+            # fala sem revisão não sobe, em nenhum canal (pedido do dono, 31/10)
+            return ["revisão da fala indisponível (nenhuma transcrição respondeu) — não publica sem ouvir"]
         heard.append(text)
     return audio_problems(narrations, " ".join(heard))
 
