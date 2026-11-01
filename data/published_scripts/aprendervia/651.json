@@ -1,0 +1,8 @@
+{
+  "job_id": 651,
+  "video_id": "WQkEpZ6k4jQ",
+  "date": "2026-10-30",
+  "long": false,
+  "title": "Saiba para onde foi seu dinheiro com IA",
+  "narration": "Você já abriu a fatura do cartão e ficou sem saber para onde foi seu dinheiro? Hoje vamos transformar esse caos em uma planilha clara, usando apenas o ChatGPT, sem gastar nada. Abra o ChatGPT e peça um modelo de planilha para registrar as transações da fatura, indicando data, descrição e valor; depois insira manualmente essas informações na planilha. Com a lista em mãos, copie os dados para o Google Sheets gratuito, importe-os e veja as tabelas já preenchidas: Data, Descrição e Valor. Ajuste a largura das colunas para melhorar a leitura. Agora crie três novas colunas: Tipo (receita ou despesa), Categoria (alimentação, transporte, lazer, etc.) e Saldo Acumulado. Use a fórmula =SE(Valor 0;\"Receita\";\"Despesa\") para preencher automaticamente o campo Tipo. Defina as categorias para cada transação – você pode usar sugestões da IA ou fazer a classificação manualmente nas colunas correspondentes. Por fim, insira a fórmula de saldo acumulado =SOMA($C$2:C2) na primeira linha da coluna Saldo e arraste até o final; a planilha mostrará exatamente onde seu dinheiro foi gasto e quanto ainda resta. Salve e compartilhe seu resultado."
+}
