@@ -242,10 +242,19 @@ require_approval: false
 
 # tema agendado (vale antes do dado sorteado do banco): Nikolas no dia 22/10
 prioridade:
-  de: "2026-10-22"
-  ate: "2026-10-22"
+  de: "2026-11-01"
+  ate: "2026-11-10"
   temas:
-    - "Nikolas Ferreira: mais de 3 milhões de votos, o deputado federal mais votado da história do Brasil"
+    - "Nikolas Ferreira: 3 milhões de votos e a máquina de arrecadação de campanha"
+    - "Sergio Moro: senador, candidato a 2026 e as associações entre suas decisões como juiz e ministro"
+    - "Ciro Gomes: a carreira política que pulou entre partidos e as despesas parlamentares acumuladas"
+    - "Jair Bolsonaro: os números de campanha 2022 e a influência no Congresso pós-eleição"
+    - "Lula: comparação de gastos parlamentares entre senadores de esquerda e direita"
+    - "Baleia Rossi: líder do MDB e as mudanças no financiamento de campanhas"
+    - "Gleisi Hoffmann: PT, Senado e a evolução das despesas em mandatos sucessivos"
+    - "Valdemar Costa Neto: PL, campanhas 2022 e as ligações entre partidos e doadores"
+    - "Romário: senador famoso e a diferença de gastos entre celebridades e políticos comuns"
+    - "Tabata Amaral: PDT, carreira meteórica e as despesas de um novo mandato no Senado"
 
 # link de afiliado da Amazon no topo da descrição (src/affiliate.py); fixo: false = busca
 # ligada ao assunto de cada vídeo, com esta como reserva
