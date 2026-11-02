@@ -42,40 +42,52 @@ def _fetch_trends(country: str = "BR") -> list[str] | None:
     Retorna lista de strings (ex: ["reforma tributária", "STF", "dólar"])
     ou None se todas as fontes falharem.
     """
-    # Tenta YouTube Trends (youtube.trends24.in) primeiro
-    country_code = country.lower() if country.lower() in ("br", "us", "pt", "in", "mx") else "br"
+    # 1. Google Trends RSS (ariaBot method) — grátis, sem chave, sem autenticação!
+    geo = "BR" if country.upper() in ("BR", "PT") else "US"
     try:
-        url = f"https://youtube.trends24.in/{country_code}"
+        url = f"https://trends.google.com/trending/rss?geo={geo}"
         resp = requests.get(url, timeout=TRENDS_TIMEOUT, headers={"User-Agent": "Mozilla/5.0"})
         resp.raise_for_status()
 
-        # Extrai títulos dos vídeos em trending do HTML
-        trends = re.findall(r'<a[^>]*href="[^"]*"[^>]*>([^<]{10,120})</a>', resp.text)
-        # Filtra por tamanho mínimo
-        trends = [t.strip() for t in trends if 10 < len(t) < 120]
+        # Parse RSS (mesmo método do ariaBot)
+        trends = []
+        for m in re.finditer(r'<item>([\s\S]*?)</item>', resp.text):
+            item = m.group(1)
+            title_match = re.search(r'<title>([\s\S]*?)</title>', item)
+            if not title_match:
+                continue
+            title = title_match.group(1)
+            # Remove CDATA
+            title = re.sub(r'<!\[CDATA\[([\s\S]*?)\]\]>', r'\1', title)
+            # Descodifica HTML entities
+            title = title.replace('&amp;', '&').replace('&quot;', '"')
+            title = title.replace('&#39;', "'").replace('&lt;', '<').replace('&gt;', '>')
+            title = title.strip()
+            if title:
+                trends.append(title)
 
         if trends:
-            log.info("YouTube Trends (%s): %d tópicos", country_code.upper(), len(trends))
+            log.info("Google Trends RSS (%s): %d tópicos", geo, len(trends))
             return trends[:20]
     except Exception as exc:
-        log.debug("YouTube Trends: %s", exc)
+        log.debug("Google Trends RSS: %s", exc)
 
-    # Google Trends (via pytrends) — genérico mas funciona
+    # 2. Google Trends pytrends (alternativa se RSS falhar)
     try:
         from pytrends.request import TrendReq
         gt = TrendReq(hl="pt-BR", timeout=(5, 10))
         trends_df = gt.trending_searches(pn=country)
         if trends_df is not None and len(trends_df) > 0:
             trends = trends_df[0].tolist()[:20]
-            log.info("Google Trends (%s): %d tópicos", country, len(trends))
+            log.info("Google Trends pytrends (%s): %d tópicos", country, len(trends))
             return trends
     except ImportError:
-        pass  # pytrends não instalado
+        pass
     except Exception as exc:
-        log.debug("Google Trends: %s", exc)
+        log.debug("Google Trends pytrends: %s", exc)
 
-    # Fallback: sem API ativa, usa config
-    log.debug("Trending topics: sem API disponível, usando fallback")
+    # 3. Fallback: config viral_queries
+    log.debug("Trending topics: usando config fallback")
     return None
 
 
