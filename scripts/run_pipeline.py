@@ -49,6 +49,7 @@ from src.spellcheck import fix_script, fix_text
 from src.stock_media import search_stock_clip, search_stock_photo
 from src.thumbnail import make_thumbnail, photo_scene_frame, title_card
 from src.topics import pick_topic, topic_problem
+from src.trending_topics import get_trending_topics, topic_for_channel, filter_topics
 from src.tts import narrate
 from src.video_qa import review_audio, review_video
 from src.visual_check import matches_scene
@@ -467,6 +468,38 @@ def _build_chapters(scenes: list[dict], durations: list[float]) -> str:
     return "\n".join(lines)
 
 
+def _get_viral_topics_with_trending(
+    channel_name: str, channel: ChannelConfig, fallback_queries: list[str] | None = None
+) -> list[str]:
+    """Combina viral_queries config + trending topics dinâmicos do X.
+
+    Tenta buscar trending topics; se falhar, usa fallback (config ou vazio).
+    Filtra para o canal específico (ex: Aprendervia busca temas de IA/carreira).
+    """
+    queries = list(fallback_queries or [])
+
+    # canais que se beneficiam de trends: todos exceto Botafogo/Política que já têm sistema próprio
+    if channel_name in ("aprendervia", "curiosidades", "motivacional"):
+        try:
+            trending = get_trending_topics("BR", fallback_topics=[])
+            if trending:
+                trending = filter_topics(trending)
+                # pega 5 trending mais relevantes para o canal
+                selected = []
+                for t in trending[:10]:
+                    topic = topic_for_channel(channel_name, [t])
+                    if topic and topic not in queries:
+                        selected.append(topic)
+                        if len(selected) == 5:
+                            break
+                queries.extend(selected)
+                log.info("[%s] adicionados %d trending topics", channel_name, len(selected))
+        except Exception as exc:
+            log.warning("[%s] trending topics falhou: %s — usando config", channel_name, exc)
+
+    return queries or fallback_queries or []
+
+
 def run(
     channel_name: str,
     topic: str | None,
@@ -601,11 +634,11 @@ def run(
         # nunca repete um tema já usado — quando a lista fixa esgota, gera
         # um tema novo via LLM dentro do nicho do canal (ver src/topics.py).
         # Fila única pra curto e longo: só sai 1 vídeo/dia por canal mesmo.
-        # Parte dos temas sai inspirada no que está viral no YouTube no mês
-        # (channels/<nome>.yaml -> viral_queries/viral_share).
+        # Trending topics dinâmicos (X) combinados com viral_queries config.
+        viral_queries = _get_viral_topics_with_trending(channel_name, channel, channel.viral_queries)
         topic = pick_topic(
             channel_name, channel.topics, channel.niche,
-            viral_queries=channel.viral_queries, viral_share=channel.viral_share,
+            viral_queries=viral_queries, viral_share=channel.viral_share,
             priority=channel.active_priority_topics,
         )
     elif topic is None:
