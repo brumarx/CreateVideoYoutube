@@ -729,8 +729,9 @@ def _subject(title: str) -> str | None:
 
 def _is_duplicate(title: str, chosen: list[dict] | list[str]) -> bool:
     """Mesma história já escolhida (ou usada nos últimos dias): muitas
-    palavras próprias em comum, 2+ nomes em comum, ou o mesmo protagonista
-    abrindo a manchete."""
+    palavras próprias em comum, 2+ nomes em comum, o mesmo protagonista
+    abrindo a manchete, ou padrão temático (ex.: notícias sobre torcida
+    pressionando + CT aparecendo)."""
     words = _title_words(title)
     subject = _subject(title)
     for other in chosen:
@@ -746,6 +747,17 @@ def _is_duplicate(title: str, chosen: list[dict] | list[str]) -> bool:
         names = {w for w in common if re.search(rf"\b{re.escape(w)}\b", other_title.lower())
                  and re.search(rf"\b{w[0].upper()}{re.escape(w[1:])}\b", title)}
         if len(names) >= 2:
+            return True
+        # fallback: padrão temático para notícias sobre torcida/organizadas
+        # pressionando (mesma história, fontes diferentes, títulos que variam)
+        low_title, low_other = title.lower(), other_title.lower()
+        has_crowd_word = any(p in low_title for p in ("torcida", "organizadas", "torcedor"))
+        other_has_crowd = any(p in low_other for p in ("torcida", "organizadas", "torcedor"))
+        has_pressure = any(p in low_title for p in ("cobr", "pressiona", "exig", "reclama"))
+        other_has_pressure = any(p in low_other for p in ("cobr", "pressiona", "exig", "reclama"))
+        # título sobre "torcida cobrando" comparado com outro "organizadas reclamando"
+        # = mesma história (mesma cobrança/pressão da torcida)
+        if has_crowd_word and other_has_crowd and has_pressure and other_has_pressure:
             return True
     return False
 
