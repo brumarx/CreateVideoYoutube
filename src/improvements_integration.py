@@ -12,12 +12,11 @@ Módulos de melhoria criados:
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from .config import ChannelConfig
-from .opening_variations import get_opening_rules, select_opening, select_closing
+from .opening_variations import select_opening, select_closing
 from .speech_timing import get_tts_rate, get_accent_instructions
-from .stock_media_diversity import load_recent_media, mark_used, score_candidates
+from .stock_media_diversity import load_recent_media
 from .visual_dynamics import get_ken_burns_for_scene, get_caption_color, get_color_grade_by_mood
 from .sfx_smart import should_use_whoosh, detect_impact_moment, get_channel_sfx_rules
 from .performance_tracking import init_schema, record_video_published

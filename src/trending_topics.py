@@ -6,12 +6,9 @@ Fontes (em ordem de prioridade):
 3. X/Twitter API ← precisa credenciais
 4. Temas pré-definidos (fallback)
 
-STATUS: Infraestrutura pronta, sem API ativa (usa fallback config)
+STATUS: Google Trends RSS ATIVO (02/11/2026) via método ariaBot — grátis, sem chave
 
-PRÓXIMOS PASSOS:
-- Instalar pytrends: pip install pytrends
-- Ou: Configurar Selenium para YouTube Trends (JS rendering)
-- Ou: X/Twitter API keys em ~/.secrets/keys.env
+PROXIMOS: YouTube Trends (selenium), X/Twitter API (credenciais)
 
 Objetivo: evitar séries estáticas e mortas; usar temas que estão
 em alta no momento (mais engagement, melhor SEO no YouTube).
@@ -318,3 +315,21 @@ def topic_for_channel(
         return trending[0] if trending else None
 
     return trending[0] if trending else None
+
+
+def fetch_trending_for_channel(channel_name: str) -> list[str] | None:
+    """Fetch trending topics direto para um canal (sem filtro, apenas trending).
+
+    Usado pelas melhorias para buscar tópicos em alta e ajustar viral_share dinamicamente.
+    Retorna lista de trending topics ou None se falhar.
+    """
+    try:
+        topics = get_trending_topics(country="BR", force_refresh=False)
+        if topics:
+            record_trend_use(channel_name, ", ".join(topics[:3]), "google_trends", success=True)
+            log.debug("Trending topics para %s: %d tópicos", channel_name, len(topics))
+        return topics
+    except Exception as exc:
+        log.debug("fetch_trending_for_channel (%s): %s", channel_name, exc)
+        record_trend_use(channel_name, "", "google_trends", success=False)
+        return None
