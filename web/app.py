@@ -387,6 +387,31 @@ def _system_problems(statuses: dict[int, str]) -> list[dict]:
     return problems
 
 
+def _load_trending_data() -> dict:
+    """Carrega dados do monitor de trending topics."""
+    monitor_file = ROOT / "data" / "trending_monitor.json"
+    if not monitor_file.exists():
+        return {}
+
+    try:
+        data = json.loads(monitor_file.read_text())
+        sources = data.get("sources", {})
+        total_success = sum(s.get("success", 0) for s in sources.values())
+        total_failed = sum(s.get("failed", 0) for s in sources.values())
+        total = total_success + total_failed
+        return {
+            "total": total,
+            "success_rate": f"{100*total_success/total:.1f}%" if total > 0 else "N/A",
+            "total_success": total_success,
+            "total_failed": total_failed,
+            "sources": sources,
+            "channels": data.get("channels", {}),
+            "history": data.get("history", [])[-20:],
+        }
+    except Exception:
+        return {}
+
+
 @app.route("/")
 def index():
     channels = _load_channels()
@@ -428,6 +453,8 @@ def index():
         "painel.html", channels=summaries, causes_7d=causes_7d, videos=videos, problems=problems, system_problems=system_problems, colors=colors, titles=titles,
         flash=flash, total_uploads=total_uploads, running=running, today=date.today().strftime("%d/%m"),
         pending=jobs_with_status("awaiting_approval"), azure_ready=bool(AZURE_SPEECH_KEYS),
+    # Trending topics monitor
+    trending=_load_trending_data(),
     )
 
 
@@ -831,47 +858,6 @@ def run_channel(channel: str):
 
     subprocess.Popen(cmd, cwd=ROOT)
     return redirect(url_for("index", started=1))
-
-
-@app.route("/trending")
-def trending_monitor():
-    """Painel de monitoramento de trending topics."""
-    from src.trending_topics import get_trending_topics
-    from pathlib import Path
-
-    monitor_file = ROOT / "data" / "trending_monitor.json"
-
-    # Carrega dados do monitor
-    monitor_data = {}
-    if monitor_file.exists():
-        monitor_data = json.loads(monitor_file.read_text())
-
-    # Estatísticas gerais
-    sources = monitor_data.get("sources", {})
-    total_success = sum(s.get("success", 0) for s in sources.values())
-    total_failed = sum(s.get("failed", 0) for s in sources.values())
-    total = total_success + total_failed
-    success_rate = f"{100*total_success/total:.1f}%" if total > 0 else "N/A"
-
-    # Canais
-    channels = monitor_data.get("channels", {})
-
-    # Histórico recente
-    history = monitor_data.get("history", [])[-20:]
-
-    return render_template(
-        "painel.html",
-        tab="trending",
-        trending={
-            "total": total,
-            "success_rate": success_rate,
-            "total_success": total_success,
-            "total_failed": total_failed,
-            "sources": sources,
-            "channels": channels,
-            "history": history,
-        }
-    )
 
 
 if __name__ == "__main__":
