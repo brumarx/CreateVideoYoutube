@@ -833,5 +833,46 @@ def run_channel(channel: str):
     return redirect(url_for("index", started=1))
 
 
+@app.route("/trending")
+def trending_monitor():
+    """Painel de monitoramento de trending topics."""
+    from src.trending_topics import get_trending_topics
+    from pathlib import Path
+
+    monitor_file = ROOT / "data" / "trending_monitor.json"
+
+    # Carrega dados do monitor
+    monitor_data = {}
+    if monitor_file.exists():
+        monitor_data = json.loads(monitor_file.read_text())
+
+    # Estatísticas gerais
+    sources = monitor_data.get("sources", {})
+    total_success = sum(s.get("success", 0) for s in sources.values())
+    total_failed = sum(s.get("failed", 0) for s in sources.values())
+    total = total_success + total_failed
+    success_rate = f"{100*total_success/total:.1f}%" if total > 0 else "N/A"
+
+    # Canais
+    channels = monitor_data.get("channels", {})
+
+    # Histórico recente
+    history = monitor_data.get("history", [])[-20:]
+
+    return render_template(
+        "painel.html",
+        tab="trending",
+        trending={
+            "total": total,
+            "success_rate": success_rate,
+            "total_success": total_success,
+            "total_failed": total_failed,
+            "sources": sources,
+            "channels": channels,
+            "history": history,
+        }
+    )
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5088, debug=False)

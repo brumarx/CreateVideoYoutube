@@ -117,6 +117,67 @@ def _load_cache(country: str = "BR") -> list[str] | None:
     return None
 
 
+def record_trend_use(channel: str, topic: str, source: str, success: bool = True) -> None:
+    """Registra uso de trending topic para monitoramento (painel)."""
+    try:
+        from pathlib import Path
+        from datetime import datetime, timezone
+
+        monitor_file = Path(__file__).resolve().parent.parent / "data" / "trending_monitor.json"
+
+        # Carrega dados
+        data = {}
+        if monitor_file.exists():
+            data = json.loads(monitor_file.read_text())
+
+        # Inicializa estruturas
+        if "sources" not in data:
+            data["sources"] = {
+                "x_twitter": {"success": 0, "failed": 0, "last_success": None},
+                "google_trends": {"success": 0, "failed": 0, "last_success": None},
+                "youtube_trends": {"success": 0, "failed": 0, "last_success": None},
+                "config_fallback": {"success": 0, "failed": 0, "last_success": None},
+            }
+        if "channels" not in data:
+            data["channels"] = {}
+        if "history" not in data:
+            data["history"] = []
+
+        # Atualiza contadores
+        if source in data["sources"]:
+            if success:
+                data["sources"][source]["success"] += 1
+                data["sources"][source]["last_success"] = datetime.now(timezone.utc).isoformat()
+            else:
+                data["sources"][source]["failed"] += 1
+
+        # Atualiza canal
+        if channel not in data["channels"]:
+            data["channels"][channel] = {"count": 0, "last_topic": None, "source": None}
+        data["channels"][channel]["count"] += 1
+        data["channels"][channel]["last_topic"] = topic[:60]
+        data["channels"][channel]["source"] = source
+
+        # Histórico
+        data["history"].append({
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "channel": channel,
+            "topic": topic[:60],
+            "source": source,
+            "success": success,
+        })
+        data["history"] = data["history"][-100:]
+
+        # Salva
+        monitor_file.parent.mkdir(parents=True, exist_ok=True)
+        monitor_file.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+
+        if success:
+            log.debug("[%s] trend logged: %s (%s)", channel, topic[:40], source)
+    except Exception as exc:
+        log.debug("Monitor logging failed: %s", exc)
+
+
 def get_trending_topics(
     country: str = "BR",
     fallback_topics: list[str] | None = None,

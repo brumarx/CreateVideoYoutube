@@ -407,6 +407,49 @@
     {% endfor %}
     {% if not azure_ready %}<p class="hint">Mais vozes aparecem quando AZURE_SPEECH_KEYS estiver configurada.</p>{% endif %}
   </section>
+
+  <section class="tab" id="tab-trending" hidden>
+    <h2>📊 Trending Topics</h2>
+    {% if trending %}
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
+        <div style="background: #f3f4f6; padding: 16px; border-radius: 8px;">
+          <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Taxa de Sucesso</div>
+          <div style="font-size: 28px; font-weight: bold; color: #1f2937;">{{ trending.success_rate }}</div>
+        </div>
+        <div style="background: #f3f4f6; padding: 16px; border-radius: 8px;">
+          <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Total de Usos</div>
+          <div style="font-size: 28px; font-weight: bold; color: #1f2937;">{{ trending.total }}</div>
+        </div>
+        <div style="background: #f3f4f6; padding: 16px; border-radius: 8px;">
+          <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Sucesso/Falha</div>
+          <div style="font-size: 14px; font-weight: bold; color: #1f2937;">{{ trending.total_success }}/{{ trending.total_failed }}</div>
+        </div>
+      </div>
+
+      <h3>Fontes</h3>
+      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px;">
+        {% for source, stats in trending.sources.items() %}
+          <div style="background: #f9fafb; padding: 12px; border-radius: 6px; border-left: 4px solid #3b82f6;">
+            <div style="font-weight: 600; margin-bottom: 4px;">{{ source.replace('_', ' ')|title }}</div>
+            <div style="font-size: 12px; color: #6b7280;">✓ {{ stats.success or 0 }} | ✗ {{ stats.failed or 0 }}</div>
+            {% if stats.last_success %}<div style="font-size: 11px; color: #9ca3af; margin-top: 4px;">Último: {{ stats.last_success[:10] }}</div>{% endif %}
+          </div>
+        {% endfor %}
+      </div>
+
+      <h3>Por Canal</h3>
+      <div style="margin-bottom: 24px;">
+        {% for channel, stats in trending.channels.items() %}
+          <div style="padding: 10px; background: #f3f4f6; border-radius: 4px; margin-bottom: 8px;">
+            <div><strong>{{ channel }}</strong> • {{ stats.count }} vídeo{% if stats.count != 1 %}s{% endif %}</div>
+            <div style="font-size: 12px; color: #6b7280;">Via: {{ stats.source|default('—') }} • Último: "{{ stats.last_topic[:50] }}"</div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p style="color: #9ca3af;">Sistema ainda sem dados. Use o pipeline normalmente e os dados aparecerão aqui em 5s.</p>
+    {% endif %}
+  </section>
 </main>
 
 <nav class="tabs" role="tablist">
@@ -422,6 +465,9 @@
   </button>
   <button role="tab" data-tab="canais" aria-selected="false">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="currentColor"/><circle cx="15" cy="12" r="2" fill="currentColor"/><circle cx="7" cy="18" r="2" fill="currentColor"/></svg>Canais
+  </button>
+  <button role="tab" data-tab="trending" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 17"/><polyline points="17 6 23 6 23 12"/></svg>Trending
   </button>
 </nav>
 
