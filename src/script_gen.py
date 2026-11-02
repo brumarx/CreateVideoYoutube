@@ -130,6 +130,39 @@ def current_date_rule() -> str:
     )
 
 
+def _get_opening_instruction(channel: str) -> str:
+    """Retorna instrução de abertura para o LLM baseado no canal."""
+    instructions = {
+        "politica": (
+            "GANCHO INICIAL (VARIAÇÃO): Comece com um NÚMERO CHOCANTE relacionado ao tema "
+            "(salário, gastos, doações, multa, crescimento) — sem contexto antes, pura e simples. "
+            "Exemplo: 'R$ 2,3 bilhões em um dia', 'cresceu 4.700%'. O número é a 1ª frase."
+        ),
+        "motivacional": (
+            "GANCHO INICIAL (VARIAÇÃO): Comece com um NÚMERO QUE DEFINE O OBSTÁCULO "
+            "(rejeitado 100 vezes, tinha R$ 5, perdeu 3 campanhas, trabalhou 50 anos). "
+            "O número é concreto e humano — não seja saudação nem contexto histórico."
+        ),
+        "aprendervia": (
+            "GANCHO INICIAL (VARIAÇÃO): Comece direto no RESULTADO PRÁTICO: 'Copie isto na IA "
+            "e economize R$ 500/mês' ou 'Use essa ferramenta grátis em 2 minutos'. "
+            "Resultado concreto em português, números, nada de saudação."
+        ),
+        "curiosidades": (
+            "GANCHO INICIAL (VARIAÇÃO): Comece com uma CONTRADIÇÃO IMPOSSÍVEL: "
+            "'O país mais rico do mundo gasta com...' ou 'O país que não tem problema resolve...'. "
+            "Algo que desafia expectativa — não saudação, direto ao choque."
+        ),
+        "botafogo": (
+            "GANCHO INICIAL (VARIAÇÃO): Comece com um PLACAR ou NÚMERO DO JOGO "
+            "(Vitória 3-0, Classificação com 3 jogos de sobra, 5 gols em 30 minutos). "
+            "Número direto e emotivo — not saudação."
+        ),
+    }
+
+    return instructions.get(channel, instructions.get("curiosidades", ""))
+
+
 _FOREIGN_FIELDS = """  "idioma": {"OPCIONAL — termo da narração em INGLÊS, ESPANHOL, FRANCÊS, ALEMÃO, ITALIANO ou HOLANDÊS (nome de ferramenta, empresa, pessoa, lugar, expressão), exatamente como está escrito na narração": "código do idioma: en, es, fr, de, it ou nl — ex.: \"Claude Code\": \"en\", \"Runway\": \"en\", \"Palm Jumeirah\": \"en\", \"Hindenburg\": \"de\", \"Mont Saint-Michel\": \"fr\". A voz fala esse termo com a pronúncia nativa. Palavra que já existe em português (Havana, Londres, Nova York, internet) NUNCA entra. Sem termo assim, {}"},
   "pronuncia": {"OPCIONAL — só nome de OUTRO alfabeto/idioma (grego, russo, japonês, árabe, chinês etc.) que uma voz brasileira leria errado — inglês, espanhol, francês, alemão, italiano e holandês vão em \"idioma\", NUNCA aqui": "como se fala, escrito à portuguesa com acento na sílaba tônica — ex.: \"Pavlopetri\": \"Pavlopétri\", \"Dyatlov\": \"Diátlov\", \"Aokigahara\": \"Aokigahára\". Palavra portuguesa nunca entra. Sem nome assim, {}"},
 """
@@ -200,11 +233,16 @@ completar com suposição):
     # ("pronuncia") — ver ChannelConfig.native_foreign
     pronunciation_fields = _FOREIGN_FIELDS if channel.native_foreign else _PRONUNCIATION_FIELD
 
+    # Instruções de abertura variada por canal (melhorias)
+    opening_instruction = _get_opening_instruction(channel.name)
+
     return f"""{channel.prompt_base}
 
 {current_date_rule()}
 
 {ACCURACY_RULES}
+
+{opening_instruction}
 
 Tópico do vídeo: {topic}
 Idioma: {channel.language}

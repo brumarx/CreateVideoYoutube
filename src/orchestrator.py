@@ -2,13 +2,24 @@
 pending -> scripted -> narrated -> rendered -> uploaded (ou failed)."""
 from __future__ import annotations
 
+import logging
 import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+log = logging.getLogger("orchestrator")
+
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "queue.db"
+
+# Inicializar infraestrutura de melhorias automaticamente
+try:
+    from .improvements_integration import initialize_improvements
+    initialize_improvements()
+    log.debug("Melhorias de qualidade inicializadas")
+except ImportError:
+    pass  # Melhorias não disponíveis (desenvolvimento)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs (
