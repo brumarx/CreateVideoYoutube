@@ -1,12 +1,20 @@
 """Busca trending topics para gerar temas de vídeos dinâmicos.
 
 Fontes (em ordem de prioridade):
-1. Google Trends (via pytrends, se disponível)
-2. Scraping direto do X/Twitter (fallback)
-3. Temas pré-definidos por canal
+1. YouTube Trends (youtube.trends24.in) ← MELHOR para YT (precisa scraping JS)
+2. Google Trends (pytrends) ← genérico, requer: pip install pytrends
+3. X/Twitter API ← precisa credenciais
+4. Temas pré-definidos (fallback)
+
+STATUS: Infraestrutura pronta, sem API ativa (usa fallback config)
+
+PRÓXIMOS PASSOS:
+- Instalar pytrends: pip install pytrends
+- Ou: Configurar Selenium para YouTube Trends (JS rendering)
+- Ou: X/Twitter API keys em ~/.secrets/keys.env
 
 Objetivo: evitar séries estáticas e mortas; usar temas que estão
-em alta no momento (mais engagement, melhor SEO).
+em alta no momento (mais engagement, melhor SEO no YouTube).
 """
 import json
 import logging
@@ -34,9 +42,40 @@ def _fetch_trends(country: str = "BR") -> list[str] | None:
     Retorna lista de strings (ex: ["reforma tributária", "STF", "dólar"])
     ou None se todas as fontes falharem.
     """
-    # TODO: Implementar integração com Google Trends (pytrends)
-    # ou X/Twitter API quando dependências estiverem disponíveis
-    log.debug("Trending topics: aguardando integração com API externa")
+    # Tenta YouTube Trends (youtube.trends24.in) primeiro
+    country_code = country.lower() if country.lower() in ("br", "us", "pt", "in", "mx") else "br"
+    try:
+        url = f"https://youtube.trends24.in/{country_code}"
+        resp = requests.get(url, timeout=TRENDS_TIMEOUT, headers={"User-Agent": "Mozilla/5.0"})
+        resp.raise_for_status()
+
+        # Extrai títulos dos vídeos em trending do HTML
+        trends = re.findall(r'<a[^>]*href="[^"]*"[^>]*>([^<]{10,120})</a>', resp.text)
+        # Filtra por tamanho mínimo
+        trends = [t.strip() for t in trends if 10 < len(t) < 120]
+
+        if trends:
+            log.info("YouTube Trends (%s): %d tópicos", country_code.upper(), len(trends))
+            return trends[:20]
+    except Exception as exc:
+        log.debug("YouTube Trends: %s", exc)
+
+    # Google Trends (via pytrends) — genérico mas funciona
+    try:
+        from pytrends.request import TrendReq
+        gt = TrendReq(hl="pt-BR", timeout=(5, 10))
+        trends_df = gt.trending_searches(pn=country)
+        if trends_df is not None and len(trends_df) > 0:
+            trends = trends_df[0].tolist()[:20]
+            log.info("Google Trends (%s): %d tópicos", country, len(trends))
+            return trends
+    except ImportError:
+        pass  # pytrends não instalado
+    except Exception as exc:
+        log.debug("Google Trends: %s", exc)
+
+    # Fallback: sem API ativa, usa config
+    log.debug("Trending topics: sem API disponível, usando fallback")
     return None
 
 
