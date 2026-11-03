@@ -1128,10 +1128,78 @@ def spoken_numbers_ok(spec: dict, narration: str) -> bool:
     return True
 
 
+def _said(text: str, narration_folded: str) -> bool:
+    """A narração fala isso? (sem acento; nome composto basta 1 palavra de 4+ letras)"""
+    words = [w for w in _fold(text).split() if len(w) >= 4]
+    return bool(words) and any(re.search(rf"(?<!\w){re.escape(w)}", narration_folded) for w in words)
+
+
+def _label_ok(label: str, narration_folded: str) -> bool:
+    """Rótulo só com palavras que a narração diz (pelo menos metade das de 4+ letras)."""
+    words = [w for w in _fold(label).split() if len(w) >= 4]
+    if not words:
+        return True
+    return sum(1 for w in words if w[:5] in narration_folded) * 2 >= len(words)
+
+
+def _ground_beat(b: dict, narration: str) -> dict | None:
+    """O gráfico só mostra o que a CENA fala: país destacado citado na
+    narração (nome ou adjetivo), cidade/rota/bilhete/personagem idem,
+    rótulo com palavras da narração. Sem isso, o diretor de arte podia
+    pintar um país que a frase nem cita."""
+    nf = _fold(narration)
+    tipo = b.get("tipo")
+    if tipo == "mapa":
+        cited = {id(find_country(n)) for n in countries_in(narration)}
+        destaques = []
+        for d in b.get("destaques") or []:
+            c = find_country(str(d.get("pais", ""))) if isinstance(d, dict) else None
+            if c is not None and id(c) in cited:
+                # nome oficial em português — nunca "Litoral perdido"/"Chile pós-guerra"
+                destaques.append({**d, "rotulo": c["name"]})
+        lugares = [n for n in b.get("lugares") or [] if find_country(str(n)) and id(find_country(str(n))) in cited]
+        b = {**b, "destaques": destaques, "lugares": lugares}
+        if b.get("cidade") and not (_said(str(b["cidade"]), nf) or _said(city_label(str(b["cidade"])), nf)):
+            b.pop("cidade")
+        rota = b.get("rota")
+        if isinstance(rota, dict):
+            def end_ok(name) -> bool:
+                name = str(name or "")
+                c = find_country(name)
+                return _said(name, nf) or _said(city_label(name), nf) or (c is not None and id(c) in cited)
+            if not (end_ok(rota.get("de")) and end_ok(rota.get("para"))):
+                b.pop("rota")
+        if b.get("nota") and not (spoken_numbers_ok({"valor": re.sub(r"\D", "", str(b["nota"]))[:4] or ""}, narration)
+                                  and _label_ok(str(b["nota"]), nf)):
+            b.pop("nota")
+        if b.get("ano_rotulo") and not _label_ok(str(b["ano_rotulo"]), nf):
+            b.pop("ano_rotulo")
+        pers = []
+        for p in b.get("personagens") or []:
+            if isinstance(p, dict) and _said(str(p.get("fala") or p.get("nome") or ""), nf):
+                pers.append(p)
+        b["personagens"] = pers
+        if not (destaques or lugares or b.get("cidade") or b.get("rota")):
+            return None
+        return b
+    if tipo in ("numero", "ano"):
+        if b.get("rotulo") and not _label_ok(str(b["rotulo"]), nf):
+            b = {**b, "rotulo": ""}
+        return b
+    if tipo == "comparacao":
+        for k in ("a_rotulo", "b_rotulo"):
+            if b.get(k) and not _label_ok(str(b[k]), nf):
+                return None  # comparação sem saber o que se compara não vale
+        return b
+    return b
+
+
 def sanitize(grafico, narration: str):
     """Tira do roteiro a batida que não passa nas travas (número que a
-    narração não fala, tipo desconhecido). None = cena sem gráfico."""
+    narração não fala, país/cidade/personagem/rótulo que ela não cita, tipo
+    desconhecido). None = cena sem gráfico."""
     beats = [b for b in beats_of(grafico) if spoken_numbers_ok(b, narration)]
+    beats = [g for b in beats if (g := _ground_beat(b, narration)) is not None]
     if not beats:
         return None
     # "ano" expandido volta a ser 1 spec só (o render expande de novo)

@@ -1528,8 +1528,11 @@ REGRAS:
 - Tratado, carta, lei, decreto, contrato citado: "nota" curta EM PORTUGUÊS com o nome e a data que a cena
   diz ("Acordo secreto · out/1807"). Rótulos e notas sempre em português; só nomes de país/cidade/pessoa
   nos campos de busca ("pais", "lugares", "de", "para", "nome") vão em inglês.
-- Figura HISTÓRICA citada (morta antes de 1950): "personagens" com nome em inglês, roupa da época e a
-  expressão da cena. NUNCA pessoa viva ou recente (político, atleta, empresário de hoje).
+- Figura HISTÓRICA citada (morta antes de 1950): "personagens" com nome em inglês, "fala": o nome EXATO
+  como a narração da cena escreve ("Dom João", "Napoleão"), roupa da época e a expressão da cena. NUNCA
+  pessoa viva ou recente (político, atleta, empresário de hoje).
+- Só mostre o que a CENA diz: país, cidade, rota, ano, número e nome que não estão na narração daquela
+  cena são descartados pelo código.
 - Use "lista" de 2-3 batidas com "palavra" quando a cena muda de assunto no meio (ex.: mapa e, quando a voz
   fala "1904", o ano).
 - Todo número/ano do gráfico TEM que estar escrito em algarismos na narração DAQUELA cena.

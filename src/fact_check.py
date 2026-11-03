@@ -577,7 +577,12 @@ _GROUNDING_PROMPT = """Abaixo há FONTES e as FRASES de um roteiro de vídeo.
 
 Para CADA frase, diga se ela afirma um FATO verificável (data, número, nome, evento, causa, consequência,
 característica de algo real, o que alguém fez ou disse) ou não (pergunta, opinião, convite, reflexão,
-transição, instrução de passo a passo, saudação).
+transição, saudação).
+
+ATENÇÃO, passo a passo de app/IA: a instrução que diz o que o app ou a IA FAZ, TEM ou MOSTRA ("o Lens
+cria um contato pronto", "a IA mostra os melhores preços", "toque em Adicionar ao calendário") TAMBÉM é
+fato — a função tem que existir, então precisa de trecho da fonte. Só a ordem pura sem afirmar função
+("Abra o app", "Copie o texto") não é fato.
 
 Se afirma fato: copie da FONTE, LETRA POR LETRA, o trecho (até 30 palavras, uma frase da fonte) que
 sustenta o fato. Não traduza, não resuma, não junte pedaços: copie igual. Se NENHUM trecho da fonte
