@@ -91,8 +91,29 @@ _BRAZILIAN_STATES = {
 _STATE_ABBREVIATION = re.compile(r"\b([A-ZÀ-Ý]{2,})-(%s)\b" % "|".join(_BRAZILIAN_STATES))
 
 
+# clube-UF ("Atlético-MG") é o adjetivo do estado, não o nome: a voz falou
+# "Atlético Minas Gerais" (Botafogo, 03/11) — no futebol é "Atlético Mineiro"
+_STATE_ADJECTIVES = {
+    "AC": "Acreano", "AL": "Alagoano", "AP": "Amapaense", "AM": "Amazonense", "BA": "Baiano",
+    "CE": "Cearense", "DF": "Brasiliense", "ES": "Capixaba", "GO": "Goiano", "MA": "Maranhense",
+    "MT": "Mato-grossense", "MS": "Sul-mato-grossense", "MG": "Mineiro", "PA": "Paraense",
+    "PB": "Paraibano", "PR": "Paranaense", "PE": "Pernambucano", "PI": "Piauiense", "RJ": "Carioca",
+    "RN": "Potiguar", "RS": "Gaúcho", "RO": "Rondoniense", "RR": "Roraimense", "SC": "Catarinense",
+    "SP": "Paulista", "SE": "Sergipano", "TO": "Tocantinense",
+}
+# como a torcida fala os que fogem da regra
+_CLUB_STATE_EXCEPTIONS = {
+    "Atlético-GO": "Atlético Goianiense", "Botafogo-SP": "Botafogo de Ribeirão Preto",
+    "Botafogo-PB": "Botafogo da Paraíba", "Vila Nova-GO": "Vila Nova", "Ferroviário-CE": "Ferroviário",
+}
+_CLUB_STATE = re.compile(r"\b([A-ZÀ-Ý][a-zà-ÿ]+)-(%s)\b" % "|".join(_BRAZILIAN_STATES))
+
+
 def _state_abbreviation_pronunciations(text: str) -> dict[str, str]:
-    return {m[0]: f"{m[1]} {_BRAZILIAN_STATES[m[2]]}" for m in _STATE_ABBREVIATION.finditer(text)}
+    out = {m[0]: f"{m[1]} {_BRAZILIAN_STATES[m[2]]}" for m in _STATE_ABBREVIATION.finditer(text)}
+    for m in _CLUB_STATE.finditer(text):
+        out[m[0]] = _CLUB_STATE_EXCEPTIONS.get(m[0], f"{m[1]} {_STATE_ADJECTIVES[m[2]]}")
+    return out
 
 
 # PALAVRA INTEIRA EM MAIÚSCULAS (5+ letras) a voz costuma soletrar: nome de
