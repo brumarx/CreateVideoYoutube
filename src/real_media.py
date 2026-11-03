@@ -130,9 +130,9 @@ def _commons_files(params: dict, kind: str) -> list[dict]:
     prop = {"photo": {"prop": "imageinfo", "iiprop": "url|size|mime|extmetadata", "iiurlwidth": 1920},
             "clip": {"prop": "videoinfo", "viprop": "url|size|extmetadata|derivatives"}}[kind]
     try:
-        data = httpx.get(_COMMONS_API, headers=_UA, timeout=20, params={
-            "action": "query", "format": "json", **params, **prop,
-        }).json()
+        from .wiki_cache import get_json  # cache em disco: nada de 429/bloqueio da Wikimedia
+
+        data = get_json(_COMMONS_API, {"action": "query", "format": "json", **params, **prop})
     except Exception as exc:  # noqa: BLE001
         log.warning("commons falhou (%s): %s", kind, exc)
         return []
@@ -143,10 +143,12 @@ def _commons_files(params: dict, kind: str) -> list[dict]:
 def _lead_image(subject: str) -> list[dict]:
     """Foto principal do verbete em inglês — se estiver no Commons."""
     try:
-        data = httpx.get(_ENWIKI_API, headers=_UA, timeout=20, params={
+        from .wiki_cache import get_json
+
+        data = get_json(_ENWIKI_API, {
             "action": "query", "format": "json", "redirects": 1, "generator": "search",
             "gsrsearch": subject, "gsrlimit": 1, "prop": "pageimages", "piprop": "name",
-        }).json()
+        })
         page = next(iter(data["query"]["pages"].values()))
         name = page.get("pageimage")
     except Exception:  # noqa: BLE001

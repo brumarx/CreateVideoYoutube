@@ -272,6 +272,12 @@ def main() -> None:
     if not NO_UPLOAD:
         subprocess.run([sys.executable, str(ROOT / "scripts" / "retry_uploads.py")], cwd=ROOT)
 
+    # consultas à Wikimedia (src/wiki_cache.py) só servem enquanto os vídeos
+    # do dia são feitos (e refeitos, no conserto em laço): depois, apaga.
+    # Mapas/ícones/personagens (data/cache/infographic) ficam: são material.
+    from src.wiki_cache import clear
+
+    clear()
     log.info("rodada diária concluída")
 
 

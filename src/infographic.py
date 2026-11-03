@@ -1137,11 +1137,13 @@ def _historical_ok(name: str) -> bool:
     if not re.search(r"\b[A-ZÀ-Ý]", name):
         return True
     try:
-        r = requests.get("https://en.wikipedia.org/w/api.php", params={
+        from .wiki_cache import get_json  # cache em disco: nada de 429/bloqueio da Wikimedia
+
+        data = get_json("https://en.wikipedia.org/w/api.php", {
             "action": "query", "prop": "extracts", "exintro": 1, "explaintext": 1, "redirects": 1,
             "titles": name, "format": "json", "formatversion": 2,
-        }, headers={"User-Agent": "FractalCurioso-video-bot/1.0 (https://www.youtube.com/@fractalcurioso)"}, timeout=15)
-        intro = (r.json()["query"]["pages"][0].get("extract") or "")[:600]
+        }, timeout=15)
+        intro = (data["query"]["pages"][0].get("extract") or "")[:600]
     except Exception:  # noqa: BLE001 — sem confirmar, não desenha
         return False
     m = re.search(r"\(([^()]*?\b\d{3,4})\s*[–-]\s*[^()]*?\b(\d{3,4})\)", intro)
