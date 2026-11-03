@@ -993,7 +993,9 @@ def generate_script(
                 log.warning("tentativa %d/3: %s, tentando de novo", attempt + 1, ending)
                 messages = [messages[0], {"role": "user", "content": messages[1]["content"]
                                           + f"\n\nO roteiro anterior terminou com {ending}. A última frase retoma o "
-                                          "gancho do começo com uma virada ou ironia — um fato, não uma dúvida."}]
+                                          "gancho do começo com uma virada ou ironia — um fato, não uma dúvida. "
+                                          "Ex.: 'Em 1948 o Norte cortou a luz do Sul. Agora não consegue manter as "
+                                          "próprias acesas.' Pergunta, 'será que', 'a resposta está' no fim: proibido."}]
                 continue
             formula = _formula_problem(script)
             if formula:

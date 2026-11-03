@@ -879,6 +879,35 @@ def countries_in(text: str) -> list[str]:
     return out
 
 
+# número que vale cartão: quantidade com unidade ("5 mil militares", "861
+# quilômetros", "90%") — nunca ano solto, nunca número pequeno sem unidade
+_STRONG_NUMBER = re.compile(
+    r"(R\$|US\$|€|£)?\s?(?<![\w.,])(\d{1,3}(?:[.,]\d{1,3})*(?:,\d+)?)\s*(%|por cento|mil|milh(?:ão|ões)|bilh(?:ão|ões)|trilh(?:ão|ões))?"
+    r"\s+(?:(?:de|da|do|dos|das|em|ao|à)\s+|(por)\s+)?([a-zà-ÿ][a-zà-ÿ-]{2,}(?:\s+[a-zà-ÿ][a-zà-ÿ-]{2,})?)", re.I)
+_NUMBER_STOP = {"anos", "dias", "horas", "minutos", "segundos", "vezes", "outubro", "novembro", "dezembro", "janeiro",
+                "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro"}
+_LABEL_STOP = {"e", "de", "da", "do", "que", "em", "no", "na", "com", "para", "pra", "por", "a", "o"}
+
+
+def strong_number(narration: str) -> dict | None:
+    best = None
+    for m in _STRONG_NUMBER.finditer(narration):
+        cur, num, mult, label = (m[1] or ""), m[2], (m[3] or ""), (f"{m[4]} {m[5]}" if m[4] else m[5])
+        digits = re.sub(r"\D", "", num)
+        if re.fullmatch(r"1\d{3}|20\d{2}", digits) and not mult:
+            continue  # ano
+        first = label.split()[0].lower()
+        if first in _NUMBER_STOP or (not mult and int(digits or 0) < 10):
+            continue
+        words = [w for i, w in enumerate(label.split()) if i == 0 or w.lower() not in _LABEL_STOP][:2]
+        unit = "%" if mult.lower() in ("%", "por cento") else (f" {mult}" if mult else "")
+        cand = {"tipo": "numero", "valor": f"{cur + ' ' if cur else ''}{num}{unit}".strip(), "rotulo": " ".join(words)}
+        score = (2 if mult or cur else 0) + len(digits)
+        if best is None or score > best[0]:
+            best = (score, cand)
+    return best[1] if best else None
+
+
 class Renderer:
     """Um por vídeo: guarda o último mapa pra servir de fundo das cenas
     sem mapa (número, comparação, ano)."""
@@ -906,7 +935,14 @@ class Renderer:
         gráfico em só 2 de 8 cenas)."""
         skipped = {id(find_country(s)) for s in skip or set() if find_country(s)}
         names = [n for n in countries_in(narration) if id(find_country(n)) not in skipped][:3]
+        number = strong_number(narration)
+        years = re.findall(r"(?<!\d)(1[0-9]\d\d|20[0-2]\d)(?!\d)", narration)
         if not names:
+            # sem país: o número forte da cena vira cartão; sem número, o ano
+            if number:
+                return [number]
+            if years and self.last_base is not None:
+                return [{"tipo": "ano", "de": years[0], "rotulo": ""}]
             return None
         for n in names:
             if all(find_country(c) is not find_country(n) for c in self.cast):
@@ -923,7 +959,8 @@ class Renderer:
             spec["cidade"] = cities[0]
         if years:
             spec["ano"] = years[0]
-        return [spec]
+        # país E número forte: mapa e, quando a voz fala o número, o cartão dele
+        return [spec, {**number, "palavra": re.sub(r"^\D+", "", number["valor"]).split()[0]}] if number else [spec]
 
     def still(self, spec: dict) -> Image.Image | None:
         try:
