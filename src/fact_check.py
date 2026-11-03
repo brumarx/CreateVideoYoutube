@@ -300,7 +300,8 @@ def review_script(
             continue
         problems.append(p)
     known = {**facts, "_internet": [f.get("trecho", "") for f in web_facts or []]} if facts else None
-    return problems + unknown + numbers_not_in_facts(script, known)
+    return problems + unknown + numbers_not_in_facts(script, known) + (
+        [] if facts else numbers_not_in_sources(script, web_facts))
 
 
 # valor em reais ou com escala ("R$ 2.309.985,78", "11,8 milhões", "35%")
@@ -357,6 +358,61 @@ def numbers_not_in_facts(script: dict, facts: dict | None, tolerance: float = 0.
             out.append({
                 "tipo": "fora_da_fonte", "termo": m.group(0).strip(),
                 "motivo": "valor que não está nos dados (conta feita pelo roteiro ou número inventado) — cite só valores dos dados",
+            })
+    return out
+
+
+# número com unidade na narração que a fonte da internet/Wikipédia não tem:
+# "lago Titicaca, a 4.800 metros de altitude" (são 3.812) passou no revisor
+# por LLM (job 704). Só confere número com unidade — ano, dia e contagem
+# solta ficam com o revisor.
+_MEASURE_RE = re.compile(
+    r"(R\$|US\$|€)?\s?(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:,\d+)?)\s*"
+    r"(mil\b|milh(?:ão|ões)|bilh(?:ão|ões)|%|por cento|metros|m\b|quil[ôo]metros|km|toneladas|litros|"
+    r"habitantes|pessoas|mortos|soldados|militares|navios|embarca[çc][õo]es|hectares|graus)",
+    re.IGNORECASE,
+)
+_SOURCE_NUM_RE = re.compile(
+    r"(\d{1,3}(?:[.,\s\u00a0]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(mil\b|thousand|milh(?:ão|ões)|million|"
+    r"bilh(?:ão|ões)|billion)?", re.IGNORECASE)
+_SRC_SCALE = {"mil": 1e3, "thousand": 1e3, "milhão": 1e6, "milhões": 1e6, "million": 1e6,
+              "bilhão": 1e9, "bilhões": 1e9, "billion": 1e9}
+
+
+def _source_numbers(text: str) -> list[float]:
+    out = []
+    for m in _SOURCE_NUM_RE.finditer(text):
+        raw = m.group(1)
+        # "3.812", "3,812", "3 812" (milhar) ou "3,5"/"3.5" (decimal)
+        if re.fullmatch(r"\d{1,3}(?:[.,\s\u00a0]\d{3})+", raw):
+            value = float(re.sub(r"\D", "", raw))
+        else:
+            value = float(raw.replace(",", "."))
+        out.append(value * _SRC_SCALE.get((m.group(2) or "").lower(), 1))
+    return out
+
+
+def numbers_not_in_sources(script: dict, web_facts: list[dict] | None, tolerance: float = 0.02) -> list[dict]:
+    """Tolerância de 2% (não 5%): com várias cifras na fonte, 5% deixava
+    "4.800 metros" passar por causa dos "5.000 militares" (job 704)."""
+    if not web_facts:
+        return []
+    known = _source_numbers(" ".join(f"{f.get('titulo', '')} {f.get('trecho', '')}" for f in web_facts))
+    out = []
+    for scene in script.get("scenes", []):
+        for m in _MEASURE_RE.finditer(scene.get("narration", "")):
+            unit = (m.group(3) or "").lower()
+            value = _to_number(m.group(2)) * _SCALE.get(unit, 1)
+
+            def close(v: float) -> bool:
+                return any((v == k) if v < 100 else abs(v - k) <= tolerance * abs(k) for k in known)
+
+            # "5 mil" na fala e "5.000" (ou "5 thousand") na fonte
+            if close(value) or (unit in _SCALE and close(_to_number(m.group(2)))):
+                continue
+            out.append({
+                "tipo": "fora_da_fonte", "termo": m.group(0).strip(),
+                "motivo": "número que não aparece nas fontes pesquisadas (Wikipédia/internet) — use só os das fontes",
             })
     return out
 

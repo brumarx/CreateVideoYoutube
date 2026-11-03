@@ -1392,7 +1392,10 @@ def fix_dangling_hooks(script: dict) -> dict:
     código e só tira a pergunta — nunca acrescenta fato. Sem LLM, segue."""
     scenes = script.get("scenes") or []
     pairs: list[tuple[int, str, str]] = []
-    for i in range(len(scenes) - 1):
+    # a pergunta da 1ª cena é o GANCHO do vídeo, respondida ao longo dele —
+    # não na frase seguinte (job 704 perdeu a abertura "Como a Bolívia...
+    # acabou ficando sem acesso ao oceano?")
+    for i in range(1, len(scenes) - 1):
         sentences = _SENTENCES.split(scenes[i].get("narration", "").strip())
         if len(sentences) > 1 and sentences[-1].endswith("?"):
             nxt = " ".join(_SENTENCES.split(scenes[i + 1].get("narration", "").strip())[:2])
