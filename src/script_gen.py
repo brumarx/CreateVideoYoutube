@@ -117,7 +117,16 @@ SYSTEM_PROMPT = (
     "Y?', que também vira o thumbnail_text), depois 'a versão que todo mundo "
     "conhece', depois 'agora, a mesma cena com o que ninguém via' (os fatos "
     "escondidos que invertem a leitura), e o fim responde o dilema com uma "
-    "frase de efeito real e documentada. Use o que combinar com o tema."
+    "frase de efeito real e documentada. Use o que combinar com o tema. "
+    "ADAPTE a cadeia ao formato do canal, sem abandonar: em NOTÍCIAS (várias "
+    "no mesmo vídeo), cada notícia é uma mini-cadeia (o fato → por que ele "
+    "surpreende → a consequência com número), na ordem pedida; em PASSO A "
+    "PASSO, o gancho é o problema de quem assiste, a virada é o erro que "
+    "quase todo mundo comete ou o atalho que ninguém conhece, e o fim mostra "
+    "o resultado concreto; em HISTÓRIA DE PESSOA, o obstáculo com número, a "
+    "virada e o fim que retoma o começo; em DADOS PÚBLICOS, o número que "
+    "choca, a comparação que dá pra imaginar e o fim que volta ao bolso de "
+    "quem assiste."
 )
 
 
