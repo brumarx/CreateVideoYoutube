@@ -43,6 +43,7 @@ from src.orchestrator import enqueue, update
 from src.people_photos import names_in, person_photo
 from src.real_media import real_clip, real_photos
 from src.script_gen import (
+    art_direction,
     trim_teaser_ending,
     chapter_titles, clean_stat_overlays, engagement_question, fix_dangling_hooks, generate_script, refresh_packaging,
     repair_script, vary_close_repeats,
@@ -867,6 +868,9 @@ def run(
         script = fix_script(script, channel.language)
         # barra comparativa só com valor falado na cena, sem ranking (22/10)
         script = clean_stat_overlays(script)
+        # visual de cada cena escolhido numa chamada só pra isso, no roteiro
+        # FINAL (o LLM quase não pedia gráfico junto com o roteiro)
+        script = art_direction(script, channel)
         # roteiro aprovado: se o vídeo reprovar depois (imagem, revisão
         # final), o daily_run refaz só o vídeo com ele (--script-file)
         (work_dir / "script.json").write_text(json.dumps(script, ensure_ascii=False, indent=2))
@@ -1159,7 +1163,16 @@ def run(
             # gol e manchete continuam na frente
             grafico_path = None
             grafico = sanitize_grafico(scene.get("grafico"), scene["narration"]) if i < original_scene_count else None
-            if news_frame is None and player_frame is None and grafico:
+            real_subject = (scene.get("real_subject") or "").strip() if channel.real_media else ""
+            # MESCLA desenho com material pronto: depois de uma cena desenhada,
+            # a que tem foto/vídeo real do assunto tenta o real primeiro — vídeo
+            # só de desenho cansa, e o arquivo do próprio assunto vale mais
+            real_first = bool(real_subject) and bool(scene_sources) and scene_sources[-1] == "grafico"
+
+            def draw_planned() -> None:
+                nonlocal grafico_path, stock_clip_path
+                if grafico_path is not None or news_frame is not None or player_frame is not None or not grafico:
+                    return
                 rendered = infographics.render(
                     grafico, scene["narration"], word_boundaries, scene_duration, work_dir / f"grafico_{i}",
                 )
@@ -1168,7 +1181,9 @@ def run(
                     if is_clip:
                         stock_clip_path = grafico_path
                     log.info("[%s] cena %d: gráfico %s", job_id, i + 1, "+".join(b["tipo"] for b in grafico))
-            real_subject = (scene.get("real_subject") or "").strip() if channel.real_media else ""
+
+            if not real_first:
+                draw_planned()
             if grafico_path is None and news_frame is None and player_frame is None and real_subject and i < original_scene_count:
                 real_context = visual_context + (
                     f"\nA imagem é FOTO/VÍDEO REAL de arquivo (Wikimedia Commons) de '{real_subject}': "
@@ -1202,6 +1217,8 @@ def run(
                                 break
                         if real_frame is not None:
                             break
+            if real_first and stock_clip_path is None and real_frame is None:
+                draw_planned()  # não achou arquivo real: o gráfico planejado entra
             if (grafico_path is None and stock_clip_path is None and real_frame is None and news_frame is None
                     and player_frame is None and i < original_scene_count):
                 # sem gráfico do roteiro nem foto/vídeo de ARQUIVO do assunto:

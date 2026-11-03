@@ -643,7 +643,7 @@ def _map_scene(spec: dict, w: int, h: int) -> tuple[Image.Image, Image.Image] | 
         if c is None:
             continue
         color = COLORS.get(_fold(d.get("cor", "")), COLORS["vermelho"])
-        pattern = flag(c.get("a2", "")) if d.get("bandeira") else None
+        pattern = flag(c.get("a2", "")) if (d.get("bandeira") or spec.get("bandeira")) else None
         _paper_country(img, view, c, color, lift=min(w, h) / 70, pattern=pattern)
         painted.append((c, d))
     if not painted and not night:
@@ -979,6 +979,24 @@ class Renderer:
         return [spec, {**number, "palavra": re.sub(r"^\D+", "", number["valor"]).split()[0]}] if number else [spec]
 
     def still(self, spec: dict) -> Image.Image | None:
+        """Quadro pronto é reaproveitado: o mesmo gráfico (mesmo spec, mesmo
+        ano no canto, mesmo tamanho) sai do disco em vez de ser desenhado
+        de novo — neste vídeo e nos próximos."""
+        import hashlib
+
+        key = hashlib.sha1(json.dumps([spec, self.era, self.w, self.h, self.repeat if spec.get("tipo") == "mapa" else 0,
+                                       sorted(self.colors.values())], sort_keys=True, ensure_ascii=False,
+                                      default=str).encode()).hexdigest()
+        path = CACHE / "quadros" / f"{key}.jpg"
+        if path.exists() and spec.get("tipo") != "mapa":
+            return Image.open(path).convert("RGB")
+        img = self._draw(spec)
+        if img is not None and spec.get("tipo") != "mapa":
+            path.parent.mkdir(parents=True, exist_ok=True)
+            img.save(path, quality=92)
+        return img
+
+    def _draw(self, spec: dict) -> Image.Image | None:
         try:
             tipo = spec.get("tipo")
             year = str(spec.get("ano") or (spec.get("de") if tipo == "ano" else "") or "").strip()

@@ -1508,3 +1508,74 @@ def chapter_titles(chapters: list[str]) -> list[str] | None:
         log.warning("títulos dos capítulos: nenhum provedor respondeu (%s)", exc)
         return None
     return _parse_titles(raw, len(chapters))
+
+
+# ---------------------------------------------------------------- diretor de arte
+
+ART_PROMPT = """Você é o DIRETOR DE ARTE de um Short do canal "{canal}" ({nicho}). O roteiro abaixo já foi
+aprovado — NÃO mude nenhuma palavra. Sua única tarefa: escolher o gráfico desenhado de cada cena, no estilo
+dos canais de mapa/história que viralizam (satélite da NASA, país em relevo de papel ou pintado com a
+bandeira, rota tracejada, bilhete de documento, personagem caricato, número gigante, ano com régua).
+
+REGRAS:
+- O vídeo MESCLA desenho com foto/vídeo real: dê gráfico a cerca de METADE das cenas — as que foto não
+  explica (lugar no mapa, viagem/rota, guerra, tratado/documento, data, número, comparação). Cena com
+  assunto concreto e fotografável (uma pessoa, um prédio, um animal, um objeto, uma paisagem) fica com
+  null, pra entrar a foto/vídeo real. Nunca mais de 3 cenas desenhadas seguidas.
+- VARIE de uma cena pra outra: não repita o mesmo mapa igual; alterne mapa, rota, número, ano, bilhete.
+- País que é PERSONAGEM da história (França x Inglaterra, Chile x Bolívia): "bandeira": true.
+- Movimento (fuga, invasão, viagem, comércio, exportação): "rota" de/para com ícone.
+- Tratado, carta, lei, decreto, contrato citado: "nota" curta EM PORTUGUÊS com o nome e a data que a cena
+  diz ("Acordo secreto · out/1807"). Rótulos e notas sempre em português; só nomes de país/cidade/pessoa
+  nos campos de busca ("pais", "lugares", "de", "para", "nome") vão em inglês.
+- Figura HISTÓRICA citada (morta antes de 1950): "personagens" com nome em inglês, roupa da época e a
+  expressão da cena. NUNCA pessoa viva ou recente (político, atleta, empresário de hoje).
+- Use "lista" de 2-3 batidas com "palavra" quando a cena muda de assunto no meio (ex.: mapa e, quando a voz
+  fala "1904", o ano).
+- Todo número/ano do gráfico TEM que estar escrito em algarismos na narração DAQUELA cena.
+- A mesma cor = o mesmo lado da história no vídeo inteiro.
+
+Formato de cada gráfico: {formato}
+
+ROTEIRO:
+{cenas}
+
+Responda SÓ com JSON: {{"cenas": [{{"cena": 1, "grafico": ...}}, ...]}}"""
+
+
+def art_direction(script: dict, channel: ChannelConfig) -> dict:
+    """Segunda chamada, só pra escolher o visual de cada cena do roteiro JÁ
+    aprovado: misturado nos ~10 campos do roteiro o LLM quase nunca pedia
+    gráfico (0 de 8 cenas no job 703), e o conserto da revisão de fatos
+    reescrevia frases depois. Cena que já tem gráfico fica como está; cada
+    um passa pelas travas de src/infographic.sanitize (número fora da
+    narração sai). Sem LLM, segue sem — o automático cobre."""
+    from .infographic import sanitize
+
+    scenes = script.get("scenes") or []
+    todo = [i for i, sc in enumerate(scenes) if not sc.get("grafico")]
+    if not todo:
+        return script
+    listing = "\n".join(f"{i + 1}) {sc.get('narration', '')}" for i, sc in enumerate(scenes))
+    prompt = ART_PROMPT.format(canal=channel.channel_title, nicho=channel.niche[:200], formato=json.loads(_GRAFICO_FIELD),
+                               cenas=listing)
+    try:
+        raw = complete([{"role": "user", "content": prompt}], max_tokens=3000, validate=lambda r: '"cenas"' in r)
+        data = _extract_json(raw)
+    except Exception as exc:  # noqa: BLE001 — sem diretor de arte, o automático cobre
+        log.warning("diretor de arte indisponível: %s", exc)
+        return script
+    picked = {}
+    for item in data.get("cenas") or []:
+        try:
+            idx = int(item.get("cena")) - 1
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if idx in todo:
+            g = sanitize(item.get("grafico"), scenes[idx].get("narration", ""))
+            if g:
+                picked[idx] = g
+    if picked:
+        log.info("diretor de arte: gráfico em %d de %d cenas (%s)", len(picked), len(todo),
+                 ", ".join(sorted({b["tipo"] for g in picked.values() for b in g})))
+    return {**script, "scenes": [{**sc, "grafico": picked[i]} if i in picked else sc for i, sc in enumerate(scenes)]}
