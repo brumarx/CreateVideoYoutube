@@ -956,78 +956,54 @@ def generate_script(
                 raise ValueError(f"JSON do roteiro sem campos {missing}: {script}")
 
             script = _trim_muletas(_drop_llm_cta(_drop_repeated_scenes(script)))
+            # TODOS os defeitos de estilo de uma vez: antes só o 1º ia pra
+            # tentativa seguinte, que podia voltar com o 2º (3 defeitos
+            # esgotavam as 3 tentativas)
+            issues: list[tuple[str, str]] = []  # (pro log, pro pedido de correção)
             news_problem = _news_order_problem(script, _news_count(facts)) if _news_count(facts) > 1 else None
             news_problem = news_problem or (_news_title_problem(script, facts) if _news_count(facts) > 1 else None)
             if news_problem:
-                filler_fallback = script
-                last_error = ValueError(news_problem)
-                log.warning("tentativa %d/3: notícias misturadas (%s), tentando de novo", attempt + 1, news_problem)
-                messages = [messages[0], {"role": "user", "content": messages[1]["content"]
-                                          + f"\n\nO roteiro anterior errou: {news_problem}. Uma notícia "
-                                          "por bloco, na ordem da lista, cada cena com o campo \"noticia\"; título = a "
-                                          "manchete mais forte, curta, sem \"notícias\"/\"hoje\" (em dia de jogo, "
-                                          "\"Botafogo x Adversário\" + gancho curto)."}]
-                continue
+                issues.append((f"notícias misturadas ({news_problem})",
+                               f"errou: {news_problem}. Uma notícia por bloco, na ordem da lista, cada cena com o campo "
+                               "\"noticia\"; título = a manchete mais forte, curta, sem \"notícias\"/\"hoje\" (em dia de "
+                               "jogo, \"Botafogo x Adversário\" + gancho curto)."))
             repeated = _repetition_problem(script) or _word_cap_problem(script, channel.word_caps)
             if repeated:
-                filler_fallback = script
-                last_error = ValueError(repeated)
-                log.warning("tentativa %d/3: repetição (%s), tentando de novo", attempt + 1, repeated)
-                messages = [messages[0], {"role": "user", "content": messages[1]["content"]
-                                          + f"\n\nO roteiro anterior se repetiu: {repeated}. Cada dado é dito uma vez "
-                                          "(no máximo citado de novo numa comparação); sem frase-muleta."}]
-                continue
+                issues.append((f"repetição ({repeated})", f"se repetiu: {repeated}. Cada dado é dito uma vez (no máximo "
+                               "citado de novo numa comparação); sem frase-muleta."))
             echo = _echo_problem(script)
             if echo:
-                filler_fallback = script
-                last_error = ValueError(echo)
-                log.warning("tentativa %d/3: %s, tentando de novo", attempt + 1, echo)
-                messages = [messages[0], {"role": "user", "content": messages[1]["content"]
-                                          + f"\n\nO roteiro anterior repetiu: {echo}. Cada frase traz um fato novo "
-                                          "que leva à próxima; nada dito duas vezes."}]
-                continue
+                issues.append((echo, f"repetiu: {echo}. Cada frase traz um fato novo que leva à próxima; nada dito duas vezes."))
             ending = _ending_problem(script)
             if ending:
-                filler_fallback = script
-                last_error = ValueError(ending)
-                log.warning("tentativa %d/3: %s, tentando de novo", attempt + 1, ending)
-                messages = [messages[0], {"role": "user", "content": messages[1]["content"]
-                                          + f"\n\nO roteiro anterior terminou com {ending}. A última frase retoma o "
-                                          "gancho do começo com uma virada ou ironia — um fato, não uma dúvida. "
-                                          "Ex.: 'Em 1948 o Norte cortou a luz do Sul. Agora não consegue manter as "
-                                          "próprias acesas.' Pergunta, 'será que', 'a resposta está' no fim: proibido."}]
-                continue
+                issues.append((ending, f"terminou com {ending}. A última frase retoma o gancho do começo com uma virada "
+                               "ou ironia — um fato, não uma dúvida. Ex.: 'Em 1948 o Norte cortou a luz do Sul. Agora não "
+                               "consegue manter as próprias acesas.' Pergunta, 'será que', 'a resposta está' no fim: proibido."))
             formula = _formula_problem(script)
             if formula:
-                filler_fallback = script
-                last_error = ValueError(formula)
-                log.warning("tentativa %d/3: %s, tentando de novo", attempt + 1, formula)
-                messages = [messages[0], {"role": "user", "content": messages[1]["content"]
-                                          + f"\n\nO roteiro anterior tinha {formula}. A voz não lê fórmula: em vez "
-                                          "de ditar, mostre o pedido pra IA escrever a fórmula (ex.: \"Peça: Escreva a "
-                                          "fórmula que soma a coluna de valores\") e onde colar a resposta."}]
-                continue
+                issues.append((formula, f"tinha {formula}. A voz não lê fórmula: em vez de ditar, mostre o pedido pra IA "
+                               "escrever a fórmula (ex.: \"Peça: Escreva a fórmula que soma a coluna de valores\") e onde "
+                               "colar a resposta."))
             filler = _filler_phrase(script, topic)
-            overused = None if filler else _overused_word(script, channel.channel_title)
-            if overused:
-                filler_fallback = script
-                last_error = ValueError(f"palavra repetida demais ({overused})")
-                log.warning("tentativa %d/3: palavra repetida demais (%s), tentando de novo", attempt + 1, overused)
-                word = overused.split()[0]
-                messages = [messages[0], {"role": "user", "content": messages[1]["content"]
-                                          + f"\n\nA palavra \"{word}\" apareceu demais: varie com pronome/sinônimo, "
-                                          "e não repita a mesma palavra frase após frase."}]
-                continue
             if filler:
                 # bordão em toda cena ("isso mostra a importância", job 239)
-                # = enchimento de modelo fraco: tenta de novo, pedindo pra não.
-                # Guarda o roteiro: bordão é defeito de estilo, não de fato —
-                # melhor publicá-lo do que perder o dia (revisões seguem valendo)
+                issues.append((f"bordão repetido ({filler!r})",
+                               f"usou a expressão \"{filler}\" — NÃO use, nem frases de enchimento sem fato novo."))
+            overused = _overused_word(script, channel.channel_title)
+            if overused:
+                word = overused.split()[0]
+                issues.append((f"palavra repetida demais ({overused})", f"repetiu demais a palavra \"{word}\": varie "
+                               "com pronome/sinônimo, e não repita a mesma palavra frase após frase."))
+            if issues:
+                # defeito de estilo, não de fato: guarda o roteiro — melhor
+                # publicá-lo do que perder o dia (as revisões de fato seguem)
                 filler_fallback = script
-                last_error = ValueError(f"bordão repetido ({filler!r})")
-                log.warning("tentativa %d/3: bordão repetido (%r), tentando de novo", attempt + 1, filler)
+                last_error = ValueError("; ".join(i[0] for i in issues))
+                log.warning("tentativa %d/3: %d defeito(s) — %s; tentando de novo", attempt + 1, len(issues),
+                            "; ".join(i[0] for i in issues))
+                fix = "\n".join(f"- O roteiro anterior {i[1]}" for i in issues)
                 messages = [messages[0], {"role": "user", "content": messages[1]["content"]
-                                          + f"\n\nNÃO use a expressão \"{filler}\" nem frases de enchimento sem fato novo."}]
+                                          + f"\n\nCorrija TODOS estes defeitos do roteiro anterior de uma vez:\n{fix}"}]
                 continue
             word_count = sum(len(s.get("narration", "").split()) for s in script["scenes"])
             if min_total_words <= word_count <= max_words_ceiling:
