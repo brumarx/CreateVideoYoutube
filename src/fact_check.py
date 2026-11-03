@@ -300,8 +300,16 @@ def review_script(
             continue
         problems.append(p)
     known = {**facts, "_internet": [f.get("trecho", "") for f in web_facts or []]} if facts else None
-    return problems + unknown + numbers_not_in_facts(script, known) + (
+    problems = problems + unknown + numbers_not_in_facts(script, known) + (
         [] if facts else numbers_not_in_sources(script, web_facts))
+    if not problems and (facts or web_facts):
+        # aprovado pelo revisor: só então a prova por citação (1 chamada a
+        # mais por roteiro, não por rodada). Fora do ar = revisão incompleta
+        grounded = ungrounded_sentences(script, facts, web_facts)
+        if grounded is None:
+            return None
+        problems = grounded
+    return problems
 
 
 # valor em reais ou com escala ("R$ 2.309.985,78", "11,8 milhões", "35%")
@@ -556,3 +564,114 @@ Nunca cite ferramenta, produto,
 número, nome ou evento que você não tem certeza de que é real. Se o título
 prometia algo que não dá pra entregar com fatos reais, mude o título.
 """
+
+
+# ---------------------------------------------------------------- citação obrigatória
+
+# O revisor por LLM dá OPINIÃO ("parece certo") e aprovou "a batalha não foi
+# naval" (Guerra do Pacífico, job 702), "alguns se afogaram por não saber
+# nadar" (job 706) e os 4.800 m do Titicaca. Aqui cada frase com fato tem
+# que trazer o TRECHO LITERAL da fonte que a sustenta, e quem confere se o
+# trecho existe na fonte é o CÓDIGO — o LLM não consegue "achar que sabe".
+_GROUNDING_PROMPT = """Abaixo há FONTES e as FRASES de um roteiro de vídeo.
+
+Para CADA frase, diga se ela afirma um FATO verificável (data, número, nome, evento, causa, consequência,
+característica de algo real, o que alguém fez ou disse) ou não (pergunta, opinião, convite, reflexão,
+transição, instrução de passo a passo, saudação).
+
+Se afirma fato: copie da FONTE, LETRA POR LETRA, o trecho (até 30 palavras, uma frase da fonte) que
+sustenta o fato. Não traduza, não resuma, não junte pedaços: copie igual. Se NENHUM trecho da fonte
+sustenta o fato inteiro (inclusive o número e o nome), responda "trecho": null — não invente.
+
+FONTES:
+{fontes}
+
+FRASES:
+{frases}
+
+Responda SÓ com JSON: {{"frases": [{{"n": 1, "fato": true, "trecho": "..."}}, {{"n": 2, "fato": false}}]}}"""
+
+_GROUND_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+
+def _fold_text(text: str) -> str:
+    text = unicodedata.normalize("NFKD", str(text).lower()).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", " ", text).strip()
+
+
+def _quote_in_source(quote: str, source_folded: str) -> bool:
+    """O trecho citado existe na fonte? Igual (sem acento/pontuação), ou com
+    pelo menos 10 palavras seguidas iguais (o LLM às vezes corta uma ponta)."""
+    q = _fold_text(quote)
+    if len(q.split()) < 4:
+        return False
+    if q in source_folded:
+        return True
+    words = q.split()
+    run = min(10, len(words))
+    return any(" ".join(words[i:i + run]) in source_folded for i in range(len(words) - run + 1))
+
+
+def _claim_matches_quote(sentence: str, quote: str) -> bool:
+    """O trecho fala do que a frase diz? Todo número da frase está no
+    trecho, e os nomes próprios da frase também (citar um trecho real sobre
+    OUTRA coisa não vale)."""
+    s_digits = {re.sub(r"\D", "", n) for n in re.findall(r"\d[\d.,]*", sentence) if len(re.sub(r"\D", "", n)) >= 2}
+    q_digits = re.sub(r"[.,\s]", "", quote)
+    if any(d not in q_digits for d in s_digits):
+        return False
+    q = _fold_text(quote)
+    names = {_fold_text(w)[:5] for w in re.findall(r"(?<![.!?]\s)(?<!^)\b[A-ZÀ-Ý][a-zà-ÿ]{3,}", sentence)}
+    names = {n for n in names if n}
+    if names and not any(n in q for n in names):
+        return False
+    return True
+
+
+def ungrounded_sentences(script: dict, facts: dict | None, web_facts: list[dict] | None) -> list[dict] | None:
+    """Frases de fato sem trecho real da fonte que as sustente — viram
+    problema "sem_fonte" (o termo é a própria frase, pra o corte achar).
+    [] = tudo sustentado; None = sem fonte pra conferir ou checagem fora do ar."""
+    parts = [f"{f.get('titulo', '')}: {f.get('trecho', '')}" for f in web_facts or []]
+    if facts:
+        parts.append(json.dumps(facts, ensure_ascii=False))
+    source = "\n\n".join(parts)
+    if not source.strip():
+        return None
+    sentences = [f.strip() for sc in script.get("scenes", []) for f in _GROUND_SPLIT.split(sc.get("narration", ""))
+                 if len(f.strip()) > 15]
+    if not sentences:
+        return []
+    from .topics import _SMALL_MODEL_RE
+
+    prompt = _GROUNDING_PROMPT.format(fontes=source[:9000], frases="\n".join(f"{i + 1}) {s}" for i, s in enumerate(sentences)))
+    try:
+        raw = complete([{"role": "user", "content": prompt}], max_tokens=2500, temperature=0.1,
+                       validate=lambda r: '"frases"' in r, model_filter=lambda m: not _SMALL_MODEL_RE.search(m))
+        m = re.search(r"\{.*\}", raw, re.S)
+        items = json.loads(m.group(0)).get("frases", []) if m else None
+    except Exception as exc:  # noqa: BLE001
+        log.warning("checagem por citação indisponível: %s", exc)
+        return None
+    if not isinstance(items, list):
+        return None
+    source_folded = _fold_text(source)
+    problems = []
+    for item in items:
+        try:
+            idx = int(item.get("n")) - 1
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if not (0 <= idx < len(sentences)) or not item.get("fato"):
+            continue
+        sentence, quote = sentences[idx], item.get("trecho")
+        if quote and _quote_in_source(str(quote), source_folded) and _claim_matches_quote(sentence, str(quote)):
+            continue
+        why = ("nenhum trecho da fonte sustenta" if not quote else
+               "o trecho citado não existe na fonte" if not _quote_in_source(str(quote), source_folded) else
+               "o trecho citado não traz o número/nome da frase")
+        problems.append({"tipo": "sem_fonte", "termo": " ".join(sentence.split()[:14]),
+                         "motivo": f"fato sem trecho da fonte que o sustente ({why}) — tire ou reescreva com o que a fonte diz"})
+    if problems:
+        log.warning("checagem por citação: %d de %d frases sem fonte", len(problems), len(sentences))
+    return problems

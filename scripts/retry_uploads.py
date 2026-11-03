@@ -97,6 +97,7 @@ def upload_pending(channel_filter: str | None, status: str = "failed", limit: in
                 thumbnail_path=thumb if thumb.exists() else None,
                 publish_at=meta.get("publish_at"),
                 synthetic=bool(meta.get("synthetic")),
+                private=bool(meta.get("ressalvas")),
             )
         except RefreshError as exc:
             dead_tokens.add(channel_name)
@@ -108,7 +109,12 @@ def upload_pending(channel_filter: str | None, status: str = "failed", limit: in
         except Exception as exc:  # noqa: BLE001 — cota/rede: tenta na próxima rodada
             log.error("[%s] reenvio falhou: %s", job_id, exc)
             continue
-        update(job_id, status=after_upload_status(channel), youtube_video_id=video_id, error=None)
+        if meta.get("ressalvas"):
+            # ressalva da revisão: privado, esperando o "Aprovar" do painel
+            update(job_id, status="awaiting_approval", youtube_video_id=video_id,
+                   error="PRIVADO, aguardando aprovação — " + "; ".join(meta["ressalvas"])[:900])
+        else:
+            update(job_id, status=after_upload_status(channel), youtube_video_id=video_id, error=None)
         log.info("[%s] publicado (%s): https://youtu.be/%s", job_id, status, video_id)
         uploaded += 1
         if meta.get("comment"):

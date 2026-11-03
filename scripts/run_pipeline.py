@@ -432,9 +432,10 @@ def _forced_cut(script: dict, problems: list[dict], topic: str, facts, web_facts
             problems = review_script(script, topic, facts, web_facts) or []
     if problems:
         log.warning(
-            "[%s] última tentativa do dia — publica com ressalvas da revisão: %s", job_id,
+            "[%s] última tentativa do dia — sobe PRIVADO com ressalvas da revisão: %s", job_id,
             "; ".join(str(p.get("termo")) for p in problems),
         )
+        script = {**script, "_ressalvas": [f"fato: {p.get('termo')} ({p.get('motivo')})" for p in problems]}
     return script
 
 
@@ -532,6 +533,11 @@ def run(
     compilation: bool = False,
 ) -> None:
     channel = ChannelConfig.load(channel_name)
+    # problema conhecido que a última tentativa do dia deixou passar (revisor
+    # fora, frase reprovada que sobrou, ressalva da revisão do vídeo): com
+    # QUALQUER um, o vídeo sobe PRIVADO e espera aprovação no painel — nunca
+    # público sozinho com erro apontado (03/11)
+    ressalvas: list[str] = []
     # guardado ANTES de qualquer auto-preenchimento abaixo — só um tema
     # digitado por uma pessoa de verdade deve disparar busca na internet
     # (ver web_facts mais abaixo); tema vindo da fila/banco interno já tem
@@ -772,6 +778,7 @@ def run(
                 if problems is None:
                     if must_publish:
                         log.warning("[%s] revisor de fatos indisponível — última tentativa do dia, segue sem revisão", job_id)
+                        ressalvas.append("revisão de fatos não rodou (revisor indisponível)")
                         break
                     raise ScriptRejected("revisor de fatos indisponível — vídeo não sai sem revisão")
             if not problems:
@@ -854,6 +861,7 @@ def run(
         trimmed = trim_teaser_ending(script)
         if trimmed is not script:
             script = {**trimmed, "_edited": True}
+        ressalvas.extend(script.pop("_ressalvas", None) or [])
         if script.pop("_edited", False):
             # conserto/corte mudou o que o vídeo narra: a descrição gerada
             # junto com o roteiro prometia o que saiu (job 558)
@@ -1412,7 +1420,8 @@ def run(
             for p in qa_problems:
                 log.warning("[%s] revisão do vídeo: %s", job_id, p)
         if qa_problems and must_publish:
-            log.warning("[%s] última tentativa do dia — publica mesmo com ressalvas da revisão do vídeo", job_id)
+            log.warning("[%s] última tentativa do dia — sobe PRIVADO com ressalvas da revisão do vídeo", job_id)
+            ressalvas.extend(qa_problems)
         elif qa_problems:
             raise ScriptRejected("vídeo reprovado na revisão antes do upload: " + "; ".join(qa_problems))
         update(job_id, status="rendered", video_path=str(final_video))
@@ -1568,6 +1577,8 @@ def run(
         # precisar gerar tudo de novo.
         upload_meta = {
             "long": long_form,
+            # com ressalva: sobe privado e espera o "Aprovar" do painel
+            "ressalvas": ressalvas,
             # alguma cena com imagem gerada por IA: declarar ao YouTube
             "synthetic": "ia" in scene_sources,
             "title": script["title"],
@@ -1603,9 +1614,15 @@ def run(
             thumbnail_path=thumb_path,
             publish_at=publish_at,
             synthetic=upload_meta["synthetic"],
+            private=bool(ressalvas),
         )
-        update(job_id, status=after_upload_status(channel), youtube_video_id=video_id)
-        log.info("[%s] publicado: https://youtu.be/%s", job_id, video_id)
+        if ressalvas:
+            update(job_id, status="awaiting_approval", youtube_video_id=video_id,
+                   error="PRIVADO, aguardando aprovação — " + "; ".join(ressalvas)[:900])
+            log.warning("[%s] subiu PRIVADO (ressalvas: %s): https://youtu.be/%s", job_id, "; ".join(ressalvas), video_id)
+        else:
+            update(job_id, status=after_upload_status(channel), youtube_video_id=video_id)
+            log.info("[%s] publicado: https://youtu.be/%s", job_id, video_id)
         try:
             post_comment(channel, video_id, upload_meta["comment"])
         except Exception as exc:  # noqa: BLE001 — engajamento é bônus
