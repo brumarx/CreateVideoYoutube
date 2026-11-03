@@ -1601,7 +1601,8 @@ def run(
         if no_upload:
             # pronto e revisado, sobe depois: o daily_run publica o "ready" do
             # canal no lugar de gerar outro (cota de ~6 uploads/dia)
-            update(job_id, status="ready", video_path=str(final_video), thumbnail_path=str(thumb_path))
+            update(job_id, status="ready", video_path=str(final_video), thumbnail_path=str(thumb_path),
+                   error=("COM RESSALVAS (sobe privado) — " + "; ".join(ressalvas))[:2000] if ressalvas else None)
             log.info("[%s] --no-upload: vídeo pronto em %s, sobe no próximo daily_run", job_id, final_video)
             return
 
