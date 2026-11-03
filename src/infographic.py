@@ -27,6 +27,7 @@ src/script_gen.py): um dict ou uma lista de até 3 "batidas", cada uma com
 """
 from __future__ import annotations
 
+import io
 import json
 import logging
 import math
@@ -217,7 +218,7 @@ class View:
         return self.lat_top - self.hdeg, self.lon0, self.lat_top, self.lon0 + self.wdeg
 
 
-def frame_view(countries: list[dict], w: int, h: int, focus: float = 0.42, pad: float = 1.7,
+def frame_view(countries: list[dict], w: int, h: int, focus: float = 0.42, pad: float = 1.45,
                points: list[tuple[float, float]] | None = None) -> View:
     """Enquadra os países pedidos no quadro vertical, com o assunto no terço
     de cima (a legenda fica embaixo)."""
@@ -651,6 +652,8 @@ def _map_scene(spec: dict, w: int, h: int) -> tuple[Image.Image, Image.Image] | 
         _draw_route(img, view, *route)
     if spec.get("nota"):
         _paper_note(img, str(spec["nota"]))
+    if spec.get("personagens"):
+        _place_characters(img, view, spec["personagens"])
     if spec.get("ano"):
         _year_ruler(img, str(spec["ano"]), str(spec.get("ano_rotulo") or ""))
     elif spec.get("_era"):
@@ -996,3 +999,110 @@ def sanitize(grafico, narration: str):
         if b["tipo"] == "ano" and b.get("ate"):
             skip = True
     return out[:MAX_BEATS]
+
+
+# ---------------------------------------------------------------- personagens
+
+# personagem caricato gerado por IA (FLUX grátis no Cloudflare, ~50 de 10 mil
+# neurons/dia por imagem), UMA vez por personagem+expressão e guardado pra
+# sempre: o mesmo Napoleão em todas as cenas e em todos os vídeos
+CHAR_STYLE = (
+    "cute chibi cartoon caricature sticker, full body, big head small body, flat vector illustration, "
+    "thick dark outline, soft cel shading, simple shapes, isolated on plain pure white background, centered"
+)
+# figura histórica só se morreu antes disso: pessoa viva/recente a IA
+# desenha com rosto errado (e político/jogador é o pior caso)
+CHAR_MAX_DEATH_YEAR = 1950
+
+
+def _historical_ok(name: str) -> bool:
+    """Nome próprio só passa se a Wikipédia em inglês mostrar que a pessoa
+    morreu antes de CHAR_MAX_DEATH_YEAR; papel genérico ("soldado francês",
+    sem maiúscula) passa sempre."""
+    if not re.search(r"\b[A-ZÀ-Ý]", name):
+        return True
+    try:
+        r = requests.get("https://en.wikipedia.org/w/api.php", params={
+            "action": "query", "prop": "extracts", "exintro": 1, "explaintext": 1, "redirects": 1,
+            "titles": name, "format": "json", "formatversion": 2,
+        }, headers={"User-Agent": "FractalCurioso-video-bot/1.0 (https://www.youtube.com/@fractalcurioso)"}, timeout=15)
+        intro = (r.json()["query"]["pages"][0].get("extract") or "")[:600]
+    except Exception:  # noqa: BLE001 — sem confirmar, não desenha
+        return False
+    m = re.search(r"\(([^()]*?\b\d{3,4})\s*[–-]\s*[^()]*?\b(\d{3,4})\)", intro)
+    return bool(m and int(m.group(2)) < CHAR_MAX_DEATH_YEAR)
+
+
+def _cutout(data: bytes, size: int) -> Image.Image | None:
+    """Tira o fundo branco (o que é branco E encosta na borda — a peruca
+    branca de dentro fica) e põe borda branca de figurinha."""
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+    white = (np.asarray(img).min(axis=2) > 225).astype(np.uint8) * 255
+    filled = Image.fromarray(white).copy()  # sem copy o floodfill não altera (memória do numpy)
+    for xy in ((0, 0), (img.width - 1, 0), (0, img.height - 1), (img.width - 1, img.height - 1)):
+        if filled.getpixel(xy) == 255:
+            ImageDraw.floodfill(filled, xy, 128)
+    bg = np.asarray(filled) == 128
+    if bg.mean() < 0.25:  # fundo não era branco: recorte daria lixo
+        return None
+    alpha = Image.fromarray(((~bg) * 255).astype(np.uint8)).filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(1))
+    rgba = img.convert("RGBA")
+    rgba.putalpha(alpha)
+    rgba = rgba.crop(rgba.getbbox())
+    pad = 12
+    out = Image.new("RGBA", (rgba.width + 2 * pad, rgba.height + 2 * pad), (0, 0, 0, 0))
+    a2 = Image.new("L", out.size, 0)
+    a2.paste(rgba.getchannel("A"), (pad, pad))
+    white_layer = Image.new("RGBA", out.size, (255, 255, 255, 255))
+    white_layer.putalpha(a2.filter(ImageFilter.MaxFilter(13)))
+    out.alpha_composite(white_layer)
+    out.alpha_composite(rgba, (pad, pad))
+    out.thumbnail((size, size), Image.Resampling.LANCZOS)
+    return out
+
+
+def character(name: str, look: str, mood: str, size: int) -> Image.Image | None:
+    key = _fold(f"{name} {mood}").replace(" ", "_")[:80]
+    path = CACHE / "personagens" / f"{key}.png"
+    if not path.exists():
+        if not _historical_ok(name):
+            log.info("personagem %r recusado (pessoa real recente ou não confirmada)", name)
+            return None
+        from .visuals import _try_cloudflare
+
+        prompt = f"{name if re.search(r'[A-ZÀ-Ý]', name) else ''} {look}, {mood} face expression, {CHAR_STYLE}".strip()
+        data = _try_cloudflare(prompt, 1)
+        sticker = _cutout(data, 900) if data else None
+        if sticker is None:
+            return None
+        path.parent.mkdir(parents=True, exist_ok=True)
+        sticker.save(path)
+    img = Image.open(path).convert("RGBA")
+    img.thumbnail((size, size), Image.Resampling.LANCZOS)
+    return img
+
+
+def _place_characters(img: Image.Image, view: "View | None", specs: list) -> None:
+    """Personagem AO LADO do país dele (nunca em cima: o país é a
+    informação), do lado com mais espaço, e longe do outro personagem."""
+    w, h = img.size
+    size = int(w * 0.3)
+    placed: list[tuple[float, float]] = []
+    for i, p in enumerate([p for p in specs if isinstance(p, dict)][:2]):
+        ch = character(str(p.get("nome") or ""), str(p.get("visual") or ""), str(p.get("expressao") or "neutral"), size)
+        if ch is None:
+            continue
+        pos = (w * (0.27 if i == 0 else 0.73), h * 0.6)
+        c = find_country(str(p.get("pais") or "")) if view is not None and p.get("pais") else None
+        if c is not None:
+            x, _ = view.px(*c["main"]["c"])
+            bottom = max(view.px(*pt)[1] for pt in c["main"]["ring"])
+            if 0 <= x <= w and 0 <= bottom <= h:
+                pos = (x, bottom + size * 0.55)  # logo abaixo do próprio país
+        for q in placed:
+            if math.dist(pos, q) < size * 0.95:
+                side = 1 if pos[0] >= q[0] else -1
+                pos = (q[0] + side * size * 1.05, pos[1])
+        pos = (min(max(pos[0], size * 0.55), w - size * 0.55), min(max(pos[1], h * 0.22), h * 0.62))
+        placed.append(pos)
+        _paste_icon(img, ch, pos)
