@@ -71,7 +71,10 @@ MUST_PUBLISH_ATTEMPTS = 3
 # são etapas intermediárias como "rendered": parado nelas dias depois é
 # execução morta (pasta de 06/10 com 0,28 GB ficou esquecida). "pending" não
 # entra — é fila que o orchestrator ainda vai pegar.
-CLEANUP_STATUSES = ("failed", "retried", "abandoned", "deleted", "uploaded", "rendered", "dry_run", "script_ready", "rendered_from_script", "scripted", "narrated")
+CLEANUP_STATUSES = ("failed", "retried", "abandoned", "deleted", "uploaded", "rendered", "dry_run", "script_ready", "rendered_from_script", "scripted", "narrated", "pending")
+# job que parou no meio (nunca publicado) há mais de CLEANUP_AFTER_DAYS vira
+# abandoned — sem isso ficava "pending"/"scripted" pra sempre (112 em 03/11)
+STALE_STATUSES = ("pending", "scripted", "script_ready", "narrated", "rendered", "rendered_from_script", "dry_run")
 CLEANUP_AFTER_DAYS = 3
 # upload que falhou (token OAuth vence a cada ~7 dias) fica com
 # upload_meta.json esperando o retry_uploads — guarda por mais tempo
@@ -93,6 +96,15 @@ def _max_job_id() -> int:
 
 
 def cleanup_output() -> None:
+    with closing(sqlite3.connect(DB_PATH)) as conn, conn:
+        stale = conn.execute(
+            f"UPDATE jobs SET status = 'abandoned', video_path = NULL, thumbnail_path = NULL "
+            f"WHERE status IN ({','.join('?' * len(STALE_STATUSES))}) AND datetime(updated_at) < datetime('now', ?)",
+            (*STALE_STATUSES, f"-{CLEANUP_AFTER_DAYS} days"),
+        ).rowcount
+    if stale:
+        log.info("limpeza: %d job(s) parado(s) há mais de %d dias, nunca publicado(s), marcado(s) como abandoned",
+                 stale, CLEANUP_AFTER_DAYS)
     with closing(sqlite3.connect(DB_PATH)) as conn:
         old = {
             row[0]: (row[1], row[2]) for row in conn.execute(
