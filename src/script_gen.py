@@ -656,7 +656,37 @@ _WEAK_ENDING = re.compile(
 
 # promessa no fim que o vídeo não cumpre (job 702: "A resposta está no
 # mesmo tratado que a privou do litoral." — e acabou)
-_TEASER_ENDING = re.compile(r"\b(a resposta est[áa]|descubra|vamos ver|voc[êe] vai (ver|descobrir)|mas isso [ée] (outra|assunto))", re.I)
+_TEASER_ENDING = re.compile(
+    r"\b(a resposta (est[áa]|pode|vem|fica)|descubra|vamos ver|voc[êe] vai (ver|descobrir)|mas isso [ée] (outra|assunto)"
+    r"|s[óo] o tempo|ser[áa] que|o que vem (a seguir|depois)|fica a pergunta)", re.I)
+
+
+def _teaser_sentence(f: str) -> bool:
+    return f.strip().endswith("?") or bool(_TEASER_ENDING.search(f)) or bool(_WEAK_ENDING.search(f))
+
+
+def trim_teaser_ending(script: dict, n_scenes: int | None = None) -> dict:
+    """Corta do FIM da última cena as frases de pergunta/promessa sem
+    resposta ("Mas será que...? A resposta pode estar...", job 703) — o
+    conserto da revisão de fatos reescreve frases depois da checagem do
+    roteiro, então isto roda no roteiro FINAL. Fica pelo menos 1 frase."""
+    scenes = list(script.get("scenes") or [])
+    idx = (n_scenes or len(scenes)) - 1
+    if idx < 0 or idx >= len(scenes):
+        return script
+    frases = [f for f in _SENTENCE_SPLIT.split(scenes[idx].get("narration", "")) if f.strip()]
+    cut = len(frases)
+    while cut > 1 and _teaser_sentence(frases[cut - 1]):
+        cut -= 1
+    if cut == len(frases):
+        return script
+    if cut == 1 and _teaser_sentence(frases[0]) and idx > 0:
+        # a cena inteira era pergunta: sai, o fim vira a cena anterior
+        log.warning("cena final só de pergunta/promessa, removida: %r", scenes[idx].get("narration", "")[:80])
+        return {**script, "scenes": scenes[:idx] + scenes[idx + 1:]}
+    log.warning("final sem resposta cortado: %r", " ".join(frases[cut:])[:100])
+    scenes[idx] = {**scenes[idx], "narration": " ".join(frases[:cut])}
+    return {**script, "scenes": scenes}
 
 
 def _ending_problem(script: dict) -> str | None:
@@ -667,7 +697,7 @@ def _ending_problem(script: dict) -> str | None:
     for f in last:
         if _WEAK_ENDING.search(f):
             return f"final sem desfecho (\"{f.strip()[:70]}\")"
-    if last and (last[-1].strip().endswith("?") or _TEASER_ENDING.search(last[-1])):
+    if last and _teaser_sentence(last[-1]):
         return f"final que pergunta/promete e não responde (\"{last[-1].strip()[:70]}\")"
     return None
 

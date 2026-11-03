@@ -164,6 +164,25 @@ _ALIASES = {
     "Coreia do Norte": "North Korea", "Coreia do Sul": "South Korea", "União Soviética": "Russia",
     "URSS": "Russia", "Soviet Union": "Russia", "Rússia": "Russia", "Tchéquia": "Czechia",
 }
+# adjetivo pátrio na narração ("tropas chilenas") também é o país — senão o
+# mapa automático pegava o outro país da frase (job 703 mostrou o Peru)
+_DEMONYMS = {
+    "chilen": "Chile", "bolivian": "Bolivia", "peruan": "Peru", "argentin": "Argentina", "brasileir": "Brazil",
+    "paraguai": "Paraguay", "uruguai": "Uruguay", "colombian": "Colombia", "venezuelan": "Venezuela",
+    "equatorian": "Ecuador", "mexican": "Mexico", "norte-american": "United States of America",
+    "estadunidense": "United States of America", "canadense": "Canada", "cuban": "Cuba",
+    "portugues": "Portugal", "espanhol": "Spain", "frances": "France", "ingles": "United Kingdom",
+    "britanic": "United Kingdom", "alema": "Germany", "alemao": "Germany", "alemaes": "Germany",
+    "italian": "Italy", "holandes": "Netherlands", "russ": "Russia", "sovietic": "Russia", "ucranian": "Ukraine",
+    "polones": "Poland", "sueco": "Sweden", "sueca": "Sweden", "norueg": "Norway", "dinamarques": "Denmark",
+    "finlandes": "Finland", "island": "Iceland", "suic": "Switzerland", "grego": "Greece", "grega": "Greece",
+    "turc": "Turkey", "egipci": "Egypt", "israelense": "Israel", "iranian": "Iran", "iraquian": "Iraq",
+    "saudita": "Saudi Arabia", "chines": "China", "japones": "Japan", "coreano": "South Korea",
+    "norte-coreano": "North Korea", "norte coreano": "North Korea", "sul-coreano": "South Korea",
+    "sul coreano": "South Korea", "indian": "India", "australian": "Australia", "sul-african": "South Africa",
+    "nigerian": "Nigeria", "marroquin": "Morocco", "vietnamit": "Vietnam", "tailandes": "Thailand",
+    "indonesi": "Indonesia", "filipin": "Philippines", "singapurian": "Singapore", "catarian": "Qatar",
+}
 
 
 def find_country(name: str) -> dict | None:
@@ -819,6 +838,9 @@ def _country_name_patterns() -> list[tuple[re.Pattern, str]]:
     pats = []
     for shown, key in sorted(names.items(), key=lambda kv: -len(kv[0])):
         pats.append((re.compile(rf"(?<!\w){re.escape(_fold(shown))}(?!\w)"), key))
+    for stem, key in sorted(_DEMONYMS.items(), key=lambda kv: -len(kv[0])):
+        # radical + terminação (chilenas, bolivianos, francesa, alemã)
+        pats.append((re.compile(rf"(?<!\w){re.escape(_fold(stem))}(?:a|o|as|os|es|e|ano|ana)?(?!\w)"), key))
     return pats
 
 
@@ -867,6 +889,7 @@ class Renderer:
         self.last_base: Image.Image | None = None
         self.era = ""  # último ano mostrado: fica no canto dos mapas seguintes
         self.colors: dict[int, str] = {}  # país -> cor, fixa no vídeo inteiro
+        self.cast: list[str] = []  # países da história, na ordem em que apareceram
         self.last_sig: tuple | None = None  # mapa da cena anterior
         self.repeat = 0  # quantas cenas seguidas com o mesmo mapa
 
@@ -885,9 +908,16 @@ class Renderer:
         names = [n for n in countries_in(narration) if id(find_country(n)) not in skipped][:3]
         if not names:
             return None
-        destaques = [{"pais": n, "cor": self.color_for(n), "rotulo": find_country(n)["name"]} for n in names[:2]]
+        for n in names:
+            if all(find_country(c) is not find_country(n) for c in self.cast):
+                self.cast.append(n)
+        # o rival da história fica no mapa mesmo quando a frase só cita um
+        # (Bolívia × Chile): a cena sobre a Marinha boliviana mostra o Chile ao lado
+        rivals = [c for c in self.cast[:3] if all(find_country(c) is not find_country(n) for n in names)]
+        shown = (names + rivals)[:3]
+        destaques = [{"pais": n, "cor": self.color_for(n), "rotulo": find_country(n)["name"]} for n in shown]
         years = re.findall(r"(?<!\d)(1[0-9]\d\d|20[0-2]\d)(?!\d)", narration)
-        spec = {"tipo": "mapa", "lugares": names, "destaques": destaques}
+        spec = {"tipo": "mapa", "lugares": shown, "destaques": destaques}
         cities = cities_in(narration)
         if cities:
             spec["cidade"] = cities[0]

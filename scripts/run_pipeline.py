@@ -43,6 +43,7 @@ from src.orchestrator import enqueue, update
 from src.people_photos import names_in, person_photo
 from src.real_media import real_clip, real_photos
 from src.script_gen import (
+    trim_teaser_ending,
     chapter_titles, clean_stat_overlays, engagement_question, fix_dangling_hooks, generate_script, refresh_packaging,
     repair_script, vary_close_repeats,
 )
@@ -834,6 +835,11 @@ def run(
                 channel, topic, facts, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes,
                 web_facts=web_facts, revision_feedback=feedback_for_rewrite(problems),
             )
+        # pergunta/promessa sem resposta no fim (o conserto da revisão de
+        # fatos reescreve depois da checagem do roteiro): corta, sempre
+        trimmed = trim_teaser_ending(script)
+        if trimmed is not script:
+            script = {**trimmed, "_edited": True}
         if script.pop("_edited", False):
             # conserto/corte mudou o que o vídeo narra: a descrição gerada
             # junto com o roteiro prometia o que saiu (job 558)
