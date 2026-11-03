@@ -558,11 +558,13 @@ def _paper_note(img: Image.Image, text: str) -> None:
 def _era_badge(img: Image.Image, year: str) -> None:
     """Ano fixo no canto (1807 → 1808 → 1815): linha do tempo sem narrar."""
     w, _ = img.size
-    font = _font(SERIF_FONT, int(w * 0.06), "Bold")
-    _shadowed_text(img, (w * 0.05, w * 0.06), year, font, fill=(232, 190, 90), anchor="lm")
+    font = _font(SERIF_FONT, int(w * 0.07), "Bold")
+    # longe da borda: o zoom lento corta ~5% de cada lado
+    x0, y0 = w * 0.09, w * 0.13
+    _shadowed_text(img, (x0, y0), year, font, fill=(232, 190, 90), anchor="lm")
     d = ImageDraw.Draw(img)
     tl = font.getlength(year)
-    d.line((w * 0.05, w * 0.06 + font.size * 0.55, w * 0.05 + tl, w * 0.06 + font.size * 0.55),
+    d.line((x0, y0 + font.size * 0.55, x0 + tl, y0 + font.size * 0.55),
            fill=(232, 190, 90, 220), width=3)
 
 
