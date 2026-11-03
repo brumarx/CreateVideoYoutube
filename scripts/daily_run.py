@@ -273,11 +273,24 @@ def main() -> None:
         subprocess.run([sys.executable, str(ROOT / "scripts" / "retry_uploads.py")], cwd=ROOT)
 
     # consultas à Wikimedia (src/wiki_cache.py) só servem enquanto os vídeos
-    # do dia são feitos (e refeitos, no conserto em laço): depois, apaga.
+    # são feitos (e refeitos, no conserto em laço): apaga quando o vídeo já
+    # foi feito E publicado — com vídeo ainda na esteira (roteiro aprovado,
+    # pronto esperando a vez, upload que falhou), fica pra ele.
     # Mapas/ícones/personagens (data/cache/infographic) ficam: são material.
     from src.wiki_cache import clear
 
-    clear()
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        # job parado há semanas (morreu sem marcar) não segura o cache
+        in_flight = conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE (status IN ('pending', 'scripted', 'script_ready', 'script_approved', "
+            "'narrated', 'rendered', 'rendered_from_script', 'ready') "
+            "OR (status = 'failed' AND video_path IS NOT NULL)) "
+            "AND datetime(updated_at) > datetime('now', '-3 days')"
+        ).fetchone()[0]
+    if in_flight:
+        log.info("consultas da Wikimedia mantidas: %d vídeo(s) ainda na esteira", in_flight)
+    else:
+        clear()
     log.info("rodada diária concluída")
 
 
