@@ -173,11 +173,11 @@ def find_country(name: str) -> dict | None:
 
 
 @lru_cache(maxsize=1)
-def _cities() -> dict[str, tuple[float, float, str]]:
+def _cities() -> dict[str, tuple[float, float, str, int]]:
     path = _get(NE + "ne_50m_populated_places.geojson", CACHE / "ne_50m_populated_places.geojson")
     if path is None:
         return {}
-    out: dict[str, tuple[float, float, str]] = {}
+    out: dict[str, tuple[float, float, str, int]] = {}
     feats = json.loads(path.read_text())["features"]
     for f in feats:
         f["properties"] = {k.lower(): v for k, v in f["properties"].items()}
@@ -189,7 +189,7 @@ def _cities() -> dict[str, tuple[float, float, str]]:
         for key in ("name", "nameascii", "name_en", "name_pt"):
             value = props.get(key)
             if value:
-                out.setdefault(_fold(value), (lon, lat, shown))
+                out.setdefault(_fold(value), (lon, lat, shown, int(props.get("pop_max") or 0)))
     return out
 
 
@@ -311,8 +311,15 @@ def _font(path: Path, size: int, variation: str | None = None) -> ImageFont.Free
 _FEATURES = ["lnum"] if features.check("raqm") else None
 
 
+def _clean(text: str) -> str:
+    """Hífen/espaço "especiais" que o LLM manda (U+2011 em "pós‑guerra") não
+    existem na fonte e saíam como quadradinho."""
+    return re.sub(r"[\u2010\u2011\u2012\u2013\u2212]", "-", str(text)).replace("\u00a0", " ").replace("\u202f", " ")
+
+
 def _shadowed_text(img: Image.Image, xy: tuple[float, float], text: str, font: ImageFont.FreeTypeFont,
                    fill=(255, 255, 255), anchor: str = "mm", shadow: int = 10) -> None:
+    text = _clean(text)
     layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
     ImageDraw.Draw(layer).text((xy[0] + 3, xy[1] + 5), text, font=font, fill=(0, 0, 0, 200), anchor=anchor,
                                features=_FEATURES)
@@ -592,8 +599,10 @@ def _map_scene(spec: dict, w: int, h: int) -> tuple[Image.Image, Image.Image] | 
     if not focus and countries:
         smallest = min(c["main"]["area"] for c in countries)
         focus = [c for c in countries if c["main"]["area"] <= smallest * 6]
+    if spec.get("_zoom") and focus:
+        focus = focus[:1]  # variação: fecha no país principal
     if focus or route:
-        view = frame_view(focus, w, h, points=list(route[:2]) if route else None)
+        view = frame_view(focus, w, h, pad=float(spec.get("_pad") or 1.45), points=list(route[:2]) if route else None)
     else:
         assert city is not None
         lon, lat = city
@@ -813,6 +822,23 @@ def _country_name_patterns() -> list[tuple[re.Pattern, str]]:
     return pats
 
 
+def cities_in(text: str) -> list[str]:
+    """Cidade citada pelo nome na narração ("Antofagasta", "La Paz") — só
+    com maiúscula e 5+ letras, e não país (senão "Natal", "Vitória" no meio
+    da frase viravam cidade)."""
+    out = []
+    for m in re.finditer(r"\b[A-ZÀ-Ý][a-zà-ÿ]+(?: (?:de |da |do )?[A-ZÀ-Ý][a-zà-ÿ]+)?", text):
+        sentence_start = m.start() == 0 or text[:m.start()].rstrip()[-1:] in ".!?:"
+        for cand in (m[0], m[0].split()[0]):
+            if sentence_start and " " not in cand:
+                continue  # "Vitória do Botafogo..." no começo da frase não é a cidade
+            hit = _cities().get(_fold(cand))
+            if hit and len(cand) >= 5 and hit[3] >= 50_000 and find_country(cand) is None and cand not in out:
+                out.append(cand)
+                break
+    return out
+
+
 def countries_in(text: str) -> list[str]:
     folded = _fold(text)
     found: list[tuple[int, str]] = []
@@ -841,6 +867,8 @@ class Renderer:
         self.last_base: Image.Image | None = None
         self.era = ""  # último ano mostrado: fica no canto dos mapas seguintes
         self.colors: dict[int, str] = {}  # país -> cor, fixa no vídeo inteiro
+        self.last_sig: tuple | None = None  # mapa da cena anterior
+        self.repeat = 0  # quantas cenas seguidas com o mesmo mapa
 
     def color_for(self, country_name: str) -> str:
         c = find_country(country_name)
@@ -860,6 +888,9 @@ class Renderer:
         destaques = [{"pais": n, "cor": self.color_for(n), "rotulo": find_country(n)["name"]} for n in names[:2]]
         years = re.findall(r"(?<!\d)(1[0-9]\d\d|20[0-2]\d)(?!\d)", narration)
         spec = {"tipo": "mapa", "lugares": names, "destaques": destaques}
+        cities = cities_in(narration)
+        if cities:
+            spec["cidade"] = cities[0]
         if years:
             spec["ano"] = years[0]
         return [spec]
@@ -878,6 +909,19 @@ class Renderer:
                             self.colors.setdefault(id(find_country(str(d["pais"]))), _fold(d["cor"]))
                         d["cor"] = self.color_for(str(d["pais"]))
                 spec = {**spec, "_era": self.era}
+                # o mesmo mapa cena após cena (o Chile vermelho em 15 quadros
+                # seguidos, job 702): fecha, vira noite, abre — nunca igual
+                sig = (tuple(sorted(_fold(n) for n in spec.get("lugares") or [])),
+                       tuple(sorted(_fold(d.get("pais", "")) for d in spec.get("destaques") or [] if isinstance(d, dict))))
+                self.repeat = self.repeat + 1 if sig == self.last_sig else 0
+                self.last_sig = sig
+                variation = self.repeat % 4
+                if variation == 1:
+                    spec.update(_zoom=True, _pad=1.12)
+                elif variation == 2:
+                    spec.update(noite=not spec.get("noite"))
+                elif variation == 3:
+                    spec.update(_pad=2.4)
                 res = _map_scene(spec, self.w, self.h)
                 if res is None:
                     return None

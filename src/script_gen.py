@@ -653,6 +653,11 @@ _WEAK_ENDING = re.compile(
 )
 
 
+# promessa no fim que o vídeo não cumpre (job 702: "A resposta está no
+# mesmo tratado que a privou do litoral." — e acabou)
+_TEASER_ENDING = re.compile(r"\b(a resposta est[áa]|descubra|vamos ver|voc[êe] vai (ver|descobrir)|mas isso [ée] (outra|assunto))", re.I)
+
+
 def _ending_problem(script: dict) -> str | None:
     scenes = script.get("scenes") or []
     if not scenes:
@@ -661,6 +666,8 @@ def _ending_problem(script: dict) -> str | None:
     for f in last:
         if _WEAK_ENDING.search(f):
             return f"final sem desfecho (\"{f.strip()[:70]}\")"
+    if last and (last[-1].strip().endswith("?") or _TEASER_ENDING.search(last[-1])):
+        return f"final que pergunta/promete e não responde (\"{last[-1].strip()[:70]}\")"
     return None
 
 
