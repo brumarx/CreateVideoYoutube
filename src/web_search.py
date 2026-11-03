@@ -66,10 +66,18 @@ WIKI_CHARS = {"pt": 1400, "en": 1000}
 
 
 def _wiki_get(lang: str, params: dict) -> dict:
-    resp = httpx.get(_WIKI_API.format(lang=lang), params={**params, "format": "json", "formatversion": 2},
-                     headers=_WIKI_HEADERS, timeout=15)
-    resp.raise_for_status()
-    return resp.json()
+    """429 (muitos pedidos seguidos) espera e tenta de novo, até 3 vezes."""
+    import time
+
+    for attempt in range(4):
+        resp = httpx.get(_WIKI_API.format(lang=lang), params={**params, "format": "json", "formatversion": 2},
+                         headers=_WIKI_HEADERS, timeout=15)
+        if resp.status_code == 429 and attempt < 3:
+            time.sleep(float(resp.headers.get("retry-after") or 0) or 5 * (attempt + 1))
+            continue
+        resp.raise_for_status()
+        return resp.json()
+    return {}
 
 
 def _wiki_search(lang: str, query: str) -> str | None:

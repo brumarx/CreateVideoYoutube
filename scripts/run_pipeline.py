@@ -311,6 +311,12 @@ def _mark_news_blocks(script: dict, facts: dict | None) -> None:
             scene["narration"] = f"{ordinal} notícia: {scene['narration']}"
 
 
+# começo de frase que aponta pra frase anterior
+_ANAPHORA = re.compile(
+    r"^(ess[ae]s?|ist[oa]|isso|aquel[ae]s?|aquilo|el[ae]s?|nel[ae]s?|del[ae]s?|dess[ae]s?|ness[ae]s?|"
+    r"l[áa]\b|ali\b|tamb[ée]m|al[ée]m disso|o mesmo|a mesma|os mesmos|as mesmas)\b", re.I)
+
+
 def _cut_flagged_sentences(
     script: dict, problems: list[dict], max_cuts: int | None = None, lenient: bool = False, min_score: float = 0.6,
 ) -> dict | None:
@@ -352,6 +358,13 @@ def _cut_flagged_sentences(
         to_cut.add(best)
     if len(to_cut) > max_cuts and not lenient:
         return None
+    # frase seguinte que só faz sentido com a cortada ("Essas embarcações
+    # patrulham... o próprio lago" sem a frase das embarcações, job 706) sai junto
+    order = [(si, ji) for si, sentences in enumerate(scenes) for ji in range(len(sentences))]
+    for k, pos in enumerate(order[:-1]):
+        nxt = order[k + 1]
+        if pos in to_cut and nxt not in to_cut and _ANAPHORA.match(scenes[nxt[0]][nxt[1]].strip()):
+            to_cut.add(nxt)
     new_scenes = []
     for si, sentences in enumerate(scenes):
         kept = " ".join(x for ji, x in enumerate(sentences) if (si, ji) not in to_cut).strip()
