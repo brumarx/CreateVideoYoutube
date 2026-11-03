@@ -164,6 +164,9 @@ _ALIASES = {
     "Coreia do Norte": "North Korea", "Coreia do Sul": "South Korea", "União Soviética": "Russia",
     "URSS": "Russia", "Soviet Union": "Russia", "Rússia": "Russia", "Tchéquia": "Czechia",
 }
+_LANGUAGE_STEMS = {"portugues", "ingles", "espanhol", "frances", "alema", "alemao", "alemaes", "italian", "chines",
+                   "japones", "russ", "holandes", "grego", "grega", "turc", "sueco", "sueca", "polones",
+                   "dinamarques", "finlandes", "norueg", "coreano", "indonesi"}
 # adjetivo pátrio na narração ("tropas chilenas") também é o país — senão o
 # mapa automático pegava o outro país da frase (job 703 mostrou o Peru)
 _DEMONYMS = {
@@ -843,8 +846,11 @@ def _country_name_patterns() -> list[tuple[re.Pattern, str]]:
     for shown, key in sorted(names.items(), key=lambda kv: -len(kv[0])):
         pats.append((re.compile(rf"(?<!\w){re.escape(_fold(shown))}(?!\w)"), key))
     for stem, key in sorted(_DEMONYMS.items(), key=lambda kv: -len(kv[0])):
-        # radical + terminação (chilenas, bolivianos, francesa, alemã)
-        pats.append((re.compile(rf"(?<!\w){re.escape(_fold(stem))}(?:a|o|as|os|es|e|ano|ana)?(?!\w)"), key))
+        # radical + terminação (chilenas, bolivianos, francesa, alemã). Quem
+        # também é IDIOMA ("traduzir para português" mostrou Portugal, job
+        # 707) só vale no plural ou no feminino: "os ingleses", "a corte portuguesa"
+        ends = "(?:as|os|es|a)" if stem in _LANGUAGE_STEMS else "(?:a|o|as|os|es|e|ano|ana)?"
+        pats.append((re.compile(rf"(?<!\w){re.escape(_fold(stem))}{ends}(?!\w)"), key))
     return pats
 
 
@@ -888,6 +894,8 @@ def countries_in(text: str) -> list[str]:
 _STRONG_NUMBER = re.compile(
     r"(R\$|US\$|€|£)?\s?(?<![\w.,])(\d{1,3}(?:[.,]\d{1,3})*(?:,\d+)?)\s*(%|por cento|mil|milh(?:ão|ões)|bilh(?:ão|ões)|trilh(?:ão|ões))?"
     r"\s+(?:(?:de|da|do|dos|das|em|ao|à)\s+|(por)\s+)?([a-zà-ÿ][a-zà-ÿ-]{2,}(?:\s+[a-zà-ÿ][a-zà-ÿ-]{2,})?)", re.I)
+_MEASURE_UNITS = {"metros": "m", "metro": "m", "quilometros": "km", "quilometro": "km", "km": "km",
+                  "centimetros": "cm", "toneladas": "t", "litros": "L", "hectares": "ha", "graus": "°"}
 _NUMBER_STOP = {"anos", "dias", "horas", "minutos", "segundos", "vezes", "outubro", "novembro", "dezembro", "janeiro",
                 "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro"}
 _LABEL_STOP = {"e", "de", "da", "do", "que", "em", "no", "na", "com", "para", "pra", "por", "a", "o"}
@@ -905,6 +913,10 @@ def strong_number(narration: str) -> dict | None:
             continue
         words = [w for i, w in enumerate(label.split()) if i == 0 or w.lower() not in _LABEL_STOP][:2]
         unit = "%" if mult.lower() in ("%", "por cento") else (f" {mult}" if mult else "")
+        if words and _fold(words[0]) in _MEASURE_UNITS:
+            # medida: a unidade vai junto do número e não pega a palavra
+            # seguinte ("4,3 / metros arremessa", job 708)
+            unit, words = f"{unit} {_MEASURE_UNITS[_fold(words[0])]}", []
         cand = {"tipo": "numero", "valor": f"{cur + ' ' if cur else ''}{num}{unit}".strip(), "rotulo": " ".join(words)}
         score = (2 if mult or cur else 0) + len(digits)
         if best is None or score > best[0]:

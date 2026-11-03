@@ -1159,10 +1159,6 @@ def run(
             # gol e manchete continuam na frente
             grafico_path = None
             grafico = sanitize_grafico(scene.get("grafico"), scene["narration"]) if i < original_scene_count else None
-            if grafico is None and i < original_scene_count:
-                # cena que cita país pelo nome e veio sem gráfico: mapa dele
-                # (o país do próprio canal, "Brasil" na política, não conta)
-                grafico = infographics.auto(scene["narration"], skip={channel.country} if channel.country else None)
             if news_frame is None and player_frame is None and grafico:
                 rendered = infographics.render(
                     grafico, scene["narration"], word_boundaries, scene_duration, work_dir / f"grafico_{i}",
@@ -1206,6 +1202,22 @@ def run(
                                 break
                         if real_frame is not None:
                             break
+            if (grafico_path is None and stock_clip_path is None and real_frame is None and news_frame is None
+                    and player_frame is None and i < original_scene_count):
+                # sem gráfico do roteiro nem foto/vídeo de ARQUIVO do assunto:
+                # cena que cita país ou número forte vira gráfico automático —
+                # depois do arquivo (a foto real da Bethany perdia pro cartão
+                # de número, job 708), antes do banco genérico. O país do
+                # próprio canal ("Brasil" na política) não conta.
+                auto = infographics.auto(scene["narration"], skip={channel.country} if channel.country else None)
+                rendered = infographics.render(
+                    auto, scene["narration"], word_boundaries, scene_duration, work_dir / f"grafico_{i}",
+                ) if auto else None
+                if rendered is not None:
+                    grafico_path, is_clip = rendered
+                    if is_clip:
+                        stock_clip_path = grafico_path
+                    log.info("[%s] cena %d: gráfico automático %s", job_id, i + 1, "+".join(b["tipo"] for b in auto))
             if grafico_path is None and stock_clip_path is None and real_frame is None and news_frame is None and player_frame is None and stock_query:
                 stock_clip_path = search_stock_clip(stock_query, width, height, check=in_context, region=channel.country)
 
