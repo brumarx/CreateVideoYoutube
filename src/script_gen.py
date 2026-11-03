@@ -144,7 +144,8 @@ ACCURACY_RULES = """REGRAS DE PRECISÃO (obrigatórias — o roteiro passa por r
 - Não faça contas com os números das fontes (diferença, soma, média, "o dobro", "X vezes mais", "o maior", "o terceiro maior"): cite os valores como estão e deixe o espectador comparar. Conta feita pelo roteiro saiu errada ("quase o dobro" pra 1,12x) e reprova.
 - Possibilidade não é fato: se a fonte diz "pode", "deve", "negocia", "avalia", narre como possibilidade.
 - Não tire conclusão, consequência ou impacto que a fonte não diz. Leia a relação de cada pessoa com o assunto exatamente como está: "emprestado pelo clube X" = joga em OUTRO clube (não desfalca X agora); "ex-X" = já saiu antes (não é saída de agora).
-- Nunca acuse ninguém de irregularidade sem que a fonte diga isso com todas as letras."""
+- Nunca acuse ninguém de irregularidade sem que a fonte diga isso com todas as letras.
+- A VIRADA tem que ser um fato da fonte, não um contraste inventado pra soar surpreendente: negação ("a batalha não foi naval", "nunca houve", "ninguém sabia") só se a fonte disser exatamente isso. Saiu "a batalha não foi naval" sobre a Guerra do Pacífico, que teve batalhas navais famosas (job 702)."""
 
 
 def current_date_rule() -> str:
