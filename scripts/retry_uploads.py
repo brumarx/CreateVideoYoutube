@@ -55,21 +55,24 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--channel", default=None)
     parser.add_argument(
-        "--status", choices=["failed", "ready"], default="failed",
-        help="ready = vídeo renderizado com --no-upload (roteiro revisado antes) esperando a vez",
+        "--status", choices=["failed", "ready", "dry_run"], default="failed",
+        help="ready = vídeo renderizado com --no-upload (roteiro revisado antes) esperando a vez; "
+             "dry_run = teste aprovado a olho",
     )
+    parser.add_argument("--job", type=int, default=None, help="só este job")
     args = parser.parse_args()
-    upload_pending(args.channel, args.status)
+    upload_pending(args.channel, args.status, job=args.job)
     # thumbnail recusada no upload (canal sem verificação por telefone)
     from src.upload import retry_pending_thumbnails
 
     retry_pending_thumbnails()
 
 
-def upload_pending(channel_filter: str | None, status: str = "failed", limit: int | None = None) -> int:
+def upload_pending(channel_filter: str | None, status: str = "failed", limit: int | None = None,
+                   job: int | None = None) -> int:
     """Sobe os vídeos prontos (`failed` = upload que falhou; `ready` =
     --no-upload). Devolve quantos subiram."""
-    jobs = _failed_jobs(channel_filter, status)[:limit]
+    jobs = [j for j in _failed_jobs(channel_filter, status) if job is None or j[0] == job][:limit]
     if not jobs:
         log.info("nenhum vídeo pendente (%s)", status)
         return 0

@@ -136,6 +136,12 @@ _SUBJECT_RULES = (
     "NUNCA proponha tema que acuse ou insinue irregularidade de uma pessoa "
     "real específica — prefira tema explicativo, verificável em fonte "
     "pública.\n\n"
+    "Prefira tema em forma de PERGUNTA 'Por que...?' ou 'Como...?' sobre um "
+    "paradoxo que dá pra VER (num mapa, numa foto, num número): 'Por que a "
+    "Coreia do Norte se apaga à noite?' fez 530 mil views em 4 dias. Notícia "
+    "sem mistério ('projeto X é suspenso') rende pouco: transforme na "
+    "pergunta por trás dela ('Por que a Arábia Saudita parou o cubo "
+    "gigante?').\n\n"
     "Não cite youtubers, podcasters ou o canal do vídeo de inspiração — o "
     "tema é o assunto, não quem falou dele.\n\n"
     'Responda SÓ com JSON numa linha: {"assunto": "SÓ o nome próprio do '

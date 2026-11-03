@@ -36,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.assemble import SFX_DIR, _ffprobe_duration, add_background_music, concat_scenes, render_scene
 from src.config import ChannelConfig
 from src.goal_card import goal_card
+from src.infographic import CREDIT as INFOGRAPHIC_CREDIT, Renderer as InfographicRenderer, sanitize as sanitize_grafico
 from src.news_card import headline_card
 from src.fact_check import BLOCKING_TYPES, feedback_for_rewrite, review_script
 from src.orchestrator import enqueue, update
@@ -959,6 +960,9 @@ def run(
             squad = elenco()
         player_credits: set[str] = set()
         real_credits: list[str] = []  # Commons (src/real_media.py): crédito na descrição
+        # cenas desenhadas por código (mapa, comparação, número, ano — ver
+        # src/infographic.py): o roteiro pede no campo "grafico"
+        infographics = InfographicRenderer(width, height)
         real_used: set[str] = set()  # arquivo do Commons não repete no vídeo
         real_found: list[str] = []  # assuntos que já deram foto (reserva de cena sem foto própria)
         gols = [g for g in ((facts or {}).get("gols") or []) if isinstance(g, dict)]
@@ -1131,8 +1135,26 @@ def run(
             stock_clip_path = None
             real_frame = None
             real_clip_found = False
+            # gráfico desenhado (mapa/número/ano): vem do próprio roteiro,
+            # então entra antes do arquivo e do banco — foto real do jogo,
+            # gol e manchete continuam na frente
+            grafico_path = None
+            grafico = sanitize_grafico(scene.get("grafico"), scene["narration"]) if i < original_scene_count else None
+            if grafico is None and i < original_scene_count:
+                # cena que cita país pelo nome e veio sem gráfico: mapa dele
+                # (o país do próprio canal, "Brasil" na política, não conta)
+                grafico = infographics.auto(scene["narration"], skip={channel.country} if channel.country else None)
+            if news_frame is None and player_frame is None and grafico:
+                rendered = infographics.render(
+                    grafico, scene["narration"], word_boundaries, scene_duration, work_dir / f"grafico_{i}",
+                )
+                if rendered is not None:
+                    grafico_path, is_clip = rendered
+                    if is_clip:
+                        stock_clip_path = grafico_path
+                    log.info("[%s] cena %d: gráfico %s", job_id, i + 1, "+".join(b["tipo"] for b in grafico))
             real_subject = (scene.get("real_subject") or "").strip() if channel.real_media else ""
-            if news_frame is None and player_frame is None and real_subject and i < original_scene_count:
+            if grafico_path is None and news_frame is None and player_frame is None and real_subject and i < original_scene_count:
                 real_context = visual_context + (
                     f"\nA imagem é FOTO/VÍDEO REAL de arquivo (Wikimedia Commons) de '{real_subject}': "
                     "foto antiga, preto e branco, granulada, de museu ou reconstrução do objeto é normal, "
@@ -1165,11 +1187,19 @@ def run(
                                 break
                         if real_frame is not None:
                             break
-            if stock_clip_path is None and real_frame is None and news_frame is None and player_frame is None and stock_query:
+            if grafico_path is None and stock_clip_path is None and real_frame is None and news_frame is None and player_frame is None and stock_query:
                 stock_clip_path = search_stock_clip(stock_query, width, height, check=in_context, region=channel.country)
 
             image_path = None
-            if news_frame is not None:
+            if grafico_path is not None:
+                if stock_clip_path is None:
+                    image_path = grafico_path
+                    last_still = grafico_path.read_bytes()
+                elif (first_beat := grafico_path.parent / "beat_0.png").exists():
+                    last_still = first_beat.read_bytes()
+                same_photo_run = 0
+                scene_sources.append("grafico")
+            elif news_frame is not None:
                 image_path = work_dir / f"scene_{i}.png"
                 image_path.write_bytes(news_frame)
                 # reserva sem a manchete: repetida em outra cena, mentiria o assunto
@@ -1244,16 +1274,18 @@ def run(
                     stat_overlay=scene.get("stat_overlay"),
                     impact_beat=bool(scene.get("impact_beat")),
                     video_path=stock_clip_path,
-                    grayscale=channel.fallback_grayscale and stock_clip_path is not None,
+                    grayscale=channel.fallback_grayscale and stock_clip_path is not None and scene_sources[-1] != "grafico",
                     # cartão (gol, manchete, canal) e foto encaixada: zoom leve
-                    composed=scene_sources[-1] in ("noticia", "jogador", "repetida") or real_frame is not None,
+                    composed=scene_sources[-1] in ("noticia", "jogador", "repetida", "grafico") or real_frame is not None,
+                    # gancho de dilema no topo da 1ª cena ("COVARDE OU GÊNIO?")
+                    hook_text=script.get("thumbnail_text") if i == 0 else None,
                 )
             finally:
                 # sem finally, um clipe baixado (10-20MB) vaza pro /tmp toda vez
                 # que o ffmpeg falhar (já visto de verdade nesta sessão — erro de
                 # rede, arquivo truncado) — acumula disco silenciosamente rodando
                 # todo dia em 5 canais.
-                if stock_clip_path is not None:
+                if stock_clip_path is not None and scene_sources[-1] != "grafico":
                     stock_clip_path.unlink(missing_ok=True)
             scene_videos.append(scene_video_path)
 
@@ -1292,7 +1324,9 @@ def run(
                 # futebol com clipe de banco/IA precisa de olho; vídeo só com
                 # foto das matérias (do próprio assunto) dispensa
                 strict_visual=channel.strict_visual and "ia" in scene_sources,
-                trusted_scenes={i + 1 for i, src in enumerate(scene_sources) if src in ("noticia", "repetida", "jogador", "arquivo")},
+                trusted_scenes={i + 1 for i, src in enumerate(scene_sources) if src in ("noticia", "repetida", "jogador", "arquivo", "grafico")},
+                # mapas da mesma região se parecem de propósito (mesmo mundo visual)
+                designed_scenes={i + 1 for i, src in enumerate(scene_sources) if src == "grafico"},
             )
             bad = [int(m.group(1)) - 1 for p in qa_problems if (m := re.match(r"cena (\d+) fora de contexto", p))]
             if not bad or len(bad) != len(qa_problems) or visual_round == VISUAL_FIX_ROUNDS:
@@ -1442,6 +1476,8 @@ def run(
 
         if real_credits:
             description += "\nImagens de arquivo: " + "; ".join(dict.fromkeys(real_credits))
+        if "grafico" in scene_sources:
+            description += "\n" + INFOGRAPHIC_CREDIT
 
         if music_attribution:
             # a licença CC BY (assets/music/ATTRIBUTION.md) exige creditar a
@@ -1479,11 +1515,6 @@ def run(
         if hashtags:
             description += "\n\n" + " ".join(hashtags)
 
-        if dry_run:
-            update(job_id, status="dry_run")
-            log.info("[%s] --dry-run: não vou publicar. Revise %s manualmente.", job_id, final_video)
-            return
-
         # guardado antes do upload: se ele falhar (token OAuth expirado,
         # rede), scripts/retry_uploads.py reenvia o vídeo já renderizado sem
         # precisar gerar tudo de novo.
@@ -1500,6 +1531,13 @@ def run(
             + (f"\n\n{channel.website_cta}: {channel.website}" if channel.website else ""),
         }
         (work_dir / UPLOAD_META_FILE).write_text(json.dumps(upload_meta, ensure_ascii=False, indent=2))
+
+        if dry_run:
+            # meta já gravada: aprovado na revisão manual, sobe com
+            # scripts/retry_uploads.py --status dry_run --job N (sem renderizar de novo)
+            update(job_id, status="dry_run", video_path=str(final_video), thumbnail_path=str(thumb_path))
+            log.info("[%s] --dry-run: não vou publicar. Revise %s manualmente.", job_id, final_video)
+            return
 
         if no_upload:
             # pronto e revisado, sobe depois: o daily_run publica o "ready" do

@@ -246,7 +246,7 @@ def review_audio(narrations: list[str], scene_audios: list[Path]) -> list[str]:
 
 def review_video(
     narrations: list[str], scene_videos: list[Path], context: str, strict_visual: bool = False,
-    trusted_scenes: set[int] | None = None,
+    trusted_scenes: set[int] | None = None, designed_scenes: set[int] | None = None,
 ) -> list[str]:
     problems: list[str] = []
 
@@ -255,7 +255,7 @@ def review_video(
         problems.append(f"narração repete {len(dup)} frase(s): \"{dup[0][:80]}\"")
 
     frames = [_frame(v) for v in scene_videos]
-    biggest, total = same_visual_share(frames)
+    biggest, total = same_visual_share([None if i + 1 in (designed_scenes or set()) else f for i, f in enumerate(frames)])
     if total and biggest >= _MIN_SAME_VISUAL_SCENES and biggest / total > _MAX_SAME_VISUAL_SHARE:
         problems.append(f"a mesma imagem aparece em {biggest} de {total} cenas")
 

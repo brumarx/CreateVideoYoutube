@@ -258,25 +258,73 @@ def _group_words(
     return groups
 
 
+# legenda no estilo dos canais de mapa/história (03/11): 2-3 palavras, caixa
+# normal, UMA palavra-chave em amarelo — a karaokê em caixa alta, com
+# 6 palavras e todas acendendo, cansava e brigava com a imagem
+CAPTION_FONT_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
+CAPTION_FONT_FAMILY = "Fira Sans"
+CAPTION_MAX_WORDS = 3
+_CAPTION_SMALL = {
+    "a", "o", "e", "as", "os", "um", "uma", "de", "da", "do", "das", "dos", "em", "no", "na", "nos", "nas",
+    "que", "se", "por", "pra", "para", "com", "sem", "mas", "ou", "ao", "à", "aos", "é", "foi", "era", "ser",
+    "tem", "seu", "sua", "isso", "esse", "essa", "este", "esta", "ele", "ela", "eles", "elas", "quando",
+    "como", "mais", "muito", "também", "agora", "então", "depois", "ainda", "onde", "você", "lhe", "nem",
+}
+
+
+def _caption_groups(word_boundaries: list[dict], font: ImageFont.FreeTypeFont, max_width: float) -> list[list[dict]]:
+    """Blocos de até 3 palavras, quebrando na pontuação (frase nova = bloco novo)."""
+    groups: list[list[dict]] = []
+    current: list[dict] = []
+    for w in word_boundaries:
+        candidate = " ".join(x["text"] for x in [*current, w])
+        if current and (len(current) >= CAPTION_MAX_WORDS or font.getlength(candidate) > max_width):
+            groups.append(current)
+            current = []
+        current.append(w)
+        if re.search(r"[.!?;:,]$", w["text"]):
+            groups.append(current)
+            current = []
+    if current:
+        groups.append(current)
+    # palavra sozinha curtinha ("e", "o") gruda no bloco seguinte
+    merged: list[list[dict]] = []
+    for g in groups:
+        if merged and len(merged[-1]) == 1 and len(merged[-1][0]["text"]) <= 3 and len(g) < CAPTION_MAX_WORDS:
+            merged[-1] = merged[-1] + g
+        else:
+            merged.append(g)
+    return merged
+
+
+def _keyword_index(group: list[dict]) -> int | None:
+    """A palavra que leva o destaque: número primeiro, senão a palavra de
+    conteúdo mais longa. Bloco só de palavra curta fica todo branco."""
+    best, best_score = None, 0
+    for i, w in enumerate(group):
+        word = re.sub(r"[^\w%$]", "", w["text"].lower())
+        if not word or word in _CAPTION_SMALL:
+            continue
+        score = 100 if re.search(r"\d", word) else (len(word) if len(word) >= 4 else 0)
+        if score > best_score:
+            best, best_score = i, score
+    return best
+
+
 def _build_ass_captions(
     word_boundaries: list[dict], width: int, height: int, accent: str, output_path: Path,
+    hook_text: str | None = None,
 ) -> None:
-    """Legenda karaokê de verdade: cada palavra "acende" na cor de destaque
-    do canal no instante exato em que é falada (tempo real do edge-tts, ver
-    src/tts.py), não uma estimativa por proporção. `ass` (libass) renderiza
-    isso numa só passada de filtro — mais barato em CPU que a cadeia de
-    vários `drawtext` encadeados do esquema antigo (_caption_filter), que
-    fica só como fallback pra quando não vier tempo real nenhum."""
-    font_size = min(width, height) // 16
+    """Legenda curta com tempo REAL de palavra (edge-tts, ver src/tts.py):
+    cada bloco de 2-3 palavras entra no instante da 1ª palavra, com um
+    "pop" leve, e uma palavra-chave sai em amarelo. `ass` (libass) faz tudo
+    numa passada — mais barato que a cadeia de drawtext do fallback."""
+    font_size = min(width, height) // 19
     margin_v = _caption_margin(width, height)
-    font = ImageFont.truetype(WATERMARK_FONT, font_size)
-    max_width = width * 0.82
-    # mesma cor de destaque em TODOS os canais (antes era o accent de cada
-    # um: roxo, laranja, verde... e no Botafogo, #e5e5e5, o destaque sumia
-    # no branco) — legenda é padrão da casa, o accent fica pros selos.
+    font = ImageFont.truetype(str(CAPTION_FONT_DIR / "FiraSans-Bold.ttf"), font_size)
+    max_width = width * 0.8
     accent_hex = CAPTION_HIGHLIGHT.lstrip("#")
-    # ASS é &HAABBGGRR (alpha invertido: 00 = opaco, FF = transparente) —
-    # troca a ordem RRGGBB -> BBGGRR do hex.
+    # ASS é &HAABBGGRR (alpha invertido: 00 = opaco)
     accent_bgr = accent_hex[4:6] + accent_hex[2:4] + accent_hex[0:2]
 
     header = f"""[Script Info]
@@ -287,22 +335,33 @@ WrapStyle: 2
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Karaoke,{ASS_FONT_FAMILY},{font_size},&H00{accent_bgr},&H00FFFFFF,&H00000000,&H73000000,-1,0,0,0,100,100,0,0,3,2,0,2,40,40,{margin_v},1
+Style: Hook,{CAPTION_FONT_FAMILY},{min(width, height) // 13},&H00FFFFFF,&H00FFFFFF,&H00141414,&H26141414,-1,0,0,0,100,100,1,0,3,{min(width, height) // 60},0,8,60,60,{int(height * 0.08)},1
+Style: Caption,{CAPTION_FONT_FAMILY},{font_size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,1,0,1,{max(font_size // 14, 3)},{max(font_size // 28, 1)},2,40,40,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     lines = [header]
-    for group in _group_words(word_boundaries, font, max_width):
-        start, end = group[0]["start"], group[-1]["end"]
-        text = ""
-        for idx, w in enumerate(group):
-            dur = (group[idx + 1]["start"] - w["start"]) if idx + 1 < len(group) else (w["end"] - w["start"])
-            centis = max(round(dur * 100), 1)
-            # libass desenha acento certinho (o bug que obriga _strip_accents
-            # é só do drawtext) — "NÃO", "ESTÁDIO", não "NAO", "ESTADIO"
-            text += f"{{\\k{centis}}}{_escape_ass_text(w['text'].upper())} "
-        lines.append(f"Dialogue: 0,{_ass_time(start)},{_ass_time(end)},Karaoke,,0,0,0,,{text.strip()}\n")
+    if hook_text and word_boundaries:
+        # gancho do vídeo num cartão no topo durante a 1ª cena; *palavra* sai
+        # em amarelo (mesma marcação do thumbnail_text)
+        hook = _escape_ass_text(hook_text.strip().upper())
+        hook = re.sub(r"\*([^*]+)\*", lambda m: f"{{\\c&H00{accent_bgr}&}}{m[1]}{{\\c&H00FFFFFF&}}", hook).replace("*", "")
+        end = word_boundaries[-1]["end"] + 0.3
+        lines.append(f"Dialogue: 1,{_ass_time(0)},{_ass_time(end)},Hook,,0,0,0,,{{\\fad(150,0)}}{hook}\n")
+    groups = _caption_groups(word_boundaries, font, max_width)
+    for gi, group in enumerate(groups):
+        start = group[0]["start"]
+        # fica até o próximo bloco entrar (sem piscar vazio entre blocos)
+        end = groups[gi + 1][0]["start"] if gi + 1 < len(groups) else group[-1]["end"] + 0.25
+        end = max(end, start + 0.2)
+        key = _keyword_index(group)
+        words = []
+        for i, w in enumerate(group):
+            text = _escape_ass_text(w["text"])
+            words.append(f"{{\\c&H00{accent_bgr}&}}{text}{{\\c&H00FFFFFF&}}" if i == key else text)
+        pop = "{\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}"
+        lines.append(f"Dialogue: 0,{_ass_time(start)},{_ass_time(end)},Caption,,0,0,0,,{pop}{' '.join(words)}\n")
 
     output_path.write_text("".join(lines), encoding="utf-8")
 
@@ -335,6 +394,7 @@ def render_scene(
     chapter_banner: dict | None = None,
     grayscale: bool = False,
     composed: bool = False,
+    hook_text: str | None = None,
 ) -> Path:
     """Renderiza uma cena: zoom lento na imagem, sincronizado com a duração
     do áudio. `width`/`height` permitem vertical (Shorts, padrão) ou
@@ -362,7 +422,7 @@ def render_scene(
     if video_path is not None:
         return _render_scene_from_video(
             video_path, audio_path, output_path, width, height, watermark, list_number, accent,
-            caption, word_boundaries, stat_overlay, impact_beat, chapter_banner, grayscale,
+            caption, word_boundaries, stat_overlay, impact_beat, chapter_banner, grayscale, hook_text,
         )
     duration = _ffprobe_duration(audio_path)
     with Image.open(image_path) as img:
@@ -411,7 +471,7 @@ def render_scene(
     )
     filter_complex += _overlay_filter_suffix(
         duration, width, height, watermark, list_number, accent, caption,
-        word_boundaries, output_path.with_suffix(".ass"), stat_overlay, chapter_banner,
+        word_boundaries, output_path.with_suffix(".ass"), stat_overlay, chapter_banner, hook_text,
     )
 
     impact = _impact_sfx_args(filter_complex, impact_beat)
@@ -577,6 +637,7 @@ def _overlay_filter_suffix(
     word_boundaries: list[dict] | None = None, ass_path: Path | None = None,
     stat_overlay: dict | None = None,
     chapter_banner: dict | None = None,
+    hook_text: str | None = None,
 ) -> str:
     """Filtros compartilhados entre cena de imagem (zoompan) e cena de
     vídeo real (src/stock_media.py) — legenda, selo de lista e marca
@@ -610,8 +671,8 @@ def _overlay_filter_suffix(
         # legenda karaokê com tempo real (ver _build_ass_captions) — filtro
         # `ass` do libass, uma passada só, mais barato em CPU que a cadeia
         # de drawtext do fallback abaixo.
-        _build_ass_captions(word_boundaries, width, height, accent, ass_path)
-        suffix += f",ass='{ass_path}'"
+        _build_ass_captions(word_boundaries, width, height, accent, ass_path, hook_text=hook_text)
+        suffix += f",ass='{ass_path}':fontsdir='{CAPTION_FONT_DIR}'"
     elif caption:
         # fallback: sem tempo real de palavra (edge-tts não mandou
         # WordBoundary por algum motivo) — legenda por proporção, pior
@@ -644,6 +705,7 @@ def _render_scene_from_video(
     impact_beat: bool = False,
     chapter_banner: dict | None = None,
     grayscale: bool = False,
+    hook_text: str | None = None,
 ) -> Path:
     """Filmagem REAL de banco de vídeo (Pexels) em vez de imagem estática
     com zoom — ver src/stock_media.py. `-stream_loop -1` cobre o caso do
@@ -675,7 +737,7 @@ def _render_scene_from_video(
         filter_v += ",hue=s=0"  # antes da legenda/selo, que seguem coloridos
     filter_v += _overlay_filter_suffix(
         duration, width, height, watermark, list_number, accent, caption,
-        word_boundaries, output_path.with_suffix(".ass"), stat_overlay, chapter_banner,
+        word_boundaries, output_path.with_suffix(".ass"), stat_overlay, chapter_banner, hook_text,
     )
 
     impact = _impact_sfx_args(filter_v, impact_beat)

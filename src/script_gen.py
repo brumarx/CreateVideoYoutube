@@ -96,7 +96,28 @@ SYSTEM_PROMPT = (
     "assiste ('você', 'imagina se...', perguntas retóricas) em vez de tom de "
     "verbete/enciclopédia, e nunca deixe duas cenas seguidas em tom "
     "puramente informativo sem reação, tensão ou surpresa nenhuma — isso é "
-    "o que mais mata retenção no meio do vídeo."
+    "o que mais mata retenção no meio do vídeo. "
+    "REGRA CRÍTICA de narrativa em CADEIA (o molde do Short 'Por que a Coreia "
+    "do Norte se apaga à noite?', 530 mil views em 4 dias): 1) abre com uma "
+    "PERGUNTA ou um paradoxo que se VÊ; 2) dá o contexto em 1-2 frases; 3) "
+    "solta a VIRADA, o dado que inverte o que a pessoa esperava; 4) no meio, "
+    "repete a pergunta com outras palavras ('Então, como...?'); 5) responde "
+    "com UMA causa principal, às vezes numa frase de uma palavra só; 6) "
+    "encadeia as consequências como dominós, cada uma com data ou número; 7) "
+    "mostra o contraste (o outro lado, o vizinho, o antes); 8) fecha com um "
+    "número concreto que dá pra imaginar ('1 sul-coreano gasta a luz de 14 "
+    "norte-coreanos') e um detalhe humano; 9) a ÚLTIMA frase retoma o começo "
+    "com uma ironia ou virada ('Em 1948 o Norte cortou a luz do Sul. Agora "
+    "não consegue manter as próprias acesas'). Cada frase precisa trazer um "
+    "fato NOVO que leve à próxima: se dá pra tirar a frase sem perder nada, "
+    "ela não entra. Nunca termine com 'o futuro permanece indefinido', 'só o "
+    "tempo dirá', 'resta saber' ou parecido: isso é admitir que a história "
+    "não tem final. Outro molde que funciona (Short 'Dom João fugiu de "
+    "Napoleão: covarde ou gênio?', 157 mil views): gancho de DILEMA ('X ou "
+    "Y?', que também vira o thumbnail_text), depois 'a versão que todo mundo "
+    "conhece', depois 'agora, a mesma cena com o que ninguém via' (os fatos "
+    "escondidos que invertem a leitura), e o fim responde o dilema com uma "
+    "frase de efeito real e documentada. Use o que combinar com o tema."
 )
 
 
@@ -168,6 +189,34 @@ _FOREIGN_FIELDS = """  "idioma": {"OPCIONAL — termo da narração em INGLÊS, 
 """
 _PRONUNCIATION_FIELD = """  "pronuncia": {"OPCIONAL — só nomes estrangeiros/difíceis da narração (lugar, pessoa, espécie) que uma voz brasileira leria errado": "como se fala, escrito à portuguesa com acento na sílaba tônica — ex.: \"Pavlopetri\": \"Pavlopétri\", \"Wegener\": \"Véguener\", \"Mesosaurus\": \"Mesossáurus\". Palavra portuguesa comum nunca entra. Sem nome assim, {}"},
 """
+
+
+# cena desenhada por código (src/infographic.py) — o que deixa o vídeo com
+# cara de canal de mapa/história, em vez de banco de imagem genérico
+_GRAFICO_FIELD = json.dumps(
+    "OPCIONAL, mas use em boa parte das cenas (meta: metade ou mais) quando a cena falar de um LUGAR real "
+    "(país, cidade), de uma DATA marcante, de UM número forte ou de uma comparação entre 2 números pequenos. "
+    "É desenhado por código no estilo dos canais de mapa (satélite da NASA, país colorido em relevo, ícones) "
+    "e fica muito mais bonito e claro que filmagem genérica. Formato: um objeto, ou uma lista de até 3 "
+    "objetos (batidas que trocam na tela no instante em que a narração fala a 'palavra' de cada uma). "
+    "Tipos: {'tipo': 'mapa', 'lugares': [nomes de PAÍS em inglês], 'noite': true só se a cena fala "
+    "de luz/energia/noite, 'destaques': [{'pais': nome em inglês, 'cor': vermelho|azul|dourado|verde|"
+    "cinza|roxo|laranja, 'rotulo': nome em português, 'icone': 1 emoji do que a cena cita (🏭 fábrica, "
+    "🛢️ petróleo, 🌾 colheita, ⚓ porto, 💧 água), 'quantidade': 1 a 6}], 'cidade': nome em inglês "
+    "(opcional), 'ano': opcional, 'ano_rotulo': 2-3 palavras, 'bandeira': true pra pintar o país com a "
+    "própria bandeira (bom quando o país é PERSONAGEM: França x Inglaterra), 'rota': {'de': cidade ou país em "
+    "inglês, 'para': idem, 'icone': emoji (⛵ frota, ✈️ voo, 🚂 trem)} pra viagem/fuga/invasão/comércio, 'nota': "
+    "bilhete de papel com o DOCUMENTO/prova que a cena cita, até 6 palavras ('SECRETO · Londres, out/1807'), "
+    "'palavra': '...'}. 'rotulo' do destaque é SEMPRE o nome do país em português (região ou cidade vai em "
+    "'cidade'); {'tipo': 'numero', "
+    "'valor': '90%', 'rotulo': o que o número mede, até 8 palavras}; {'tipo': 'comparacao', 'a': 1, "
+    "'a_rotulo': '...', 'b': 14, 'b_rotulo': '...', 'icone': emoji} (a e b de 1 a 20); {'tipo': 'ano', "
+    "'de': '1950', 'ate': '1964' (opcional), 'rotulo': '...'}. Use aspas duplas no JSON de verdade. Todo "
+    "número ou ano do gráfico TEM que estar escrito em algarismos na narração DESTA cena. A mesma cor marca "
+    "o mesmo lado da história no vídeo inteiro. null quando a cena não tem lugar, data nem número (passo a "
+    "passo de app, reflexão).",
+    ensure_ascii=False,
+)
 
 
 def _prompt_for(
@@ -257,7 +306,7 @@ Gere um JSON com exatamente este formato:
   "tags": ["tag1", "tag2", "..."],
   "mood": "clima geral do vídeo pra escolher a música de fundo certa — exatamente um destes valores: 'tenso' (denúncia grave, algo errado/perigoso, suspense), 'animado' (conquista, vitória, dica animadora, virada positiva), 'melancolico' (derrota, perda, resultado triste/decepcionante), 'calmo' (reflexivo, sem tensão nem euforia), 'neutro' (explicativo/factual, sem carga emocional forte definida). Escolha 1 só, o que domina o vídeo como um todo, não cena a cena.",
   "scenes": [
-    {{"narration": "texto que o narrador vai falar nesta cena", "image_prompt": "prompt em inglês, só cenário/objetos/atmosfera — SEM texto, palavras, logos, botões ou UI, e SEM jogador/atleta de uniforme ou escudo de time (vira jogador falso que parece real)", "stock_query": "3 a 5 palavras em inglês pra buscar filmagem REAL — amarrada num detalhe CONCRETO desta cena (lugar, objeto, ação), nunca a categoria genérica (ruim: 'soccer stadium'; bom, se a cena fala de gol sofrido: 'goalkeeper diving missed save'). NUNCA nome de pessoa real, NUNCA escudo/camisa/uniforme/logo/bandeira de time (o banco só tem clubes estrangeiros); futebol é 'soccer', nunca 'football'. Cena abstrata/conceitual que não existe filmada: null (nunca 'symbolic shot' ou 'related to the story').", "impact_beat": "true APENAS na cena do momento mais chocante/decisivo de todo o vídeo (o gol, o número mais absurdo, a virada) — no máximo 1 cena `true` no roteiro inteiro; todas as outras, false ou omita.", "stat_overlay": "OPCIONAL, deixe null na grande maioria das cenas — só preencha quando ESTA cena citar, no texto da narração, 2 valores comparáveis específicos vindos de DADOS REAIS (ex.: posse de bola de cada time, % de aprovação, participação em votos) — formato exato: {{\"label\": \"o que está sendo comparado\", \"a_label\": \"nome do 1º\", \"a_value\": numero, \"b_label\": \"nome do 2º\", \"b_value\": numero, \"unit\": \"% se for porcentagem, senão a unidade por extenso (pontos, gols, finalizações)\"}}. NUNCA invente ou estime os valores — só use quando estiverem literalmente nos DADOS REAIS. Nunca posição/ranking (lugar menor é melhor e a barra mostraria o contrário). Rótulos em português com acento (\"posição\", \"milhões\")."{real_subject_field}}}
+    {{"narration": "texto que o narrador vai falar nesta cena", "image_prompt": "prompt em inglês, só cenário/objetos/atmosfera — SEM texto, palavras, logos, botões ou UI, e SEM jogador/atleta de uniforme ou escudo de time (vira jogador falso que parece real)", "stock_query": "3 a 5 palavras em inglês pra buscar filmagem REAL — amarrada num detalhe CONCRETO desta cena (lugar, objeto, ação), nunca a categoria genérica (ruim: 'soccer stadium'; bom, se a cena fala de gol sofrido: 'goalkeeper diving missed save'). NUNCA nome de pessoa real, NUNCA escudo/camisa/uniforme/logo/bandeira de time (o banco só tem clubes estrangeiros); futebol é 'soccer', nunca 'football'. Cena abstrata/conceitual que não existe filmada: null (nunca 'symbolic shot' ou 'related to the story').", "impact_beat": "true APENAS na cena do momento mais chocante/decisivo de todo o vídeo (o gol, o número mais absurdo, a virada) — no máximo 1 cena `true` no roteiro inteiro; todas as outras, false ou omita.", "stat_overlay": "OPCIONAL, deixe null na grande maioria das cenas — só preencha quando ESTA cena citar, no texto da narração, 2 valores comparáveis específicos vindos de DADOS REAIS (ex.: posse de bola de cada time, % de aprovação, participação em votos) — formato exato: {{\"label\": \"o que está sendo comparado\", \"a_label\": \"nome do 1º\", \"a_value\": numero, \"b_label\": \"nome do 2º\", \"b_value\": numero, \"unit\": \"% se for porcentagem, senão a unidade por extenso (pontos, gols, finalizações)\"}}. NUNCA invente ou estime os valores — só use quando estiverem literalmente nos DADOS REAIS. Nunca posição/ranking (lugar menor é melhor e a barra mostraria o contrário). Rótulos em português com acento (\"posição\", \"milhões\").", "grafico": {_GRAFICO_FIELD}{real_subject_field}}}
   ]
 }}
 
@@ -566,6 +615,42 @@ def _repetition_problem(script: dict) -> str | None:
 _FORMULA = re.compile(r"=\s*[A-ZÀ-Ý]{2,}\s*\(|\$[A-Z]{1,2}\$?\d|\b[A-Z]{1,2}\d+:[A-Z]{1,2}\d+\b")
 
 
+def _echo_problem(script: dict) -> str | None:
+    """Trecho de 6+ palavras dito em duas frases diferentes: o roteiro do
+    cubo saudita (job 696) falou "citando revisão de prioridades e custos
+    inesperados" duas vezes — soa como enchimento."""
+    seen: dict[tuple[str, ...], int] = {}
+    frases = [f for sc in script.get("scenes", []) for f in _SENTENCE_SPLIT.split(sc.get("narration", "")) if f.strip()]
+    for idx, f in enumerate(frases):
+        words = re.findall(r"\w+", f.lower())
+        for j in range(len(words) - 5):
+            gram = tuple(words[j:j + 6])
+            if seen.setdefault(gram, idx) != idx:
+                return f"o trecho \"{' '.join(gram)}\" aparece em duas frases"
+    return None
+
+
+# fim que admite que a história não tem final (job 696: "O futuro do
+# projeto permanece indefinido")
+_WEAK_ENDING = re.compile(
+    r"permanece(m)? (indefinid|incert|em aberto)|s[óo] o tempo dir[áa]|resta saber|futuro (é |segue |continua )?incerto"
+    r"|continua(m)? a (intrigar|fascinar)|ningu[ée]m sabe (ao certo )?o que o futuro"
+    r"|(permanece|segue|continua)(m)? (em|sob) (debate|discuss[ãa]o|negocia[çc])",
+    re.I,
+)
+
+
+def _ending_problem(script: dict) -> str | None:
+    scenes = script.get("scenes") or []
+    if not scenes:
+        return None
+    last = [f for f in _SENTENCE_SPLIT.split(scenes[-1].get("narration", "")) if f.strip()][-2:]
+    for f in last:
+        if _WEAK_ENDING.search(f):
+            return f"final sem desfecho (\"{f.strip()[:70]}\")"
+    return None
+
+
 def _formula_problem(script: dict) -> str | None:
     for sc in script.get("scenes", []):
         if m := _FORMULA.search(sc.get("narration", "")):
@@ -840,6 +925,24 @@ def generate_script(
                 messages = [messages[0], {"role": "user", "content": messages[1]["content"]
                                           + f"\n\nO roteiro anterior se repetiu: {repeated}. Cada dado é dito uma vez "
                                           "(no máximo citado de novo numa comparação); sem frase-muleta."}]
+                continue
+            echo = _echo_problem(script)
+            if echo:
+                filler_fallback = script
+                last_error = ValueError(echo)
+                log.warning("tentativa %d/3: %s, tentando de novo", attempt + 1, echo)
+                messages = [messages[0], {"role": "user", "content": messages[1]["content"]
+                                          + f"\n\nO roteiro anterior repetiu: {echo}. Cada frase traz um fato novo "
+                                          "que leva à próxima; nada dito duas vezes."}]
+                continue
+            ending = _ending_problem(script)
+            if ending:
+                filler_fallback = script
+                last_error = ValueError(ending)
+                log.warning("tentativa %d/3: %s, tentando de novo", attempt + 1, ending)
+                messages = [messages[0], {"role": "user", "content": messages[1]["content"]
+                                          + f"\n\nO roteiro anterior terminou com {ending}. A última frase retoma o "
+                                          "gancho do começo com uma virada ou ironia — um fato, não uma dúvida."}]
                 continue
             formula = _formula_problem(script)
             if formula:
