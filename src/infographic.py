@@ -554,7 +554,7 @@ def _paper_note(img: Image.Image, text: str) -> None:
     lines = [l.strip() for l in re.split(r"\s*[·|/\n]\s*(?=\D)|\n", text) if l.strip()][:3] or [text]
     title = _font(SERIF_FONT, int(w * 0.042), "Bold")
     small = _font(SERIF_FONT, int(w * 0.032), "SemiBold")
-    tw = max(title.getlength(lines[0].upper()), *(small.getlength(l) for l in lines[1:])) if lines else 0
+    tw = max([title.getlength(lines[0].upper()), *(small.getlength(l) for l in lines[1:])])
     cw, ch = int(min(tw + w * 0.09, w * 0.7)), int(title.size * 1.6 + len(lines[1:]) * small.size * 1.35 + w * 0.05)
     card = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
     cd = ImageDraw.Draw(card)
@@ -676,12 +676,16 @@ def _map_scene(spec: dict, w: int, h: int) -> tuple[Image.Image, Image.Image] | 
             d.ellipse((x - 7, y - 7, x + 7, y + 7), fill=(255, 255, 255, 255))
             _shadowed_text(img, (x, y + r + w * 0.03), city_label(city_name), label_font)
 
-    if route is not None:
-        _draw_route(img, view, *route)
-    if spec.get("nota"):
-        _paper_note(img, str(spec["nota"]))
-    if spec.get("personagens"):
-        _place_characters(img, view, spec["personagens"])
+    # enfeite que quebra não derruba o mapa (bilhete de 1 linha quebrou o
+    # max() e a cena inteira perdeu o gráfico, job 705)
+    for name, draw in (("rota", lambda: _draw_route(img, view, *route) if route is not None else None),
+                       ("nota", lambda: _paper_note(img, str(spec["nota"])) if spec.get("nota") else None),
+                       ("personagens", lambda: _place_characters(img, view, spec["personagens"])
+                        if spec.get("personagens") else None)):
+        try:
+            draw()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("enfeite %s do mapa falhou: %s", name, exc)
     if spec.get("ano"):
         _year_ruler(img, str(spec["ano"]), str(spec.get("ano_rotulo") or ""))
     elif spec.get("_era"):

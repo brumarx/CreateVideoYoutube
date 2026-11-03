@@ -374,14 +374,32 @@ _MEASURE_RE = re.compile(
 )
 _SOURCE_NUM_RE = re.compile(
     r"(\d{1,3}(?:[.,\s\u00a0]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(mil\b|thousand|milh(?:ão|ões)|million|"
-    r"bilh(?:ão|ões)|billion)?", re.IGNORECASE)
+    r"bilh(?:ão|ões)|billion)?\s*([a-zà-ÿ]+)?", re.IGNORECASE)
+# a unidade tem que ser da mesma família na fonte: "4.800 metros" casava com
+# uma contagem de tropas perto de 4.800 (job 705)
+_UNIT_FAMILY = {
+    **dict.fromkeys(["metros", "m", "meters", "metres", "ft", "feet", "quilômetros", "quilometros", "km",
+                     "kilometers", "kilometres", "miles", "mi"], "comprimento"),
+    **dict.fromkeys(["toneladas", "tons", "tonnes", "t"], "massa"),
+    **dict.fromkeys(["litros", "liters", "litres", "l"], "volume"),
+    **dict.fromkeys(["habitantes", "pessoas", "mortos", "people", "inhabitants", "residents", "dead", "killed",
+                     "deaths", "casualties", "persons"], "pessoas"),
+    **dict.fromkeys(["soldados", "militares", "soldiers", "troops", "men", "sailors", "personnel", "homens",
+                     "marinheiros"], "tropas"),
+    **dict.fromkeys(["navios", "embarcações", "embarcacoes", "ships", "vessels", "boats", "barcos"], "barcos"),
+    **dict.fromkeys(["hectares", "ha"], "area"),
+    **dict.fromkeys(["graus", "degrees"], "temperatura"),
+}
 _SRC_SCALE = {"mil": 1e3, "thousand": 1e3, "milhão": 1e6, "milhões": 1e6, "million": 1e6,
               "bilhão": 1e9, "bilhões": 1e9, "billion": 1e9}
 
 
-def _source_numbers(text: str) -> list[float]:
+def _source_numbers(text: str, family: str | None = None) -> list[float]:
+    """Números da fonte; com `family`, só os seguidos de unidade dessa família."""
     out = []
     for m in _SOURCE_NUM_RE.finditer(text):
+        if family and _UNIT_FAMILY.get((m.group(3) or "").lower()) != family:
+            continue
         raw = m.group(1)
         # "3.812", "3,812", "3 812" (milhar) ou "3,5"/"3.5" (decimal)
         if re.fullmatch(r"\d{1,3}(?:[.,\s\u00a0]\d{3})+", raw):
@@ -397,12 +415,15 @@ def numbers_not_in_sources(script: dict, web_facts: list[dict] | None, tolerance
     "4.800 metros" passar por causa dos "5.000 militares" (job 704)."""
     if not web_facts:
         return []
-    known = _source_numbers(" ".join(f"{f.get('titulo', '')} {f.get('trecho', '')}" for f in web_facts))
+    source = " ".join(f"{f.get('titulo', '')} {f.get('trecho', '')}" for f in web_facts)
+    all_known = _source_numbers(source)
     out = []
     for scene in script.get("scenes", []):
         for m in _MEASURE_RE.finditer(scene.get("narration", "")):
             unit = (m.group(3) or "").lower()
             value = _to_number(m.group(2)) * _SCALE.get(unit, 1)
+            family = _UNIT_FAMILY.get(unit.replace("ç", "c").replace("õ", "o")) or _UNIT_FAMILY.get(unit)
+            known = _source_numbers(source, family) if family else all_known
 
             def close(v: float) -> bool:
                 return any((v == k) if v < 100 else abs(v - k) <= tolerance * abs(k) for k in known)
