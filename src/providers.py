@@ -57,12 +57,17 @@ _PREFERRED_MODELS = {
 # Modelo mais inteligente de cada provedor: tentado em TODAS as chaves do
 # rodízio antes de qualquer outro modelo (ver complete)
 _STRONG_MODELS = {
+    "nvidia": ["nvidia/nemotron-3-ultra-550b-a55b"],
     "groq": ["openai/gpt-oss-120b"],
     "cerebras": ["gpt-oss-120b"],
 }
 
 # (nome, atributo em LLMKeys, endpoint de chat, endpoint de listagem de modelos)
 OPENAI_COMPAT_PROVIDERS = [
+    # 1º: o maior modelo grátis que temos (Nemotron 550B). A cota diária do
+    # gpt-oss-120b no Groq acabava à tarde (04/11) e sobrava modelo fraco
+    # pra escrever e revisar o roteiro
+    ("nvidia", "nvidia", "https://integrate.api.nvidia.com/v1/chat/completions", "https://integrate.api.nvidia.com/v1/models"),
     ("xai", "xai", "https://api.x.ai/v1/chat/completions", "https://api.x.ai/v1/models"),
     ("groq", "groq", "https://api.groq.com/openai/v1/chat/completions", "https://api.groq.com/openai/v1/models"),
     ("cerebras", "cerebras", "https://api.cerebras.ai/v1/chat/completions", "https://api.cerebras.ai/v1/models"),
@@ -115,6 +120,10 @@ def _is_chat_model(model_id: str) -> bool:
 
 
 def _fetch_models(provider: str, list_url: str, api_key: str) -> list[str]:
+    if provider == "nvidia":
+        # o /models lista dezenas que dão 404 "Function not found" nesta
+        # conta (testado 02/11 e 04/11): só o Nemotron 550B responde
+        return list(_STRONG_MODELS["nvidia"])
     cache_key = f"{provider}:{api_key[-6:]}"
     if cache_key in _model_cache:
         return _model_cache[cache_key]
@@ -223,7 +232,7 @@ def _call_openai_compat(
             endpoint,
             headers={"Authorization": f"Bearer {api_key}"},
             json=payload,
-            timeout=60,
+            timeout=180 if "nemotron" in model else 60,
         )
         m = _TOO_LARGE_RE.search(resp.text) if resp.status_code == 413 else None
         if m and not _fitted:
@@ -280,6 +289,12 @@ def _call_gemini(api_key: str, model: str, messages: list[dict], max_tokens: int
     except Exception as exc:
         log.warning("gemini (%s) falhou: %s", model, exc)
         return None
+
+
+def is_strong_model(model: str) -> bool:
+    """Modelo grande o bastante pra JULGAR fato (prova por citação, premissa
+    do tema): o gpt-oss-20b e o qwen aprovavam frase que o trecho não prova."""
+    return any(model in ms for ms in _STRONG_MODELS.values())
 
 
 def complete(

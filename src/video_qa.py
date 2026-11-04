@@ -264,13 +264,10 @@ def review_video(
     for start in range(0, len(numbered), _BATCH):
         verdicts = _vision_batch(numbered[start:start + _BATCH], by_num, context)
         if verdicts is None:
-            if strict_visual:
-                # canal de futebol: sem olhar as imagens, o risco de clube
-                # errado/outro esporte é alto demais pra subir no escuro
-                problems.append("revisão visual indisponível (nenhum modelo de visão respondeu)")
-                break
-            log.warning("revisão visual indisponível pras cenas %d+ — seguindo sem ela", start + 1)
-            continue
+            # imagem sem conferir contra o roteiro não vai pro ar (04/11):
+            # vira ressalva (sobe PRIVADO na última tentativa) em todo canal
+            problems.append("revisão visual indisponível (nenhum modelo de visão respondeu)")
+            break
         for v in verdicts:
             # foto da própria matéria (e cena que a repete): o rosto é da
             # pessoa citada mesmo — a regra de "rosto de outra pessoa" reprovou

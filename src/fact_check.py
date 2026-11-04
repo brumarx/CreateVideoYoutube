@@ -309,6 +309,15 @@ def review_script(
         if grounded is None:
             return None
         problems = grounded
+    if not problems and (facts or web_facts):
+        # última barreira: o roteiro COMPLETO (título + todas as frases) vai
+        # pro maior modelo que temos, que julga frase por frase se é real.
+        # Passaram "80% reprovam" (eram só os jovens, job 717) e "o Falcon 9
+        # está sendo aposentado" (ninguém anunciou, job 714) — 04/11
+        verdict = verify_full_script(script, topic, facts, web_facts)
+        if verdict is None:
+            return None
+        problems = verdict
     return problems
 
 
@@ -680,3 +689,148 @@ def ungrounded_sentences(script: dict, facts: dict | None, web_facts: list[dict]
     if problems:
         log.warning("checagem por citação: %d de %d frases sem fonte", len(problems), len(sentences))
     return problems
+
+
+# ---------------------------------------------------------------- verificação final
+
+_VERIFY_PROMPT = """Você é o checador de fatos de um canal de vídeos. Nada pode ir ao ar errado: um erro faz o
+público fugir. Abaixo estão as FONTES pesquisadas e o ROTEIRO COMPLETO (título + frases numeradas).
+
+Julgue CADA item (o título também — mesmo em forma de pergunta, ele AFIRMA a premissa: "Por que X decidiu Y?"
+afirma que X decidiu Y):
+- "ok": a fonte sustenta o item INTEIRO, ou o item não afirma fato (pergunta retórica sem premissa, opinião,
+  convite, transição, instrução pura como "abra o app").
+- "falso": a fonte (ou fato amplamente conhecido) CONTRADIZ o item.
+- "sem_prova": a fonte não sustenta o item inteiro. Inclui, SEMPRE:
+  * generalizar o que a fonte diz de um GRUPO para todos ("80% dos jovens" virou "80% dos brasileiros");
+  * transformar plano, possibilidade, previsão, boato ou "pode" em decisão ou fato consumado
+    ("planeja", "estuda", "pode encerrar" virou "está encerrando", "foi aposentado");
+  * trocar o sujeito, o número, a data, o lugar, o cargo ou o time;
+  * acrescentar causa, consequência, motivo, citação ou adjetivo forte ("o mais", "recorde", "histórico")
+    que a fonte não diz;
+  * afirmar que um app/IA tem uma função que a fonte não mostra.
+Conta simples com números da fonte vale como sustentada se o resultado bate (58,2 mi − 51,1 mi = 7,1 mi
+a mais). Na dúvida, "sem_prova". Seja rigoroso: é melhor cortar uma frase verdadeira do que publicar uma falsa.
+
+FONTES:
+{fontes}
+
+TEMA: {tema}
+
+ROTEIRO:
+{itens}
+
+Responda SÓ com JSON: {{"itens": [{{"n": 0, "veredito": "ok"}}, {{"n": 1, "veredito": "sem_prova", "motivo": "1 frase"}}]}}
+(n=0 é o título)"""
+
+
+def _judge(prompt: str, key: str, max_tokens: int = 3000) -> list | None:
+    """Pergunta ao modelo FORTE (Nemotron 550B, gpt-oss-120b) e devolve a
+    lista `key` do JSON. Sem modelo forte = None (modelo pequeno aprova o que
+    não devia — é exatamente o que se quer evitar aqui)."""
+    from .providers import is_strong_model
+
+    try:
+        raw = complete([{"role": "user", "content": prompt}], max_tokens=max_tokens, temperature=0,
+                       validate=lambda r: f'"{key}"' in r, model_filter=is_strong_model)
+        m = re.search(r"\{.*\}", raw, re.S)
+        items = json.loads(m.group(0)).get(key) if m else None
+    except Exception as exc:  # noqa: BLE001
+        log.warning("checador forte indisponível: %s", exc)
+        return None
+    return items if isinstance(items, list) else None
+
+
+def _sources_text(facts: dict | None, web_facts: list[dict] | None, limit: int = 12000) -> str:
+    parts = [f"{f.get('titulo', '')}: {f.get('trecho', '')}" for f in web_facts or []]
+    if facts:
+        parts.append(json.dumps(facts, ensure_ascii=False))
+    return "\n\n".join(parts)[:limit]
+
+
+def verify_full_script(script: dict, topic: str, facts: dict | None, web_facts: list[dict] | None) -> list[dict] | None:
+    """Roteiro inteiro, de uma vez, pro checador forte: [] = tudo real;
+    problemas "fora_da_fonte" (frase) e "titulo_enganoso" (título); None =
+    checador fora do ar (revisão incompleta)."""
+    source = _sources_text(facts, web_facts)
+    if not source.strip():
+        return None
+    sentences = [f.strip() for sc in script.get("scenes", []) for f in _GROUND_SPLIT.split(sc.get("narration", ""))
+                 if len(f.strip()) > 3]
+    title = str(script.get("title") or "").strip()
+    itens = "\n".join([f"0) TÍTULO: {title}"] + [f"{i + 1}) {s}" for i, s in enumerate(sentences)])
+    items = _judge(_VERIFY_PROMPT.format(fontes=source, tema=topic, itens=itens), "itens",
+                   max_tokens=600 + 80 * len(sentences))
+    if items is None:
+        return None
+    judged = set()
+    problems = []
+    for item in items:
+        try:
+            idx = int(item.get("n"))
+        except (TypeError, ValueError, AttributeError):
+            continue
+        judged.add(idx)
+        verdict = str(item.get("veredito", "")).lower()
+        if verdict == "ok" or not (0 <= idx <= len(sentences)):
+            continue
+        why = str(item.get("motivo") or verdict)
+        if idx == 0:
+            problems.append({"tipo": "titulo_enganoso", "termo": title[:100],
+                             "motivo": f"título com premissa que a fonte não sustenta: {why}"})
+        else:
+            problems.append({"tipo": "fora_da_fonte", "termo": " ".join(sentences[idx - 1].split()[:14]),
+                             "motivo": f"checagem final ({verdict}): {why}"})
+    if len(judged & set(range(len(sentences) + 1))) < (len(sentences) + 1) * 0.8:
+        log.warning("checagem final: resposta incompleta (%d de %d itens)", len(judged), len(sentences) + 1)
+        return None
+    if problems:
+        log.warning("checagem final: %d de %d itens reprovados — %s", len(problems), len(sentences) + 1,
+                    "; ".join(f"{p['termo'][:50]} ({p['motivo'][:80]})" for p in problems))
+    else:
+        log.info("checagem final: roteiro completo aprovado (%d itens)", len(sentences) + 1)
+    return problems
+
+
+_PREMISE_PROMPT = """Tema de um vídeo: "{tema}"
+
+FONTES pesquisadas:
+{fontes}
+
+O tema afirma ou pressupõe algum fato (mesmo em forma de pergunta: "Por que X decidiu Y?" pressupõe que X
+decidiu Y)? As FONTES sustentam essa premissa INTEIRA — sem transformar plano/possibilidade em decisão, sem
+generalizar um grupo para todos, sem trocar número, data ou sujeito?
+
+Se sustentam (ou o tema não tem premissa), responda {{"ok": true}}.
+Se não, reescreva o tema sobre o MESMO assunto, só com o que as fontes dizem, no mesmo estilo (pergunta ou
+afirmação curta): {{"ok": false, "motivo": "1 frase", "tema": "tema corrigido"}}
+Responda SÓ com JSON."""
+
+
+def check_premise(topic: str, facts: dict | None, web_facts: list[dict] | None) -> tuple[bool, str, str] | None:
+    """(ok, tema a usar, motivo). O tema vindo da manchete/tendência pode
+    trazer premissa falsa ("Por que a SpaceX decidiu encerrar o Falcon 9",
+    job 714) e o roteiro inteiro nasce torto. Mantém o ASSUNTO, corrige a
+    afirmação. None = sem fonte ou checador fora do ar."""
+    source = _sources_text(facts, web_facts, limit=8000)
+    if not source.strip():
+        return None
+    from .providers import is_strong_model
+
+    try:
+        raw = complete([{"role": "user", "content": _PREMISE_PROMPT.format(tema=topic, fontes=source)}],
+                       max_tokens=2000, temperature=0, validate=lambda r: bool(re.search(r'"ok"\s*:\s*(true|false)', r)),
+                       model_filter=is_strong_model)
+        m = re.search(r"\{.*\}", raw, re.S)
+        data = json.loads(m.group(0)) if m else {}
+    except Exception as exc:  # noqa: BLE001
+        log.warning("checagem da premissa do tema indisponível: %s", exc)
+        return None
+    if data.get("ok") is True:
+        return True, topic, ""
+    if not data:
+        log.warning("checagem da premissa do tema: resposta ilegível: %r", raw[:200])
+    fixed = str(data.get("tema") or "").strip()
+    if data.get("ok") is False and fixed:
+        return False, fixed, str(data.get("motivo") or "")
+    return None

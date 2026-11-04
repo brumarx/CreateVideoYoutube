@@ -58,6 +58,10 @@ _RULES = """Responda NÃO (ok=false) se a imagem:
   quem assiste procura o atleta e acha outro jogador famoso (cena do
   Ronaldo Fenômeno com lance de jogo do Real Madrid, 22/10). Bola, campo
   vazio, treino amador ou torcida genérica estão OK.
+- é um MAPA ou GRÁFICO desenhado que contradiz a narração: país, cidade,
+  rota, número, ano ou rótulo diferente do que a cena fala (mapa da
+  Argentina numa cena sobre o Chile; "1904" numa cena que diz 1879).
+  Mapa/gráfico que mostra o que a cena fala está OK, mesmo sendo desenho.
 Imagem genérica mas coerente com o assunto e o clima da cena (estádio sem
 clube identificável, bola, torcida genérica, pessoa num escritório numa
 cena sobre trabalho) está OK."""
@@ -156,6 +160,9 @@ def _gemini(prompt: str, jpeg: bytes) -> str | None:
 # as 3 chaves com 429 — a checagem visual ficou desligada e passou vídeo
 # com notícia do BAIRRO Botafogo e a mesma imagem em 9 de 16 cenas)
 _OPENAI_COMPAT_VISION = [
+    # 1º: NVIDIA super-vl 120B (grátis, 40 req/min, ~1-2 s). É de raciocínio:
+    # sem reasoning_effort "none" gasta os tokens pensando e volta vazio
+    ("nvidia", "https://integrate.api.nvidia.com/v1/chat/completions", ["nvidia/nemotron-3.5-super-vl-120b-a12b"]),
     ("mistral", "https://api.mistral.ai/v1/chat/completions", ["mistral-small-latest"]),
     # Groq grátis: o qwen3.8 aceita imagem (testado 06/10, leu o texto da
     # thumbnail) — divide a cota diária com o texto
@@ -179,7 +186,8 @@ def _openai_compat(prompt: str, jpeg: bytes) -> str | None:
                     continue
                 try:
                     resp = httpx.post(url, headers={"Authorization": f"Bearer {key}"}, timeout=_TIMEOUT, json={
-                        "model": model, "temperature": 0,
+                        "model": model, "temperature": 0, "max_tokens": 1500,
+                        **({"reasoning_effort": "none"} if provider == "nvidia" else {}),
                         "messages": [{"role": "user", "content": [
                             {"type": "text", "text": prompt},
                             {"type": "image_url", "image_url": {"url": data_url}},
@@ -204,9 +212,10 @@ def _openai_compat(prompt: str, jpeg: bytes) -> str | None:
 
 
 def ask_vision(prompt: str, jpeg: bytes) -> str | None:
-    """Resposta de texto de um modelo com visão: Gemini, Mistral, Groq,
-    OpenRouter grátis e Cloudflare. None se nenhum respondeu."""
-    return _gemini(prompt, jpeg) or _openai_compat(prompt, jpeg) or _cloudflare_vision(prompt, jpeg)
+    """Resposta de texto de um modelo com visão: NVIDIA super-vl, Mistral,
+    Groq, OpenRouter grátis, Gemini e Cloudflare. None se nenhum respondeu.
+    A NVIDIA vem antes do Gemini (cota grátis do Gemini esgotada desde 09/10)."""
+    return _openai_compat(prompt, jpeg) or _gemini(prompt, jpeg) or _cloudflare_vision(prompt, jpeg)
 
 
 def _cloudflare_vision(prompt: str, jpeg: bytes) -> str | None:

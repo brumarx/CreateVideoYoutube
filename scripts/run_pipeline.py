@@ -753,6 +753,19 @@ def run(
             else:
                 log.info("[%s] tema sem busca na internet (sem chave configurada ou sem resultado)", job_id)
 
+        if not script_file and (facts or web_facts):
+            # tema com premissa falsa vinda da manchete ("Por que a SpaceX
+            # decidiu encerrar o Falcon 9?", job 714): o conserto em laço
+            # acabava "lavando" a premissa até passar. Mesmo assunto, só a
+            # afirmação corrigida pelo que as fontes dizem
+            from src.fact_check import check_premise
+
+            premise = check_premise(topic, facts, web_facts)
+            if premise is not None and not premise[0]:
+                log.warning("[%s] premissa do tema não sustentada pelas fontes (%s): %r -> %r",
+                            job_id, premise[2], topic, premise[1])
+                topic = premise[1]
+                update(job_id, topic=topic)
         log.info("[%s] gerando roteiro (%s) para: %s (voz: %s)", job_id, "longo" if long_form else "curto", topic, tts_voice)
         if script_file:
             # roteiro escrito à mão (ex.: quando só sobra modelo fraco que copia
@@ -1380,7 +1393,9 @@ def run(
                 # futebol com clipe de banco/IA precisa de olho; vídeo só com
                 # foto das matérias (do próprio assunto) dispensa
                 strict_visual=channel.strict_visual and "ia" in scene_sources,
-                trusted_scenes={i + 1 for i, src in enumerate(scene_sources) if src in ("noticia", "repetida", "jogador", "arquivo", "grafico")},
+                # gráfico desenhado também é conferido: mapa/número/ano tem que
+                # bater com a fala da cena (04/11)
+                trusted_scenes={i + 1 for i, src in enumerate(scene_sources) if src in ("noticia", "repetida", "jogador", "arquivo")},
                 # mapas da mesma região se parecem de propósito (mesmo mundo visual)
                 designed_scenes={i + 1 for i, src in enumerate(scene_sources) if src == "grafico"},
             )

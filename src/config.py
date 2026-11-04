@@ -39,6 +39,8 @@ def _as_list(value) -> list:
 
 @dataclass
 class LLMKeys:
+    # NVIDIA Build grátis (40 req/min, sem cobrança): Nemotron 550B (texto) e super-vl (visão)
+    nvidia: list[str] = field(default_factory=lambda: _keys("NVIDIA_API_KEYS"))
     xai: list[str] = field(default_factory=lambda: _keys("XAI_API_KEYS"))
     groq: list[str] = field(default_factory=lambda: _keys("GROQ_API_KEYS"))
     cerebras: list[str] = field(default_factory=lambda: _keys("CEREBRAS_API_KEYS"))
