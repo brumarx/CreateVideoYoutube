@@ -91,28 +91,31 @@ _BRAZILIAN_STATES = {
 _STATE_ABBREVIATION = re.compile(r"\b([A-ZÀ-Ý]{2,})-(%s)\b" % "|".join(_BRAZILIAN_STATES))
 
 
-# clube-UF ("Atlético-MG") é o adjetivo do estado, não o nome: a voz falou
-# "Atlético Minas Gerais" (Botafogo, 03/11) — no futebol é "Atlético Mineiro"
-_STATE_ADJECTIVES = {
-    "AC": "Acreano", "AL": "Alagoano", "AP": "Amapaense", "AM": "Amazonense", "BA": "Baiano",
-    "CE": "Cearense", "DF": "Brasiliense", "ES": "Capixaba", "GO": "Goiano", "MA": "Maranhense",
-    "MT": "Mato-grossense", "MS": "Sul-mato-grossense", "MG": "Mineiro", "PA": "Paraense",
-    "PB": "Paraibano", "PR": "Paranaense", "PE": "Pernambucano", "PI": "Piauiense", "RJ": "Carioca",
-    "RN": "Potiguar", "RS": "Gaúcho", "RO": "Rondoniense", "RR": "Roraimense", "SC": "Catarinense",
-    "SP": "Paulista", "SE": "Sergipano", "TO": "Tocantinense",
-}
-# como a torcida fala os que fogem da regra
-_CLUB_STATE_EXCEPTIONS = {
-    "Atlético-GO": "Atlético Goianiense", "Botafogo-SP": "Botafogo de Ribeirão Preto",
-    "Botafogo-PB": "Botafogo da Paraíba", "Vila Nova-GO": "Vila Nova", "Ferroviário-CE": "Ferroviário",
+# clube/cidade-UF: a UF só desambigua, a torcida não fala. "Botafogo-RJ" é
+# "Botafogo" (a voz falou "Botafogo Rio de Janeiro", 04/11); o adjetivo do
+# estado só onde ele FAZ parte do nome falado ("Atlético Mineiro"). Antes a
+# regra punha o adjetivo em todos ("Botafogo Carioca").
+_CLUB_STATE_SPOKEN = {
+    "Atlético-MG": "Atlético Mineiro", "América-MG": "América Mineiro", "Athletico-PR": "Athletico Paranaense",
+    "Atlético-PR": "Athletico Paranaense", "Atlético-GO": "Atlético Goianiense", "Botafogo-SP": "Botafogo de Ribeirão Preto",
+    "Botafogo-PB": "Botafogo da Paraíba", "América-RN": "América de Natal", "Guarani-SP": "Guarani de Campinas",
+    "Operário-PR": "Operário Ferroviário", "Atlético-BA": "Atlético de Alagoinhas",
 }
 _CLUB_STATE = re.compile(r"\b([A-ZÀ-Ý][a-zà-ÿ]+)-(%s)\b" % "|".join(_BRAZILIAN_STATES))
+# o LLM escreve "Atlético‑MG" com hífen especial (U+2011, U+2010, U+2012) e
+# nenhuma trava de fala reconhecia: vira hífen comum antes de tudo (04/11)
+_ODD_HYPHENS = re.compile(r"[\u2010\u2011\u2012\u00ad\u2043]")
+
+
+def normalize_hyphens(text: str) -> str:
+    return _ODD_HYPHENS.sub("-", text)
 
 
 def _state_abbreviation_pronunciations(text: str) -> dict[str, str]:
+    text = normalize_hyphens(text)
     out = {m[0]: f"{m[1]} {_BRAZILIAN_STATES[m[2]]}" for m in _STATE_ABBREVIATION.finditer(text)}
     for m in _CLUB_STATE.finditer(text):
-        out[m[0]] = _CLUB_STATE_EXCEPTIONS.get(m[0], f"{m[1]} {_STATE_ADJECTIVES[m[2]]}")
+        out[m[0]] = _CLUB_STATE_SPOKEN.get(m[0], m[1])
     return out
 
 
@@ -617,6 +620,7 @@ def narrate(
     `foreign` ({"Claude Code": "en"}, ver FOREIGN_VOICES): termo narrado pela
     voz nativa do idioma — nunca reescrito à portuguesa."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    text = normalize_hyphens(text)
     pronunciations = {
         **(pronunciations or {}),
         **_state_abbreviation_pronunciations(text),
