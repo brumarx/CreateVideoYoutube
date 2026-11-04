@@ -712,6 +712,12 @@ afirma que X decidiu Y):
   * acrescentar causa, consequência, motivo, citação ou adjetivo forte ("o mais", "recorde", "histórico")
     que a fonte não diz;
   * afirmar que um app/IA tem uma função que a fonte não mostra.
+NÃO reprove:
+  * arredondamento honesto ("cerca de 5.300 km", título "5.300 km" para 5.373 da fonte) — diferença de até
+    5% sem mudar o sentido;
+  * frase de reflexão, emoção, lição ou mensagem ("não abandonou o sonho", "a mensagem ecoou", "a ação
+    começa com um passo") que não afirma um fato novo — é "ok";
+  * fato amplamente conhecido e incontroverso sobre o assunto (Terry Fox perdeu a perna para um câncer).
 Conta simples com números da fonte vale como sustentada se o resultado bate (58,2 mi − 51,1 mi = 7,1 mi
 a mais). Na dúvida, "sem_prova". Seja rigoroso: é melhor cortar uma frase verdadeira do que publicar uma falsa.
 
@@ -723,11 +729,16 @@ TEMA: {tema}
 ROTEIRO:
 {itens}
 
-Responda SÓ com JSON: {{"itens": [{{"n": 0, "veredito": "ok"}}, {{"n": 1, "veredito": "sem_prova", "motivo": "1 frase"}}]}}
+Em cada item diga também "concreto": true se ele traz algo ESPECÍFICO — um fato com quem/o quê/quando/
+quanto/onde, um nome próprio fazendo algo, um número, ou um passo de tutorial que dá pra seguir ("toque em
+Compartilhar"). false se é generalidade ou jargão ("levanta preocupações sem precedentes", "riscos
+emergentes", "reforça a urgência de redefinir limites operacionais").
+
+Responda SÓ com JSON: {{"itens": [{{"n": 0, "veredito": "ok", "concreto": true}}, {{"n": 1, "veredito": "sem_prova", "concreto": false, "motivo": "1 frase"}}]}}
 (n=0 é o título)"""
 
 
-def _judge(prompt: str, key: str, max_tokens: int = 3000) -> list | None:
+def _judge(prompt: str, key: str, max_tokens: int = 3000, whole: dict | None = None) -> list | None:
     """Pergunta ao modelo FORTE (Nemotron 550B, gpt-oss-120b) e devolve a
     lista `key` do JSON. Sem modelo forte = None (modelo pequeno aprova o que
     não devia — é exatamente o que se quer evitar aqui)."""
@@ -737,7 +748,10 @@ def _judge(prompt: str, key: str, max_tokens: int = 3000) -> list | None:
         raw = complete([{"role": "user", "content": prompt}], max_tokens=max_tokens, temperature=0,
                        validate=lambda r: f'"{key}"' in r, model_filter=is_strong_model)
         m = re.search(r"\{.*\}", raw, re.S)
-        items = json.loads(m.group(0)).get(key) if m else None
+        data = json.loads(m.group(0)) if m else {}
+        items = data.get(key)
+        if whole is not None:
+            whole.update(data)
     except Exception as exc:  # noqa: BLE001
         log.warning("checador forte indisponível: %s", exc)
         return None
@@ -762,8 +776,9 @@ def verify_full_script(script: dict, topic: str, facts: dict | None, web_facts: 
                  if len(f.strip()) > 3]
     title = str(script.get("title") or "").strip()
     itens = "\n".join([f"0) TÍTULO: {title}"] + [f"{i + 1}) {s}" for i, s in enumerate(sentences)])
+    whole: dict = {}
     items = _judge(_VERIFY_PROMPT.format(fontes=source, tema=topic, itens=itens), "itens",
-                   max_tokens=600 + 80 * len(sentences))
+                   max_tokens=600 + 80 * len(sentences), whole=whole)
     if items is None:
         return None
     judged = set()
@@ -787,6 +802,12 @@ def verify_full_script(script: dict, topic: str, facts: dict | None, web_facts: 
     if len(judged & set(range(len(sentences) + 1))) < (len(sentences) + 1) * 0.8:
         log.warning("checagem final: resposta incompleta (%d de %d itens)", len(judged), len(sentences) + 1)
         return None
+    concrete = [bool(it.get("concreto")) for it in items if isinstance(it, dict) and str(it.get("n")) != "0"]
+    if len(concrete) >= 3 and sum(concrete) / len(concrete) < 0.4:
+        # o conserto em laço tirava cada fato reprovado e sobrava jargão, que
+        # a checagem aprovava por não ter fato a reprovar (job 722, 04/11)
+        problems.append({"tipo": "caso_generico", "termo": title[:100],
+                         "motivo": "roteiro vago: conte O QUE aconteceu (quem, o quê, quando, quanto) com os fatos da fonte"})
     if problems:
         log.warning("checagem final: %d de %d itens reprovados — %s", len(problems), len(sentences) + 1,
                     "; ".join(f"{p['termo'][:50]} ({p['motivo'][:80]})" for p in problems))
@@ -837,3 +858,4 @@ def check_premise(topic: str, facts: dict | None, web_facts: list[dict] | None) 
     if data.get("ok") is False and fixed:
         return False, fixed, str(data.get("motivo") or "")
     return None
+
