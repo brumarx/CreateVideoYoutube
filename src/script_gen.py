@@ -407,6 +407,9 @@ ESTRUTURA OBRIGATÓRIA (são {n} notícias SEPARADAS, formato noticiário):
 - A 1ª cena de cada bloco começa anunciando a notícia ("Primeira notícia:",
   "Segunda notícia:", ... "Última notícia:") e a manchete em poucas
   palavras; não ligue uma notícia na outra como se fosse a mesma história.
+- Notícia de jogo/transmissão: diga o CANAL de TV ou streaming e o horário
+  que a fonte traz (quem assiste quer saber onde ver). Rádio não interessa:
+  não cite. Sem canal na fonte, conte só o dia, o horário e o local.
 - O título do vídeo é a manchete MAIS forte do dia, curta (até 50
   caracteres), escrita como notícia única: "Júnior Santos Deixa o
   Botafogo", "Justiça multa Textor". Nunca "X notícias", "hoje",

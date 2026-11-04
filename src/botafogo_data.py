@@ -870,6 +870,20 @@ _PROMO_RE = re.compile(
 )
 
 
+# transmissão por RÁDIO não interessa a quem assiste o vídeo — quer saber
+# em que canal de TV/streaming passa ("Rádio Nacional transmite Botafogo x
+# Atlético-MG" abriu o vídeo de 04/11, job 713)
+_RADIO_RE = re.compile(r"\br[áa]dio\b|\bnarra[çc][ãa]o (da|na|pela) r[áa]dio\b|\bAM\b|\bFM\b", re.IGNORECASE)
+_TV_RE = re.compile(r"\bonde assistir\b|\btv\b|\bglobo\b|\bsportv\b|\bpremiere\b|\bespn\b|\bprime video\b|"
+                    r"\bcazé ?tv\b|\bstreaming\b|\brecord\b|\bband\b|\bpay-per-view\b", re.IGNORECASE)
+
+
+def _is_radio_news(art: dict) -> bool:
+    """Notícia de transmissão por rádio (sem TV/streaming no título)."""
+    title = art.get("title") or ""
+    return bool(_RADIO_RE.search(title)) and not _TV_RE.search(title)
+
+
 def _is_video_or_promo(art: dict) -> bool:
     url = (art.get("source_url") or "").lower()
     if "youtube.com" in url or "youtu.be" in url:
@@ -914,6 +928,9 @@ def portal_news_task(per_video: int = PORTAL_NEWS_PER_VIDEO) -> dict | None:
             continue
         if _is_duplicate(title, escolhidas) or _is_duplicate(title, recentes):
             log.info("portal: notícia repetida (mesma história): %s", title)
+            continue
+        if _is_radio_news(art):
+            log.info("portal: pulando transmissão de rádio (ninguém procura): %s", title)
             continue
         if art.get("source_type") != "authored" and _is_video_or_promo(art):
             # descrição de vídeo do YouTube ("CUPOM GOSETOR", "Chave PIX",
