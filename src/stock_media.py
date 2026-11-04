@@ -242,6 +242,26 @@ def _pixabay_clip(query: str, width: int, height: int, check, region: str = "") 
 COVERR_VIDEO_URL = "https://api.coverr.co/videos"
 
 
+def _coverr_hits(query: str, vertical: bool) -> list[dict]:
+    rotator = _rotator_for(COVERR_API_KEYS)
+    for api_key in rotator.order():
+        try:
+            resp = httpx.get(COVERR_VIDEO_URL, headers={"Authorization": f"Bearer {api_key}"}, timeout=30, params={
+                "query": _normalize_query(query)[:100], "page_size": 20, "urls": "true",
+                "filter": f"is_vertical:{'true' if vertical else 'false'}",
+            })
+            if resp.status_code in (401, 403):
+                rotator.ban(api_key)
+                continue
+            if resp.status_code == 429:
+                continue  # 50/hora por chave (Demo): a próxima chave do rodízio
+            resp.raise_for_status()
+            return resp.json().get("hits", [])
+        except Exception as exc:  # noqa: BLE001
+            log.warning("busca coverr falhou (%r): %s", query, exc)
+    return []
+
+
 def _coverr_clip(query: str, width: int, height: int, check, region: str = "") -> Path | None:
     """Coverr (coverr.co): 3º banco de vídeo grátis, sem custo (licença
     Coverr: uso livre, crédito opcional). Ideia tirada do MoneyPrinterTurbo
@@ -250,24 +270,17 @@ def _coverr_clip(query: str, width: int, height: int, check, region: str = "") -
     if not COVERR_API_KEYS or not query:
         return None
     want_portrait = height > width
-    rotator = _rotator_for(COVERR_API_KEYS)
-    hits: list[dict] = []
-    for api_key in rotator.order():
-        try:
-            resp = httpx.get(COVERR_VIDEO_URL, headers={"Authorization": f"Bearer {api_key}"}, timeout=30, params={
-                "query": _normalize_query(query)[:100], "page_size": 20, "urls": "true",
-                "filter": f"is_vertical:{'true' if want_portrait else 'false'}",
-            })
-            if resp.status_code in (401, 403):
-                rotator.ban(api_key)
-                continue
-            resp.raise_for_status()
-            hits = resp.json().get("hits", [])
-            break
-        except Exception as exc:  # noqa: BLE001
-            log.warning("busca coverr falhou (%r): %s", query, exc)
     tags = lambda h: " ".join([str(h.get("title") or ""), " ".join(map(str, h.get("tags") or []))])  # noqa: E731
-    for hit in _rank_candidates(query, hits, "coverr_video", tags, region)[:MAX_VISUAL_TRIES]:
+    # o acervo vertical do Coverr é minúsculo (0-7 por assunto, 04/11) e o
+    # deitado tem centenas: sem vertical relevante, busca o deitado — o
+    # render põe o clipe inteiro no meio sobre ele mesmo desfocado
+    candidates: list[dict] = []
+    for vertical in (want_portrait, not want_portrait):
+        hits = _coverr_hits(query, vertical)
+        candidates = _rank_candidates(query, hits, "coverr_video", tags, region)[:MAX_VISUAL_TRIES]
+        if candidates:
+            break
+    for hit in candidates:
         url = (hit.get("urls") or {}).get("mp4_download")
         if not url or (hit.get("max_height") or 0) < MIN_CLIP_HEIGHT:
             continue
