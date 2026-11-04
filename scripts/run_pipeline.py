@@ -674,7 +674,8 @@ def run(
     from src.topics import _load as _used_topics
 
     already_picked = topic in channel.active_priority_topics or topic in _used_topics().get(channel_name, [])
-    if facts is None and not already_picked:
+    # roteiro pronto (--script-file) já teve o tema aceito quando foi escrito
+    if facts is None and not already_picked and not script_file:
         for _ in range(MAX_TOPIC_CHECKS):
             problem = topic_problem(topic, channel.niche, strict=user_provided_topic)
             if problem is None:
