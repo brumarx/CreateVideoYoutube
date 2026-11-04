@@ -832,7 +832,11 @@ def run(
                 log.info("[%s] não deu pra cortar só as frases apontadas — reescrevendo", job_id)
             if attempt == FACT_CHECK_REWRITES:
                 if not any(p.get("tipo") in BLOCKING_TYPES for p in problems):
-                    log.warning("[%s] só sobraram ressalvas leves da revisão — segue pra aprovação", job_id)
+                    log.warning("[%s] só sobraram ressalvas leves da revisão — sobe PRIVADO pra aprovação", job_id)
+                    # qualquer apontamento que sobrou vira ressalva: nunca
+                    # público sozinho com frase reprovada (job 719, 04/11)
+                    if problems:
+                        script = {**script, "_ressalvas": [f"fato: {p.get('termo')} ({p.get('motivo')})" for p in problems]}
                     break
                 if channel_name == "politica" and facts is None and not user_provided_topic:
                     # tema da fila/viral sem dado que sustente: em vez de

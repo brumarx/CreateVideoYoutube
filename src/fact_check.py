@@ -559,7 +559,10 @@ def unknown_names(script: dict, topic: str, facts: dict | None, web_facts: list[
 # daily_run já tenta de novo com outro tema). Antes "fato duvidoso" e
 # "título enganoso" passavam; foi assim que saiu o vídeo do Botafogo que
 # tratava lesão de jogador emprestado como problema do elenco.
-BLOCKING_TYPES = set(_TYPES)
+# "sem_fonte" (prova por citação) também reprova: fora daqui, a última
+# tentativa tratava como "ressalva leve" e soltava o roteiro SEM cortar a
+# frase (job 719, 04/11: "humanos para Marte", "capital próprio")
+BLOCKING_TYPES = set(_TYPES) | {"sem_fonte"}
 
 
 def feedback_for_rewrite(problems: list[dict]) -> str:
