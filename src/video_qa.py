@@ -188,7 +188,41 @@ def _transcribe_once(audio: bytes) -> str | None:
             log.warning("transcrição cloudflare: HTTP %d %s", resp.status_code, resp.text[:120])
         except (httpx.HTTPError, ValueError) as exc:
             log.warning("transcrição cloudflare falhou: %s", exc)
-    return None
+    return _local_whisper(audio)
+
+
+_LOCAL_MODEL = None
+
+
+def _local_whisper(audio: bytes) -> str | None:
+    """Último recurso, sem cota: Whisper "small" rodando no próprio
+    Raspberry (faster-whisper, int8, ~1,5x a duração do áudio). Sem ele, a
+    regra "sem transcrição não publica" travava o vídeo quando a cota do
+    Groq e do Cloudflare acabava (04/11, ideia tirada do MoneyPrinterTurbo).
+    O áudio é decodificado pelo ffmpeg: o PyAV instalado não aceita a chamada
+    que o faster-whisper usa."""
+    global _LOCAL_MODEL
+    try:
+        import numpy as np
+        from faster_whisper import WhisperModel
+    except ImportError:
+        return None
+    try:
+        raw = subprocess.run(
+            ["ffmpeg", "-v", "error", "-i", "pipe:0", "-f", "s16le", "-ac", "1", "-ar", "16000", "pipe:1"],
+            input=audio, capture_output=True, check=True, timeout=120,
+        ).stdout
+        if _LOCAL_MODEL is None:
+            _LOCAL_MODEL = WhisperModel("small", device="cpu", compute_type="int8", cpu_threads=4)
+        segments, _ = _LOCAL_MODEL.transcribe(np.frombuffer(raw, np.int16).astype(np.float32) / 32768,
+                                              language="pt", beam_size=1)
+        text = " ".join(seg.text.strip() for seg in segments).strip()
+        if text:
+            log.info("transcrição pelo Whisper local (sem cota)")
+        return text or None
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Whisper local falhou: %s", exc)
+        return None
 
 
 def transcribe(video: Path, rounds: int = _TRANSCRIBE_ROUNDS) -> str | None:

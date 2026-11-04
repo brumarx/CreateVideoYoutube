@@ -13,3 +13,4 @@ rembg[cpu]>=2.0  # recorte do sujeito na thumbnail (opcional: sem ele, foto inte
 trafilatura>=1.12  # texto da matéria original quando o portal só manda o título
 ddgs>=9.0  # busca DuckDuckGo grátis (reserva da Tavily)
 psycopg[binary]>=3.2
+faster-whisper>=1.2  # transcrição local sem cota (src/video_qa._local_whisper)

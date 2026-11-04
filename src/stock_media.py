@@ -24,7 +24,7 @@ from typing import Callable
 
 import httpx
 
-from .config import PEXELS_API_KEYS, PIXABAY_API_KEYS
+from .config import COVERR_API_KEYS, PEXELS_API_KEYS, PIXABAY_API_KEYS
 from .providers import _rotator_for
 from .visual_check import frames_from_clip
 
@@ -169,8 +169,9 @@ def _pick_best_file(video: dict, width: int, height: int) -> dict | None:
 def search_stock_clip(
     query: str, width: int, height: int, check: Callable[[bytes], bool | None] | None = None, region: str = "",
 ) -> Path | None:
-    """Pexels e, sem nada no contexto, Pixabay (2º banco grátis)."""
-    return _pexels_clip(query, width, height, check, region) or _pixabay_clip(query, width, height, check, region)
+    """Pexels e, sem nada no contexto, Pixabay e Coverr (bancos grátis)."""
+    return (_pexels_clip(query, width, height, check, region) or _pixabay_clip(query, width, height, check, region)
+            or _coverr_clip(query, width, height, check, region))
 
 
 def search_stock_photo(
@@ -234,6 +235,58 @@ def _pixabay_clip(query: str, width: int, height: int, check, region: str = "") 
             continue
         _mark_recent("pixabay_video", str(hit.get("id")))
         log.info("clipe real (pixabay) encontrado pra %r (%sx%s)", query, picked.get("width"), picked.get("height"))
+        return path
+    return None
+
+
+COVERR_VIDEO_URL = "https://api.coverr.co/videos"
+
+
+def _coverr_clip(query: str, width: int, height: int, check, region: str = "") -> Path | None:
+    """Coverr (coverr.co): 3º banco de vídeo grátis, sem custo (licença
+    Coverr: uso livre, crédito opcional). Ideia tirada do MoneyPrinterTurbo
+    (04/11). Busca já filtrada na orientação do vídeo; o link mp4_download
+    conta o download pro Coverr, como a API pede."""
+    if not COVERR_API_KEYS or not query:
+        return None
+    want_portrait = height > width
+    rotator = _rotator_for(COVERR_API_KEYS)
+    hits: list[dict] = []
+    for api_key in rotator.order():
+        try:
+            resp = httpx.get(COVERR_VIDEO_URL, headers={"Authorization": f"Bearer {api_key}"}, timeout=30, params={
+                "query": _normalize_query(query)[:100], "page_size": 20, "urls": "true",
+                "filter": f"is_vertical:{'true' if want_portrait else 'false'}",
+            })
+            if resp.status_code in (401, 403):
+                rotator.ban(api_key)
+                continue
+            resp.raise_for_status()
+            hits = resp.json().get("hits", [])
+            break
+        except Exception as exc:  # noqa: BLE001
+            log.warning("busca coverr falhou (%r): %s", query, exc)
+    tags = lambda h: " ".join([str(h.get("title") or ""), " ".join(map(str, h.get("tags") or []))])  # noqa: E731
+    for hit in _rank_candidates(query, hits, "coverr_video", tags, region)[:MAX_VISUAL_TRIES]:
+        url = (hit.get("urls") or {}).get("mp4_download")
+        if not url or (hit.get("max_height") or 0) < MIN_CLIP_HEIGHT:
+            continue
+        try:
+            resp = httpx.get(url, timeout=60, follow_redirects=True)
+            resp.raise_for_status()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("download do clipe coverr falhou (%r): %s", query, exc)
+            continue
+        tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+        tmp.write(resp.content)
+        tmp.close()
+        path = Path(tmp.name)
+        frames = frames_from_clip(path) if check is not None else b""
+        if check is not None and (frames is None or not _passes(check, frames, query)):
+            path.unlink(missing_ok=True)
+            continue
+        _mark_recent("coverr_video", str(hit.get("id")))
+        log.info("clipe real (coverr) encontrado pra %r", query)
         return path
     return None
 
