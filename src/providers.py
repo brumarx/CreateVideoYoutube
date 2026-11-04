@@ -227,6 +227,15 @@ def _call_openai_compat(
         # o raciocínio sai do mesmo max_tokens: no padrão o gpt-oss gastava
         # os 3 mil pensando e devolvia o roteiro vazio (teste de 20/10)
         payload["reasoning_effort"] = "low"
+    if "nemotron" in model:
+        # o Nemotron também pensa dentro do max_tokens: o roteiro voltava
+        # vazio ou cortado no meio do JSON e o Groq escrevia no lugar (04/11).
+        # Escrita (temperatura alta): sem raciocínio, 3x mais rápido.
+        # Julgamento (checagem de fato, temperatura baixa): pensa, com folga
+        if temperature >= 0.5:
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
+        else:
+            payload["max_tokens"] = max_tokens + 4096
     try:
         resp = httpx.post(
             endpoint,
