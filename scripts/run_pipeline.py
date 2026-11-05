@@ -1051,9 +1051,13 @@ def run(
             "\nA imagem é uma FOTO REAL desta partida, da matéria de um jornal: uniforme "
             "especial ou de cor diferente (ex.: camisa rosa do Outubro Rosa) é normal."
         )
+        compiled = any(sc.get("_arquivo") for sc in script["scenes"])
         for i, scene in enumerate(script["scenes"]):
             log.info("[%s] cena %d/%d", job_id, i + 1, len(script["scenes"]))
             audio_path, word_boundaries, scene_duration = narrations[i]
+            if compiled and not scene.get("_arquivo"):
+                # abertura/transição da compilação: começa outra história
+                infographics.new_story()
 
             # toda imagem/clipe real passa por um modelo de visão antes de
             # entrar: tem que combinar com o que ESTA cena narra (vídeos de

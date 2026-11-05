@@ -938,6 +938,14 @@ class Renderer:
         self.last_sig: tuple | None = None  # mapa da cena anterior
         self.repeat = 0  # quantas cenas seguidas com o mesmo mapa
 
+    def new_story(self) -> None:
+        """Outra história no mesmo vídeo (compilação da semana): o ano e o
+        mapa da anterior não passam pra ela — o Japão do Senna saiu com o
+        1897 do Machado no canto (job 742)."""
+        self.era = ""
+        self.last_sig = None
+        self.repeat = 0
+
     def color_for(self, country_name: str) -> str:
         c = find_country(country_name)
         key = id(c)
