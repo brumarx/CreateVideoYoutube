@@ -334,7 +334,29 @@ def review_script(
         if verdict is None:
             return None
         problems = verdict
+    if facts and facts.get("tipo") == "compilacao":
+        problems = _only_in_reviewed(problems, script)
     return problems
+
+
+def _only_in_reviewed(problems: list[dict], script: dict) -> list[dict]:
+    """Compilação: o revisor lê as narrações dos Shorts como fonte e apontava
+    fato DELAS ("Neymar 10 mil reais aos 15") que nem estava no texto novo
+    revisado (job 743). Só vale o apontamento cujas palavras estão no texto
+    revisado (título, thumb e cenas novas)."""
+    text = " ".join([script.get("title", ""), script.get("thumbnail_text", "")]
+                    + [sc.get("narration", "") for sc in script.get("scenes", [])]).lower()
+    words_in = set(re.findall(r"\w+", text))
+    out = []
+    for p in problems:
+        term = str(p.get("termo", "")).lower()
+        words = {w for w in re.findall(r"\w+", term) if len(w) > 3}
+        nums = set(re.findall(r"\d+", term))
+        if (nums and not nums <= words_in) or (words and len(words & words_in) / len(words) < 0.5):
+            log.info("compilação: apontamento fora do texto novo (%r) — ignorado", p.get("termo"))
+            continue
+        out.append(p)
+    return out
 
 
 # valor em reais ou com escala ("R$ 2.309.985,78", "11,8 milhões", "35%")
