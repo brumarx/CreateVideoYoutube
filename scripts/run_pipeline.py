@@ -864,7 +864,14 @@ def run(
                     # frases apontadas (até 3 rodadas de revisão), em vez de
                     # descartar o roteiro e passar o dia sem vídeo (botafogo
                     # 09/10: 4 notícias seguidas reprovadas, jobs 350-353)
+                    before = sum(len(sc.get("narration", "").split()) for sc in script.get("scenes", []))
                     script = {**_forced_cut(script, problems or [], topic, facts, web_facts, job_id), "_edited": True}
+                    after = sum(len(sc.get("narration", "").split()) for sc in script.get("scenes", []))
+                    if after < max(60, before * 0.5):
+                        # cortou o roteiro quase todo: sobrava "Os executivos
+                        # revelaram... O que vem depois?" (job 726, 04/11).
+                        # Vídeo vazio não serve nem privado
+                        raise ScriptRejected(f"corte forçado esvaziou o roteiro ({before} -> {after} palavras)")
                     break
                 raise ScriptRejected(
                     "roteiro reprovado na revisão de fatos: "
