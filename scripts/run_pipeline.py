@@ -775,6 +775,14 @@ def run(
                             job_id, premise[2], topic, premise[1])
                 topic = premise[1]
                 update(job_id, topic=topic)
+                if web_facts and facts is None:
+                    # Wikipédia escolhida pelo tema antigo (senadores) virava
+                    # parágrafo solto sobre o Senado num vídeo de deputados
+                    # (job 740): artigos refeitos pro tema corrigido
+                    from src.web_search import wikipedia_facts
+
+                    news = [f for f in web_facts if "wikipedia.org" not in f.get("url", "")]
+                    web_facts = (wikipedia_facts(topic) + news) or web_facts
         log.info("[%s] gerando roteiro (%s) para: %s (voz: %s)", job_id, "longo" if long_form else "curto", topic, tts_voice)
         if script_file:
             # roteiro escrito à mão (ex.: quando só sobra modelo fraco que copia

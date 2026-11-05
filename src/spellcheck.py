@@ -380,18 +380,30 @@ def align_names(text: str, names: list[str]) -> str:
     """Nome quase igual a um da narração vira o da narração: a thumbnail
     saiu "JÚNIOR SAINTS" com a narração dizendo Júnior Santos (job 423) —
     o LanguageTool aponta mas não corrige nome próprio. Só palavra de 5+
-    letras, mesma inicial e bem parecida (sem trocar palavra comum)."""
+    letras, mesma inicial e bem parecida (sem trocar palavra comum): o
+    título saiu "deputados Federal" com "federais" virando o "Federal" de
+    "Senado Federal" (job 740). Palavra em minúscula ou que existe em
+    português fica como está."""
     folded = {_fold(n): n for n in names}
+
+    def candidate(word: str) -> str | None:
+        key = _fold(word)
+        if len(key) < 5 or key in folded or word.islower():
+            return None
+        close = [c for c in difflib.get_close_matches(key, list(folded), n=1, cutoff=0.8) if c[0] == key[0]]
+        return folded[close[0]] if close else None
+
+    found = {w: c for w in set(re.findall(r"\w+", text)) if (c := candidate(w))}
+    if not found:
+        return text
+    common = portuguese_words([w.lower() for w in found])
+    found = {w: c for w, c in found.items() if w.lower() not in common}
 
     def fix(m: re.Match) -> str:
         word = m.group(0)
-        key = _fold(word)
-        if len(key) < 5 or key in folded:
+        right = found.get(word)
+        if not right:
             return word
-        close = [c for c in difflib.get_close_matches(key, list(folded), n=1, cutoff=0.8) if c[0] == key[0]]
-        if not close:
-            return word
-        right = folded[close[0]]
         log.info("nome corrigido pela narração: %r -> %r", word, right)
         return right.upper() if word.isupper() else right
     return re.sub(r"\w+", fix, text)
