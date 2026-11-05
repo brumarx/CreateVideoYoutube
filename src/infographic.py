@@ -963,10 +963,9 @@ class Renderer:
         for n in names:
             if all(find_country(c) is not find_country(n) for c in self.cast):
                 self.cast.append(n)
-        # o rival da história fica no mapa mesmo quando a frase só cita um
-        # (Bolívia × Chile): a cena sobre a Marinha boliviana mostra o Chile ao lado
-        rivals = [c for c in self.cast[:3] if all(find_country(c) is not find_country(n) for n in names)]
-        shown = (names + rivals)[:3]
+        # só o que a CENA cita: o "rival da história" entrava no mapa sem a
+        # frase falar dele, contra a regra do gráfico (revisão de 04/11)
+        shown = names[:3]
         destaques = [{"pais": n, "cor": self.color_for(n), "rotulo": find_country(n)["name"]} for n in shown]
         years = re.findall(r"(?<!\d)(1[0-9]\d\d|20[0-2]\d)(?!\d)", narration)
         spec = {"tipo": "mapa", "lugares": shown, "destaques": destaques}

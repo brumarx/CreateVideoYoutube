@@ -74,7 +74,9 @@ MUST_PUBLISH_ATTEMPTS = 3
 CLEANUP_STATUSES = ("failed", "retried", "abandoned", "deleted", "uploaded", "rendered", "dry_run", "script_ready", "rendered_from_script", "scripted", "narrated", "pending")
 # job que parou no meio (nunca publicado) há mais de CLEANUP_AFTER_DAYS vira
 # abandoned — sem isso ficava "pending"/"scripted" pra sempre (112 em 03/11)
-STALE_STATUSES = ("pending", "scripted", "script_ready", "narrated", "rendered", "rendered_from_script", "dry_run")
+# "dry_run" não entra: desde 03/11 grava upload_meta e é publicado depois da
+# revisão manual (retry_uploads --status dry_run) — virava abandoned em 3 dias
+STALE_STATUSES = ("pending", "scripted", "script_ready", "narrated", "rendered", "rendered_from_script")
 CLEANUP_AFTER_DAYS = 3
 # upload que falhou (token OAuth vence a cada ~7 dias) fica com
 # upload_meta.json esperando o retry_uploads — guarda por mais tempo
@@ -123,8 +125,8 @@ def cleanup_output() -> None:
         if job_id not in old:
             continue
         status, past_retry_window = old[job_id]
-        if status == "failed" and (job_dir / UPLOAD_META_FILE).exists() and not past_retry_window:
-            continue  # vídeo pronto esperando reenvio
+        if status in ("failed", "dry_run") and (job_dir / UPLOAD_META_FILE).exists() and not past_retry_window:
+            continue  # vídeo pronto esperando reenvio / revisão manual do teste (até 14 dias)
         freed += sum(f.stat().st_size for f in job_dir.rglob("*") if f.is_file())
         shutil.rmtree(job_dir, ignore_errors=True)
         removed += 1

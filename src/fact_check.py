@@ -399,7 +399,7 @@ _MEASURE_RE = re.compile(
 )
 _SOURCE_NUM_RE = re.compile(
     r"(\d{1,3}(?:[.,\s\u00a0]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(mil\b|thousand|milh(?:ão|ões)|million|"
-    r"bilh(?:ão|ões)|billion)?\s*([a-zà-ÿ]+)?", re.IGNORECASE)
+    r"bilh(?:ão|ões)|billion)?\s*(°\s?[CF]?|[a-zà-ÿ]+)?", re.IGNORECASE)
 # a unidade tem que ser da mesma família na fonte: "4.800 metros" casava com
 # uma contagem de tropas perto de 4.800 (job 705)
 _UNIT_FAMILY = {
@@ -413,7 +413,8 @@ _UNIT_FAMILY = {
                      "marinheiros"], "tropas"),
     **dict.fromkeys(["navios", "embarcações", "embarcacoes", "ships", "vessels", "boats", "barcos"], "barcos"),
     **dict.fromkeys(["hectares", "ha"], "area"),
-    **dict.fromkeys(["graus", "degrees"], "temperatura"),
+    # a fonte escreve "15 °C" (símbolo), a fala "15 graus" (05/11)
+    **dict.fromkeys(["graus", "degrees", "°", "°c", "°f", "° c", "° f", "celsius", "fahrenheit"], "temperatura"),
 }
 _SRC_SCALE = {"mil": 1e3, "thousand": 1e3, "milhão": 1e6, "milhões": 1e6, "million": 1e6,
               "bilhão": 1e9, "bilhões": 1e9, "billion": 1e9}
