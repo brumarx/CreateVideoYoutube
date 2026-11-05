@@ -359,7 +359,9 @@ def numbers_not_in_facts(script: dict, facts: dict | None, tolerance: float = 0.
     10,8) passou na revisão do modelo (job 594, 21/10)."""
     if not facts:
         return []
-    known = [n for n in _fact_numbers(facts) if n]
+    # + números com escala em inglês ("$542 million"): dado copiado de fonte
+    # estrangeira reprovava "542 milhões" como inventado (job 723, 04/11)
+    known = [n for n in _fact_numbers(facts) if n] + _source_numbers(json.dumps(facts, ensure_ascii=False))
     out = []
     for scene in script.get("scenes", []):
         text = scene.get("narration", "")
@@ -572,6 +574,10 @@ REVISÃO DE FATOS DA VERSÃO ANTERIOR (reprovada — corrija TODOS estes pontos)
 {items}
 APAGUE o que foi apontado — não troque por outro número, medida, data ou
 detalhe que também não esteja nas fontes (é o que reprova a versão nova).
+NÃO acrescente nada novo nesta versão: nenhum superlativo ("o mais", "o
+maior", "o primeiro", "o único", "recorde", "histórico"), nenhuma
+generalização e nenhuma causa ou consequência que a fonte não diga. Frase a
+menos é melhor do que frase nova sem fonte.
 Nunca cite ferramenta, produto,
 número, nome ou evento que você não tem certeza de que é real. Se o título
 prometia algo que não dá pra entregar com fatos reais, mude o título.
