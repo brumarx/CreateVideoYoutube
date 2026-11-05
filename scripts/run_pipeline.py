@@ -1464,7 +1464,9 @@ def run(
             # time feminino). Sem casar com nenhuma, a IA gera a imagem.
             photo = _news_photo_for_scene(f"{script['title']} {thumb_text}", facts, news_photos)
             real_photo_url = photo["url"] if photo else None
-        elif facts and facts.get("dados"):
+        elif facts and isinstance(facts.get("dados"), list) and isinstance(facts["dados"][0], dict):
+            # dados também podem vir como dicionário (--facts-file escrito à
+            # mão): sem lista, não há foto (KeyError: 0 derrubava o vídeo pronto)
             real_photo_url = facts["dados"][0].get("foto_url") or None
         elif channel_name == "politica" and user_provided_topic:
             # tema digitado à mão (sem `facts` do banco) pode citar alguém que
