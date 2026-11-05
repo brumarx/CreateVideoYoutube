@@ -308,13 +308,19 @@ def review_script(
         grounded = ungrounded_sentences(script, facts, web_facts)
         if grounded is None:
             return None
-        problems = grounded
+        # a citação não reprova sozinha: o modelo às vezes não acha o trecho
+        # que ESTÁ na fonte ("parou de aceitar reservas para depois de 2028",
+        # job 730). As frases que ela não sustentou vão ao juiz final como
+        # suspeitas, conferidas com atenção redobrada — ele decide
+        suspects = [p["termo"] for p in grounded]
+    else:
+        suspects = []
     if not problems and (facts or web_facts):
         # última barreira: o roteiro COMPLETO (título + todas as frases) vai
         # pro maior modelo que temos, que julga frase por frase se é real.
         # Passaram "80% reprovam" (eram só os jovens, job 717) e "o Falcon 9
         # está sendo aposentado" (ninguém anunciou, job 714) — 04/11
-        verdict = verify_full_script(script, topic, facts, web_facts)
+        verdict = verify_full_script(script, topic, facts, web_facts, suspects=suspects)
         if verdict is None:
             return None
         problems = verdict
@@ -657,7 +663,14 @@ def ungrounded_sentences(script: dict, facts: dict | None, web_facts: list[dict]
     [] = tudo sustentado; None = sem fonte pra conferir ou checagem fora do ar."""
     parts = [f"{f.get('titulo', '')}: {f.get('trecho', '')}" for f in web_facts or []]
     if facts:
-        parts.append(json.dumps(facts, ensure_ascii=False))
+        dados = facts.get("dados") if isinstance(facts, dict) else None
+        if isinstance(dados, dict):
+            # cada fonte do arquivo separada (nome da fonte + trecho): o ano
+            # ou o nome pode estar no NOME da fonte ("CNBC, 2º tri de 2026")
+            parts += [f"{k}: {v}" for k, v in dados.items()]
+            parts.append(json.dumps({k: v for k, v in facts.items() if k != "dados"}, ensure_ascii=False))
+        else:
+            parts.append(json.dumps(facts, ensure_ascii=False))
     source = "\n\n".join(parts)
     if not source.strip():
         return None
@@ -688,7 +701,11 @@ def ungrounded_sentences(script: dict, facts: dict | None, web_facts: list[dict]
         if not (0 <= idx < len(sentences)) or not item.get("fato"):
             continue
         sentence, quote = sentences[idx], item.get("trecho")
-        if quote and _quote_in_source(str(quote), source_folded) and _claim_matches_quote(sentence, str(quote)):
+        # número/nome da frase conferidos contra a FONTE de onde o trecho saiu
+        # (trecho + nome da fonte), não só o trecho: "2026" no nome "CNBC, 2º
+        # tri de 2026" reprovava a frase certa (job 730, 05/11)
+        chunk = next((pt for pt in parts if quote and _quote_in_source(str(quote), _fold_text(pt))), str(quote or ""))
+        if quote and _quote_in_source(str(quote), source_folded) and _claim_matches_quote(sentence, chunk):
             continue
         why = ("nenhum trecho da fonte sustenta" if not quote else
                "o trecho citado não existe na fonte" if not _quote_in_source(str(quote), source_folded) else
@@ -771,7 +788,8 @@ def _sources_text(facts: dict | None, web_facts: list[dict] | None, limit: int =
     return "\n\n".join(parts)[:limit]
 
 
-def verify_full_script(script: dict, topic: str, facts: dict | None, web_facts: list[dict] | None) -> list[dict] | None:
+def verify_full_script(script: dict, topic: str, facts: dict | None, web_facts: list[dict] | None,
+                       suspects: list[str] | None = None) -> list[dict] | None:
     """Roteiro inteiro, de uma vez, pro checador forte: [] = tudo real;
     problemas "fora_da_fonte" (frase) e "titulo_enganoso" (título); None =
     checador fora do ar (revisão incompleta)."""
@@ -781,7 +799,12 @@ def verify_full_script(script: dict, topic: str, facts: dict | None, web_facts: 
     sentences = [f.strip() for sc in script.get("scenes", []) for f in _GROUND_SPLIT.split(sc.get("narration", ""))
                  if len(f.strip()) > 3]
     title = str(script.get("title") or "").strip()
-    itens = "\n".join([f"0) TÍTULO: {title}"] + [f"{i + 1}) {s}" for i, s in enumerate(sentences)])
+    def suspect(sentence: str) -> bool:
+        return any(sentence.startswith(t.rstrip(".")) or t.startswith(sentence[:60]) for t in suspects or [])
+
+    itens = "\n".join([f"0) TÍTULO: {title}"] + [
+        f"{i + 1}) {'[SUSPEITA: o verificador automático não achou trecho da fonte — procure com cuidado; sem trecho que prove, sem_prova] ' if suspect(s) else ''}{s}"
+        for i, s in enumerate(sentences)])
     whole: dict = {}
     items = _judge(_VERIFY_PROMPT.format(fontes=source, tema=topic, itens=itens), "itens",
                    max_tokens=600 + 80 * len(sentences), whole=whole)
