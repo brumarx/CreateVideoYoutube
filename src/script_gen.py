@@ -1188,7 +1188,7 @@ def _packaging_ok(data: dict, allowed: set[str]) -> bool:
     )
 
 
-def refresh_packaging(script: dict, channel: ChannelConfig, topic: str = "") -> dict:
+def refresh_packaging(script: dict, channel: ChannelConfig, topic: str = "", extra_rule: str = "") -> dict:
     """Depois de conserto ou corte (ver run_pipeline._repair_loop): descrição
     refeita do que as cenas narram e, se o título ou o texto da thumbnail
     citam número/nome que saiu da narração, os dois refeitos com a regra de
@@ -1202,12 +1202,13 @@ def refresh_packaging(script: dict, channel: ChannelConfig, topic: str = "") -> 
         return script
     rule = _TITLE_RULE_RE.search(channel.prompt_base or "")
     prompt = (
-        "Crie o TÍTULO e o texto da THUMBNAIL de um vídeo curto do YouTube, em português. São o que faz a "
+        "Crie o TÍTULO e o texto da THUMBNAIL de um vídeo do YouTube, em português. São o que faz a "
         "pessoa clicar: título curto (até 55 caracteres) com o fato ou número mais forte, em português "
         "correto e com palavras comuns (ex.: \"Catar: estádio gelado no meio do deserto\"); thumbnail com "
         "no máximo 4 palavras, tipo manchete de banca, diferente do título (ex.: \"AR FRIO NO DESERTO\"). "
         "Use SÓ fatos, números e nomes que estão na NARRAÇÃO.\n"
         + (f"Regra de título do canal:{rule.group(1).strip()}\n" if rule else "")
+        + (f"Regra deste vídeo (vale mais que a do canal): {extra_rule}\n" if extra_rule else "")
         + f"\nTEMA: {topic}\nTÍTULO ANTERIOR (citava algo que saiu do vídeo): {script.get('title', '')}\n"
         f"NARRAÇÃO: {narration}\n\n"
         'Responda só com JSON: {"titulo": "...", "thumbnail_text": "..."}'

@@ -898,7 +898,10 @@ def run(
         if script.pop("_edited", False):
             # conserto/corte mudou o que o vídeo narra: a descrição gerada
             # junto com o roteiro prometia o que saiu (job 558)
-            script = refresh_packaging(script, channel, topic)
+            # compilação: título com o fio comum das histórias, não uma só
+            # ("Nadia: Nobel após ser escrava" num vídeo de 6, job 739)
+            is_compilation = isinstance(facts, dict) and facts.get("tipo") == "compilacao"
+            script = refresh_packaging(script, channel, topic, extra_rule=facts["aviso"] if is_compilation else "")
             log.info("[%s] descrição refeita a partir do roteiro final", job_id)
         update(job_id, status="scripted")
         # pergunta de transição que a cena seguinte não responde (job 363)

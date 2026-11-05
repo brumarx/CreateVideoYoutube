@@ -53,6 +53,17 @@ def archive(channel: str, job_id: int, work_dir: Path, video_id: str, long_form:
         log.warning("não consegui guardar o roteiro do job %s: %s", job_id, exc)
 
 
+def _cut_at_sentence(text: str, limit: int = NARRATION_CHARS) -> str:
+    """Corta no fim da última frase que cabe: cortada no meio ("praticar
+    15"), a revisão tratava o resto da frase como fato sem fonte e o
+    roteirista inventava o final (job 739)."""
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    end = max(head.rfind(". "), head.rfind("! "), head.rfind("? "))
+    return head[:end + 1] if end > limit // 2 else head.rsplit(" ", 1)[0]
+
+
 def compilation_facts(channel: str, days: int = 7) -> dict | None:
     """Os Shorts publicados nos últimos `days` dias, no formato de DADOS REAIS
     do roteiro ({tema, dados}), ou None se forem menos de MIN_VIDEOS."""
@@ -64,7 +75,7 @@ def compilation_facts(channel: str, days: int = 7) -> dict | None:
         except (OSError, ValueError):
             continue
         if entry.get("date", "") >= since and not entry.get("long") and entry.get("narration"):
-            items.append({"titulo": entry["title"], "narracao": entry["narration"][:NARRATION_CHARS]})
+            items.append({"titulo": entry["title"], "narracao": _cut_at_sentence(entry["narration"])})
     if len(items) < MIN_VIDEOS:
         return None
     return {

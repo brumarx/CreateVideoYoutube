@@ -223,7 +223,12 @@ def copied_from_source(script: dict, facts: dict | None, web_facts: list[dict] |
     checagem por código, não depende do LLM (que com cota esgotada cai em
     modelo fraco). Foi assim que uma coluna irônica debochando dos próprios
     jogadores virou a voz do canal (job 237); copiar matéria também é risco
-    de direito autoral. Citação curta (< 9 palavras) passa."""
+    de direito autoral. Citação curta (< 9 palavras) passa. Compilação da
+    semana fica de fora: a fonte é a narração dos próprios Shorts, já
+    revisada — repetir é o objetivo; forçar paráfrase tirou nomes e deixou
+    o texto truncado ("bólido rival", "pretensões francesas", job 739)."""
+    if facts and facts.get("tipo") == "compilacao":
+        return []
     source = json.dumps(facts, ensure_ascii=False) if facts else ""
     source += " ".join(f.get("trecho", "") for f in (web_facts or []))
     if not source:
