@@ -252,6 +252,11 @@ def review_script(
     internet ([] = aprovado), ou None se o revisor não conseguiu responder
     (quem chama decide — o pipeline segue, já que a aprovação manual no
     painel é a segunda barreira)."""
+    if facts and facts.get("tipo") == "compilacao":
+        # cenas que vieram dos Shorts publicados já passaram na revisão:
+        # só o texto novo (abertura, transições, fechamento) e o título
+        new = [sc for sc in script.get("scenes", []) if not sc.get("_arquivo")]
+        script = {**script, "scenes": new or script.get("scenes", [])[:1]}
     copied = copied_from_source(script, facts, web_facts)
     if len(copied) >= 2:
         return copied

@@ -44,6 +44,12 @@ def archive(channel: str, job_id: int, work_dir: Path, video_id: str, long_form:
         "job_id": job_id, "video_id": video_id, "date": date.today().isoformat(), "long": long_form,
         "title": script.get("title", ""),
         "narration": " ".join(sc.get("narration", "") for sc in script.get("scenes", [])),
+        # cenas inteiras (com a busca de imagem): a compilação reaproveita
+        # sem pedir nada ao LLM (ver script_gen.compose_compilation)
+        "scenes": [
+            {k: sc[k] for k in ("narration", "image_prompt", "stock_query", "real_subject", "grafico") if sc.get(k)}
+            for sc in script.get("scenes", []) if sc.get("narration")
+        ],
     }
     try:
         folder = ARCHIVE_DIR / channel
@@ -75,7 +81,7 @@ def compilation_facts(channel: str, days: int = 7) -> dict | None:
         except (OSError, ValueError):
             continue
         if entry.get("date", "") >= since and not entry.get("long") and entry.get("narration"):
-            items.append({"titulo": entry["title"], "narracao": _cut_at_sentence(entry["narration"])})
+            items.append({"job_id": entry["job_id"], "titulo": entry["title"], "narracao": _cut_at_sentence(entry["narration"])})
     if len(items) < MIN_VIDEOS:
         return None
     return {
@@ -89,3 +95,11 @@ def compilation_facts(channel: str, days: int = 7) -> dict | None:
             "impossível\"), não \"compilação\"."
         ),
     }
+
+
+def archived(channel: str, job_id: int) -> dict | None:
+    """Roteiro guardado de um vídeo publicado (narração inteira + cenas)."""
+    try:
+        return json.loads((ARCHIVE_DIR / channel / f"{job_id}.json").read_text())
+    except (OSError, ValueError):
+        return None

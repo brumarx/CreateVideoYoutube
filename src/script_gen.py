@@ -892,6 +892,128 @@ def recent_mistakes(channel_name: str, jobs: int = 8, max_items: int = 6) -> str
     )
 
 
+def _story_scenes(entry: dict) -> list[dict]:
+    """Cenas de um Short guardado: as do arquivo (com a busca de imagem) ou,
+    pros guardados antes de 05/11 (só narração), a narração em blocos de 2
+    frases, com a busca de imagem a preencher."""
+    if entry.get("scenes"):
+        return [{**sc, "_arquivo": True} for sc in entry["scenes"]]
+    sentences = [x for x in _SENTENCE_SPLIT.split(entry.get("narration", "").strip()) if x]
+    return [{"narration": " ".join(sentences[i:i + 2]), "_arquivo": True} for i in range(0, len(sentences), 2)]
+
+
+def compose_compilation(channel: ChannelConfig, facts: dict, revision_feedback: str | None = None) -> dict:
+    """Longo semanal montado com a narração dos Shorts EXATAMENTE como foi
+    publicada (já passou na revisão); o LLM escreve só abertura, transições,
+    fechamento, título e a busca de imagem das cenas sem uma. Pedir pro LLM
+    reescrever as 6 histórias fazia a revisão de fatos reprovar o que estava
+    no próprio Short e o conserto em laço tirava nomes e travava o texto
+    ("bólido rival", "pretensões francesas", job 739; "força de vontade" 9x,
+    job 741). Cenas do arquivo levam "_arquivo" (ver fact_check.review_script)."""
+    from .script_archive import archived
+    from .spellcheck import portuguese_words
+    from .topics import _SMALL_MODEL_RE  # import tardio: topics importa este módulo
+
+    stories = []
+    for item in facts.get("dados") or []:
+        entry = archived(channel.name, item.get("job_id")) if item.get("job_id") else None
+        entry = entry or {"title": item.get("titulo", ""), "narration": item.get("narracao", "")}
+        scenes = _story_scenes(entry)
+        if scenes:
+            stories.append({"title": entry.get("title", ""), "scenes": scenes})
+    if len(stories) < 2:
+        raise ValueError("compilação sem histórias guardadas suficientes")
+    everything = " ".join(sc["narration"] for st in stories for sc in st["scenes"])
+    allowed = _fact_tokens(everything, every_capital=True)
+    missing = [(i, j) for i, st in enumerate(stories) for j, sc in enumerate(st["scenes"]) if not sc.get("image_prompt")]
+    blocks = "\n\n".join(
+        f"HISTÓRIA {i + 1} — {st['title']}\n" + "\n".join(
+            (f"[{i + 1}.{j + 1}] " if not sc.get("image_prompt") else "") + sc["narration"]
+            for j, sc in enumerate(st["scenes"]))
+        for i, st in enumerate(stories)
+    )
+    n = len(stories)
+    visual = ('{"narration": "...", "image_prompt": "prompt em inglês, só cenário/objetos/atmosfera, sem texto, '
+              'sem rosto de pessoa real", "stock_query": "3 a 5 palavras em inglês pra filmagem real"}')
+    prompt = (
+        f"{channel.prompt_base}\n\n"
+        f"Vídeo LONGO que junta {n} Shorts da semana do canal. A narração de cada história JÁ ESTÁ PRONTA e entra "
+        "como está — você NÃO reescreve nada dela. Escreva só:\n"
+        "- abertura: 1 ou 2 frases que prometem as histórias sem contar o final;\n"
+        f"- transicoes: exatamente {n - 1} frases curtas, uma antes de cada história a partir da 2ª, que "
+        "ligam a anterior à próxima (pode citar o nome de quem vem);\n"
+        "- fechamento: 1 ou 2 frases com a lição comum das histórias.\n"
+        "Nesses textos novos, NENHUM fato, número, data ou nome que não esteja nas narrações abaixo; sem "
+        "pergunta que fica sem resposta, sem pedir inscrição.\n"
+        "Título (até 70 caracteres) e thumbnail (até 4 palavras): o fio comum das histórias com o número "
+        f"delas (ex.: \"{n} brasileiros que venceram o impossível\"), nunca uma história só e nunca "
+        "\"compilação\".\n"
+        + (f"Para cada trecho marcado [h.c], dê a busca de imagem em \"visuais\".\n" if missing else "")
+        + (revision_feedback or "")
+        + f"\n\n{blocks}\n\n"
+        "Responda só com JSON:\n"
+        f'{{"title": "...", "thumbnail_text": "...", "thumbnail_image_prompt": "prompt em inglês, sem rosto", '
+        f'"description": "2 parágrafos", "tags": ["..."], "mood": "animado|calmo|neutro|tenso|melancolico", '
+        f'"abertura": {visual}, "transicoes": [{visual}, ...], "fechamento": {visual}'
+        + (', "visuais": {"1.1": {"image_prompt": "...", "stock_query": "..."}, ...}' if missing else "")
+        + "}"
+    )
+
+    def parse(raw: str) -> dict | None:
+        try:
+            data = _extract_json(raw)
+        except ValueError:
+            return None
+        parts = [data.get("abertura"), *(data.get("transicoes") or []), data.get("fechamento")]
+        if len(data.get("transicoes") or []) != n - 1 or not all(
+                isinstance(p, dict) and str(p.get("narration") or "").strip() and p.get("image_prompt") for p in parts):
+            return None
+        new_text = " ".join(str(p["narration"]) for p in parts)
+        if _fact_tokens(new_text) - allowed:
+            return None
+        title, thumb = str(data.get("title") or ""), str(data.get("thumbnail_text") or "")
+        if not (8 <= len(title) <= 70 and 0 < len(thumb.split()) <= 5):
+            return None
+        # título leva o número de histórias; palavra em Title Case ("Histórias
+        # Reais") só reprova se não for palavra comum do português
+        odd = _fact_tokens(f"{title} {thumb}") - allowed - {str(n)}
+        if odd and (any(t.isdigit() for t in odd) or odd - portuguese_words(sorted(odd))):
+            return None
+        vis = data.get("visuais") or {}
+        if any(not isinstance(vis.get(f"{i + 1}.{j + 1}"), dict) or not vis[f"{i + 1}.{j + 1}"].get("image_prompt")
+               for i, j in missing):
+            return None
+        return data
+
+    raw = complete(
+        [{"role": "user", "content": prompt}], max_tokens=600 + 80 * len(missing) + 120 * n,
+        validate=lambda r: parse(r) is not None, model_filter=lambda m: not _SMALL_MODEL_RE.search(m),
+        temperature=0.6,
+    )
+    data = parse(raw)
+    for i, j in missing:
+        v = data["visuais"][f"{i + 1}.{j + 1}"]
+        stories[i]["scenes"][j].update({k: v[k] for k in ("image_prompt", "stock_query") if v.get(k)})
+
+    def new_scene(p: dict) -> dict:
+        return {k: str(p[k]).strip() for k in ("narration", "image_prompt", "stock_query") if p.get(k)}
+
+    scenes = [new_scene(data["abertura"])]
+    for i, st in enumerate(stories):
+        if i:
+            scenes.append(new_scene(data["transicoes"][i - 1]))
+        scenes.extend(st["scenes"])
+    scenes.append(new_scene(data["fechamento"]))
+    log.info("compilação montada: %d histórias guardadas, %d cenas (%d novas)", n, len(scenes), n + 1)
+    return {
+        "title": data["title"].strip(), "thumbnail_text": data["thumbnail_text"].strip(),
+        "thumbnail_image_prompt": data.get("thumbnail_image_prompt") or scenes[1].get("image_prompt", ""),
+        "description": data.get("description") or "", "tags": data.get("tags") or [],
+        "mood": data.get("mood") if data.get("mood") in {"animado", "calmo", "neutro", "tenso", "melancolico"} else "animado",
+        "scenes": scenes,
+    }
+
+
 def generate_script(
     channel: ChannelConfig,
     topic: str,
@@ -915,6 +1037,11 @@ def generate_script(
 
     Levanta ValueError se o LLM não devolver um JSON parseável (raro, mas
     acontece)."""
+    if facts and facts.get("tipo") == "compilacao":
+        try:
+            return compose_compilation(channel, facts, revision_feedback)
+        except RuntimeError as exc:
+            raise ValueError(f"compilação: {exc}") from exc
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": _prompt_for(channel, topic, facts, scenes, min_minutes, max_minutes, web_facts)
