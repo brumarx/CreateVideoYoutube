@@ -312,6 +312,14 @@ def _mark_news_blocks(script: dict, facts: dict | None) -> None:
             scene["narration"] = f"{ordinal} notícia: {scene['narration']}"
 
 
+def _archive_is_cited_person(scene: dict) -> bool:
+    """Arquivo da própria pessoa citada: "real_subject" com nome e sobrenome
+    que a narração da cena fala."""
+    subject = (scene.get("real_subject") or "").strip()
+    words = [w for w in subject.split() if w[:1].isupper()]
+    return len(words) >= 2 and subject.lower() in (scene.get("narration") or "").lower()
+
+
 # começo de frase que aponta pra frase anterior
 _ANAPHORA = re.compile(
     r"^(ess[ae]s?|ist[oa]|isso|aquel[ae]s?|aquilo|el[ae]s?|nel[ae]s?|del[ae]s?|dess[ae]s?|ness[ae]s?|"
@@ -1407,7 +1415,13 @@ def run(
                 strict_visual=channel.strict_visual and "ia" in scene_sources,
                 # gráfico desenhado também é conferido: mapa/número/ano tem que
                 # bater com a fala da cena (04/11)
-                trusted_scenes={i + 1 for i, src in enumerate(scene_sources) if src in ("noticia", "repetida", "jogador", "arquivo")},
+                # arquivo só dispensa o olho quando é a PESSOA citada na cena
+                # (foto oficial reprovava pela regra do rosto, job 319); o
+                # resto é conferido — passou o Jim Cramer (CNBC) numa cena
+                # sobre verificação em dois fatores (job 729, 05/11)
+                trusted_scenes={i + 1 for i, src in enumerate(scene_sources)
+                                if src in ("noticia", "repetida", "jogador")
+                                or (src == "arquivo" and i < len(script["scenes"]) and _archive_is_cited_person(script["scenes"][i]))},
                 # mapas da mesma região se parecem de propósito (mesmo mundo visual)
                 designed_scenes={i + 1 for i, src in enumerate(scene_sources) if src == "grafico"},
             )

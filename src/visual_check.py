@@ -58,6 +58,10 @@ _RULES = """Responda NÃO (ok=false) se a imagem:
   quem assiste procura o atleta e acha outro jogador famoso (cena do
   Ronaldo Fenômeno com lance de jogo do Real Madrid, 22/10). Bola, campo
   vazio, treino amador ou torcida genérica estão OK.
+- mostra uma PESSOA REAL reconhecível (apresentador de TV, político,
+  empresário, celebridade) que a narração da cena NÃO cita pelo nome, ou
+  logo/marca de emissora ou empresa sem relação (Jim Cramer da CNBC numa
+  cena sobre senha de conta, job 729);
 - é um MAPA ou GRÁFICO desenhado que contradiz a narração: país, cidade,
   rota, número, ano ou rótulo diferente do que a cena fala (mapa da
   Argentina numa cena sobre o Chile; "1904" numa cena que diz 1879).
