@@ -103,6 +103,9 @@ def upload_video(
     }
 
     media = MediaFileUpload(str(video_path), chunksize=-1, resumable=True, mimetype="video/mp4")
+    from .yt_quota import spend
+
+    spend("upload")
     request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
 
     response = None
@@ -116,6 +119,9 @@ def upload_video(
 
     if thumbnail_path and thumbnail_path.exists():
         try:
+            from .yt_quota import spend as _spend
+
+            _spend("thumbnail")
             youtube.thumbnails().set(
                 videoId=video_id, media_body=MediaFileUpload(str(thumbnail_path))
             ).execute()
@@ -152,6 +158,9 @@ def retry_pending_thumbnails() -> int:
             if channel_name not in clients:
                 channel = ChannelConfig.load(channel_name)
                 clients[channel_name] = build("youtube", "v3", credentials=_load_credentials(channel.token_file))
+            from .yt_quota import spend as _spend
+
+            _spend("thumbnail")
             clients[channel_name].thumbnails().set(videoId=video_id, media_body=MediaFileUpload(str(thumb))).execute()
         except Exception as exc:  # noqa: BLE001 — continua pendente, tenta amanhã
             log.info("thumbnail de %s (%s) ainda pendente: %s", video_id, channel_name, str(exc)[:120])
@@ -206,6 +215,9 @@ def _get_or_create_playlist(youtube, channel: ChannelConfig) -> str:
         },
         "status": {"privacyStatus": "public"},
     }
+    from .yt_quota import spend
+
+    spend("playlist_create")
     response = youtube.playlists().insert(part="snippet,status", body=body).execute()
     playlist_id = response["id"]
     state[channel.name] = playlist_id
@@ -216,6 +228,9 @@ def _get_or_create_playlist(youtube, channel: ChannelConfig) -> str:
 
 def _add_to_channel_playlist(youtube, channel: ChannelConfig, video_id: str) -> None:
     playlist_id = _get_or_create_playlist(youtube, channel)
+    from .yt_quota import spend
+
+    spend("playlist_item")
     youtube.playlistItems().insert(
         part="snippet",
         body={
@@ -236,6 +251,9 @@ def post_comment(channel: ChannelConfig, video_id: str, text: str) -> None:
         log.info("token de %s sem permissão de comentar — reautorize o canal pra ativar", channel.name)
         return
     youtube = build("youtube", "v3", credentials=creds)
+    from .yt_quota import spend
+
+    spend("comment")
     youtube.commentThreads().insert(
         part="snippet",
         body={

@@ -544,3 +544,28 @@ def test_evidence_search_per_rejected_claim(monkeypatch):
     out = fact_check.evidence_for_problems(problems, "Simone Biles: de abrigo a campeã")
     assert len(queries) == 2 and "730 dias" in queries[0]
     assert len(out) == 2
+
+
+def test_quota_ledger_stops_at_daily_limit(tmp_path, monkeypatch):
+    from src import yt_quota
+
+    monkeypatch.setattr(yt_quota, "LEDGER", tmp_path / "q.json")
+    monkeypatch.setattr(yt_quota, "DAILY_LIMIT", 3300)
+    yt_quota.spend("upload")          # 1600
+    yt_quota.spend("upload")          # 3200
+    with pytest.raises(yt_quota.QuotaExceeded):
+        yt_quota.spend("upload")      # 4800 > 3300: não reserva
+    assert yt_quota.used_today() == 3200
+
+
+def test_quota_ledger_resets_next_day(tmp_path, monkeypatch):
+    import json
+
+    from src import yt_quota
+
+    monkeypatch.setattr(yt_quota, "LEDGER", tmp_path / "q.json")
+    today = yt_quota._day()
+    (tmp_path / "q.json").write_text(json.dumps({today: 9000}))
+    monkeypatch.setattr(yt_quota, "_day", lambda: "2099-01-02")
+    yt_quota.spend("upload")
+    assert yt_quota.used_today() == 1600

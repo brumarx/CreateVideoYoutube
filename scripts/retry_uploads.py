@@ -79,8 +79,19 @@ def upload_pending(channel_filter: str | None, status: str = "failed", limit: in
     uploaded = 0
 
     dead_tokens: set[str] = set()
+    import sqlite3
+
+    from src.orchestrator import DB_PATH as _DB
+
     for job_id, channel_name, video in jobs:
         if channel_name in dead_tokens:
+            continue
+        # idempotência: job que já tem id no YouTube não sobe de novo (duplicaria o vídeo)
+        with sqlite3.connect(_DB) as _c:
+            row = _c.execute("SELECT youtube_video_id FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        if row and row[0]:
+            log.warning("[%s] já tem vídeo no YouTube (%s) — não reenvio, marco como enviado", job_id, row[0])
+            update(job_id, status=after_upload_status(ChannelConfig.load(channel_name)))
             continue
         work_dir = video.parent
         meta = json.loads((work_dir / UPLOAD_META_FILE).read_text())
