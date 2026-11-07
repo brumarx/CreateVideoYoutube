@@ -798,6 +798,37 @@ def _is_risky_face_prompt(prompt: str) -> bool:
     return bool(_RISKY_FACE_RE.search(prompt))
 
 
+# Escudo/brasão de clube: a IA de imagem inventa um escudo que não é o do clube
+# (botafogo, 07/11). Quando o prompt pede escudo, a cena vira só uma estrela
+# branca de cinco pontas num fundo preto — nunca um escudo inventado.
+_CREST_RE = re.compile(
+    r"\b(escudo|brasão|brasao|emblema do clube|escudo do clube|crest|badge|club emblem|team emblem|club crest|team crest)\b",
+    re.IGNORECASE,
+)
+_CREST_SAFE_PROMPT = (
+    "plain solid black background, a single white five-pointed star centered, "
+    "minimalist, no text, no logos, no emblem, no shield"
+)
+
+
+def _sanitize_club_crests(script: dict) -> dict:
+    """Troca o prompt de imagem que pede escudo/brasão de clube pela estrela
+    branca em fundo preto (regra do canal botafogo, 07/11). Vale pra cena e
+    pro prompt da thumbnail; a busca de estoque dessa cena é desligada pra não
+    trazer um escudo de banco de imagens."""
+    for i, scene in enumerate(script.get("scenes", [])):
+        prompt = scene.get("image_prompt", "") or ""
+        if _CREST_RE.search(prompt):
+            log.warning("cena %d: image_prompt pede escudo de clube, trocando pela estrela: %s", i, prompt[:120])
+            scene["image_prompt"] = _CREST_SAFE_PROMPT
+            scene["stock_query"] = ""
+    thumb = script.get("thumbnail_image_prompt") or ""
+    if _CREST_RE.search(thumb):
+        log.warning("thumbnail pede escudo de clube, trocando pela estrela")
+        script["thumbnail_image_prompt"] = _CREST_SAFE_PROMPT
+    return script
+
+
 def _sanitize_person_images(topic: str, script: dict) -> dict:
     # Antes só olhava o TÓPICO do vídeo — suficiente quando nome de pessoa
     # real é exceção rara no tema, mas insuficiente pra um canal como o de
@@ -1138,7 +1169,7 @@ def generate_script(
                 continue
             word_count = sum(len(s.get("narration", "").split()) for s in script["scenes"])
             if min_total_words <= word_count <= max_words_ceiling:
-                return _sanitize_person_images(topic, script)
+                return _sanitize_club_crests(_sanitize_person_images(topic, script))
 
             distance = (
                 min_total_words - word_count if word_count < min_total_words
@@ -1159,10 +1190,10 @@ def generate_script(
             "usando o melhor roteiro obtido mesmo fora da faixa de %d-%d palavras",
             min_total_words, max_words_ceiling,
         )
-        return _sanitize_person_images(topic, best_script)
+        return _sanitize_club_crests(_sanitize_person_images(topic, best_script))
     if filler_fallback is not None:
         log.warning("3 tentativas com bordão repetido — usando a última mesmo assim")
-        return _sanitize_person_images(topic, filler_fallback)
+        return _sanitize_club_crests(_sanitize_person_images(topic, filler_fallback))
 
     raise ValueError(f"LLM não devolveu roteiro válido após 3 tentativas: {last_error}")
 

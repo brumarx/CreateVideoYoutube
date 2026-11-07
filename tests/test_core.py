@@ -292,3 +292,21 @@ def test_claim_sources_keeps_units_and_sourceless_results(monkeypatch):
     out = fact_check.claim_sources(_scene("Terry percorreu 5.300 milhas em 1980."), "Terry Fox")
     assert any("milhas" in q for q in queries)
     assert len(out) == 2  # resultado sem URL não é descartado
+
+
+def test_club_crest_prompt_becomes_white_star_on_black():
+    from src.script_gen import _CREST_SAFE_PROMPT, _sanitize_club_crests
+
+    script = {
+        "thumbnail_image_prompt": "Botafogo crest on a shield",
+        "scenes": [
+            {"image_prompt": "close-up of the Botafogo escudo on a jersey", "stock_query": "botafogo"},
+            {"image_prompt": "a crowd cheering in a stadium at night", "stock_query": "stadium"},
+        ],
+    }
+    out = _sanitize_club_crests(script)
+    assert out["scenes"][0]["image_prompt"] == _CREST_SAFE_PROMPT
+    assert out["scenes"][0]["stock_query"] == ""
+    assert out["scenes"][1]["image_prompt"] == "a crowd cheering in a stadium at night"
+    assert out["thumbnail_image_prompt"] == _CREST_SAFE_PROMPT
+    assert "black background" in _CREST_SAFE_PROMPT and "five-pointed star" in _CREST_SAFE_PROMPT
