@@ -280,6 +280,57 @@ def audio_problems(narrations: list[str], heard: str) -> list[str]:
     return problems
 
 
+_NAME_STOP = {
+    "Fala", "Você", "Hoje", "Mas", "Quando", "Como", "Qual", "Quanto", "Ainda", "Agora", "Então", "Porque",
+    "Brasil", "Brasileiro", "Brasileira", "Primeira", "Segunda", "Terceira", "Última", "Veja", "Imagine",
+    "Esse", "Essa", "Isso", "Aqui", "Pois", "Além", "Assim", "Depois", "Antes", "Ainda", "Também",
+}
+
+
+def _fold(text: str) -> str:
+    import unicodedata
+
+    return "".join(c for c in unicodedata.normalize("NFKD", text.lower()) if not unicodedata.combining(c))
+
+
+def name_problems(narrations: list[str], heard: str) -> list[str]:
+    """Nome próprio do roteiro que a transcrição não tem (a voz falou outra
+    coisa: "Textor" saiu "Tech Store", "Svalbard" saiu "Esvalbard"). Não reprova:
+    vira ressalva pra aprovação humana, porque o Whisper também erra nome."""
+    heard_f = " " + " ".join(re.findall(r"\w+", _fold(heard))) + " "
+    missing: list[str] = []
+    for text in narrations:
+        for sentence in re.split(r"(?<=[.!?])\s+", text or ""):
+            words = sentence.split()
+            for i, raw in enumerate(words):
+                if i == 0:
+                    continue  # início de frase é maiúscula de graça
+                core = raw.strip(".,;:!?…\"“”()'")
+                if len(core) < 5 or not core[0].isupper() or core.isupper() or core in _NAME_STOP:
+                    continue
+                if not re.fullmatch(r"[A-Za-zÀ-ÿ'-]+", core):
+                    continue
+                token = _fold(core)
+                if f" {token} " not in heard_f and core not in missing:
+                    missing.append(core)
+    if not missing:
+        return []
+    return [f"nome que a voz não falou como escrito: {', '.join(missing[:6])} — confira a pronúncia (ouvido: \"{heard[:120].strip()}\")"]
+
+
+def review_audio_full(narrations: list[str], scene_audios: list[Path]) -> tuple[list[str], list[str]]:
+    """(problemas graves, ressalvas). Graves reprovam o vídeo; ressalvas sobem
+    privadas pra aprovação humana."""
+    heard = []
+    for audio in scene_audios:
+        text = transcribe(audio)
+        if text is None:
+            return ["revisão da fala indisponível (nenhuma transcrição respondeu) — não publica sem ouvir"], []
+        heard.append(text)
+    joined = " ".join(heard)
+    return audio_problems(narrations, joined), name_problems(narrations, joined)
+
+
 def review_audio(narrations: list[str], scene_audios: list[Path]) -> list[str]:
     """Uma transcrição por cena: o arquivo inteiro de uma vez o Whisper
     devolvia com trechos cortados ("insustent sem retornos t", job 423) e a

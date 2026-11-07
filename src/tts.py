@@ -159,6 +159,24 @@ def _is_mixed_case(word: str) -> bool:
     return any(c.isupper() for c in word[1:])
 
 
+# Siglas com leitura explícita: o Google decidia sozinho (soletrava ou lia como
+# palavra, às vezes errado). Só letra maiúscula inteira casa; "IA" fica com a
+# regra própria (IÁ), e siglas que se leem como palavra (PIX, SUS) não entram.
+ACRONYM_SPOKEN = {
+    "EUA": "Estados Unidos",
+    "CPF": "cê pê efe", "CNPJ": "cê ene pê jota", "OAB": "o á bê", "INSS": "i ene ésse ésse",
+    "FGTS": "éfe gê tê ésse", "MDB": "eme dê bê", "STF": "ésse tê efe", "TSE": "tê ésse é",
+    "CBF": "cê bê efe", "ESPN": "é ésse pê ene", "BNDES": "bê ene dê é ésse", "PEC": "pê é cê",
+    "API": "a pê í", "GPU": "gê pê u", "CPU": "cê pê u", "SSD": "ésse ésse dê", "USB": "u ésse bê",
+    "HDMI": "agá dê eme i", "URL": "u erre éle", "IP": "i pê", "PT": "pê tê",
+}
+_ACRONYM_RE = re.compile(r"\b(" + "|".join(sorted(ACRONYM_SPOKEN, key=len, reverse=True)) + r")\b")
+
+
+def _acronyms_for_speech(text: str) -> str:
+    return _ACRONYM_RE.sub(lambda m: ACRONYM_SPOKEN[m[1]], text)
+
+
 def _apply_pronunciations(text: str, extra: dict[str, str] | None, skip: set[str] | None = None) -> str:
     """Fixas (PRONUNCIATIONS) + as do roteiro: nome estrangeiro que o LLM
     soletrou à portuguesa com a tônica marcada ("Pavlopetri" ->
@@ -238,6 +256,7 @@ def _for_speech(text: str, extra: dict[str, str] | None = None, skip: set[str] |
     text = clean_markup(text)  # última barreira: nada de "asterisco" falado
     text = _ABREVIACAO.sub(lambda m: _ABREVIACOES[m[0]], text)
     text = _spoken_swaps(text)
+    text = _acronyms_for_speech(text)
     text = _apply_pronunciations(text, extra, skip)
     text = _units_for_speech(text)
     text = _versus(text)

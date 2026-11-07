@@ -1484,9 +1484,15 @@ def run(
                 log.warning("[%s] cena %d fora de contexto — imagem trocada, remontando o vídeo", job_id, i + 1)
         # voz falando besteira não passa nem na última tentativa do dia —
         # não publicar é melhor que "Fala a é acento circunflexo" (job 414)
-        audio_problems = review_audio([s["narration"] for s in script["scenes"]], [n[0] for n in narrations])
+        from src.video_qa import review_audio_full
+
+        audio_problems, audio_names = review_audio_full([s["narration"] for s in script["scenes"]], [n[0] for n in narrations])
         if audio_problems:
             raise ScriptRejected("áudio reprovado antes do upload: " + "; ".join(audio_problems))
+        if audio_names:
+            # nome pronunciado diferente: não reprova (o Whisper também erra nome), sobe privado pra aprovação
+            log.warning("[%s] pronúncia de nome: %s", job_id, "; ".join(audio_names))
+            ressalvas.extend(audio_names)
         if qa_problems:
             for p in qa_problems:
                 log.warning("[%s] revisão do vídeo: %s", job_id, p)

@@ -471,3 +471,21 @@ def test_foreign_term_is_not_rewritten_by_fixed_pronunciation():
     # sem marcação, a reescrita fixa continua valendo
     spoken2, _ = tts._for_speech("o Textor e o Botafogo", {})
     assert "Técstor" in spoken2
+
+
+# ---------- áudio: nome e sigla (relatório de 07/11) ----------
+
+def test_name_mispronounced_is_flagged_but_correct_name_is_not():
+    from src.video_qa import name_problems
+
+    assert name_problems(["O Textor investiu no Botafogo."], "O Tech Store investiu no Botafogo.")
+    assert name_problems(["Svalbard fica no Ártico."], "Esvalbard fica no Ártico.")
+    assert name_problems(["O arquipélago de Svalbard está no Ártico."], "o arquipélago de svalbard está no ártico") == []
+
+
+def test_acronyms_have_explicit_spoken_form():
+    from src import tts
+
+    assert "Estados Unidos" in tts._for_speech("o EUA")[0]
+    assert "cê pê efe" in tts._for_speech("o CPF")[0]
+    assert "ésse tê efe" in tts._for_speech("o STF")[0]
