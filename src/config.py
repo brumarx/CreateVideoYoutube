@@ -189,6 +189,22 @@ class ChannelConfig:
     # `prioridade.de`: começa só nessa data (tema agendado pra um dia)
     priority_from: str = ""
 
+    def with_greeting(self, script: dict) -> dict:
+        """Põe o bordão de entrada na 1ª cena do roteiro (uma vez só). Chamado
+        ANTES da revisão de fatos: o que é falado tem que ser o que é revisado."""
+        import random
+
+        scenes = script.get("scenes") or []
+        if not self.greetings or not scenes:
+            return script
+        first = scenes[0]
+        narration = first.get("narration", "") or ""
+        if any(narration.startswith(g) for g in self.greetings):
+            return script
+        greet = script.get("_greeting") or random.choice(self.greetings)
+        return {**script, "_greeting": greet,
+                "scenes": [{**first, "narration": f"{greet} {narration}"}, *scenes[1:]]}
+
     @property
     def active_priority_topics(self) -> list[str]:
         today = date.today().isoformat()
@@ -200,6 +216,9 @@ class ChannelConfig:
     # de abrir com saudação). Cada canal tem o seu: todos abriam com "Fala,
     # galera!" (30/10). Lista no yaml = sorteia um por vídeo. Vazio = sem.
     greetings: list[str] = field(default_factory=list)
+    # canal sem pesquisa de tema (motivacional, curiosidades): cada frase com
+    # número/data ganha busca na internet pra revisão de fatos ter fonte
+    claim_sources: bool = False
     # CTA falado do site no fim do vídeo, "{site}" vira o domínio. Vazio =
     # o padrão de notícias ("As notícias completas... estão no site ...")
     website_speech: str = ""
@@ -263,6 +282,7 @@ class ChannelConfig:
             extra_links=[l for l in data.get("links_descricao") or [] if isinstance(l, dict) and l.get("url")],
             amazon_affiliate=data.get("afiliado_amazon") or {},
             greetings=[str(g) for g in _as_list(data.get("greeting")) if g],
+            claim_sources=bool(data.get("claim_sources", False)),
             website_speech=str(data.get("website_fala") or ""),
             pronunciations={str(k): str(v) for k, v in (data.get("pronuncia") or {}).items()},
             editorial_line=[str(x) for x in data.get("linha_editorial") or []],

@@ -802,6 +802,13 @@ def run(
         # reprovado, reescreve com o feedback do revisor; se continuar
         # reprovado, o vídeo não sai — melhor um dia sem vídeo do que um
         # tutorial de ferramenta inventada ou acusação sem dado no ar.
+        # o bordão de entrada entra ANTES da revisão: o que é falado é o que é revisado
+        script = channel.with_greeting(script)
+        if not (facts or web_facts) and channel.claim_sources:
+            # canal sem pesquisa de tema: cada frase com número/data busca fonte
+            from src.fact_check import claim_sources as fontes_por_afirmacao
+
+            web_facts = fontes_por_afirmacao(script, topic) or None
         for attempt in range(FACT_CHECK_REWRITES + 1):
             problems = review_script(script, topic, facts, web_facts)
             if problems is None:
@@ -954,9 +961,9 @@ def run(
 
         # bordão de entrada do canal — por código, igual ao CTA abaixo, pra
         # sair sempre igual; o gancho do LLM vem logo depois.
-        if channel.greetings and script["scenes"]:
-            first = script["scenes"][0]
-            first["narration"] = f"{random.choice(channel.greetings)} {first['narration']}"
+        # (ver with_greeting: já entra antes da revisão; aqui só garante que o
+        # conserto em laço não tirou o bordão)
+        script = channel.with_greeting(script)
 
         # CTA falado (like + se inscrever) — gerado por CÓDIGO, nunca pelo LLM,
         # pra nunca faltar. Antes só existia um link na descrição, que quase

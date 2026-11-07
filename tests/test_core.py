@@ -160,3 +160,70 @@ def test_spoken_fixes(texto, esperado):
 def test_tite_caption_keeps_written_name():
     # a legenda volta a grafia escrita (Tite), não a fonética falada
     assert tts._SPELLING_BACK.get("tchitchi") == "Tite"
+
+
+# ---------- redação, promessas e unidades (roteiros publicados) ----------
+
+def _scene(*texts):
+    return {"scenes": [{"narration": t} for t in texts]}
+
+
+def test_broken_sentence_flags_terry_fox_and_svalbard():
+    from src.fact_check import broken_sentences
+
+    terry = _scene("Em 12 de abril de 1980, Terry Fox saiu de St. Ele havia perdido uma perna.")
+    svalbard = _scene("Svalbard, a milhas ao norte da Noruega, é um laboratório natural.")
+    assert any("St." in p["termo"] for p in broken_sentences(terry))
+    assert any("milhas" in p["termo"] for p in broken_sentences(svalbard))
+
+
+def test_broken_sentence_accepts_clean_text():
+    from src.fact_check import broken_sentences
+
+    ok = _scene("Terry Fox saiu de St. John's, no Canadá, em 1980.", "Ele correu 42 km por dia.")
+    assert broken_sentences(ok) == []
+
+
+def test_unfulfilled_promise_flags_missing_prompt():
+    from src.fact_check import unfulfilled_promises
+
+    nlm = _scene("Copie este prompt no NotebookLM e transforme seus PDFs em tutor.", "Acesse o site.")
+    assert len(unfulfilled_promises(nlm)) == 1
+
+
+def test_promise_ok_when_prompt_is_given():
+    from src.fact_check import unfulfilled_promises
+
+    nlm = _scene(
+        "Copie este prompt no NotebookLM: “Você é um tutor. Faça perguntas sobre o material e corrija as respostas.”",
+    )
+    assert unfulfilled_promises(nlm) == []
+
+
+def test_unit_mismatch_miles_vs_km():
+    from src.fact_check import numbers_not_in_sources
+
+    web = [{"titulo": "Terry Fox", "trecho": "Terry percorreu cerca de 5.373 km até parar."}]
+    wrong = _scene("Terry completou cerca de 5.300 milhas antes de parar.")
+    right_km = _scene("Terry completou cerca de 5.373 km antes de parar.")
+    right_mi = _scene("Terry completou cerca de 3.339 milhas antes de parar.")
+    assert any(p["tipo"] == "unidade_errada" for p in numbers_not_in_sources(wrong, web))
+    assert numbers_not_in_sources(right_km, web) == []
+    assert numbers_not_in_sources(right_mi, web) == []
+
+
+def test_greeting_is_added_once_before_review():
+    from src.config import ChannelConfig
+
+    channel = ChannelConfig.load("motivacional")
+    script = _scene("Nove vezes ele ouviu não.", "Ele seguiu.")
+    once = channel.with_greeting(script)
+    twice = channel.with_greeting(once)
+    assert once["scenes"][0]["narration"].startswith(once["_greeting"])
+    assert twice["scenes"][0]["narration"] == once["scenes"][0]["narration"]
+
+
+def test_domain_is_not_repeated_word():
+    from src.fact_check import broken_sentences
+
+    assert broken_sentences(_scene("Acesse notebooklm.google.com com sua conta Google.")) == []

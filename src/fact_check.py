@@ -30,6 +30,7 @@ _TYPES = {
     "ferramenta_inexistente", "fato_nao_confirmado", "atribuicao_falsa",
     "acusacao_sem_base", "data_desatualizada", "titulo_enganoso", "fora_da_fonte",
     "caso_generico", "deboche", "copia_da_fonte",
+    "frase_quebrada", "promessa_sem_conteudo", "unidade_errada",
 }
 # tipos que dá pra confirmar com uma busca na internet (existe ou não
 # existe); os outros são problema de redação/atribuição e reprovam direto.
@@ -63,6 +64,10 @@ abaixo ANTES de ele virar vídeo. Aponte SÓ problemas concretos destes tipos:
 - "atribuicao_falsa": diz que algo foi "revelado", "mostrado" ou "está nos
   dados" de uma fonte (Portal da Transparência, TSE, dados oficiais etc.)
   mas as FONTES não trazem esse dado.
+- "frase_quebrada": frase sem sentido ou incompleta, com palavra faltando ou
+  trocada ("a milhas" sem o número, "St." cortado). Só aponte se a frase NÃO se entende.
+- "promessa_sem_conteudo": o roteiro manda fazer ou usar algo que nunca entrega
+  ("copie este prompt" sem o prompt). Aponte só se o conteúdo prometido não aparece.
 - "caso_generico": acontecimento, descoberta, crime ou história apresentado
   como REAL sem um nome próprio verificável (nome do sítio arqueológico, da
   pessoa, do navio, do caso famoso) — ex.: "em 1980 mergulhadores
@@ -311,7 +316,7 @@ def review_script(
         problems.append(p)
     known = {**facts, "_internet": [f.get("trecho", "") for f in web_facts or []]} if facts else None
     problems = problems + unknown + numbers_not_in_facts(script, known) + (
-        [] if facts else numbers_not_in_sources(script, web_facts))
+        [] if facts else numbers_not_in_sources(script, web_facts)) + broken_sentences(script) + unfulfilled_promises(script)
     if not problems and (facts or web_facts):
         # aprovado pelo revisor: só então a prova por citação (1 chamada a
         # mais por roteiro, não por rodada). Fora do ar = revisão incompleta
@@ -425,7 +430,7 @@ def numbers_not_in_facts(script: dict, facts: dict | None, tolerance: float = 0.
 # solta ficam com o revisor.
 _MEASURE_RE = re.compile(
     r"(R\$|US\$|€)?\s?(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:,\d+)?)\s*"
-    r"(mil\b|milh(?:ão|ões)|bilh(?:ão|ões)|%|por cento|metros|m\b|quil[ôo]metros|km|toneladas|litros|"
+    r"(mil\b|milh(?:ão|ões)|bilh(?:ão|ões)|%|por cento|metros|m\b|quil[ôo]metros|km|milhas|milha|pés|toneladas|litros|"
     r"habitantes|pessoas|mortos|soldados|militares|navios|embarca[çc][õo]es|hectares|graus)",
     re.IGNORECASE,
 )
@@ -436,7 +441,7 @@ _SOURCE_NUM_RE = re.compile(
 # uma contagem de tropas perto de 4.800 (job 705)
 _UNIT_FAMILY = {
     **dict.fromkeys(["metros", "m", "meters", "metres", "ft", "feet", "quilômetros", "quilometros", "km",
-                     "kilometers", "kilometres", "miles", "mi"], "comprimento"),
+                     "kilometers", "kilometres", "miles", "mi", "milhas", "milha", "pés", "pes"], "comprimento"),
     **dict.fromkeys(["toneladas", "tons", "tonnes", "t"], "massa"),
     **dict.fromkeys(["litros", "liters", "litres", "l"], "volume"),
     **dict.fromkeys(["habitantes", "pessoas", "mortos", "people", "inhabitants", "residents", "dead", "killed",
@@ -488,6 +493,124 @@ def _source_numbers(text: str, family: str | None = None) -> list[float]:
     return out
 
 
+# tamanho em metros de cada unidade de distância (pra comparar milhas com km)
+_LENGTH_M = {
+    "km": 1000.0, "quilômetros": 1000.0, "quilometros": 1000.0, "quilômetro": 1000.0, "kilometers": 1000.0,
+    "milhas": 1609.344, "milha": 1609.344, "miles": 1609.344, "mi": 1609.344,
+    "metros": 1.0, "m": 1.0, "meters": 1.0,
+    "pés": 0.3048, "pes": 0.3048, "ft": 0.3048, "feet": 0.3048,
+}
+
+
+def _source_lengths_m(text: str) -> list[float]:
+    """Distâncias da fonte já convertidas pra metros."""
+    out = []
+    for m in _SOURCE_NUM_RE.finditer(text):
+        unit = (m.group(3) or "").lower()
+        if unit not in _LENGTH_M:
+            continue
+        value = _source_number(m.group(1))
+        if value is None:
+            continue
+        out.append(value * _SRC_SCALE.get((m.group(2) or "").lower(), 1) * _LENGTH_M[unit])
+    return out
+
+
+# ---------------------------------------------------------------- redação
+
+# palavra funcional no fim da frase = frase cortada ("...até 10 mil reais por")
+_DANGLING_END = re.compile(
+    r"\b(de|da|do|das|dos|a|o|as|os|em|no|na|nos|nas|para|pra|com|por|que|e|ou|um|uma|ao|se)\s*$", re.IGNORECASE)
+# artigo/preposição + unidade sem número ("a milhas", "de quilômetros")
+_UNIT_WITHOUT_NUMBER = re.compile(
+    r"\b(a|o|as|os|de|em|do|da|no|na)\s+(milhas?|quil[ôo]metros|km|metros|reais|anos|graus|dias|horas)\b", re.IGNORECASE)
+# "St." só é abreviação de nome próprio com estes complementos (St. John's, St. Louis)
+_ST_NAMES = re.compile(
+    r"\bSt\.(?!\s+(John|Louis|Petersburg|Helena|Paul|Moritz|Gallen|Lucia|Tropez|Andrews|Kitts|Vincent|Germain|Denis|Etienne|Lawrence|Pierre|Malo|Barth|Nazaire|Tropez)\b)",
+)
+_REPEATED_WORD = re.compile(r"(?<![.\w])([a-zà-ú]{2,})\s+\1\b", re.IGNORECASE)  # "google.com com" é domínio, não repetição
+_REPEAT_OK = {"muito", "mais", "bem", "sim", "não", "nao", "cada", "tudo"}
+_PROMISE_RE = re.compile(
+    r"\b(copie|cole|use|escreva|digite|pergunte)\s+(este|esse|o|um|seguinte)\s+(prompt|comando|código|codigo|texto)\b"
+    r"|\b(este|esse)\s+prompt\b", re.IGNORECASE)
+_QUOTED_BLOCK = re.compile(r"[“\"][^”\"]{25,}[”\"]")
+
+
+def _sentences(text: str) -> list[str]:
+    # "St. John's" não é fim de frase: protege a abreviação antes de dividir
+    protected = re.sub(r"\bSt\. (?=[A-Z])", "St\u0001", text or "")
+    parts = re.split(r"(?<=[.!?])\s+", protected)
+    return [s.replace("\u0001", ". ").strip() for s in parts if s.strip()]
+
+
+def broken_sentences(script: dict) -> list[dict]:
+    """Frase que não se lê: termina em palavra funcional, tem artigo com unidade
+    sem número, "St." que não é nome próprio, ou palavra repetida. Visto:
+    "a milhas" e "St." cortado no Terry Fox (744) e Svalbard (752)."""
+    out = []
+    for scene in script.get("scenes", []):
+        text = scene.get("narration", "") or ""
+        problems = []
+        for sentence in _sentences(text):
+            core = sentence.rstrip(" .!?…,;:")
+            if _DANGLING_END.search(core):
+                problems.append(("termina em palavra solta", sentence))
+            if _UNIT_WITHOUT_NUMBER.search(sentence):
+                problems.append(("unidade sem número", sentence))
+            if _ST_NAMES.search(sentence):
+                problems.append(("abreviação 'St.' sem nome", sentence))
+            for m in _REPEATED_WORD.finditer(sentence):
+                if m.group(1).lower() not in _REPEAT_OK:
+                    problems.append((f"palavra repetida ('{m.group(1)} {m.group(1)}')", sentence))
+                    break
+        for why, sentence in problems:
+            out.append({"tipo": "frase_quebrada", "termo": sentence[:120],
+                        "motivo": f"frase com erro de redação ({why}) — reescreva inteira, com o número ou o nome que falta"})
+    return out
+
+
+def unfulfilled_promises(script: dict) -> list[dict]:
+    """O roteiro manda usar um prompt/texto e não entrega o conteúdo. Visto:
+    "Copie este prompt no NotebookLM" sem prompt nenhum (745, NotebookLM)."""
+    narrations = [sc.get("narration", "") or "" for sc in script.get("scenes", [])]
+    promise = next((s for n in narrations for s in _sentences(n) if _PROMISE_RE.search(s)), None)
+    if promise is None:
+        return []
+    if any(_QUOTED_BLOCK.search(n) for n in narrations):
+        return []
+    return [{"tipo": "promessa_sem_conteudo", "termo": promise[:120],
+             "motivo": "o roteiro manda usar um prompt/texto que nunca aparece — inclua o conteúdo completo ou tire a promessa"}]
+
+
+# frase com número/data/medida que precisa de fonte (canal sem pesquisa própria)
+_CLAIM_RE = re.compile(
+    r"\b(1[5-9]\d\d|20\d\d)\b|\d[\d.,]*\s*(?:mil\b|milh|bilh|km|quil|milha|metros|%|por cento)", re.IGNORECASE)
+_claim_cache: dict[str, list[dict]] = {}
+
+
+def claim_sources(script: dict, topic: str, max_queries: int = 8) -> list[dict]:
+    """Fontes da internet pras frases com número/data da narração, pra canal
+    que não tem pesquisa de tema (motivacional, curiosidades). Sem isso a
+    revisão de fatos não tinha o que conferir e aprovava Senna e Terry Fox
+    errados. Cada frase vira uma busca curta (nomes, números e o tema)."""
+    from .web_search import search_topic_facts
+
+    claims = [s for sc in script.get("scenes", []) for s in _sentences(sc.get("narration", ""))
+              if _CLAIM_RE.search(s)][:max_queries]
+    out, seen = [], set()
+    for claim in claims:
+        keys = re.findall(r"[A-ZÀ-Ú][\wà-ú'-]+|\d[\d.,]*", claim)
+        query = f"{topic} {' '.join(keys)}"[:200]
+        if query not in _claim_cache:
+            _claim_cache[query] = search_topic_facts(query) or []
+        for fact in _claim_cache[query]:
+            if fact.get("url") not in seen:
+                seen.add(fact.get("url"))
+                out.append(fact)
+    log.info("fontes por afirmação: %d busca(s), %d fonte(s)", len(claims), len(out))
+    return out
+
+
 def numbers_not_in_sources(script: dict, web_facts: list[dict] | None, tolerance: float = 0.02) -> list[dict]:
     """Tolerância de 2% (não 5%): com várias cifras na fonte, 5% deixava
     "4.800 metros" passar por causa dos "5.000 militares" (job 704)."""
@@ -501,6 +624,17 @@ def numbers_not_in_sources(script: dict, web_facts: list[dict] | None, tolerance
             unit = (m.group(3) or "").lower()
             value = _to_number(m.group(2)) * _SCALE.get(unit, 1)
             family = _UNIT_FAMILY.get(unit.replace("ç", "c").replace("õ", "o")) or _UNIT_FAMILY.get(unit)
+            if unit in _LENGTH_M:
+                # distância: compara em metros, pra "5.300 milhas" não passar
+                # por "5.373 km" (1 milha = 1.609 m, não 1.000)
+                metros = value * _LENGTH_M[unit]
+                if any(abs(metros - k) <= tolerance * abs(k) for k in _source_lengths_m(source)):
+                    continue
+                out.append({
+                    "tipo": "unidade_errada", "termo": m.group(0).strip(),
+                    "motivo": "distância que não bate com a fonte nessa unidade — confira a conversão (1 milha = 1,6 km) ou use o número da fonte",
+                })
+                continue
             known = _source_numbers(source, family) if family else all_known
 
             def close(v: float) -> bool:
