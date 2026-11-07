@@ -198,7 +198,28 @@ _PERSON_STOP = {
 }
 
 
-def person_in_narration(text: str) -> str | None:
+def topic_person(topic: str) -> str | None:
+    """Pessoa do tema, quando ele vem no formato "Nome: resto do tema"
+    ("Neymar: da periferia de Mogi Cruzes..."). É o nome que o canal já escolheu."""
+    head = (topic or "").split(":", 1)[0].strip() if ":" in (topic or "") else ""
+    words = head.split()
+    if 1 <= len(words) <= 3 and all(w[:1].isupper() and w.isalpha() and len(w) >= 3 for w in words):
+        return head
+    return None
+
+
+def person_in_narration(text: str, topic: str | None = None) -> str | None:
+    """Pessoa citada na narração. Se o tema já diz quem é a personagem, a cena
+    que cita esse nome (ou sobrenome) usa o nome do tema — isso também pega o
+    nome que começa a frase ("Neymar começou..."), que a regra de maiúscula não
+    pega. Senão: nome e sobrenome no meio da frase, ou nome único no meio."""
+    name = topic_person(topic or "")
+    if name:
+        narracao = _fold_name(text or "")
+        for token in name.split():
+            if len(token) >= 4 and re.search(r"\b" + re.escape(_fold_name(token)) + r"\b", narracao):
+                return name
+
     """Nome de pessoa citado na narração ("Gleisi Hoffmann", "Simone Biles"):
     a primeira sequência de 2 ou 3 palavras com maiúscula que não começa com
     palavra comum. Só serve de assunto de BUSCA; a foto ainda passa pela
