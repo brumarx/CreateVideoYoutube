@@ -2,14 +2,18 @@
 1 unidade de cota por 50 vídeos) e grava em data/queue.db (video_performance).
 
 Uso: python scripts/collect_performance.py [--csv saida.csv]
-Usa o token OAuth de cada canal (data/tokens via channels/<canal>.yaml).
+Agendado semanalmente (segunda 09:00) pelo crontab; saída em logs/performance.log.
+Estado da última execução em data/performance_status.json (lido pelo painel).
+Falha de algum canal (ex.: token OAuth vencido) manda aviso no Telegram.
 """
 import argparse
 import csv
+import json
 import logging
 import re
 import sqlite3
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -18,9 +22,11 @@ sys.path.insert(0, str(ROOT))
 from googleapiclient.discovery import build  # noqa: E402
 
 from src.config import ChannelConfig  # noqa: E402
-QUEUE_DB = ROOT / "data" / "queue.db"
+from src.notify import send_telegram  # noqa: E402
 from src.upload import _load_credentials  # noqa: E402
 
+QUEUE_DB = ROOT / "data" / "queue.db"
+STATUS_FILE = ROOT / "data" / "performance_status.json"
 log = logging.getLogger("collect_performance")
 _ISO = re.compile(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?")
 
@@ -43,7 +49,6 @@ def fetch(channel: str, ids: list[str]) -> list[dict]:
             stats, snip = item.get("statistics", {}), item.get("snippet", {})
             out.append({
                 "video_id": item["id"],
-                "channel": channel,
                 "published_at": snip.get("publishedAt", ""),
                 "title": snip.get("title", ""),
                 "duration_seconds": _seconds(item.get("contentDetails", {}).get("duration", "")),
@@ -54,26 +59,39 @@ def fetch(channel: str, ids: list[str]) -> list[dict]:
     return out
 
 
+def _ensure_title_column(con: sqlite3.Connection) -> None:
+    try:
+        con.execute("ALTER TABLE video_performance ADD COLUMN title TEXT")
+    except sqlite3.OperationalError:
+        pass  # já existe
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--csv", default="")
     args = ap.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     con = sqlite3.connect(QUEUE_DB)
+    _ensure_title_column(con)
     rows = con.execute(
-        "SELECT id, channel, youtube_video_id FROM jobs WHERE status='uploaded' AND youtube_video_id IS NOT NULL AND youtube_video_id != ''"
+        "SELECT id, channel, youtube_video_id FROM jobs WHERE status='uploaded' "
+        "AND youtube_video_id IS NOT NULL AND youtube_video_id != ''"
     ).fetchall()
     by_channel: dict[str, dict[str, int]] = {}
     for job_id, channel, vid in rows:
         by_channel.setdefault(channel, {})[vid] = job_id
 
-    results = []
+    results, errors = [], {}
     for channel, ids in by_channel.items():
+        if not (ROOT / "channels" / f"{channel}.yaml").exists():
+            log.info("[%s] sem channels/%s.yaml (canal desativado): ignorado", channel, channel)
+            continue
         try:
             videos = fetch(channel, list(ids))
-        except Exception as exc:  # noqa: BLE001 — um canal com token vencido não derruba os outros
+        except Exception as exc:  # noqa: BLE001 — um canal com problema não derruba os outros
             log.warning("[%s] não consegui buscar estatísticas: %s", channel, exc)
+            errors[channel] = str(exc)[:200]
             continue
         for v in videos:
             job_id = ids[v["video_id"]]
@@ -81,16 +99,27 @@ def main() -> None:
             con.execute(
                 """INSERT OR REPLACE INTO video_performance
                    (job_id, channel, published_at, duration_seconds, is_short, views_current, likes, comments,
-                    engagement_rate, publish_hour, publish_day_of_week, created_at, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))""",
+                    engagement_rate, publish_hour, publish_day_of_week, title, created_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))""",
                 (job_id, channel, v["published_at"], v["duration_seconds"], int(is_short), v["views"],
                  v["likes"], v["comments"], (v["likes"] + v["comments"]) / v["views"] if v["views"] else 0.0,
-                 int(v["published_at"][11:13] or 0), 0),
+                 int(v["published_at"][11:13] or 0), 0, v["title"]),
             )
-            results.append({**v, "job_id": job_id, "is_short": int(is_short)})
+            results.append({**v, "channel": channel, "job_id": job_id, "is_short": int(is_short)})
         con.commit()
         log.info("[%s] %d vídeo(s) atualizados", channel, len(videos))
     con.close()
+
+    status = {
+        "last_run": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "videos": len(results),
+        "errors": errors,
+        "ok": not errors and bool(results),
+    }
+    STATUS_FILE.write_text(json.dumps(status, ensure_ascii=False, indent=2), encoding="utf-8")
+    if errors or not results:
+        detail = "; ".join(f"{c}: {e}" for c, e in errors.items()) or "nenhum vídeo retornou"
+        send_telegram(f"⚠️ Coleta de desempenho falhou: {detail}\nVeja logs/performance.log")
 
     if args.csv:
         with open(args.csv, "w", newline="", encoding="utf-8") as f:
@@ -98,7 +127,7 @@ def main() -> None:
             w.writeheader()
             w.writerows(results)
         print(f"CSV: {args.csv}")
-    print(f"{len(results)} vídeos gravados em video_performance")
+    log.info("%d vídeos gravados em video_performance", len(results))
 
 
 if __name__ == "__main__":

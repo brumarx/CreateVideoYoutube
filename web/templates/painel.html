@@ -409,6 +409,69 @@
     {% if not azure_ready %}<p class="hint">Mais vozes aparecem quando AZURE_SPEECH_KEYS estiver configurada.</p>{% endif %}
   </section>
 
+  <section class="tab" id="tab-desempenho" hidden>
+    <h2>Desempenho dos vídeos</h2>
+    {% set pf = perf %}
+    <p class="hint">Última coleta: {{ pf.last_run or "nunca" }}{% if pf.last_run and not pf.ok %} — <b>com erro</b>{% endif %}.
+      Coleta automática toda segunda, 09:00.</p>
+    {% for canal, d in pf.channels.items() %}
+    <div class="problem" style="--c:var(--ok)">
+      <div class="head"><span>{{ canal }}</span><span class="tag">{{ d.shorts }} curtos</span></div>
+      <div class="topic">mediana {{ d.median_short }} views</div>
+      <div class="why">{{ d.zero_or_low }} vídeo(s) com 10 views ou menos</div>
+    </div>
+    {% endfor %}
+    <div class="problem" style="--c:var(--off)">
+      <div class="head"><span>Curto × longo</span><span class="tag">{{ pf.long_count }} longos</span></div>
+      <div class="topic">curto: {{ pf.short_median }} · longo: {{ pf.long_median }} (mediana)</div>
+    </div>
+    <div class="problem" style="--c:var(--off)">
+      <div class="head"><span>Título</span><span class="tag">efeito do limite de 60</span></div>
+      <div class="topic">até 60 caracteres: {{ pf.title_short_median }} ({{ pf.title_short_count }}) · acima: {{ pf.title_long_median }} ({{ pf.title_long_count }})</div>
+      <div class="why">Vídeos novos com título até 60 caracteres ainda são poucos pra conclusão.</div>
+    </div>
+    {% if pf.errors %}
+    <div class="problem" style="--c:var(--off)">
+      <div class="head"><span>Coleta</span><span class="tag failed">erro</span></div>
+      {% for c, e in pf.errors.items() %}<div class="why">{{ c }}: {{ e }}</div>{% endfor %}
+    </div>
+    {% endif %}
+    <form method="post" action="{{ url_for('collect_performance') }}" style="margin-top:12px">
+      <button type="submit">Coletar agora</button>
+    </form>
+  </section>
+
+  <section class="tab" id="tab-sistema" hidden>
+    <h2>Sistema</h2>
+    {% set sy = system %}
+    <div class="problem" style="--c:{% if sy.disk_used_pct >= 85 %}var(--off){% else %}var(--ok){% endif %}">
+      <div class="head"><span>Disco</span><span class="tag">{{ sy.disk_used_pct }}% usado</span></div>
+      <div class="topic">livre: {{ sy.disk_free }}</div>
+      <div class="why">logs {{ sy.logs_total }} · output {{ sy.output_total }} · data {{ sy.data_total }}</div>
+    </div>
+    <div class="problem" style="--c:var(--off)">
+      <div class="head"><span>Limpeza automática</span><span class="tag">diária 04:30</span></div>
+      {% if sy.housekeeping %}
+      <div class="topic">última: {{ sy.housekeeping.run_at }} — liberou {{ (sy.housekeeping.freed_bytes / 1e6)|round(1) }} MB</div>
+      {% else %}<div class="topic">ainda não rodou</div>{% endif %}
+      <div class="why">Logs com mais de 30 dias saem; logs acima de 10 MB são cortados. Intermediários de vídeo saem após 7 dias; vídeo final já no YouTube, após 30.</div>
+      <form method="post" action="{{ url_for('run_housekeeping') }}" style="margin-top:8px">
+        <button type="submit">Limpar agora</button>
+      </form>
+    </div>
+    <h3>Logs (maiores primeiro)</h3>
+    {% for log in sy.logs %}
+    <div class="problem" style="--c:var(--off)">
+      <div class="head"><span><a href="{{ url_for('view_log', name=log.name) }}" target="_blank">{{ log.name }}</a></span><span class="tag">{{ log.size }}</span></div>
+      <div class="why">modificado {{ log.modified }}</div>
+    </div>
+    {% endfor %}
+    <h3>Pastas de vídeo que mais ocupam</h3>
+    {% for j in sy.biggest_jobs %}
+    <div class="problem" style="--c:var(--off)"><div class="head"><span>{{ j.name }}</span><span class="tag">{{ j.size }}</span></div></div>
+    {% endfor %}
+  </section>
+
   <section class="tab" id="tab-trending" hidden>
     <h2>📊 Trending Topics</h2>
     {% if trending %}
@@ -469,6 +532,12 @@
   </button>
   <button role="tab" data-tab="trending" aria-selected="false">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 17"/><polyline points="17 6 23 6 23 12"/></svg>Trending
+  </button>
+  <button role="tab" data-tab="desempenho" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21V10M9 21V4M15 21v-7M21 21H3"/></svg>Desempenho
+  </button>
+  <button role="tab" data-tab="sistema" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><path d="M7 7h.01M7 17h.01"/></svg>Sistema
   </button>
 </nav>
 

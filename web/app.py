@@ -19,7 +19,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import yaml
-from flask import Flask, redirect, render_template, request, url_for
+from flask import Flask, redirect, render_template, render_template_string, request, url_for
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -30,6 +30,7 @@ from src.topics import topic_problem  # noqa: E402
 from src.orchestrator import get_job, jobs_with_status, published_jobs, recent_jobs, update  # noqa: E402
 from src.politica_data import FACT_FETCHERS  # noqa: E402
 from src.topics import STATE_FILE as USED_TOPICS_FILE  # noqa: E402
+from system_views import performance_view, system_view, tail as log_tail  # noqa: E402
 
 app = Flask(__name__)
 
@@ -412,6 +413,38 @@ def _load_trending_data() -> dict:
         return {}
 
 
+@app.route("/performance/collect", methods=["POST"])
+def collect_performance():
+    # coleta roda em segundo plano (leva uns segundos); o log vai pra logs/performance.log
+    subprocess.Popen(
+        [str(ROOT / ".venv" / "bin" / "python"), str(ROOT / "scripts" / "collect_performance.py")],
+        cwd=str(ROOT), stdout=open(ROOT / "logs" / "performance.log", "a"), stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+    return redirect(url_for("index", perf_started=1) + "#desempenho")
+
+
+@app.route("/system/housekeeping", methods=["POST"])
+def run_housekeeping():
+    subprocess.run(
+        [str(ROOT / ".venv" / "bin" / "python"), str(ROOT / "scripts" / "housekeeping.py"), "--apply"],
+        cwd=str(ROOT), timeout=600, capture_output=True,
+    )
+    return redirect(url_for("index") + "#sistema")
+
+
+@app.route("/logs/<name>")
+def view_log(name: str):
+    text = log_tail(name)
+    if text is None:
+        return "log não encontrado", 404
+    return render_template_string(
+        "<!doctype html><meta charset=utf-8><title>{{ n }}</title>"
+        "<body style='font:13px monospace;background:#111;color:#ddd;padding:12px'>"
+        "<h3>{{ n }} (últimas 300 linhas)</h3><pre style='white-space:pre-wrap'>{{ t }}</pre>",
+        n=name, t=text)
+
+
 @app.route("/")
 def index():
     channels = _load_channels()
@@ -453,6 +486,7 @@ def index():
         "painel.html", channels=summaries, causes_7d=causes_7d, videos=videos, problems=problems, system_problems=system_problems, colors=colors, titles=titles,
         flash=flash, total_uploads=total_uploads, running=running, today=date.today().strftime("%d/%m"),
         pending=jobs_with_status("awaiting_approval"), azure_ready=bool(AZURE_SPEECH_KEYS),
+        perf=performance_view(), system=system_view(),
     # Trending topics monitor
     trending=_load_trending_data(),
     )
