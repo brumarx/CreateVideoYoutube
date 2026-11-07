@@ -516,3 +516,31 @@ def test_single_name_mid_sentence_is_found():
     from src.real_media import person_in_narration
 
     assert person_in_narration("Ele começou jogando com Neymar no Santos.") == "Neymar"
+
+
+def test_topic_name_covers_sentence_start_name():
+    from src.real_media import person_in_narration, topic_person
+
+    tema = "Neymar: da periferia de Mogi Cruzes ao Barcelona"
+    assert topic_person(tema) == "Neymar"
+    assert person_in_narration("Neymar começou aos 11 anos.", tema) == "Neymar"
+    assert person_in_narration("O Congresso aprovou a lei.", tema) is None
+    assert topic_person("Como funciona a cota parlamentar") is None
+
+
+def test_evidence_search_per_rejected_claim(monkeypatch):
+    from src import fact_check
+
+    queries = []
+
+    def fake_search(query, max_results=5):
+        queries.append(query)
+        return [{"url": f"https://ex/{len(queries)}", "titulo": "t", "trecho": "730 dias"}]
+
+    monkeypatch.setattr("src.web_search.search_topic_facts", fake_search)
+    fact_check._claim_cache.clear()
+    problems = [{"tipo": "fora_da_fonte", "termo": "730 dias sem lar fixo"},
+                {"tipo": "fato_nao_confirmado", "termo": "escola em casa aos 13 anos"}]
+    out = fact_check.evidence_for_problems(problems, "Simone Biles: de abrigo a campeã")
+    assert len(queries) == 2 and "730 dias" in queries[0]
+    assert len(out) == 2

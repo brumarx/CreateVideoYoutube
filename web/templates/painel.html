@@ -477,6 +477,34 @@
     {% endfor %}
   </section>
 
+  <section class="tab" id="tab-roteiros" hidden>
+    <h2>Roteiros e vídeos prontos</h2>
+    <p class="hint">Roteiro revisado espera a sua aprovação aqui. "Aprovar" renderiza (sem publicar). Vídeo pronto sobe no próximo ciclo ou pelo botão "Reenviar".</p>
+    {% for r in scripts_ready %}
+    <div class="problem" style="--c:var(--off)" data-ch="{{ r.channel }}">
+      <div class="head"><span>{{ titles.get(r.channel, r.channel) }}, {{ r.date_label }}, job {{ r.id }}</span><span class="tag">{{ r.scenes }} cenas</span></div>
+      <div class="topic">{{ r.title or r.topic }}</div>
+      <div class="why clip" title="toque pra ver tudo">{{ r.preview }}</div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <form method="post" action="{{ url_for('approve_script', job_id=r.id) }}"><button type="submit">Aprovar e renderizar</button></form>
+        <form method="post" action="{{ url_for('discard_script', job_id=r.id) }}"><button type="submit">Descartar</button></form>
+      </div>
+    </div>
+    {% else %}
+    <p class="hint">Nenhum roteiro esperando aprovação.</p>
+    {% endfor %}
+    <h3>Prontos (renderizados, ainda não enviados)</h3>
+    {% for v in ready_jobs %}
+    <div class="problem" style="--c:var(--ok)" data-ch="{{ v.channel }}">
+      <div class="head"><span>{{ titles.get(v.channel, v.channel) }}, {{ v.date_label }}, job {{ v.id }}</span><span class="tag">pronto</span></div>
+      <div class="topic">{{ v.topic }}</div>
+      <form method="post" action="{{ url_for('retry_job', job_id=v.id) }}" style="margin-top:8px"><button type="submit">Enviar agora</button></form>
+    </div>
+    {% else %}
+    <p class="hint">Nenhum vídeo pronto parado.</p>
+    {% endfor %}
+  </section>
+
   <section class="tab" id="tab-trending" hidden>
     <h2>📊 Trending Topics</h2>
     {% if trending %}
@@ -537,6 +565,9 @@
   </button>
   <button role="tab" data-tab="trending" aria-selected="false">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 17"/><polyline points="17 6 23 6 23 12"/></svg>Trending
+  </button>
+  <button role="tab" data-tab="roteiros" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7"/></svg>Roteiros{% if scripts_ready %} <span class="badge">{{ scripts_ready|length }}</span>{% endif %}
   </button>
   <button role="tab" data-tab="desempenho" aria-selected="false">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21V10M9 21V4M15 21v-7M21 21H3"/></svg>Desempenho

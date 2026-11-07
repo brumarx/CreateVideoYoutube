@@ -8,6 +8,7 @@ Uso: .venv/bin/python3 web/app.py
 from __future__ import annotations
 
 import json
+import logging
 import re
 import shutil
 import subprocess
@@ -22,6 +23,7 @@ import yaml
 from flask import Flask, redirect, render_template, render_template_string, request, url_for
 
 ROOT = Path(__file__).resolve().parent.parent
+log = logging.getLogger("painel")
 sys.path.insert(0, str(ROOT))
 
 from src.config import AZURE_SPEECH_KEYS, ChannelConfig  # noqa: E402
@@ -160,11 +162,32 @@ def _used_topics() -> dict:
     return {}
 
 
+def _write_yaml(path: Path, text: str) -> None:
+    """Grava o YAML só se ele continuar válido: arquivo temporário + troca
+    atômica. YAML quebrado levanta ValueError (o painel avisa, não grava)."""
+    import os
+
+    try:
+        yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"YAML inválido, não salvei {path.name}: {exc}") from exc
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    backup = path.with_suffix(path.suffix + ".bak")
+    if path.exists():
+        backup.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def _load_channels() -> list[dict]:
     used = _used_topics()
     channels = []
     for yaml_path in sorted((ROOT / "channels").glob("*.yaml")):
-        cfg = yaml.safe_load(yaml_path.read_text())
+        try:
+            cfg = yaml.safe_load(yaml_path.read_text()) or {}
+        except (OSError, yaml.YAMLError) as exc:
+            log.warning("canal %s com YAML inválido, fora do painel: %s", yaml_path.name, exc)
+            continue
         name = yaml_path.stem
         topics = cfg.get("topics", [])
         used_topics = set(used.get(name, []))
@@ -305,6 +328,8 @@ def _channel_summary(c: dict, jobs: list, videos: list[dict], running: bool) -> 
         state, text = "ok", f"{len(published)} vídeo(s) no ar hoje"
     elif pending and running:
         state, text = "busy", "gerando o vídeo de hoje"
+    elif any(j.status in ("awaiting_approval", "ready", "script_ready") for j in today_jobs):
+        state, text = "busy", "aguardando você (roteiro, vídeo ou aprovação)"
     elif today_jobs:
         state, text = "fail", "falhou hoje — veja em Problemas"
     elif datetime.now().hour < 10:
@@ -433,6 +458,27 @@ def run_housekeeping():
     return redirect(url_for("index") + "#sistema")
 
 
+@app.before_request
+def _senha_opcional():
+    """Se PAINEL_SENHA estiver definida, o painel pede usuário e senha (qualquer
+    usuário, a senha é a PAINEL_SENHA). Sem ela, o painel segue como antes."""
+    import hmac
+    import os
+
+    senha = os.getenv("PAINEL_SENHA", "")
+    if not senha:
+        return None
+    auth = request.authorization
+    if auth and hmac.compare_digest(auth.password or "", senha):
+        return None
+    return ("Autenticação necessária", 401, {"WWW-Authenticate": 'Basic realm="painel"'})
+
+
+@app.errorhandler(ValueError)
+def _config_invalida(exc: ValueError):
+    return redirect(url_for("index", retry_error=str(exc)[:200]))
+
+
 @app.route("/logs/<name>")
 def view_log(name: str):
     text = log_tail(name)
@@ -489,6 +535,9 @@ def index():
         "painel.html", channels=summaries, causes_7d=causes_7d, videos=videos, problems=problems, system_problems=system_problems, colors=colors, titles=titles,
         flash=flash, total_uploads=total_uploads, running=running, today=date.today().strftime("%d/%m"),
         pending=jobs_with_status("awaiting_approval"), azure_ready=bool(AZURE_SPEECH_KEYS),
+        scripts_ready=[_script_preview(j) for j in raw_jobs if j.status == "script_ready"],
+        ready_jobs=[{"id": j.id, "channel": j.channel, "topic": j.topic, "date_label": _date_label(j.created_at)}
+                    for j in raw_jobs if j.status == "ready"],
         perf=performance_view(), system=system_view(),
     # Trending topics monitor
     trending=_load_trending_data(),
@@ -527,7 +576,7 @@ def save_duration(channel: str):
         else:
             text = f"{replacement}\n{text}"
 
-    path.write_text(text)
+    _write_yaml(path, text)
     return redirect(url_for("index", saved=1))
 
 
@@ -563,7 +612,7 @@ def save_voices(channel: str):
         text = re.sub(pattern, block, text, count=1, flags=re.MULTILINE)
     else:
         text = block + text
-    path.write_text(text)
+    _write_yaml(path, text)
     return redirect(url_for("index", saved=1))
 
 
@@ -593,7 +642,7 @@ def save_publishing(channel: str):
     privacy = request.form.get("upload_privacy", "")
     if privacy in ("public", "unlisted", "private"):
         text = _yaml_set_scalar(text, "upload_privacy", f'"{privacy}"')
-    path.write_text(text)
+    _write_yaml(path, text)
     return redirect(url_for("index", saved=1))
 
 
@@ -654,7 +703,7 @@ def save_identity(channel: str):
             text = text.rstrip("\n") + "\n" + block
 
     yaml.safe_load(text)  # nunca grava um yaml quebrado
-    path.write_text(text)
+    _write_yaml(path, text)
     return redirect(url_for("index", saved=1))
 
 
@@ -682,7 +731,7 @@ def save_viral(channel: str):
         text = re.sub(pattern, lambda _: block, text, count=1, flags=re.MULTILINE)
     else:
         text = re.sub(r"^topics:", lambda _: block + "topics:", text, count=1, flags=re.MULTILINE)
-    path.write_text(text)
+    _write_yaml(path, text)
     return redirect(url_for("index", saved=1))
 
 
@@ -764,7 +813,7 @@ def add_topic(channel: str):
 
     text = path.read_text()
     text = _yaml_append_list_item(text, "topics", topic)
-    path.write_text(text)
+    _write_yaml(path, text)
     return redirect(url_for("index", topic_added=1))
 
 
@@ -788,7 +837,7 @@ def update_topic(channel: str):
     updated = _yaml_replace_list_item(text, "topics", index, new_topic)
     if updated is None:
         return redirect(url_for("index"))
-    path.write_text(updated)
+    _write_yaml(path, updated)
     return redirect(url_for("index", topic_added=1))
 
 
@@ -808,8 +857,47 @@ def delete_topic(channel: str):
     updated = _yaml_delete_list_item(text, "topics", index)
     if updated is None:
         return redirect(url_for("index"))
-    path.write_text(updated)
+    _write_yaml(path, updated)
     return redirect(url_for("index", topic_added=1))
+
+
+@app.route("/script/<int:job_id>/approve", methods=["POST"])
+def approve_script(job_id: int):
+    """Aprova o roteiro revisado e renderiza (sem publicar) em segundo plano."""
+    job = get_job(job_id)
+    if not job or job.status != "script_ready":
+        return redirect(url_for("index", retry_error="este roteiro não está aguardando aprovação"))
+    update(job_id, status="script_approved")
+    subprocess.Popen(
+        [str(ROOT / ".venv" / "bin" / "python"), "-c",
+         f"import sys; sys.path.insert(0, 'scripts'); import daily_run; daily_run._render_approved({job.channel!r})"],
+        cwd=str(ROOT), stdout=open(ROOT / "logs" / "render_aprovado.log", "a"), stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+    return redirect(url_for("index", approved_script=1) + "#roteiros")
+
+
+@app.route("/script/<int:job_id>/discard", methods=["POST"])
+def discard_script(job_id: int):
+    job = get_job(job_id)
+    if job and job.status == "script_ready":
+        update(job_id, status="abandoned", error="roteiro descartado no painel")
+    return redirect(url_for("index") + "#roteiros")
+
+
+def _script_preview(job) -> dict:
+    """Título e início da narração do roteiro salvo, pra revisar sem abrir arquivo."""
+    path = ROOT / "output" / f"job_{job.id}" / "script.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    narr = " ".join(sc.get("narration", "") for sc in data.get("scenes", []))
+    return {
+        "id": job.id, "channel": job.channel, "topic": job.topic,
+        "title": data.get("title", ""), "preview": narr[:600], "scenes": len(data.get("scenes", [])),
+        "date_label": _date_label(job.created_at),
+    }
 
 
 @app.route("/retry/<int:job_id>", methods=["POST"])

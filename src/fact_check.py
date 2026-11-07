@@ -601,6 +601,28 @@ _CLAIM_RE = re.compile(
 _claim_cache: dict[str, list[dict]] = {}
 
 
+def evidence_for_problems(problems: list[dict], topic: str, limit: int = 3) -> list[dict]:
+    """Insumo pro conserto: uma busca focada em cada trecho reprovado ("tema +
+    trecho"). A busca do tema traz visão geral; o detalhe reprovado (730 dias,
+    escola em casa) só aparece numa busca com o próprio trecho, e sem ele o
+    reescritor não tem o que trocar a frase."""
+    from .web_search import search_topic_facts
+
+    terms: list[str] = []
+    for p in problems or []:
+        term = str(p.get("termo") or "").strip()
+        if term and term not in terms:
+            terms.append(term)
+    out: list[dict] = []
+    for term in terms[:limit]:
+        query = f"{topic} {term}"[:200]
+        if query not in _claim_cache:
+            _claim_cache[query] = search_topic_facts(query) or []
+        out.extend(_claim_cache[query])
+    if out:
+        log.info("insumo pro conserto: %d busca(s) por trecho reprovado, %d fonte(s)", min(len(terms), limit), len(out))
+    return out
+
 def merge_web_facts(web_facts: list[dict] | None, extra: list[dict] | None) -> list[dict] | None:
     """Fontes do tema + fontes por afirmação, sem repetir URL. None se vazio."""
     seen = {f.get("url") for f in web_facts or [] if f.get("url")}

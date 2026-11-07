@@ -830,6 +830,10 @@ def run(
                 "[%s] revisão de fatos reprovou (tentativa %d): %s", job_id, attempt + 1,
                 "; ".join(f"{p.get('tipo')}: {p.get('termo')}" for p in problems),
             )
+            # insumo antes do conserto: fonte focada em cada trecho reprovado
+            from src.fact_check import evidence_for_problems, merge_web_facts
+
+            web_facts = merge_web_facts(web_facts, evidence_for_problems(problems, topic)) or web_facts
             if script_file:
                 fixed = _repair_loop(script, problems, topic, facts, web_facts, job_id)
                 if fixed is not None:
@@ -1244,7 +1248,7 @@ def run(
                 # usa o nome da narração (foto do verbete, checada na visão)
                 from src.real_media import person_in_narration
 
-                real_subject = person_in_narration(scene.get("narration", "")) or ""
+                real_subject = person_in_narration(scene.get("narration", ""), topic) or ""
             # MESCLA desenho com material pronto: depois de uma cena desenhada,
             # a que tem foto/vídeo real do assunto tenta o real primeiro — vídeo
             # só de desenho cansa, e o arquivo do próprio assunto vale mais
