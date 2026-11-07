@@ -20,3 +20,4 @@ data/people_photos.json
 data/cache/
 data/performance_status.json
 data/housekeeping_status.json
+data/daily_run.lock
