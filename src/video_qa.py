@@ -86,12 +86,19 @@ def _ahash(img: Image.Image) -> int:
     return sum(1 << i for i, p in enumerate(px) if p > avg)
 
 
+# aHash tem só 64 bits: com limite de 6, fundos escuros/borrados de cenas
+# diferentes (moeda, grade, Congresso, cidade — job 760) caíam no mesmo
+# grupo (5 de 8). Mesma imagem re-codificada fica a 0-2 bits; 3 separa
+# cenas diferentes (menor distância entre cenas distintas no job 760: 4).
+_SAME_VISUAL_MAX_BITS = 3
+
+
 def same_visual_share(frames: list[Image.Image | None]) -> tuple[int, int]:
     """(maior grupo de cenas com a mesma imagem, total de cenas com frame)."""
     hashes = [_ahash(f) for f in frames if f is not None]
     best = 0
     for h in hashes:
-        best = max(best, sum(1 for o in hashes if bin(h ^ o).count("1") <= 6))
+        best = max(best, sum(1 for o in hashes if bin(h ^ o).count("1") <= _SAME_VISUAL_MAX_BITS))
     return best, len(hashes)
 
 
