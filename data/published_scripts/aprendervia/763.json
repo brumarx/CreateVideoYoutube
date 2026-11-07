@@ -1,0 +1,44 @@
+{
+  "job_id": 763,
+  "video_id": "0g1ROPzRbho",
+  "date": "2026-11-07",
+  "long": false,
+  "title": "Economize 6,4h/semana criando anúncios com IA",
+  "narration": "Bora aprender com IA! Uma descrição fraca não persuade o cliente a comprar. Copie este prompt na IA grátis, faça a revisão humana e gere um anúncio que converte. Abra o ChatGPT ou Gemini no celular, cole o texto entre aspas e substitua apenas o nome do seu produto. O prompt exato: \"Aja como copywriter sênior. Escreva descrição persuasiva para nome do produto destacando 3 benefícios principais, use tom direto, inclua palavras-chave de busca do Mercado Livre e Shopee, termine com chamada para ação clara. Formato: título, bullets, descrição, CTA.\" A IA devolve o texto pronto em segundos. Copie tudo, vá no seu anúncio no Mercado Livre ou Shopee, cole no campo descrição. Apague trechos genéricos, confira medidas, voltagem e garantia — a IA acerta o tom, mas dados técnicos são seus. Profissionais de e-commerce que usam IA estimam economizar em média 6,4 horas por semana. Isso significa mais anúncios no ar, mais testes de título e menos tempo travado escrevendo. Quer escalar? Peça variações: \"Escreva 3 versões do título testando benefício diferente em cada\" ou \"Adapte para Instagram com hashtags e emojis\". A IA gera opções e você escolhe a melhor sem escrever do zero. Pronto. Seu anúncio agora tem copy de profissional, feito em minutos, grátis. Teste hoje no seu produto parado e me diga nos comentários quantas vendas saíram na primeira semana.",
+  "scenes": [
+    {
+      "narration": "Bora aprender com IA! Uma descrição fraca não persuade o cliente a comprar. Copie este prompt na IA grátis, faça a revisão humana e gere um anúncio que converte. Abra o ChatGPT ou Gemini no celular, cole o texto entre aspas e substitua apenas o nome do seu produto.",
+      "image_prompt": "A person holding a smartphone with a chat interface open, thumbs hovering over the screen, soft indoor lighting, coffee cup on desk nearby, over-the-shoulder perspective",
+      "stock_query": "person typing smartphone chat interface"
+    },
+    {
+      "narration": "O prompt exato: \"Aja como copywriter sênior. Escreva descrição persuasiva para nome do produto destacando 3 benefícios principais, use tom direto, inclua palavras-chave de busca do Mercado Livre e Shopee, termine com chamada para ação clara. Formato: título, bullets, descrição, CTA.\"",
+      "image_prompt": "Close-up of a smartphone screen showing the prompt text being pasted into an AI chat input field, fingers tapping send button, clean modern UI blur, warm ambient light",
+      "stock_query": "smartphone screen pasting text ai chat"
+    },
+    {
+      "narration": "A IA devolve o texto pronto em segundos. Copie tudo, vá no seu anúncio no Mercado Livre ou Shopee, cole no campo descrição. Apague trechos genéricos, confira medidas, voltagem e garantia — a IA acerta o tom, mas dados técnicos são seus.",
+      "image_prompt": "Split view: left side AI chat response with formatted text, right side marketplace listing editor page with description field highlighted, desktop recording style, clean lighting",
+      "stock_query": "desktop screen recording marketplace listing editor"
+    },
+    {
+      "narration": "Profissionais de e-commerce que usam IA estimam economizar em média 6,4 horas por semana. Isso significa mais anúncios no ar, mais testes de título e menos tempo travado escrevendo.",
+      "image_prompt": "A seller packing multiple labeled boxes at a home office desk, shipping labels printed, laptop showing dashboard with multiple active listings, natural window light, productive atmosphere",
+      "stock_query": "seller packing boxes home office laptop dashboard",
+      "grafico": {
+        "tipo": "numero",
+        "valor": "6,4h",
+        "rotulo": "horas economizadas por semana com IA na redação"
+      }
+    },
+    {
+      "narration": "Quer escalar? Peça variações: \"Escreva 3 versões do título testando benefício diferente em cada\" ou \"Adapte para Instagram com hashtags e emojis\". A IA gera opções e você escolhe a melhor sem escrever do zero.",
+      "image_prompt": "Smartphone screen showing AI chat with three title variations listed side by side, user tapping to copy one, blurred background of product samples on table, bright daylight",
+      "stock_query": "smartphone ai chat multiple title options"
+    },
+    {
+      "narration": "Pronto. Seu anúncio agora tem copy de profissional, feito em minutos, grátis. Teste hoje no seu produto parado e me diga nos comentários quantas vendas saíram na primeira semana.",
+      "image_prompt": "plain solid black background, a single white five-pointed star centered, minimalist, no text, no logos, no emblem, no shield"
+    }
+  ]
+}

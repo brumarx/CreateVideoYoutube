@@ -1,0 +1,92 @@
+{
+  "job_id": 764,
+  "video_id": "VdaIz3k8SBU",
+  "date": "2026-11-07",
+  "long": false,
+  "title": "Justino volta, Botafogo fecha contra Bahia e Santos",
+  "narration": "Olá, alvinegros de plantão! Cinco notícias quentes hoje: Justino brilha no retorno, a base ganha força com Tite, CBF define as duas rodadas finais contra Bahia e Santos, e a negociação de Ferraresi por Newton complica o futuro de Artur no São Paulo. A semana alvinegra foi intensa. Primeira notícia: Justino volta e garante solidez. Após quase dois meses fora, o zagueiro da base foi titular na vitória sobre o Atlético Mineiro, quarta-feira, no Nilton Santos. Time não sofreu gols. Ele celebrou: \"Cabeça boa, me preparei para quando a chance chegasse\". Próximo desafio é dia 18 contra o Corinthians. Segunda notícia: Tite aposta nos garotos sob pressão. Justino e Huguinho voltaram ao time titular contra o Atlético Mineiro. Kauan Toledo entrou no segundo tempo. A mudança acontece com o time perto da zona de rebaixamento, 42 pontos na 11ª posição. A base responde quando o técnico mais precisa. Terceira notícia: CBF detalha as rodadas 37 e 38. Botafogo recebe o Bahia dia 28 de novembro, sábado, às 21h, no Nilton Santos. Fecha o Brasileirão dia 2 de dezembro, quarta, às 21h30, contra o Santos na Vila Belmiro. Todos os jogos da última rodada simultâneos. Time busca se afastar de vez do perigo. Quarta notícia: confirmação das datas finais. A CBF publicou a tabela detalhada sexta-feira (6). Brasileirão termina dia 2 de dezembro, quarta-feira, com todos os jogos às 21h30. Penúltima rodada entre 24 e 29 de novembro por causa da final da Libertadores do Palmeiras. Botafogo x Bahia confirmado para o dia 28 no Nilton Santos. Última notícia: mercado movimenta rivais. São Paulo queria trocar Ferraresi por Artur, mas Botafogo negou a troca verbalmente no meio do ano. Ferraresi acabou vendido em definitivo ao Glorioso, que cedeu Newton ao tricolor. Com isso, a permanência de Artur no Morumbis para 2027 fica incerta.",
+  "scenes": [
+    {
+      "narration": "Olá, alvinegros de plantão! Cinco notícias quentes hoje: Justino brilha no retorno, a base ganha força com Tite, CBF define as duas rodadas finais contra Bahia e Santos, e a negociação de Ferraresi por Newton complica o futuro de Artur no São Paulo. A semana alvinegra foi intensa.",
+      "image_prompt": "A digital sports news studio background with abstract glowing lines in black and white colors, modern broadcast graphics atmosphere, high tech feel, 8k resolution",
+      "stock_query": "sports news studio background"
+    },
+    {
+      "narration": "Primeira notícia: Justino volta e garante solidez. Após quase dois meses fora, o zagueiro da base foi titular na vitória sobre o Atlético Mineiro, quarta-feira, no Nilton Santos. Time não sofreu gols. Ele celebrou: \"Cabeça boa, me preparei para quando a chance chegasse\". Próximo desafio é dia 18 contra o Corinthians.",
+      "image_prompt": "Empty football pitch at Estadio Nilton Santos under bright floodlights at night, black and white seat patterns visible, atmospheric mist, cinematic wide angle, 8k resolution",
+      "stock_query": "Estadio Nilton Santos night empty",
+      "grafico": {
+        "tipo": "numero",
+        "valor": "42",
+        "rotulo": "pontos do Botafogo na 11ª colocação"
+      }
+    },
+    {
+      "narration": "Segunda notícia: Tite aposta nos garotos sob pressão. Justino e Huguinho voltaram ao time titular contra o Atlético Mineiro. Kauan Toledo entrou no segundo tempo. A mudança acontece com o time perto da zona de rebaixamento, 42 pontos na 11ª posição. A base responde quando o técnico mais precisa.",
+      "image_prompt": "Football training ground early morning, young players in black and white training gear doing tactical drills, cones on grass, soft golden sunlight, cinematic atmosphere, 8k resolution",
+      "stock_query": "football academy training young players",
+      "grafico": {
+        "tipo": "comparacao",
+        "a": 11,
+        "a_rotulo": "posição atual",
+        "b": 17,
+        "b_rotulo": "início da ZR",
+        "icone": "⚽"
+      }
+    },
+    {
+      "narration": "Terceira notícia: CBF detalha as rodadas 37 e 38. Botafogo recebe o Bahia dia 28 de novembro, sábado, às 21h, no Nilton Santos. Fecha o Brasileirão dia 2 de dezembro, quarta, às 21h30, contra o Santos na Vila Belmiro. Todos os jogos da última rodada simultâneos. Time busca se afastar de vez do perigo.",
+      "image_prompt": "Aerial view of Estadio Nilton Santos on a sunny day in Rio de Janeiro, iconic curved roof, surrounding urban landscape, Sugarloaf Mountain faint in background, vibrant green pitch, 8k resolution",
+      "stock_query": "Estadio Nilton Santos aerial Rio de Janeiro",
+      "grafico": {
+        "tipo": "mapa",
+        "lugares": [
+          "Brazil"
+        ],
+        "cidade": "Rio de Janeiro",
+        "destaques": [
+          {
+            "pais": "Brazil",
+            "cor": "preto",
+            "rotulo": "Rio de Janeiro",
+            "icone": "🏟️",
+            "quantidade": 1
+          },
+          {
+            "pais": "Brazil",
+            "cor": "branco",
+            "rotulo": "Santos",
+            "icone": "🏟️",
+            "quantidade": 1
+          }
+        ]
+      }
+    },
+    {
+      "narration": "Quarta notícia: confirmação das datas finais. A CBF publicou a tabela detalhada sexta-feira (6). Brasileirão termina dia 2 de dezembro, quarta-feira, com todos os jogos às 21h30. Penúltima rodada entre 24 e 29 de novembro por causa da final da Libertadores do Palmeiras. Botafogo x Bahia confirmado para o dia 28 no Nilton Santos.",
+      "image_prompt": "Official CBF document on a wooden table, Brazilian Football Confederation logo embossed, pages with match schedules visible, warm lighting, shallow depth of field, 8k resolution",
+      "stock_query": "official football federation document schedule",
+      "grafico": {
+        "tipo": "ano",
+        "de": "2026",
+        "ate": "2026",
+        "rotulo": "Término do Brasileirão: 02/12"
+      }
+    },
+    {
+      "narration": "Última notícia: mercado movimenta rivais. São Paulo queria trocar Ferraresi por Artur, mas Botafogo negou a troca verbalmente no meio do ano. Ferraresi acabou vendido em definitivo ao Glorioso, que cedeu Newton ao tricolor. Com isso, a permanência de Artur no Morumbis para 2027 fica incerta.",
+      "image_prompt": "Modern football office interior with tactical boards, tablets showing player stats, black and white scarf draped over a chair, professional atmosphere, cinematic lighting, 8k resolution",
+      "stock_query": "football director office transfer meeting",
+      "grafico": [
+        {
+          "tipo": "mapa",
+          "lugares": [],
+          "cidade": "São Paulo",
+          "destaques": [],
+          "nota": "Ferraresi definitivo · Newton cedido",
+          "personagens": []
+        }
+      ]
+    }
+  ]
+}

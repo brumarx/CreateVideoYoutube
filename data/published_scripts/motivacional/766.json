@@ -1,0 +1,79 @@
+{
+  "job_id": 766,
+  "video_id": "98dx36xqmPg",
+  "date": "2026-11-07",
+  "long": false,
+  "title": "Simone Biles: 30 medalhas e a pausa",
+  "narration": "Em 2021, nos Jogos Olímpicos de Tóquio, o mundo assistia Simone Biles, a ginasta mais condecorada, pronta para mais uma performance. Mas em vez disso, ela surpreendeu a todos: se retirou de finais, um ato de coragem que ninguém esperava da maior estrela do esporte. Ela já havia alcançado a fama em 2013, com apenas 16 anos, conquistando duas medalhas de ouro no Campeonato da Antuérpia, incluindo o cobiçado título individual. De 2013 a 2023, Biles dominou o cenário, acumulando seis conquistas mundiais nessa prova. Sua coleção de 30 medalhas em campeonatos mundiais, sendo 23 de ouro, a tornou a ginasta mais condecorada da história dos Estados Unidos nesses eventos. Em 2024, ela conquistou medalhas nas Olimpíadas e foi nomeada Atleta do Ano pela Sports Illustrated, solidificando seu legado. Mas o que levou a essa decisão em Tóquio? Biles priorizou sua saúde mental em detrimento dos objetivos esportivos, revelando que não há problema em não estar bem, mesmo no auge de uma carreira. A ginasta voltou às disputas depois de Tóquio, mostrando que a pausa não era o fim, mas um recomeço; em 2024, tornou-se a ginasta mais velha a vencer o campeonato nacional de conjunto, dez anos após seu primeiro título. Uma prova de resiliência e foco. A história de Simone Biles nos ensina algo valioso: a verdadeira força está em saber quando parar, cuidar de si e recomeçar. Priorizar sua saúde, mesmo diante de grandes expectativas, é uma decisão que pode te levar a conquistas ainda maiores.",
+  "scenes": [
+    {
+      "narration": "Em 2021, nos Jogos Olímpicos de Tóquio, o mundo assistia Simone Biles, a ginasta mais condecorada, pronta para mais uma performance. Mas em vez disso, ela surpreendeu a todos: se retirou de finais, um ato de coragem que ninguém esperava da maior estrela do esporte.",
+      "image_prompt": "A close-up of a gymnast's hands gripping a bar, with strong, muscular arms. The background is blurred, suggesting a large arena. Focus on the chalk dust and the intensity of the grip.",
+      "stock_query": "gymnast hands gripping bar chalk",
+      "grafico": {
+        "tipo": "mapa",
+        "lugares": [
+          "Japan"
+        ],
+        "destaques": [
+          {
+            "pais": "Japan",
+            "cor": "vermelho",
+            "rotulo": "Tóquio",
+            "icone": "🏟️"
+          }
+        ],
+        "ano": "2021",
+        "ano_rotulo": "Jogos Olímpicos"
+      }
+    },
+    {
+      "narration": "Ela já havia alcançado a fama em 2013, com apenas 16 anos, conquistando duas medalhas de ouro no Campeonato da Antuérpia, incluindo o cobiçado título individual. De 2013 a 2023, Biles dominou o cenário, acumulando seis conquistas mundiais nessa prova.",
+      "image_prompt": "A young gymnast, seen from behind, standing on a podium with two gold medals around her neck, looking at a large crowd. The atmosphere is celebratory and bright, focusing on the achievement.",
+      "stock_query": "young gymnast podium gold medals",
+      "grafico": {
+        "tipo": "ano",
+        "de": "2013",
+        "ate": "2023",
+        "rotulo": "6 Títulos Mundiais"
+      }
+    },
+    {
+      "narration": "Sua coleção de 30 medalhas em campeonatos mundiais, sendo 23 de ouro, a tornou a ginasta mais condecorada da história dos Estados Unidos nesses eventos. Em 2024, ela conquistou medalhas nas Olimpíadas e foi nomeada Atleta do Ano pela Sports Illustrated, solidificando seu legado.",
+      "image_prompt": "A close-up of a collection of gold medals, meticulously arranged on a velvet surface, reflecting light. The focus is on the intricate details of the medals, conveying prestige and achievement.",
+      "stock_query": "collection gold medals sports",
+      "grafico": {
+        "tipo": "numero",
+        "valor": "30",
+        "rotulo": "Medalhas em Mundiais"
+      }
+    },
+    {
+      "narration": "Mas o que levou a essa decisão em Tóquio? Biles priorizou sua saúde mental em detrimento dos objetivos esportivos, revelando que não há problema em não estar bem, mesmo no auge de uma carreira.",
+      "image_prompt": "A silhouette of a person sitting alone in a large, empty gymnasium, head bowed. The lighting is dim, creating a sense of introspection and solitude. Focus on the emotional weight.",
+      "stock_query": "silhouette person gymnasium solitude",
+      "grafico": {
+        "tipo": "palavra",
+        "palavra": "SAÚDE MENTAL"
+      }
+    },
+    {
+      "narration": "A ginasta voltou às disputas depois de Tóquio, mostrando que a pausa não era o fim, mas um recomeço; em 2024, tornou-se a ginasta mais velha a vencer o campeonato nacional de conjunto, dez anos após seu primeiro título. Uma prova de resiliência e foco.",
+      "image_prompt": "symbolic wide shot related to the story, no identifiable face, focus on hands, objects, a silhouette seen from behind, or the surrounding environment, cinematic lighting, no text, no words, no letters, no numbers, no logos, no UI, no buttons, no watermark, no signs, no signage, no plaques, no banners, no billboards",
+      "grafico": {
+        "tipo": "ano",
+        "valor": "2021",
+        "rotulo": "Retorno à Competição"
+      }
+    },
+    {
+      "narration": "A história de Simone Biles nos ensina algo valioso: a verdadeira força está em saber quando parar, cuidar de si e recomeçar. Priorizar sua saúde, mesmo diante de grandes expectativas, é uma decisão que pode te levar a conquistas ainda maiores.",
+      "image_prompt": "A person standing at a crossroads on a mountain path, looking towards two different directions. The atmosphere is calm and reflective, symbolizing choice and new beginnings. Focus on the path ahead.",
+      "stock_query": "person crossroads mountain path choice",
+      "grafico": {
+        "tipo": "palavra",
+        "palavra": "RESILIÊNCIA"
+      }
+    }
+  ]
+}

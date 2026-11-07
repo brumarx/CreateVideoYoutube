@@ -1,0 +1,84 @@
+{
+  "job_id": 768,
+  "video_id": "Sq8Mwx0Ywo4",
+  "date": "2026-11-07",
+  "long": false,
+  "title": "Gleisi Hoffmann gastou R$ 525.279,57 em 2024",
+  "narration": "Fala, fiscal da República! R$ 525.279,57. Essa foi a quantia exata que a deputada Gleisi Hoffmann consumiu da cota parlamentar em 2024, segundo dados abertos da Câmara. Mas de onde veio essa despesa? Natural de Curitiba e filiada ao PT, a parlamentar registrou no ano anterior, em 2023, um gasto de R$ 485.044,52 na mesma rubrica. Quem banca essa estrutura é você, pagador de impostos. Em 2025, o gasto registrado foi de R$ 91.691,78, subindo para R$ 255.528,57 em 2026. Mas será que a presença nas sessões acompanhou esse mesmo ritmo? Os registros oficiais mostram oscilações drásticas: em 2019 e 2022, a presença ficou em 62,0%. Em contrapartida, atingiu 90,7% em 2021 e 100,0% naquele ano. Entre as proposições recentes apresentadas pela deputada, constam medidas de emenda constitucional prevendo redução da jornada de trabalho e ajustes tributários. Mas qual foi o reflexo disso nas disputas eleitorais? Na pesquisa Quaest de outubro de 2026 para o Senado no Paraná, Gleisi registrou 15%, enquanto Filipe Barros teve 25% e Alexandre Curi e Deltan pontuaram 21%. O cenário político se consolidou como um teste decisivo. Manter gabinetes e mandatos custa caro ao país, e o caminho para valorizar quem produz passa por corte de gastos e menos máquina pública.",
+  "scenes": [
+    {
+      "narration": "Fala, fiscal da República! R$ 525.279,57. Essa foi a quantia exata que a deputada Gleisi Hoffmann consumiu da cota parlamentar em 2024, segundo dados abertos da Câmara. Mas de onde veio essa despesa?",
+      "image_prompt": "Close-up of a wooden gavel resting beside official paper documents on a polished dark desk inside a Brazilian government room, dramatic side lighting, no text, no faces.",
+      "stock_query": "Brazil congress building interior",
+      "real_subject": "Chamber of Deputies of Brazil",
+      "grafico": {
+        "tipo": "numero",
+        "valor": "R$ 525.279,57",
+        "rotulo": "Cota parlamentar em 2024"
+      }
+    },
+    {
+      "narration": "Natural de Curitiba e filiada ao PT, a parlamentar registrou no ano anterior, em 2023, um gasto de R$ 485.044,52 na mesma rubrica. Quem banca essa estrutura é você, pagador de impostos.",
+      "image_prompt": "Wide view of the modern architecture of Curitiba civic center under an overcast gray sky, realistic atmosphere, no people close up.",
+      "stock_query": "Curitiba aerial city landscape",
+      "real_subject": "Curitiba",
+      "grafico": [
+        {
+          "tipo": "mapa",
+          "lugares": [],
+          "cidade": "Curitiba",
+          "destaques": [],
+          "ano": 2023,
+          "ano_rotulo": "gasto anterior",
+          "personagens": []
+        }
+      ]
+    },
+    {
+      "narration": "Em 2025, o gasto registrado foi de R$ 91.691,78, subindo para R$ 255.528,57 em 2026. Mas será que a presença nas sessões acompanhou esse mesmo ritmo?",
+      "image_prompt": "Empty green carpeted legislative chamber of the Brazilian lower house with modern overhead lighting, distant rows of empty seats, no people, no text.",
+      "stock_query": "Brazilian Chamber of Deputies plenary",
+      "real_subject": "Chamber of Deputies of Brazil"
+    },
+    {
+      "narration": "Os registros oficiais mostram oscilações drásticas: em 2019 e 2022, a presença ficou em 62,0%. Em contrapartida, atingiu 90,7% em 2021 e 100,0% naquele ano.",
+      "image_prompt": "A digital clock on a dark office wall illuminated in soft blue light, surrounded by neat stacks of legislative files, atmosphere of tension, no text.",
+      "stock_query": "voting voting system government hall",
+      "real_subject": "National Congress of Brazil"
+    },
+    {
+      "narration": "Entre as proposições recentes apresentadas pela deputada, constam medidas de emenda constitucional prevendo redução da jornada de trabalho e ajustes tributários. Mas qual foi o reflexo disso nas disputas eleitorais?",
+      "image_prompt": "A fountain pen resting on an open formal leather binder containing official document pages, elegant marble desk, dramatic contrast lighting, no readable text.",
+      "stock_query": "signing official government document",
+      "real_subject": "Chamber of Deputies of Brazil",
+      "grafico": {
+        "tipo": "ano",
+        "de": "2024",
+        "ate": "2026",
+        "rotulo": "Propostas de emenda constitucional"
+      }
+    },
+    {
+      "narration": "Na pesquisa Quaest de outubro de 2026 para o Senado no Paraná, Gleisi registrou 15%, enquanto Filipe Barros teve 25% e Alexandre Curi e Deltan pontuaram 21%. O cenário político se consolidou como um teste decisivo.",
+      "image_prompt": "High aerial view of Brasilia central esplanade at dusk with car trails and government buildings illuminated, sharp cinematic composition, no people, no text.",
+      "stock_query": "Brasilia esplanade ministries dusk",
+      "real_subject": "Esplanada dos Ministérios",
+      "grafico": [
+        {
+          "tipo": "comparacao",
+          "a": 15,
+          "a_rotulo": "Gleisi",
+          "b": 25,
+          "b_rotulo": "Filipe Barros",
+          "icone": "🗳️"
+        }
+      ]
+    },
+    {
+      "narration": "Manter gabinetes e mandatos custa caro ao país, e o caminho para valorizar quem produz passa por corte de gastos e menos máquina pública.",
+      "image_prompt": "Silhouetted back view of an anonymous taxpayer walking away from the imposing white curved architecture of the Brazilian Congress building at sunset, cinematic lighting, no faces visible.",
+      "stock_query": "Brazilian real banknotes counting machine",
+      "real_subject": "National Congress of Brazil"
+    }
+  ]
+}
