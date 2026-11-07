@@ -468,9 +468,13 @@ def complete(
                     if status == 413:
                         too_large.add((api_key, model))
                     if status in (401, 402, 403):
-                        # 402 = "pagamento exigido" (Cerebras, 22/10): custo
-                        # zero, nunca paga — a chave sai do rodízio
-                        rotator.ban(api_key)
+                        # 401 = chave inválida (permanente). 402 "pagamento" e 403
+                        # podem voltar (crédito, região, modelo): descansam por
+                        # prazo, não banidos pra sempre
+                        if status == 401:
+                            rotator.ban(api_key)
+                        else:
+                            rotator.rest(api_key, 86400 if status == 402 else 21600)
                         break  # próxima chave, não adianta repetir modelos com a mesma
                     if cooldown:
                         # cota estourada: descansa a chave e não insiste nos

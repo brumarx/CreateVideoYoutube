@@ -604,3 +604,36 @@ def test_compilation_numbers_stories_and_closes_each_with_question(monkeypatch):
     assert texts[3].endswith("?")          # fim da história 1: pergunta
     assert texts[6].endswith("?")          # fim da história 2: pergunta
     assert texts[2] == arch[1]["narration"]  # narração da história preservada
+
+
+def test_long_jobs_get_longer_timeout():
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import daily_run as d
+
+    assert d._timeout_for(["x", "--channel", "a"]) == d.PIPELINE_TIMEOUT_S
+    assert d._timeout_for(["x", "--long", "--compilation"]) == d.LONG_TIMEOUT_S
+    assert d.LONG_TIMEOUT_S > d.PIPELINE_TIMEOUT_S
+
+
+def test_runlock_is_exclusive(tmp_path, monkeypatch):
+    from src import runlock
+
+    monkeypatch.setattr(runlock, "LOCK_FILE", tmp_path / "p.lock")
+    first = runlock.try_acquire()
+    assert first is not None and runlock.try_acquire() is None and runlock.is_busy()
+    first.close()
+    assert not runlock.is_busy()
+
+
+def test_timeout_kills_child_processes():
+    import subprocess
+    import time
+
+    from src.proc_limit import run_limited
+
+    t = time.time()
+    rc = run_limited(["sh", "-c", "sleep 60 & sleep 60"], 2)
+    assert rc == 124 and time.time() - t < 45

@@ -120,6 +120,13 @@ def upload_pending(channel_filter: str | None, status: str = "failed", limit: in
         except Exception as exc:  # noqa: BLE001 — cota/rede: tenta na próxima rodada
             from googleapiclient.errors import HttpError
 
+            from src.yt_quota import QuotaExceeded
+
+            if isinstance(exc, QuotaExceeded):
+                # cota do dia acabou: vira "pronto" e sobe amanhã (não é falha)
+                update(job_id, status="ready", error=f"cota do YouTube esgotada hoje — sobe amanhã ({exc})")
+                log.warning("[%s] cota do dia esgotada — fica pronto pra amanhã", job_id)
+                continue
             if isinstance(exc, HttpError) and exc.resp.status == 400:
                 # 400 = o YouTube recusou o conteúdo (ex.: descrição inválida): repetir não resolve
                 update(job_id, status="failed_permanent", error=f"recusado pelo YouTube (400): {str(exc)[:300]}")

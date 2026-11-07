@@ -162,7 +162,7 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
             log.warning("[%s] %s: última tentativa no formato curto", channel_name, label)
         log.info("[%s] %s (tentativa %d/%d)", channel_name, label, attempt, total)
         before = _max_job_id()
-        rc = _run_limited(cmd, PIPELINE_TIMEOUT_S)
+        rc = _run_limited(cmd, _timeout_for(cmd))
         if rc == 0:
             return
         job = _last_job(channel_name, before)
@@ -173,7 +173,7 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
         job_id, status, video_path, topic, error = job
         if rc == 124:
             # travado além do limite: não repete (outra tentativa travaria de novo, horas de rodada)
-            update(job_id, status="failed", error=f"tempo esgotado ({PIPELINE_TIMEOUT_S // 60} min)")
+            update(job_id, status="failed", error=f"tempo esgotado ({_timeout_for(cmd) // 60} min)")
             log.error("[%s] %s: interrompido por tempo — job %d marcado como falha, sem repetir", channel_name, label, job_id)
             return
         if video_path:
@@ -214,6 +214,12 @@ def _render_approved(channel_name: str) -> None:
     """Renderiza (sem publicar) o roteiro aprovado mais antigo do canal com
     o comando salvo pelo --script-only. Falhou (ex.: revisão do vídeo):
     volta pra fila normal do dia, o job vira 'abandoned'."""
+    from src.runlock import try_acquire
+
+    trava = try_acquire()
+    if trava is None:
+        log.info("[%s] trava ocupada — roteiro aprovado fica pra próxima rodada", channel_name)
+        return
     with closing(sqlite3.connect(DB_PATH)) as conn:
         row = conn.execute(
             "SELECT id FROM jobs WHERE channel = ? AND status = 'script_approved' ORDER BY id LIMIT 1",
@@ -227,7 +233,7 @@ def _render_approved(channel_name: str) -> None:
         return
     cmd = json.loads(cmd_file.read_text())
     log.info("[%s] renderizando roteiro aprovado (job %s)", channel_name, row[0])
-    rc = _run_limited([sys.executable, *cmd[1:]], PIPELINE_TIMEOUT_S)
+    rc = _run_limited([sys.executable, *cmd[1:]], _timeout_for(cmd))
     update(row[0], status="rendered_from_script" if rc == 0 else "abandoned",
            error=None if rc == 0 else f"render do roteiro aprovado falhou (exit {rc})")
 
@@ -278,35 +284,31 @@ def run_channel(channel_name: str, cfg: dict) -> None:
         )
 
 
-PIPELINE_TIMEOUT_S = 45 * 60   # render de um vídeo leva ~20 min; travado além disso é falha
+PIPELINE_TIMEOUT_S = 45 * 60    # Short: render leva ~20 min
+LONG_TIMEOUT_S = 150 * 60      # longo/compilação (48 cenas levou ~2 h)
 RETRY_TIMEOUT_S = 30 * 60
-LOCK_FILE = ROOT / "data" / "daily_run.lock"
+
+
+def _timeout_for(cmd: list[str]) -> int:
+    return LONG_TIMEOUT_S if "--long" in cmd else PIPELINE_TIMEOUT_S
 
 
 def _run_limited(cmd: list[str], timeout: int) -> int:
-    """Roda com limite de tempo: estourou, mata o processo e devolve 124
-    (a rodada segue pros próximos canais em vez de travar todos)."""
-    try:
-        return subprocess.run(cmd, cwd=ROOT, timeout=timeout).returncode
-    except subprocess.TimeoutExpired:
-        log.error("etapa passou de %d min e foi interrompida: %s", timeout // 60, " ".join(cmd[-4:]))
-        return 124
+    """Tempo limite que mata o grupo inteiro (ffmpeg e TTS junto); estourou,
+    devolve 124 e a rodada segue pros próximos canais."""
+    from src.proc_limit import run_limited
+
+    return run_limited(cmd, timeout, cwd=str(ROOT))
 
 
 def _acquire_lock():
-    """Trava de arquivo: cron e execução manual não rodam ao mesmo tempo
-    (dois vídeos iguais e cota gasta duas vezes)."""
-    import fcntl
+    """Trava única com o painel (src/runlock.py): ocupada, esta rodada sai."""
+    from src.runlock import try_acquire
 
-    LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
-    handle = LOCK_FILE.open("w")
-    try:
-        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        log.error("outra rodada já está em andamento — esta sai sem fazer nada")
+    handle = try_acquire()
+    if handle is None:
+        log.error("outra geração de vídeo já está em andamento — esta rodada sai sem fazer nada")
         raise SystemExit(0)
-    handle.write(str(os.getpid()))
-    handle.flush()
     return handle
 
 
@@ -353,7 +355,10 @@ def main() -> None:
     if not NO_UPLOAD:
         _run_limited([sys.executable, str(ROOT / "scripts" / "retry_uploads.py")], RETRY_TIMEOUT_S)
 
-    _alerta_do_dia()
+    try:
+        _alerta_do_dia()
+    except Exception:  # noqa: BLE001 — o alerta nunca derruba a limpeza
+        log.exception("resumo do fim da rodada falhou")
 
     # consultas à Wikimedia (src/wiki_cache.py) só servem enquanto os vídeos
     # são feitos (e refeitos, no conserto em laço): apaga quando o vídeo já

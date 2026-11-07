@@ -179,6 +179,9 @@ def after_upload_status(channel: ChannelConfig) -> str:
 def publish_video(channel: ChannelConfig, video_id: str) -> None:
     """Aprovação no painel: troca o vídeo de privado pra privacidade
     configurada do canal. Cota: 50 unidades."""
+    from .yt_quota import spend
+
+    spend("update")
     youtube = build("youtube", "v3", credentials=_load_credentials(channel.token_file))
     youtube.videos().update(
         part="status",

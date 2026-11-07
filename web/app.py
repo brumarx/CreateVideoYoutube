@@ -906,11 +906,14 @@ def retry_job(job_id: int):
     job = get_job(job_id)
     if not job or job.status not in ("failed", "ready"):
         return redirect(url_for("index", retry_error="este job não está parado no upload"))
-    subprocess.run(
-        [str(ROOT / ".venv" / "bin" / "python"), str(ROOT / "scripts" / "retry_uploads.py"),
+    rc = subprocess.run(
+        [str(ROOT / ".venv" / "bin" / "python"), str(ROOT / "scripts" / "run_locked.py"), "1800",
+         str(ROOT / ".venv" / "bin" / "python"), str(ROOT / "scripts" / "retry_uploads.py"),
          "--status", job.status, "--job", str(job_id)],
-        cwd=str(ROOT), timeout=900, capture_output=True,
-    )
+        cwd=str(ROOT), timeout=1900, capture_output=True,
+    ).returncode
+    if rc == 3:
+        return redirect(url_for("index", retry_error="outra geração de vídeo está rodando; tente em alguns minutos"))
     job = get_job(job_id)
     if job and job.status in ("uploaded", "awaiting_approval"):
         return redirect(url_for("index", retry_ok=1))
@@ -999,7 +1002,9 @@ def run_channel(channel: str):
         # de sortear — botão "Fatos reais do banco de dados" no painel.
         cmd += ["--fact-label", fact_label]
 
-    subprocess.Popen(cmd, cwd=ROOT)
+    # trava única com a rodada diária (scripts/run_locked.py): ocupada, não inicia outro
+    subprocess.Popen([sys.executable, str(ROOT / "scripts" / "run_locked.py"), "9000", *cmd],
+                     cwd=ROOT, start_new_session=True)
     return redirect(url_for("index", started=1))
 
 

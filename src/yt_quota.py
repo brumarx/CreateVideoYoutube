@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parent.parent
 LEDGER = ROOT / "data" / "yt_quota.json"
 DAILY_LIMIT = 9_500  # folga de 500 sobre o limite de 10.000
-COST = {"upload": 1600, "thumbnail": 50, "playlist_item": 50, "playlist_create": 50, "comment": 50}
+COST = {"upload": 1600, "thumbnail": 50, "playlist_item": 50, "playlist_create": 50, "comment": 50, "update": 50}
 
 
 class QuotaExceeded(RuntimeError):
