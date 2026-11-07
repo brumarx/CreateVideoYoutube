@@ -435,7 +435,7 @@ _MEASURE_RE = re.compile(
     re.IGNORECASE,
 )
 _SOURCE_NUM_RE = re.compile(
-    r"(\d{1,3}(?:[.,\s\u00a0]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(mil\b|thousand|milh(?:ão|ões)|million|"
+    r"([-−]?(?:[1-9]\d{0,2}(?:[.,\s\u00a0]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?))\s*(mil\b|thousand|milh(?:ão|ões)|million|"
     r"bilh(?:ão|ões)|billion)?\s*(°\s?[CF]?|[a-zà-ÿ]+)?", re.IGNORECASE)
 # a unidade tem que ser da mesma família na fonte: "4.800 metros" casava com
 # uma contagem de tropas perto de 4.800 (job 705)
@@ -459,23 +459,25 @@ _SRC_SCALE = {"mil": 1e3, "thousand": 1e3, "milhão": 1e6, "milhões": 1e6, "mil
 
 def _source_number(raw: str) -> float | None:
     """Um número escrito como na fonte: "3.812"/"3,812"/"3 812" (milhar),
-    "3,5"/"3.5" (decimal) ou os dois separadores juntos — "R$ 353.248,04"
-    (pt-BR) e "12,345.67" (en). O formato misto quebrava a revisão inteira
-    (ValueError em '353.248.04', jobs 754-759, 06/11)."""
+    "3,5"/"3.5" (decimal), "0,125" (decimal de 3 casas), sinal negativo, ou os
+    dois separadores juntos — "R$ 353.248,04" (pt-BR) e "12,345.67" (en)."""
     raw = raw.strip()
-    # só milhar: remove todo separador
-    if re.fullmatch(r"\d{1,3}(?:[.,\s\u00a0]\d{3})+", raw):
-        return float(re.sub(r"\D", "", raw))
     if not raw:
         return None
-    # último separador é o decimal (1-2 casas) ou há dois tipos de separador
+    sign = -1.0 if raw[:1] in "-−" else 1.0
+    raw = raw.lstrip("-−").strip()
+    # só milhar (1-3 dígitos sem zero à frente): remove todo separador
+    if re.fullmatch(r"[1-9]\d{0,2}(?:[.,\s\u00a0]\d{3})+", raw):
+        return sign * float(re.sub(r"\D", "", raw))
+    # último separador é o decimal (1-2 casas) ou há dois tipos de separador;
+    # inteiro zero ("0,125") é decimal mesmo com 3 casas
     sep = max(raw.rfind("."), raw.rfind(","))
     if sep != -1:
         integer, fraction = re.sub(r"\D", "", raw[:sep]), re.sub(r"\D", "", raw[sep + 1:])
-        if integer and fraction and (len(fraction) <= 2 or re.search(r"[.,]", raw[:sep])):
-            return float(f"{integer}.{fraction}")
+        if integer and fraction and (len(fraction) <= 2 or re.search(r"[.,]", raw[:sep]) or integer == "0"):
+            return sign * float(f"{integer}.{fraction}")
     try:
-        return float(re.sub(r"\D", "", raw))
+        return sign * float(re.sub(r"\D", "", raw))
     except ValueError:
         return None
 
@@ -522,12 +524,13 @@ def _source_lengths_m(text: str) -> list[float]:
 _DANGLING_END = re.compile(
     r"\b(de|da|do|das|dos|a|o|as|os|em|no|na|nos|nas|para|pra|com|por|que|e|ou|um|uma|ao|se)\s*$", re.IGNORECASE)
 # artigo/preposição + unidade sem número ("a milhas", "de quilômetros")
-_UNIT_WITHOUT_NUMBER = re.compile(
-    r"\b(a|o|as|os|de|em|do|da|no|na)\s+(milhas?|quil[ôo]metros|km|metros|reais|anos|graus|dias|horas)\b", re.IGNORECASE)
-# "St." só é abreviação de nome próprio com estes complementos (St. John's, St. Louis)
-_ST_NAMES = re.compile(
-    r"\bSt\.(?!\s+(John|Louis|Petersburg|Helena|Paul|Moritz|Gallen|Lucia|Tropez|Andrews|Kitts|Vincent|Germain|Denis|Etienne|Lawrence|Pierre|Malo|Barth|Nazaire|Tropez)\b)",
-)
+# "a milhas" (artigo + unidade no plural, sem número): o bug real. "de milhas",
+# "as milhas", "milha aérea" são português normal e não entram
+_UNIT_WITHOUT_NUMBER = re.compile(r"\b(a|o)\s+(milhas|quil[ôo]metros|metros)\b", re.IGNORECASE)
+# "St." seguido de maiúscula é nome próprio (St. Patrick, St. Peter, St. John's);
+# só é cortado com minúscula, pontuação ou início de frase comum ("St. Ele havia")
+_ST_SENTENCE_START = re.compile(
+    r"\bSt\.(?:\s+(?:Ele|Ela|Eles|Elas|Em|Na|No|O|A|Os|As|Um|Uma|Depois|Mas|Quando|Ao|Foi|Era|Havia)\b|\s+[a-zà-ú]|\s*[,;!?]|\s*$)")
 _REPEATED_WORD = re.compile(r"(?<![.\w])([a-zà-ú]{2,})\s+\1\b", re.IGNORECASE)  # "google.com com" é domínio, não repetição
 _REPEAT_OK = {"muito", "mais", "bem", "sim", "não", "nao", "cada", "tudo"}
 _PROMISE_RE = re.compile(
@@ -557,7 +560,7 @@ def broken_sentences(script: dict) -> list[dict]:
                 problems.append(("termina em palavra solta", sentence))
             if _UNIT_WITHOUT_NUMBER.search(sentence):
                 problems.append(("unidade sem número", sentence))
-            if _ST_NAMES.search(sentence):
+            if _ST_SENTENCE_START.search(sentence):
                 problems.append(("abreviação 'St.' sem nome", sentence))
             for m in _REPEATED_WORD.finditer(sentence):
                 if m.group(1).lower() not in _REPEAT_OK:
@@ -599,14 +602,20 @@ def claim_sources(script: dict, topic: str, max_queries: int = 8) -> list[dict]:
               if _CLAIM_RE.search(s)][:max_queries]
     out, seen = [], set()
     for claim in claims:
-        keys = re.findall(r"[A-ZÀ-Ú][\wà-ú'-]+|\d[\d.,]*", claim)
+        keys = re.findall(
+            r"[A-ZÀ-Ú][\wà-ú'-]+|(?:R\$|US\$|€)?\s?\d[\d.,]*(?:\s*(?:milhões|bilhões|milhas|milha|quilômetros|metros|mil|km|%|reais|anos|por cento))?",
+            claim)
+        keys = [k.strip().rstrip('.,') for k in keys if k.strip().rstrip('.,')]
         query = f"{topic} {' '.join(keys)}"[:200]
         if query not in _claim_cache:
             _claim_cache[query] = search_topic_facts(query) or []
         for fact in _claim_cache[query]:
-            if fact.get("url") not in seen:
-                seen.add(fact.get("url"))
-                out.append(fact)
+            url = fact.get("url")
+            if url and url in seen:
+                continue
+            if url:
+                seen.add(url)
+            out.append(fact)
     log.info("fontes por afirmação: %d busca(s), %d fonte(s)", len(claims), len(out))
     return out
 
@@ -629,6 +638,12 @@ def numbers_not_in_sources(script: dict, web_facts: list[dict] | None, tolerance
                 # por "5.373 km" (1 milha = 1.609 m, não 1.000)
                 metros = value * _LENGTH_M[unit]
                 if any(abs(metros - k) <= tolerance * abs(k) for k in _source_lengths_m(source)):
+                    continue
+                if not _source_lengths_m(source):
+                    out.append({
+                        "tipo": "fora_da_fonte", "termo": m.group(0).strip(),
+                        "motivo": "distância que não aparece nas fontes pesquisadas",
+                    })
                     continue
                 out.append({
                     "tipo": "unidade_errada", "termo": m.group(0).strip(),

@@ -81,7 +81,7 @@ def _frame(video: Path) -> Image.Image | None:
 
 def _ahash(img: Image.Image) -> int:
     small = img.convert("L").resize((8, 8))
-    px = list(small.getdata())
+    px = list(small.get_flattened_data() if hasattr(small, "get_flattened_data") else small.getdata())
     avg = sum(px) / len(px)
     return sum(1 << i for i, p in enumerate(px) if p > avg)
 

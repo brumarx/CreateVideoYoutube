@@ -238,3 +238,57 @@ def test_title_limit_is_60_chars():
     allowed = {"baleia", "rossi", "377", "mil", "2025", "cota"}
     assert _packaging_ok(ok, allowed)
     assert not _packaging_ok(longo, allowed)
+
+
+# ---------- revisão: correções da revisão de 07/11 ----------
+
+@pytest.mark.parametrize("raw, expected", [
+    ("0.125", 0.125), ("0,125", 0.125), ("-5", -5.0), ("-3.812", -3812.0),
+    ("3.812", 3812.0), ("353.248,04", 353248.04), ("12,345.67", 12345.67), ("3,5", 3.5),
+])
+def test_source_number_zero_decimal_and_sign(raw, expected):
+    assert fact_check._source_number(raw) == pytest.approx(expected)
+
+
+def test_st_proper_names_are_not_broken():
+    from src.fact_check import broken_sentences
+
+    for text in ["Ele visitou St. Patrick's Cathedral.", "A igreja de St. Peter fica no Vaticano."]:
+        assert broken_sentences(_scene(text)) == [], text
+
+
+def test_st_abbreviation_before_sentence_start_is_broken():
+    from src.fact_check import broken_sentences
+
+    assert broken_sentences(_scene("Terry saiu de St. Ele havia perdido uma perna."))
+
+
+def test_ordinary_milhas_are_not_broken():
+    from src.fact_check import broken_sentences
+
+    for text in ["Ela falou de milhas e quilômetros.", "O projeto de milhas aéreas cresceu."]:
+        assert broken_sentences(_scene(text)) == [], text
+
+
+def test_distance_without_source_distance_is_fora_da_fonte():
+    from src.fact_check import numbers_not_in_sources
+
+    web = [{"titulo": "Terry Fox", "trecho": "Terry foi um atleta canadense."}]
+    problems = numbers_not_in_sources(_scene("Terry completou 5.300 milhas."), web)
+    assert [p["tipo"] for p in problems] == ["fora_da_fonte"]
+
+
+def test_claim_sources_keeps_units_and_sourceless_results(monkeypatch):
+    from src import fact_check
+
+    queries = []
+
+    def fake_search(query, max_results=5):
+        queries.append(query)
+        return [{"titulo": "x", "trecho": "y", "url": None}, {"titulo": "z", "trecho": "w", "url": "https://a"}]
+
+    monkeypatch.setattr("src.web_search.search_topic_facts", fake_search)
+    fact_check._claim_cache.clear()
+    out = fact_check.claim_sources(_scene("Terry percorreu 5.300 milhas em 1980."), "Terry Fox")
+    assert any("milhas" in q for q in queries)
+    assert len(out) == 2  # resultado sem URL não é descartado

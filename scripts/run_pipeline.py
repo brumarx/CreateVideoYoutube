@@ -804,11 +804,14 @@ def run(
         # tutorial de ferramenta inventada ou acusação sem dado no ar.
         # o bordão de entrada entra ANTES da revisão: o que é falado é o que é revisado
         script = channel.with_greeting(script)
-        if not (facts or web_facts) and channel.claim_sources:
-            # canal sem pesquisa de tema: cada frase com número/data busca fonte
+        if channel.claim_sources:
+            # canal com claim_sources (motivacional, curiosidades): cada frase com número/data
+            # busca fonte, MESMO quando o tema já tem fonte (junto, sem repetir URL)
             from src.fact_check import claim_sources as fontes_por_afirmacao
 
-            web_facts = fontes_por_afirmacao(script, topic) or None
+            extra = fontes_por_afirmacao(script, topic) or []
+            seen_urls = {f.get("url") for f in web_facts or [] if f.get("url")}
+            web_facts = (list(web_facts or []) + [f for f in extra if not (f.get("url") and f["url"] in seen_urls)]) or None
         for attempt in range(FACT_CHECK_REWRITES + 1):
             problems = review_script(script, topic, facts, web_facts)
             if problems is None:
