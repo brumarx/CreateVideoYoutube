@@ -118,6 +118,13 @@ def upload_pending(channel_filter: str | None, status: str = "failed", limit: in
             )
             continue
         except Exception as exc:  # noqa: BLE001 — cota/rede: tenta na próxima rodada
+            from googleapiclient.errors import HttpError
+
+            if isinstance(exc, HttpError) and exc.resp.status == 400:
+                # 400 = o YouTube recusou o conteúdo (ex.: descrição inválida): repetir não resolve
+                update(job_id, status="failed_permanent", error=f"recusado pelo YouTube (400): {str(exc)[:300]}")
+                log.error("[%s] recusado pelo YouTube (400) — marcado como falha permanente: %s", job_id, exc)
+                continue
             log.error("[%s] reenvio falhou: %s", job_id, exc)
             continue
         if meta.get("ressalvas"):

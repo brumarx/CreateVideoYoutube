@@ -254,7 +254,7 @@ DURATION_FIELDS = ("short_min_minutes", "short_max_minutes", "long_min_minutes",
 # status que ainda podem virar vídeo (rodando agora ou esperando o render)
 IN_PROGRESS = ("pending", "scripted", "narrated", "rendered", "script_ready", "script_approved")
 # falha que custou o vídeo (retried = tentativa substituída por outra)
-FAILED = ("failed", "abandoned")
+FAILED = ("failed", "abandoned", "failed_permanent")
 GRID_DAYS = 14
 
 

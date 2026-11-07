@@ -309,6 +309,30 @@ def _acquire_lock():
     return handle
 
 
+def _alerta_do_dia() -> None:
+    """Resumo no Telegram quando algo não saiu: canal sem vídeo no ar hoje,
+    job travado, falha permanente ou vídeo/roteiro esperando você."""
+    from src.notify import send_telegram
+
+    hoje = date.today().isoformat()
+    with closing(sqlite3.connect(DB_PATH, timeout=30)) as conn:
+        rows = conn.execute(
+            "SELECT channel, status, id FROM jobs WHERE date(created_at) = ?", (hoje,)
+        ).fetchall()
+    canais = [p.stem for p in sorted((ROOT / "channels").glob("*.yaml"))]
+    no_ar = {c for c, st, _ in rows if st == "uploaded"}
+    sem_video = [c for c in canais if c not in no_ar]
+    problemas = [f"job {i} ({c}): {st}" for c, st, i in rows
+                 if st in ("failed", "failed_permanent", "awaiting_approval", "ready", "script_ready", "pending")]
+    if not sem_video and not problemas:
+        return
+    linhas = ["📋 Resumo da rodada de hoje"]
+    if sem_video:
+        linhas.append("Sem vídeo no ar hoje: " + ", ".join(sem_video))
+    linhas += problemas[:15]
+    send_telegram("\n".join(linhas))
+
+
 def main() -> None:
     _lock = _acquire_lock()  # mantém a trava até o fim do processo
     channels_dir = ROOT / "channels"
@@ -316,14 +340,19 @@ def main() -> None:
 
     for yaml_path in sorted(channels_dir.glob("*.yaml")):
         channel_name = yaml_path.stem
-        cfg = yaml.safe_load(yaml_path.read_text())
-        run_channel(channel_name, cfg)
+        try:
+            cfg = yaml.safe_load(yaml_path.read_text())
+            run_channel(channel_name, cfg)
+        except Exception:  # noqa: BLE001 — um canal quebrado não derruba os outros
+            log.exception("[%s] erro na rodada deste canal — seguindo pros próximos", channel_name)
 
     # vídeos já renderizados cujo upload falhou (hoje ou antes — ex. token
     # OAuth expirado e reautorizado depois). Roda no fim: upload que falhou
     # por token não gasta cota, então sobra cota pro reenvio.
     if not NO_UPLOAD:
         _run_limited([sys.executable, str(ROOT / "scripts" / "retry_uploads.py")], RETRY_TIMEOUT_S)
+
+    _alerta_do_dia()
 
     # consultas à Wikimedia (src/wiki_cache.py) só servem enquanto os vídeos
     # são feitos (e refeitos, no conserto em laço): apaga quando o vídeo já
