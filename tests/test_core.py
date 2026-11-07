@@ -310,3 +310,114 @@ def test_club_crest_prompt_becomes_white_star_on_black():
     assert out["scenes"][1]["image_prompt"] == "a crowd cheering in a stadium at night"
     assert out["thumbnail_image_prompt"] == _CREST_SAFE_PROMPT
     assert "black background" in _CREST_SAFE_PROMPT and "five-pointed star" in _CREST_SAFE_PROMPT
+
+
+# ---------- revisão (segunda rodada): intervalos, sinal, merge, veredito ----------
+
+@pytest.mark.parametrize("texto, esperado", [
+    ("COVID-19", [19.0]),
+    ("2020-2021", [2020.0, 2021.0]),
+    ("-5 °C", [-5.0]),
+    ("-5 milhões", [-5_000_000.0]),
+])
+def test_source_numbers_hyphen_is_not_sign(texto, esperado):
+    assert fact_check._source_numbers(texto) == pytest.approx(esperado)
+
+
+def test_range_with_shared_unit_counts_both_ends():
+    from src.fact_check import numbers_not_in_sources
+
+    web = [{"trecho": "A trilha tem entre 10-20 km."}]
+    assert numbers_not_in_sources({"scenes": [{"narration": "A trilha tem 20 km."}]}, web) == []
+    web2 = [{"trecho": "trilha de 5-10 km"}]
+    assert numbers_not_in_sources({"scenes": [{"narration": "5 km"}]}, web2) == []
+
+
+def test_a_milhas_flagged_only_after_comma_or_start():
+    from src.fact_check import broken_sentences
+
+    assert broken_sentences(_scene("Ele ficou a milhas de distância.")) == []
+    assert broken_sentences(_scene("A casa fica a metros da praia.")) == []
+    assert broken_sentences(_scene("Svalbard, a milhas ao norte.")) != []
+
+
+def test_merge_web_facts_dedupes_by_url():
+    from src.fact_check import merge_web_facts
+
+    tema = [{"url": "https://a", "trecho": "1"}]
+    extra = [{"url": "https://a", "trecho": "dup"}, {"url": "https://b", "trecho": "2"}, {"url": None, "trecho": "3"}]
+    out = merge_web_facts(tema, extra)
+    assert [f["trecho"] for f in out] == ["1", "2", "3"]
+    assert merge_web_facts(None, None) is None
+
+
+def test_compilacao_merges_claim_sources_without_losing_theme_sources():
+    from src.fact_check import merge_web_facts
+
+    compil = [{"url": "https://wiki", "trecho": "tema"}]
+    claims = [{"url": "https://wiki", "trecho": "x"}, {"url": "https://news", "trecho": "y"}]
+    assert [f["url"] for f in merge_web_facts(compil, claims)] == ["https://wiki", "https://news"]
+
+
+def test_unfulfilled_promise_accepts_code_block_prompt():
+    from src.fact_check import unfulfilled_promises
+
+    script = _scene("Copie este prompt no NotebookLM: `Você é um tutor que faz perguntas sobre o material.`")
+    assert unfulfilled_promises(script) == []
+
+
+def test_topic_problem_valid_and_invalid_verdicts(monkeypatch):
+    from src import topics
+
+    monkeypatch.setattr(topics, "complete", lambda *a, **k: '{"ok": true, "motivo": ""}')
+    assert topics.topic_problem("Como usar IA para estudar mais rápido", "IA e carreira", strict=False) is None
+    monkeypatch.setattr(topics, "complete", lambda *a, **k: '{"ok": false, "motivo": "fora do nicho"}')
+    assert topics.topic_problem("Como usar IA para estudar mais rápido", "IA e carreira", strict=False) == "fora do nicho"
+
+
+def test_is_parseable_script_accepts_code_fence_and_surrounding_text():
+    raw = 'Aqui está:\n```json\n{"titulo": "x", "scenes": []}\n```\nObrigado.'
+    assert script_gen._is_parseable_script(raw, {"titulo", "scenes"})
+
+
+def test_money_currencies_and_scales():
+    assert "3 reais e 50 centavos" in tts._money("R$ 3,50")
+    assert "dólares" in tts._money("US$ 10")
+    assert "euros" in tts._money("€39 milhões")
+    assert "milhões" in tts._money("R$ 5 milhões")
+
+
+def _dark_scene(seed: int):
+    import random
+
+    from PIL import Image, ImageDraw, ImageFilter
+
+    rnd = random.Random(seed)
+    im = Image.new("RGB", (480, 854), (12, 14, 20))
+    d = ImageDraw.Draw(im)
+    for _ in range(3):
+        x, y = rnd.randint(0, 300), rnd.randint(300, 700)
+        d.rectangle([x, y, x + rnd.randint(80, 180), y + rnd.randint(80, 200)],
+                    fill=(rnd.randint(60, 200), rnd.randint(60, 200), rnd.randint(60, 200)))
+    return im.filter(ImageFilter.GaussianBlur(3))
+
+
+def test_same_visual_two_dark_different_scenes_not_grouped():
+    from src import video_qa
+
+    assert video_qa.same_visual_share([_dark_scene(1), _dark_scene(2)]) == (1, 2)
+
+
+def test_same_visual_recompressed_and_zoomed_still_grouped():
+    import io
+
+    from PIL import Image
+
+    from src import video_qa
+
+    base = _dark_scene(3)
+    buf = io.BytesIO()
+    base.save(buf, "JPEG", quality=55)
+    rec = Image.open(io.BytesIO(buf.getvalue())).convert("RGB")
+    zoom = base.crop((24, 43, 456, 811)).resize((480, 854))
+    assert video_qa.same_visual_share([base, rec, zoom]) == (3, 3)

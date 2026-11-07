@@ -435,7 +435,7 @@ _MEASURE_RE = re.compile(
     re.IGNORECASE,
 )
 _SOURCE_NUM_RE = re.compile(
-    r"([-−]?(?:[1-9]\d{0,2}(?:[.,\s\u00a0]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?))\s*(mil\b|thousand|milh(?:ão|ões)|million|"
+    r"((?:(?<![\w\-−])[-−])?(?:[1-9]\d{0,2}(?:[.,\s\u00a0]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?))\s*(mil\b|thousand|milh(?:ão|ões)|million|"
     r"bilh(?:ão|ões)|billion)?\s*(°\s?[CF]?|[a-zà-ÿ]+)?", re.IGNORECASE)
 # a unidade tem que ser da mesma família na fonte: "4.800 metros" casava com
 # uma contagem de tropas perto de 4.800 (job 705)
@@ -482,10 +482,20 @@ def _source_number(raw: str) -> float | None:
         return None
 
 
+
+_RANGE_RE = re.compile(
+    r"(?<![\w.,\-−])(\d[\d.,]*)\s*(?:-|–|a|até)\s*(\d[\d.,]*)\s+([a-zà-ÿ°]+)", re.IGNORECASE)
+
+
+def _expand_ranges(text: str) -> str:
+    """"entre 5-10 km" -> "5 km e 10 km": intervalo com unidade só no fim
+    vale pros dois extremos. Datas ("2020-2021") não têm unidade, não entram."""
+    return _RANGE_RE.sub(lambda m: f"{m[1]} {m[3]} {m[2]} {m[3]}", text)
+
 def _source_numbers(text: str, family: str | None = None) -> list[float]:
     """Números da fonte; com `family`, só os seguidos de unidade dessa família."""
     out = []
-    for m in _SOURCE_NUM_RE.finditer(text):
+    for m in _SOURCE_NUM_RE.finditer(_expand_ranges(text)):
         if family and _UNIT_FAMILY.get((m.group(3) or "").lower()) != family:
             continue
         value = _source_number(m.group(1))
@@ -507,7 +517,7 @@ _LENGTH_M = {
 def _source_lengths_m(text: str) -> list[float]:
     """Distâncias da fonte já convertidas pra metros."""
     out = []
-    for m in _SOURCE_NUM_RE.finditer(text):
+    for m in _SOURCE_NUM_RE.finditer(_expand_ranges(text)):
         unit = (m.group(3) or "").lower()
         if unit not in _LENGTH_M:
             continue
@@ -526,7 +536,7 @@ _DANGLING_END = re.compile(
 # artigo/preposição + unidade sem número ("a milhas", "de quilômetros")
 # "a milhas" (artigo + unidade no plural, sem número): o bug real. "de milhas",
 # "as milhas", "milha aérea" são português normal e não entram
-_UNIT_WITHOUT_NUMBER = re.compile(r"\b(a|o)\s+(milhas|quil[ôo]metros|metros)\b", re.IGNORECASE)
+_UNIT_WITHOUT_NUMBER = re.compile(r"(?:^|[,;]\s*)(a|o)\s+(milhas|quil[ôo]metros|metros)\b", re.IGNORECASE)
 # "St." seguido de maiúscula é nome próprio (St. Patrick, St. Peter, St. John's);
 # só é cortado com minúscula, pontuação ou início de frase comum ("St. Ele havia")
 _ST_SENTENCE_START = re.compile(
@@ -536,7 +546,7 @@ _REPEAT_OK = {"muito", "mais", "bem", "sim", "não", "nao", "cada", "tudo"}
 _PROMISE_RE = re.compile(
     r"\b(copie|cole|use|escreva|digite|pergunte)\s+(este|esse|o|um|seguinte)\s+(prompt|comando|código|codigo|texto)\b"
     r"|\b(este|esse)\s+prompt\b", re.IGNORECASE)
-_QUOTED_BLOCK = re.compile(r"[“\"][^”\"]{25,}[”\"]")
+_QUOTED_BLOCK = re.compile(r"[“\"][^”\"]{25,}[”\"]|`{1,3}[^`]{25,}`{1,3}")
 
 
 def _sentences(text: str) -> list[str]:
@@ -589,6 +599,20 @@ def unfulfilled_promises(script: dict) -> list[dict]:
 _CLAIM_RE = re.compile(
     r"\b(1[5-9]\d\d|20\d\d)\b|\d[\d.,]*\s*(?:mil\b|milh|bilh|km|quil|milha|metros|%|por cento)", re.IGNORECASE)
 _claim_cache: dict[str, list[dict]] = {}
+
+
+def merge_web_facts(web_facts: list[dict] | None, extra: list[dict] | None) -> list[dict] | None:
+    """Fontes do tema + fontes por afirmação, sem repetir URL. None se vazio."""
+    seen = {f.get("url") for f in web_facts or [] if f.get("url")}
+    merged = list(web_facts or [])
+    for fact in extra or []:
+        url = fact.get("url")
+        if url and url in seen:
+            continue
+        if url:
+            seen.add(url)
+        merged.append(fact)
+    return merged or None
 
 
 def claim_sources(script: dict, topic: str, max_queries: int = 8) -> list[dict]:

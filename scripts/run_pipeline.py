@@ -807,11 +807,9 @@ def run(
         if channel.claim_sources:
             # canal com claim_sources (motivacional, curiosidades): cada frase com número/data
             # busca fonte, MESMO quando o tema já tem fonte (junto, sem repetir URL)
-            from src.fact_check import claim_sources as fontes_por_afirmacao
+            from src.fact_check import claim_sources as fontes_por_afirmacao, merge_web_facts
 
-            extra = fontes_por_afirmacao(script, topic) or []
-            seen_urls = {f.get("url") for f in web_facts or [] if f.get("url")}
-            web_facts = (list(web_facts or []) + [f for f in extra if not (f.get("url") and f["url"] in seen_urls)]) or None
+            web_facts = merge_web_facts(web_facts, fontes_por_afirmacao(script, topic))
         for attempt in range(FACT_CHECK_REWRITES + 1):
             problems = review_script(script, topic, facts, web_facts)
             if problems is None:
