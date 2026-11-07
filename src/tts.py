@@ -159,11 +159,14 @@ def _is_mixed_case(word: str) -> bool:
     return any(c.isupper() for c in word[1:])
 
 
-def _apply_pronunciations(text: str, extra: dict[str, str] | None) -> str:
+def _apply_pronunciations(text: str, extra: dict[str, str] | None, skip: set[str] | None = None) -> str:
     """Fixas (PRONUNCIATIONS) + as do roteiro: nome estrangeiro que o LLM
     soletrou à portuguesa com a tônica marcada ("Pavlopetri" ->
     "Pavlopétri")."""
     table = {**(extra or {}), **PRONUNCIATIONS}
+    # termo que o roteiro marcou como estrangeiro vai pra voz nativa com a
+    # grafia original: a reescrita fonética pt-BR não pode desfazer isso
+    table = {k: v for k, v in table.items() if k.lower() not in (skip or set())}
     # maiúscula no meio da palavra ("vIA", marca do canal; sigla "IA") é
     # grafia própria: troca só escrita exatamente assim — sem diferenciar,
     # todo "via" comum viraria "via I-A" e todo "ia" (verbo) "I A"
@@ -186,7 +189,37 @@ def _apply_pronunciations(text: str, extra: dict[str, str] | None) -> str:
     return pattern.sub(swap, text)
 
 
-def _for_speech(text: str, extra: dict[str, str] | None = None) -> tuple[str, list[tuple[str, str]]]:
+
+# Unidades, símbolos e intervalos que a voz do Google lia errado (ver relatório
+# de 07/11: "100 km/h" embolava, "°C" saía "grau C", "24/7" saía "24 de julho").
+_UNIT_RULES = [
+    (re.compile(r"(?<=\d) ?km/h\b"), " quilômetros por hora"),
+    (re.compile(r"(?<=\d) ?m²"), " metros quadrados"),
+    (re.compile(r"(?<=\d) ?km²"), " quilômetros quadrados"),
+    (re.compile(r"(?<=\d) ?°C\b"), " graus Celsius"),
+    (re.compile(r"(?<=\d) ?°F\b"), " graus Fahrenheit"),
+    (re.compile(r"(?<=\d) ?GB\b"), " gigabytes"),
+    (re.compile(r"(?<=\d) ?TB\b"), " terabytes"),
+    (re.compile(r"(?<=\d) ?MB\b"), " megabytes"),
+    (re.compile(r"\b24/7\b"), "24 horas por dia, 7 dias por semana"),
+    (re.compile(r"(?<=\d)h/semana\b"), " horas por semana"),
+    (re.compile(r"\bséculo XXI\b"), "século vinte e um"),
+    (re.compile(r"\bséculo XX\b"), "século vinte"),
+    (re.compile(r"\bséculo XIX\b"), "século dezenove"),
+    (re.compile(r"\bséculo XVIII\b"), "século dezoito"),
+    # intervalo de anos e de placar: "2020-2021" e "3-0" viram "a"
+    (re.compile(r"(?<=\d{4})-(?=\d{4})"), " a "),
+    (re.compile(r"(?<=\b\d)-(?=\d\b)"), " a "),
+]
+
+
+def _units_for_speech(text: str) -> str:
+    for pattern, spoken in _UNIT_RULES:
+        text = pattern.sub(spoken, text)
+    return text
+
+
+def _for_speech(text: str, extra: dict[str, str] | None = None, skip: set[str] | None = None) -> tuple[str, list[tuple[str, str]]]:
     """Texto pra síntese + a lista, em ordem, de (palavra falada, original)
     das palavras em maiúsculas trocadas — a legenda karaokê devolve a
     grafia original na mesma ordem, sem tocar num "lance" comum só porque
@@ -205,7 +238,8 @@ def _for_speech(text: str, extra: dict[str, str] | None = None) -> tuple[str, li
     text = clean_markup(text)  # última barreira: nada de "asterisco" falado
     text = _ABREVIACAO.sub(lambda m: _ABREVIACOES[m[0]], text)
     text = _spoken_swaps(text)
-    text = _apply_pronunciations(text, extra)
+    text = _apply_pronunciations(text, extra, skip)
+    text = _units_for_speech(text)
     text = _versus(text)
     text = _barra(text)
     text = _money(text)
@@ -650,7 +684,7 @@ def narrate(
     if foreign and pronunciations:
         folded = {k.lower() for k in foreign}
         pronunciations = {k: v for k, v in pronunciations.items() if k.lower() not in folded}
-    text, spelling_back = _for_speech(text, pronunciations)
+    text, spelling_back = _for_speech(text, pronunciations, {k.lower() for k in foreign})
     if voice not in EDGE_VOICES:
         # voz só-Azure
         if AZURE_SPEECH_KEYS:

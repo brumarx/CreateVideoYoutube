@@ -170,8 +170,10 @@ def _foreign_terms(script: dict, pronunciations: dict[str, str]) -> tuple[dict[s
         if isinstance(k, str) and isinstance(v, str) and 1 < len(k.strip()) <= 40 and len(k.split()) <= 4
         and v.strip().lower()[:2] in FOREIGN_VOICES and k.strip().lower() in narration
     }
-    pt = portuguese_words(sorted(set(foreign) | set(pronunciations)))
-    foreign = {k: v for k, v in foreign.items() if k not in pt}
+    # o filtro de "já é português" (LanguageTool) só vale pras reescritas
+    # automáticas: ele aceita Textor, Hoffmann, NotebookLM como palavra, e o
+    # roteiro que marcou "idioma" sabe o que é estrangeiro
+    pt = portuguese_words(sorted(set(pronunciations)))
     folded = {k.lower() for k in foreign}
     kept = {}
     for k, v in pronunciations.items():

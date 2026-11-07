@@ -445,3 +445,29 @@ def test_short_description_untouched():
     from src.youtube_text import fit_description
 
     assert fit_description("curta") == "curta"
+
+
+# ---------- fala: unidades, símbolos e termo estrangeiro (relatório de 07/11) ----------
+
+@pytest.mark.parametrize("texto, esperado", [
+    ("100 km/h", "100 quilômetros por hora"),
+    ("30 °C", "30 graus Celsius"),
+    ("abre 24/7", "24 horas por dia, 7 dias por semana"),
+    ("entre 2020-2021", "2020 a 2021"),
+    ("no século XXI", "século vinte e um"),
+    ("placar 3-0", "3 a 0"),
+    ("cabe 2 GB", "2 gigabytes"),
+    ("5 m²", "5 metros quadrados"),
+    ("6,4h/semana", "6,4 horas por semana"),
+])
+def test_units_and_symbols_are_spoken_in_words(texto, esperado):
+    assert esperado in tts._for_speech(texto)[0]
+
+
+def test_foreign_term_is_not_rewritten_by_fixed_pronunciation():
+    # Textor tem reescrita fixa (Técstor), mas marcado como estrangeiro fica como está
+    spoken, _ = tts._for_speech("o Textor e o Botafogo", {}, {"textor"})
+    assert "Textor" in spoken and "Técstor" not in spoken
+    # sem marcação, a reescrita fixa continua valendo
+    spoken2, _ = tts._for_speech("o Textor e o Botafogo", {})
+    assert "Técstor" in spoken2
