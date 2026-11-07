@@ -38,7 +38,8 @@ PRONUNCIATIONS = {
     "Textor": "Técstor",  # John Textor (SAF do Botafogo): TÉX-tor, não tex-TÔR
     "FogãoNET": "Fogãonéti",  # site FogãoNET: a voz soletrava "Fogão N-E-T"
     "Botafogo.WIN": "botafogo.win",  # maiúsculo a voz soletra "dáblio-i-ene"
-    "Tite": "Títi",  # técnico: a voz engolia o "e" final ("Tit") — varredura das legendas de 11/10
+    # técnico Tite: "Títi" saía errado (o "e" final virava "i"); se fala "tchitchi"
+    "Tite": "Tchitchi",
     "SAF": "Sáfi",  # "a SAF" se fala como palavra, não "ésse-á-éfe"
     "UOL": "Uól",
     "ge": "Gê-É",  # site ge (Globo Esporte): minúsculo a voz lê "jê", "GE" também sai errado
@@ -57,6 +58,25 @@ PRONUNCIATIONS = {
     "criativos": "criatívos",
 }
 _SPELLING_BACK = {v.lower(): k for k, v in PRONUNCIATIONS.items()}
+
+# Palavras que a voz lê errado por não serem português (ou por ser abreviação
+# de outra língua). Troca só no texto falado; a legenda mostra a fala.
+#  - "descenso" é espanhol: no Brasil se diz rebaixamento (job 749)
+#  - "vs" a voz lê em inglês ("vês"): se diz "contra"
+#  - "St. John's" (cidade do Canadá) a voz lia "st" como abreviação
+_SPOKEN_SWAPS = [
+    (re.compile(r"\bzona de descenso\b"), "zona de rebaixamento"),
+    (re.compile(r"\bdescenso\b"), "rebaixamento"),
+    (re.compile(r"\bDescenso\b"), "Rebaixamento"),
+    (re.compile(r"\bvs\.?(?=\s)"), "contra"),
+    (re.compile(r"\bSt\. (?=[A-Z])"), "Saint "),
+]
+
+
+def _spoken_swaps(text: str) -> str:
+    for pattern, spoken in _SPOKEN_SWAPS:
+        text = pattern.sub(spoken, text)
+    return text
 
 _BRAZILIAN_STATES = {
     "AC": "Acre",
@@ -184,6 +204,7 @@ def _for_speech(text: str, extra: dict[str, str] | None = None) -> tuple[str, li
 
     text = clean_markup(text)  # última barreira: nada de "asterisco" falado
     text = _ABREVIACAO.sub(lambda m: _ABREVIACOES[m[0]], text)
+    text = _spoken_swaps(text)
     text = _apply_pronunciations(text, extra)
     text = _versus(text)
     text = _barra(text)

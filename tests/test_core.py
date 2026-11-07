@@ -143,3 +143,20 @@ def test_same_visual_share_separates_different_images():
     ImageDraw.Draw(b).rectangle([32, 0, 63, 63], fill="black")
     c = Image.new("RGB", (64, 64), "gray")
     assert video_qa.same_visual_share([a, b, c]) == (1, 3)
+
+
+# ---------- tts: falas que a voz lia errado ----------
+
+@pytest.mark.parametrize("texto, esperado", [
+    ("Tite alivia a pressão", "Tchitchi alivia"),
+    ("na zona de descenso", "zona de rebaixamento"),
+    ("Chelsea vs Arsenal", "Chelsea contra Arsenal"),
+    ("saiu de St. John's", "Saint John's"),
+])
+def test_spoken_fixes(texto, esperado):
+    assert esperado in tts._for_speech(texto)[0]
+
+
+def test_tite_caption_keeps_written_name():
+    # a legenda volta a grafia escrita (Tite), não a fonética falada
+    assert tts._SPELLING_BACK.get("tchitchi") == "Tite"
