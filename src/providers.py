@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import logging
 import re
+import time
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 import httpx
@@ -99,7 +101,9 @@ def _cloudflare_complete(entries, messages, max_tokens, ok, model_filter, valida
         for model in CLOUDFLARE_MODELS:
             if model_filter is not None and not model_filter(model):
                 continue
-            result, status = _call_openai_compat(CLOUDFLARE_CHAT_URL.format(account=account), token, model, messages, max_tokens, temperature)
+            result, status, cooldown = _call_openai_compat(
+                CLOUDFLARE_CHAT_URL.format(account=account), token, model, messages, max_tokens, temperature,
+            )
             if ok(result):
                 log.info("resposta via cloudflare/%s", model)
                 return result
@@ -107,6 +111,9 @@ def _cloudflare_complete(entries, messages, max_tokens, ok, model_filter, valida
                 log.warning("resposta de cloudflare/%s não passou na validação, tentando próximo modelo", model)
             if status in (401, 403):
                 rotator.ban(entry)
+                break
+            if cooldown:
+                rotator.rest(entry, cooldown)
                 break
     return None
 
@@ -180,15 +187,22 @@ class KeyRotator:
     """Rodízio de chaves por provedor: cada chamada começa por uma chave
     diferente (round-robin) e bane chaves com erro de auth/permissão
     (401/403) pelo resto do processo — as demais continuam disponíveis.
+    Chave com 429 de cota entra em descanso para não ser tentada de novo a
+    cada chamada (TPD: até a virada do dia UTC; TPM: ~1 min).
     """
 
     def __init__(self, keys: list[str]):
-        self._keys = keys
+        self._keys = list(keys)
         self._banned: set[str] = set()
+        self._resting: dict[str, float] = {}
         self._next = 0
 
     def order(self) -> list[str]:
-        active = [k for k in self._keys if k not in self._banned]
+        now = time.monotonic()
+        active = [
+            k for k in self._keys
+            if k not in self._banned and self._resting.get(k, 0.0) <= now
+        ]
         if not active:
             return []
         start = self._next % len(active)
@@ -199,12 +213,22 @@ class KeyRotator:
         self._banned.add(key)
         log.warning("chave banida por erro de auth/permissão (…%s)", key[-4:])
 
+    def rest(self, key: str, seconds: float) -> None:
+        if seconds > 0:
+            self._resting[key] = time.monotonic() + seconds
+            log.warning("chave em descanso por %.0fs (cota, …%s)", seconds, key[-4:])
 
-_rotators: dict[int, KeyRotator] = {}
+
+# O rodízio PRECISA persistir entre chamadas. Antes era `id(keys)`, mas cada
+# complete() cria um LLMKeys() novo: o id mudava, o rotador nascia do zero e
+# a 1ª chave era sempre a primeira da lista. Na prática o Groq queimava a
+# cota da chave 1 antes de encostar nas outras 7 (06/11). A chave do cache é
+# o conteúdo da lista (tupla), que é estável entre instâncias.
+_rotators: dict[tuple[str, ...], KeyRotator] = {}
 
 
 def _rotator_for(keys: list[str]) -> KeyRotator:
-    cache_id = id(keys)
+    cache_id = tuple(keys)
     if cache_id not in _rotators:
         _rotators[cache_id] = KeyRotator(keys)
     return _rotators[cache_id]
@@ -218,10 +242,26 @@ _TOO_LARGE_RE = re.compile(r"Request too large.*?\(TPM\): Limit (\d+), Requested
 _MIN_FIT_TOKENS = 1024
 
 
+def _cooldown_seconds(status: int | None, body: str) -> int:
+    """Quanto tempo a chave deve descansar depois de um 429. Cota por dia
+    (TPD) só volta na virada UTC; cota por minuto (TPM) em ~1 min. Sem isso
+    a mesma chave esgotada era tentada em toda chamada seguinte — o log de
+    06/11 tem 2.089 tentativas no Groq, muitas na chave que já tinha
+    estourado o TPD."""
+    if status != 429:
+        return 0
+    low = body.lower()
+    if "per day" in low or "per-day" in low or "daily" in low or "tpd" in low:
+        now = datetime.now(timezone.utc)
+        reset = (now + timedelta(days=1)).replace(hour=0, minute=5, second=0, microsecond=0)
+        return max(60, int((reset - now).total_seconds()))
+    return 75
+
+
 def _call_openai_compat(
     endpoint: str, api_key: str, model: str, messages: list[dict], max_tokens: int, temperature: float = 0.8,
     _fitted: bool = False,
-) -> tuple[str | None, int | None]:
+) -> tuple[str | None, int | None, int]:
     payload = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
     if "gpt-oss" in model:
         # o raciocínio sai do mesmo max_tokens: no padrão o gpt-oss gastava
@@ -255,13 +295,13 @@ def _call_openai_compat(
                 return _call_openai_compat(endpoint, api_key, model, messages, fitted, temperature, _fitted=True)
         if resp.status_code != 200:
             log.warning("%s (%s) -> HTTP %s: %s", endpoint, model, resp.status_code, resp.text[:200])
-            return None, resp.status_code
+            return None, resp.status_code, _cooldown_seconds(resp.status_code, resp.text)
         data = resp.json()
         content = data["choices"][0]["message"]["content"]
-        return (_strip_reasoning(content) if content else None), 200
+        return (_strip_reasoning(content) if content else None), 200, 0
     except Exception as exc:  # rede, timeout, JSON malformado, etc.
         log.warning("%s (%s) falhou: %s", endpoint, model, exc)
-        return None, None
+        return None, None, 0
 
 
 def _call_gemini(api_key: str, model: str, messages: list[dict], max_tokens: int, temperature: float = 0.8) -> str | None:
@@ -360,30 +400,40 @@ def complete(
         # "camisa 9" no teste de 22/10) respondia 70% de tudo — o gpt-oss-120b
         # só via a vez quando o qwen falhava (pedido do dono, 22/10)
         passes = [(m, order) for m in _STRONG_MODELS.get(name, [])] + [(None, order)]
-        too_large: set[str] = set()  # 413 é igual em toda chave (limite por minuto do modelo)
+        # 413 é por chave/conta (TPM daquela chave), não do provedor inteiro:
+        # com 8 contas no Groq, marcar o modelo globalmente impedia as outras
+        # chaves de tentarem o modelo forte (06/11).
+        too_large: set[tuple[str, str]] = set()
         for only, pass_keys in passes:
             for api_key in pass_keys:
-                if api_key in rotator._banned:
+                if api_key in rotator._banned or rotator._resting.get(api_key, 0.0) > time.monotonic():
                     continue
                 models = _fetch_models(name, models_endpoint, api_key)
                 for model in models:
                     if (only is not None and model != only) or (only is None and model in _STRONG_MODELS.get(name, [])):
                         continue
-                    if model in too_large or (model_filter is not None and not model_filter(model)):
+                    if (api_key, model) in too_large or (model_filter is not None and not model_filter(model)):
                         continue
-                    result, status = _call_openai_compat(chat_endpoint, api_key, model, messages, max_tokens, temperature)
+                    result, status, cooldown = _call_openai_compat(
+                        chat_endpoint, api_key, model, messages, max_tokens, temperature,
+                    )
                     if _ok(result):
                         log.info("resposta via %s/%s", name, model)
                         return result  # type: ignore[return-value]
                     if result and validate is not None:
                         log.warning("resposta de %s/%s não passou na validação, tentando próximo modelo", name, model)
                     if status == 413:
-                        too_large.add(model)
+                        too_large.add((api_key, model))
                     if status in (401, 402, 403):
                         # 402 = "pagamento exigido" (Cerebras, 22/10): custo
                         # zero, nunca paga — a chave sai do rodízio
                         rotator.ban(api_key)
                         break  # próxima chave, não adianta repetir modelos com a mesma
+                    if cooldown:
+                        # cota estourada: descansa a chave e não insiste nos
+                        # outros modelos dela nesta mesma chamada
+                        rotator.rest(api_key, cooldown)
+                        break
 
     if keys.cloudflare:
         result = _cloudflare_complete(keys.cloudflare, messages, max_tokens, _ok, model_filter, validate, temperature)

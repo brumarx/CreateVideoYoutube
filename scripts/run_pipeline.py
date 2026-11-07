@@ -312,12 +312,15 @@ def _mark_news_blocks(script: dict, facts: dict | None) -> None:
             scene["narration"] = f"{ordinal} notícia: {scene['narration']}"
 
 
-def _archive_is_cited_person(scene: dict) -> bool:
+def _archive_is_cited_person(scene: dict, topic: str = "") -> bool:
     """Arquivo da própria pessoa citada: "real_subject" com nome e sobrenome
-    que a narração da cena fala."""
+    que a narração da cena fala — ou o TEMA do vídeo, pra cena que continua
+    a anterior com pronome ("Ele tem um histórico...", job 760: a foto do
+    Baleia Rossi era a pessoa certa, mas a narração só dizia "Ele")."""
     subject = (scene.get("real_subject") or "").strip()
     words = [w for w in subject.split() if w[:1].isupper()]
-    return len(words) >= 2 and subject.lower() in (scene.get("narration") or "").lower()
+    haystack = f"{scene.get('narration') or ''} {topic}".lower()
+    return len(words) >= 2 and subject.lower() in haystack
 
 
 # começo de frase que aponta pra frase anterior
@@ -1436,7 +1439,7 @@ def run(
                 # sobre verificação em dois fatores (job 729, 05/11)
                 trusted_scenes={i + 1 for i, src in enumerate(scene_sources)
                                 if src in ("noticia", "repetida", "jogador")
-                                or (src == "arquivo" and i < len(script["scenes"]) and _archive_is_cited_person(script["scenes"][i]))},
+                                or (src == "arquivo" and i < len(script["scenes"]) and _archive_is_cited_person(script["scenes"][i], topic))},
                 # mapas da mesma região se parecem de propósito (mesmo mundo visual)
                 designed_scenes={i + 1 for i, src in enumerate(scene_sources) if src == "grafico"},
             )

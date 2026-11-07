@@ -158,8 +158,15 @@ _TRANSCRIBE_WAIT = 75
 
 
 def _transcribe_once(audio: bytes) -> str | None:
+    # mesmo rodízio do resto do sistema: alterna a chave inicial entre as
+    # chamadas e descansa a que estourou cota (antes a chave 1 era sempre a
+    # primeira, e as outras 7 só entravam depois dela falhar)
+    from .providers import _rotator_for
+
+    keys = LLMKeys().groq
+    rotator = _rotator_for(keys)
     for model in _WHISPER_MODELS:
-        for key in LLMKeys().groq:
+        for key in rotator.order():
             try:
                 resp = httpx.post(
                     _WHISPER_URL, headers={"Authorization": f"Bearer {key}"}, timeout=180,
@@ -168,6 +175,8 @@ def _transcribe_once(audio: bytes) -> str | None:
                 )
                 if resp.status_code == 200:
                     return resp.text
+                if resp.status_code == 429:
+                    rotator.rest(key, 75)
                 log.warning("transcrição groq (%s): HTTP %d %s", model, resp.status_code, resp.text[:120])
             except httpx.HTTPError as exc:
                 log.warning("transcrição groq falhou: %s", exc)

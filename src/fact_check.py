@@ -452,18 +452,38 @@ _SRC_SCALE = {"mil": 1e3, "thousand": 1e3, "milhão": 1e6, "milhões": 1e6, "mil
               "bilhão": 1e9, "bilhões": 1e9, "billion": 1e9}
 
 
+def _source_number(raw: str) -> float | None:
+    """Um número escrito como na fonte: "3.812"/"3,812"/"3 812" (milhar),
+    "3,5"/"3.5" (decimal) ou os dois separadores juntos — "R$ 353.248,04"
+    (pt-BR) e "12,345.67" (en). O formato misto quebrava a revisão inteira
+    (ValueError em '353.248.04', jobs 754-759, 06/11)."""
+    raw = raw.strip()
+    # só milhar: remove todo separador
+    if re.fullmatch(r"\d{1,3}(?:[.,\s\u00a0]\d{3})+", raw):
+        return float(re.sub(r"\D", "", raw))
+    if not raw:
+        return None
+    # último separador é o decimal (1-2 casas) ou há dois tipos de separador
+    sep = max(raw.rfind("."), raw.rfind(","))
+    if sep != -1:
+        integer, fraction = re.sub(r"\D", "", raw[:sep]), re.sub(r"\D", "", raw[sep + 1:])
+        if integer and fraction and (len(fraction) <= 2 or re.search(r"[.,]", raw[:sep])):
+            return float(f"{integer}.{fraction}")
+    try:
+        return float(re.sub(r"\D", "", raw))
+    except ValueError:
+        return None
+
+
 def _source_numbers(text: str, family: str | None = None) -> list[float]:
     """Números da fonte; com `family`, só os seguidos de unidade dessa família."""
     out = []
     for m in _SOURCE_NUM_RE.finditer(text):
         if family and _UNIT_FAMILY.get((m.group(3) or "").lower()) != family:
             continue
-        raw = m.group(1)
-        # "3.812", "3,812", "3 812" (milhar) ou "3,5"/"3.5" (decimal)
-        if re.fullmatch(r"\d{1,3}(?:[.,\s\u00a0]\d{3})+", raw):
-            value = float(re.sub(r"\D", "", raw))
-        else:
-            value = float(raw.replace(",", "."))
+        value = _source_number(m.group(1))
+        if value is None:
+            continue
         out.append(value * _SRC_SCALE.get((m.group(2) or "").lower(), 1))
     return out
 
