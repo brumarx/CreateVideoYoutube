@@ -1,0 +1,83 @@
+{
+  "job_id": 762,
+  "video_id": "z3pwJBeUfro",
+  "date": "2026-11-07",
+  "long": false,
+  "title": "R$ 377.205,06: Baleia Rossi (MDB) em 2025",
+  "narration": "Baleia Rossi é um deputado federal por São Paulo. Em 2025, a cota parlamentar dele somou R$ 377.205,06. Ele tem um histórico de propostas apresentadas, tendo submetido 10 iniciativas em 2026. Ele também é conhecido por sua posição contra a filiação de pessoas vinculadas a facções criminosas ou milícias. Mas quem paga a conta por esses gastos? É você, pagador de impostos. É importante lembrar que os recursos públicos são sagrados e devem ser usados com responsabilidade. A reforma administrativa e o corte de despesas são urgentes para evitar o desperdício desses recursos. Você acha justo pagar R$ 377.205,06 por ano para manter um deputado federal?",
+  "scenes": [
+    {
+      "narration": "Baleia Rossi é um deputado federal por São Paulo. Em 2025, a cota parlamentar dele somou R$ 377.205,06.",
+      "image_prompt": "Brazilian congress building in Brasilia",
+      "stock_query": "Brazil congress building",
+      "real_subject": "National Congress of Brazil",
+      "grafico": {
+        "tipo": "numero",
+        "valor": "R$ 353.248,04",
+        "rotulo": "gastos anuais"
+      }
+    },
+    {
+      "narration": "Ele tem um histórico de propostas apresentadas, tendo submetido 10 iniciativas em 2026.",
+      "image_prompt": "Brazilian politician speaking in congress",
+      "stock_query": "Brazilian politician speaking",
+      "real_subject": "Baleia Rossi",
+      "grafico": {
+        "tipo": "comparacao",
+        "a": 10,
+        "a_rotulo": "propostas em 2026",
+        "b": 6,
+        "b_rotulo": "propostas em 2025",
+        "icone": "📝"
+      }
+    },
+    {
+      "narration": "Ele também é conhecido por sua posição contra a filiação de pessoas vinculadas a facções criminosas ou milícias.",
+      "image_prompt": "Brazilian politician holding a document with a red X",
+      "stock_query": "Brazilian politician holding a document",
+      "real_subject": "Baleia Rossi",
+      "grafico": {
+        "tipo": "ano",
+        "de": "2026",
+        "rotulo": "posição contra milícias"
+      }
+    },
+    {
+      "narration": "Mas quem paga a conta por esses gastos? É você, pagador de impostos.",
+      "image_prompt": "Brazilian real banknotes and a tax return form",
+      "stock_query": "Brazilian real banknotes and tax return",
+      "real_subject": "Brazilian real"
+    },
+    {
+      "narration": "É importante lembrar que os recursos públicos são sagrados e devem ser usados com responsabilidade.",
+      "image_prompt": "Brazilian flag waving in the wind",
+      "stock_query": "Brazilian flag waving",
+      "real_subject": "Brazil"
+    },
+    {
+      "narration": "A reforma administrativa e o corte de despesas são urgentes para evitar o desperdício desses recursos.",
+      "image_prompt": "Brazilian politician speaking in congress with a graph of decreasing expenses",
+      "stock_query": "Brazilian politician speaking with graph",
+      "real_subject": "National Congress of Brazil",
+      "grafico": {
+        "tipo": "numero",
+        "valor": "R$ 310.788,96",
+        "rotulo": "gastos em 2024"
+      }
+    },
+    {
+      "narration": "Você acha justo pagar R$ 377.205,06 por ano para manter um deputado federal?",
+      "image_prompt": "Brazilian real banknotes and a question mark",
+      "stock_query": "Brazilian real banknotes and question mark",
+      "real_subject": "Brazilian real",
+      "grafico": [
+        {
+          "tipo": "numero",
+          "valor": "R$ 353.248,04",
+          "rotulo": "",
+          "palavra": "R$ 353.248,04"
+        }
+      ]
+    }
+  ]
+}

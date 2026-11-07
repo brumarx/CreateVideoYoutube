@@ -18,3 +18,5 @@ assets/sfx/*.mp3
 .code-graph/
 data/people_photos.json
 data/cache/
+data/performance_status.json
+data/housekeeping_status.json
