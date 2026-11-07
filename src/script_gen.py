@@ -971,9 +971,14 @@ def compose_compilation(channel: ChannelConfig, facts: dict, revision_feedback: 
         f"Vídeo LONGO que junta {n} Shorts da semana do canal. A narração de cada história JÁ ESTÁ PRONTA e entra "
         "como está — você NÃO reescreve nada dela. Escreva só:\n"
         "- abertura: 1 ou 2 frases que prometem as histórias sem contar o final;\n"
-        f"- transicoes: exatamente {n - 1} frases curtas, uma antes de cada história a partir da 2ª, que "
-        "ligam a anterior à próxima (pode citar o nome de quem vem);\n"
-        "- fechamento: 1 ou 2 frases com a lição comum das histórias.\n"
+        f"- transicoes: exatamente {n} frases, UMA para cada história, na ordem; cada uma apresenta a história "
+        "que vem (quem é, o assunto em uma frase, por que importa) e é o início dela. NÃO escreva o número "
+        "da história: o código põe \"História N de {n}\" antes de cada uma;\n"
+        f"- perguntas: exatamente {n}, UMA por história, na ordem. Cada uma fecha a história em uma frase "
+        "(o desfecho ou a lição, sem fato novo) e termina com uma pergunta direta ao público sobre "
+        "aquela história (ex.: \"Você acha justo?\", \"Qual dessas te surpreendeu mais?\"), que convide a comentar. "
+        "A última palavra de cada uma é a pergunta;\n"
+        "- fechamento: 1 ou 2 frases com a lição comum das histórias, sem pergunta.\n"
         "Nesses textos novos, NENHUM fato, número, data ou nome que não esteja nas narrações abaixo; sem "
         "pergunta que fica sem resposta, sem pedir inscrição.\n"
         "Título (até 70 caracteres) e thumbnail (até 4 palavras): o fio comum das histórias com o número "
@@ -985,7 +990,7 @@ def compose_compilation(channel: ChannelConfig, facts: dict, revision_feedback: 
         "Responda só com JSON:\n"
         f'{{"title": "...", "thumbnail_text": "...", "thumbnail_image_prompt": "prompt em inglês, sem rosto", '
         f'"description": "2 parágrafos", "tags": ["..."], "mood": "animado|calmo|neutro|tenso|melancolico", '
-        f'"abertura": {visual}, "transicoes": [{visual}, ...], "fechamento": {visual}'
+        f'"abertura": {visual}, "transicoes": [{visual}, ...], "perguntas": [{visual}, ...], "fechamento": {visual}'
         + (', "visuais": {"1.1": {"image_prompt": "...", "stock_query": "..."}, ...}' if missing else "")
         + "}"
     )
@@ -995,9 +1000,12 @@ def compose_compilation(channel: ChannelConfig, facts: dict, revision_feedback: 
             data = _extract_json(raw)
         except ValueError:
             return None
-        parts = [data.get("abertura"), *(data.get("transicoes") or []), data.get("fechamento")]
-        if len(data.get("transicoes") or []) != n - 1 or not all(
+        parts = [data.get("abertura"), *(data.get("transicoes") or []), *(data.get("perguntas") or []), data.get("fechamento")]
+        if len(data.get("transicoes") or []) != n or len(data.get("perguntas") or []) != n or not all(
                 isinstance(p, dict) and str(p.get("narration") or "").strip() and p.get("image_prompt") for p in parts):
+            return None
+        # cada história fecha com pergunta ao público (termina com "?")
+        if any(not str(p.get("narration", "")).strip().endswith("?") for p in data.get("perguntas") or []):
             return None
         new_text = " ".join(str(p["narration"]) for p in parts)
         if _fact_tokens(new_text) - allowed:
@@ -1029,11 +1037,15 @@ def compose_compilation(channel: ChannelConfig, facts: dict, revision_feedback: 
     def new_scene(p: dict) -> dict:
         return {k: str(p[k]).strip() for k in ("narration", "image_prompt", "stock_query") if p.get(k)}
 
+    # cada história: "História N de n" (código, não LLM), o início, as cenas
+    # (narração intacta), o desfecho e a pergunta ao público
     scenes = [new_scene(data["abertura"])]
     for i, st in enumerate(stories):
-        if i:
-            scenes.append(new_scene(data["transicoes"][i - 1]))
+        intro = new_scene(data["transicoes"][i])
+        intro["narration"] = f"História {i + 1} de {n}. " + intro["narration"]
+        scenes.append(intro)
         scenes.extend(st["scenes"])
+        scenes.append(new_scene(data["perguntas"][i]))
     scenes.append(new_scene(data["fechamento"]))
     log.info("compilação montada: %d histórias guardadas, %d cenas (%d novas)", n, len(scenes), n + 1)
     return {

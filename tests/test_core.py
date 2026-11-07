@@ -569,3 +569,38 @@ def test_quota_ledger_resets_next_day(tmp_path, monkeypatch):
     monkeypatch.setattr(yt_quota, "_day", lambda: "2099-01-02")
     yt_quota.spend("upload")
     assert yt_quota.used_today() == 1600
+
+
+def test_compilation_numbers_stories_and_closes_each_with_question(monkeypatch):
+    import json as _json
+    from unittest import mock
+
+    from src import script_gen as g
+    from src.config import ChannelConfig
+
+    arch = {
+        1: {"title": "A", "narration": "Primeira frase da historia A. Segunda frase.",
+            "scenes": [{"narration": "Primeira frase da historia A. Segunda frase.", "image_prompt": "x", "stock_query": "y"}]},
+        2: {"title": "B", "narration": "Frase da B. Outra frase da B.",
+            "scenes": [{"narration": "Frase da B. Outra frase da B.", "image_prompt": "x", "stock_query": "y"}]},
+    }
+    facts = {"tipo": "compilacao", "dados": [{"job_id": 1, "titulo": "A"}, {"job_id": 2, "titulo": "B"}]}
+    v = {"image_prompt": "a", "stock_query": "b"}
+    resp = {
+        "title": "Dois casos incriveis", "thumbnail_text": "Dois casos", "thumbnail_image_prompt": "a room",
+        "description": "d", "tags": ["a"], "mood": "neutro",
+        "abertura": {"narration": "Hoje voce vai ver duas historias.", **v},
+        "transicoes": [{"narration": "Comecamos com A, um barco.", **v}, {"narration": "Agora B, uma cidade.", **v}],
+        "perguntas": [{"narration": "O barco volta ao porto. Voce acha justo?", **v},
+                      {"narration": "A cidade segue deserta. Qual te surpreendeu mais?", **v}],
+        "fechamento": {"narration": "Cada uma mostra algo que se repete.", **v},
+    }
+    monkeypatch.setattr("src.script_archive.archived", lambda c, j: arch[j])
+    monkeypatch.setattr(g, "complete", lambda *a, **k: _json.dumps(resp))
+    out = g.compose_compilation(ChannelConfig.load("curiosidades"), facts)
+    texts = [sc["narration"] for sc in out["scenes"]]
+    assert texts[1].startswith("História 1 de 2.")
+    assert texts[4].startswith("História 2 de 2.")
+    assert texts[3].endswith("?")          # fim da história 1: pergunta
+    assert texts[6].endswith("?")          # fim da história 2: pergunta
+    assert texts[2] == arch[1]["narration"]  # narração da história preservada
