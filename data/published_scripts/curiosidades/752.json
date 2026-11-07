@@ -1,0 +1,78 @@
+{
+  "job_id": 752,
+  "video_id": "FqynRJnPfNo",
+  "date": "2026-11-06",
+  "long": false,
+  "title": "Por que Svalbard é considerado um laboratório natural das mudanças climáticas",
+  "narration": "Como pode um território assinado pela Noruega e dez outras nações em 1920 ser o termômetro mais sensível da Terra? Svalbard, a milhas ao norte da Noruega, é um laboratório natural das mudanças climáticas. O Tratado de Svalbard, assinado em Paris em 1920, permite à Noruega regular a exploração e proíbe bases militares. A região norueguesa é alvo de décadas de monitoramento científico intensivo. A corrente do Atlântico Norte aquece Svalbard, mas o fenômeno chamado amplificação polar faz o aquecimento ser três a quatro vezes maior que a média global, segundo estudos climáticos. Em 2024, o Ártico deixou de ser um sumidouro de carbono e virou fonte, impulsionado pelo aumento das temperaturas e incêndios. Esse aquecimento também provocou um forte aumento de relâmpagos no Ártico. Ursos polares em Svalbard, monitorados por décadas, parecem estar aproveitando novas fontes de alimento em um ambiente em rápida transformação. No arquipélago, o Svalbard Global Seed Vault guarda milhares de variedades de sementes, uma arca de esperança contra guerras, desastres naturais, crises climáticas e perdas em bancos genéticos. Então, o que tudo isso revela? Svalbard não é apenas um ponto no mapa; é o laboratório onde o futuro climático do planeta se escreve, pedra por pedra, gelo por gelo.",
+  "scenes": [
+    {
+      "narration": "Como pode um território assinado pela Noruega e dez outras nações em 1920 ser o termômetro mais sensível da Terra? Svalbard, a milhas ao norte da Noruega, é um laboratório natural das mudanças climáticas.",
+      "image_prompt": "panoramic view of Svalbard's icy coastline with distant mountains, cold mist over the sea, ships tiny on the horizon",
+      "stock_query": "Svalbard Arctic coastline aerial",
+      "real_subject": "Svalbard"
+    },
+    {
+      "narration": "O Tratado de Svalbard, assinado em Paris em 1920, permite à Noruega regular a exploração e proíbe bases militares. A região norueguesa é alvo de décadas de monitoramento científico intensivo.",
+      "image_prompt": "historic parchment of the 1920 treaty lying on a wooden table beside a compass and a Norwegian flag, soft lighting",
+      "stock_query": "Treaty of Svalbard document closeup",
+      "real_subject": "Treaty of Svalbard"
+    },
+    {
+      "narration": "A corrente do Atlântico Norte aquece Svalbard, mas o fenômeno chamado amplificação polar faz o aquecimento ser três a quatro vezes maior que a média global, segundo estudos climáticos.",
+      "image_prompt": "satellite view showing temperature gradient from equator to Arctic, bright red over Svalbard, blue elsewhere",
+      "stock_query": "Arctic amplification temperature map",
+      "grafico": {
+        "tipo": "comparacao",
+        "a": 3,
+        "a_rotulo": "Ártico",
+        "b": 1,
+        "b_rotulo": "Média global",
+        "icone": "🌡️"
+      }
+    },
+    {
+      "narration": "Em 2024, o Ártico deixou de ser um sumidouro de carbono e virou fonte, impulsionado pelo aumento das temperaturas e incêndios.",
+      "image_prompt": "smoky Arctic landscape with patches of thawing ground, faint flames emerging, dark clouds overhead",
+      "stock_query": "Arctic permafrost melt fire 2024",
+      "grafico": {
+        "tipo": "mapa",
+        "lugares": [
+          "Arctic"
+        ],
+        "noite": false,
+        "destaques": [
+          {
+            "pais": "Arctic",
+            "cor": "vermelho",
+            "rotulo": "fonte de carbono",
+            "icone": "🔥",
+            "quantidade": 1
+          }
+        ]
+      }
+    },
+    {
+      "narration": "Esse aquecimento também provocou um forte aumento de relâmpagos no Ártico.",
+      "image_prompt": "stormy Arctic sky with bright lightning bolts striking icy sea, dark clouds swirling, reflections on water",
+      "stock_query": "Arctic lightning storm footage"
+    },
+    {
+      "narration": "Ursos polares em Svalbard, monitorados por décadas, parecem estar aproveitando novas fontes de alimento em um ambiente em rápida transformação.",
+      "image_prompt": "polar bear on melting ice edge, thick fur, looking at open water where algae bloom is visible",
+      "stock_query": "polar bear Svalbard research 2023",
+      "real_subject": "Ursus maritimus"
+    },
+    {
+      "narration": "No arquipélago, o Svalbard Global Seed Vault guarda milhares de variedades de sementes, uma arca de esperança contra guerras, desastres naturais, crises climáticas e perdas em bancos genéticos.",
+      "image_prompt": "underground concrete vault entrance with a metallic door, snow-covered hill behind, subtle glow from inside",
+      "stock_query": "Svalbard Global Seed Vault exterior",
+      "real_subject": "Svalbard Global Seed Vault"
+    },
+    {
+      "narration": "Então, o que tudo isso revela? Svalbard não é apenas um ponto no mapa; é o laboratório onde o futuro climático do planeta se escreve, pedra por pedra, gelo por gelo.",
+      "image_prompt": "close-up of ice core sample being extracted, frosted fingers holding the cylinder, lab equipment blurred in background",
+      "stock_query": "ice core extraction laboratory"
+    }
+  ]
+}

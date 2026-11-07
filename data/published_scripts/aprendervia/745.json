@@ -1,0 +1,46 @@
+{
+  "job_id": 745,
+  "video_id": "2_o5hPF_POo",
+  "date": "2026-11-06",
+  "long": false,
+  "title": "Tutor grátis para ENEM com seus PDFs",
+  "narration": "Copie este prompt no NotebookLM e transforme seus PDFs em um tutor particular grátis para ENEM e concursos. O Google libera a ferramenta sem custo, roda no navegador e usa o Gemini para ler só o que você enviar. Acesse notebooklm.google.com com sua conta Google. Faça upload dos seus arquivos: PDFs, Google Docs, Slides e links de sites. Com tudo pronto, peça um cronograma de estudos baseado nos seus materiais. A IA responde usando apenas o conteúdo dos seus documentos. Quer testar seus conhecimentos? Peça questões personalizadas ou provas completas a partir do material. O recurso 'Resumo em Áudio' gera podcasts sobre o material enviado. O Google lançou o NotebookLM Plus, pago, para empresas e assinantes Gemini. A versão gratuita usa o Gemini para interagir com seus documentos. Seus dados, suas regras, seu tutor.",
+  "scenes": [
+    {
+      "narration": "Copie este prompt no NotebookLM e transforme seus PDFs em um tutor particular grátis para ENEM e concursos. O Google libera a ferramenta sem custo, roda no navegador e usa o Gemini para ler só o que você enviar.",
+      "image_prompt": "A laptop screen displaying the NotebookLM homepage with a clean interface, soft window light reflecting on the keyboard, cozy home office atmosphere, photorealistic",
+      "stock_query": "laptop screen clean interface",
+      "real_subject": "NotebookLM"
+    },
+    {
+      "narration": "Acesse notebooklm.google.com com sua conta Google. Faça upload dos seus arquivos: PDFs, Google Docs, Slides e links de sites.",
+      "image_prompt": "Hands dragging PDF files from a desktop folder into a browser window, top-down view, warm lighting, realistic desk setup",
+      "stock_query": "dragging files into browser",
+      "real_subject": "NotebookLM"
+    },
+    {
+      "narration": "Com tudo pronto, peça um cronograma de estudos baseado nos seus materiais. A IA responde usando apenas o conteúdo dos seus documentos.",
+      "image_prompt": "Close-up of a cursor typing a prompt into a chat input box on a laptop screen, shallow depth of field, cinematic lighting",
+      "stock_query": "typing prompt chat interface",
+      "real_subject": "NotebookLM"
+    },
+    {
+      "narration": "Quer testar seus conhecimentos? Peça questões personalizadas ou provas completas a partir do material.",
+      "image_prompt": "A laptop screen showing a generated list of multiple choice questions with highlighted answer keys, over-the-shoulder view, natural light",
+      "stock_query": "multiple choice questions screen",
+      "real_subject": "NotebookLM"
+    },
+    {
+      "narration": "O recurso 'Resumo em Áudio' gera podcasts sobre o material enviado.",
+      "image_prompt": "A smartphone playing an audio file with waveform visualization, resting on a gym bag next to headphones, blurred gym background, photorealistic",
+      "stock_query": "phone playing audio headphones",
+      "real_subject": "NotebookLM"
+    },
+    {
+      "narration": "O Google lançou o NotebookLM Plus, pago, para empresas e assinantes Gemini. A versão gratuita usa o Gemini para interagir com seus documentos. Seus dados, suas regras, seu tutor.",
+      "image_prompt": "A printed checklist on a clipboard with checked boxes, pen resting on top, coffee mug beside it, morning light, top-down flat lay",
+      "stock_query": "checklist clipboard pen coffee",
+      "real_subject": "NotebookLM"
+    }
+  ]
+}

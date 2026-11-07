@@ -150,6 +150,8 @@ topics:
   - "Como usar o Gemini Notebook gratuito da Google para estudar, programar e economizar no celular"
   - "Como o Google Lens transforma tarefas do dia a dia no celular e ajuda a economizar tempo e dinheiro"
   - "Como o ataque cibernético da OpenAI ao Hugging Face pode impactar o acesso gratuito a ferramentas de IA no Brasil?"
+  - "Como usar o Google AI Studio grátis para analisar PDFs gigantes e vídeos longos no celular"
+  - "Como o NotebookLM do Google vira seu tutor particular grátis para o ENEM e concursos usando seus próprios PDFs"
 prompt_base: >
   Escreva um roteiro de tutorial prático no estilo de canais de tecnologia/
   produtividade do YouTube. O ângulo deste canal é PRÁTICO E ACIONÁVEL — o

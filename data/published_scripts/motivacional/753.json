@@ -1,0 +1,107 @@
+{
+  "job_id": 753,
+  "video_id": "RLwMSE6-Fu0",
+  "date": "2026-11-06",
+  "long": false,
+  "title": "Cafu: A insistência após nove \"nãos\" até o penta",
+  "narration": "Nove vezes ele ouviu 'não'. Passou por peneiras e teve portas fechadas. Nove portas se fecharam para o garoto que queria jogar bola. A virada veio da insistência dele em continuar após nove nãos. Ele seguiu trabalhando, mesmo sem ninguém ver. No São Paulo, esteve na seleção do Brasileiro em noventa e dois e noventa e três. A Seleção chamou em noventa e quatro. Fez parte do grupo campeão do tetra. Não parou. Noventa e oito: final da Copa, França. Derrota. Quatro anos depois, capitão em Yokohama. Trinta de junho de dois mil e dois. Ele levantou a taça com as duas mãos, o único a jogar três finais seguidas. Cento e quarenta e dois jogos pela amarelinha. O garoto que ouviu nove 'nãos' chegou lá pela insistência diante das portas fechadas. O 'não' não define você. Define o que você faz depois dele. Na próxima porta fechada, não pergunte por que fecharam. Pergunte: 'O que eu faço hoje para seguir em frente?' A insistência abre o caminho. O 'sim' mora na persistência.",
+  "scenes": [
+    {
+      "narration": "Nove vezes ele ouviu 'não'. Passou por peneiras e teve portas fechadas. Nove portas se fecharam para o garoto que queria jogar bola.",
+      "image_prompt": "A dusty red clay soccer field in a Brazilian suburb at sunset, empty goalposts with torn nets, long shadows stretching across the uneven ground, warm golden hour light, atmospheric perspective",
+      "stock_query": "brazil suburb soccer field sunset",
+      "real_subject": "Itaquaquecetuba",
+      "grafico": {
+        "tipo": "comparacao",
+        "a": 9,
+        "a_rotulo": "Rejeições em peneiras",
+        "b": 1,
+        "b_rotulo": "Objetivo: vestir a camisa",
+        "icone": "⚽"
+      }
+    },
+    {
+      "narration": "A virada veio da insistência dele em continuar após nove nãos. Ele seguiu trabalhando, mesmo sem ninguém ver.",
+      "image_prompt": "A lone silhouette running on a dirt path at early dawn, mist rising from the ground, faint streetlights fading ahead, cool blue pre-dawn atmosphere, sense of solitude and determination",
+      "stock_query": "person running dirt road dawn mist",
+      "real_subject": "Cafu training",
+      "grafico": {
+        "tipo": "mapa",
+        "lugares": [
+          "Brazil"
+        ],
+        "destaques": [
+          {
+            "pais": "Brazil",
+            "cor": "dourado",
+            "rotulo": "Brasil",
+            "icone": "🏃",
+            "quantidade": 1
+          }
+        ],
+        "cidade": "Itaquaquecetuba",
+        "ano": 1983,
+        "ano_rotulo": "Início dos treinos solos"
+      }
+    },
+    {
+      "narration": "No São Paulo, esteve na seleção do Brasileiro em noventa e dois e noventa e três. A Seleção chamou em noventa e quatro. Fez parte do grupo campeão do tetra. Não parou.",
+      "image_prompt": "A football stadium tunnel view from inside, looking out onto a bright green pitch under floodlights, empty stands, dramatic light beams cutting through darkness, perspective of someone about to step onto the field",
+      "stock_query": "stadium tunnel view floodlights",
+      "real_subject": "São Paulo FC",
+      "grafico": {
+        "tipo": "ano",
+        "de": "1992",
+        "ate": "1994",
+        "rotulo": "Títulos e convocação"
+      }
+    },
+    {
+      "narration": "Noventa e oito: final da Copa, França. Derrota. Quatro anos depois, capitão em Yokohama. Trinta de junho de dois mil e dois. Ele levantou a taça com as duas mãos, o único a jogar três finais seguidas. Cento e quarenta e dois jogos pela amarelinha.",
+      "image_prompt": "A captain's armband with the Brazilian flag colors, worn on a sleeve, resting on a polished wooden trophy case shelf next to a golden World Cup replica trophy, soft museum lighting, close-up detail texture",
+      "stock_query": "captain armband brazil trophy case",
+      "real_subject": "2002 FIFA World Cup Final",
+      "grafico": {
+        "tipo": "comparacao",
+        "a": 3,
+        "a_rotulo": "Finais de Copa disputadas",
+        "b": 142,
+        "b_rotulo": "Jogos pela Seleção",
+        "icone": "🏆"
+      }
+    },
+    {
+      "narration": "O garoto que ouviu nove 'nãos' chegou lá pela insistência diante das portas fechadas.",
+      "image_prompt": "A weathered leather soccer ball on a wooden shelf, surrounded by framed jerseys in red, black, and yellow colors, golden medals catching the light, dust motes dancing in a sunbeam, legacy atmosphere",
+      "stock_query": "soccer trophies medals display shelf",
+      "real_subject": "AS Roma",
+      "grafico": {
+        "tipo": "mapa",
+        "lugares": [
+          "Italy"
+        ],
+        "destaques": [
+          {
+            "pais": "Italy",
+            "cor": "vermelho",
+            "rotulo": "Itália",
+            "icone": "🏟️",
+            "quantidade": 2
+          }
+        ],
+        "cidade": "Rome",
+        "ano_rotulo": "Carreira europeia"
+      }
+    },
+    {
+      "narration": "O 'não' não define você. Define o que você faz depois dele. Na próxima porta fechada, não pergunte por que fecharam. Pergunte: 'O que eu faço hoje para seguir em frente?' A insistência abre o caminho. O 'sim' mora na persistência.",
+      "image_prompt": "An open wooden door at the end of a long dark corridor, bright warm light pouring through onto the floor, inviting path forward, cinematic composition, symbol of opportunity and new beginning",
+      "stock_query": "open door light corridor opportunity",
+      "grafico": {
+        "tipo": "numero",
+        "valor": "10º",
+        "rotulo": "A tentativa que muda tudo"
+      }
+    }
+  ]
+}

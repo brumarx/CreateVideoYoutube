@@ -1,0 +1,79 @@
+{
+  "job_id": 749,
+  "video_id": "C20pwc_8F1s",
+  "date": "2026-11-06",
+  "long": false,
+  "title": "Edenílson marca, Tite respira e Danilo vira dúvida",
+  "narration": "Cinco notícias agitam o Botafogo hoje: Edenílson marca e desabafa sobre o medo do rebaixamento, Tite ganha moral após vitória suada, Gabriel Batista exalta a torcida, Ferraresi desfalca o time contra o Corinthians e Danilo vira grande interrogação com lesão na coxa. Primeira notícia: Edenílson faz o gol da vitória por um a zero sobre o Atlético Mineiro na 34ª rodada e revela tensão forte no vestiário. O volante de 36 anos admite dificuldade de blindar o grupo contra a pressão da zona de descenso e pede aproveitamento da pausa para evoluir. Segunda notícia: Tite alivia a pressão interna após o triunfo no Nilton Santos. Em sete jogos no comando, são duas vitórias, um empate e quatro derrotas. A diretoria blinda o treinador e entende que a experiência dele mudou a postura do time na reta final do Brasileiro. Terceira notícia: Gabriel Batista, titular no gol, passa em branco contra o Atlético e multiplica agradecimentos. Ele chama os três pontos de fundamentais para as pretensões do campeonato e destaca o apoio da torcida durante os noventa minutos no estádio. Quarta notícia: Danilo acumula ausências em 2026 entre convocações, afastamento e lesões. Foram 39 de 58 jogos disputados. Agora, lesão na coxa o tira da Seleção e o coloca como dúvida para o duelo de dia 18 na Neo Química Arena. Última notícia: Ferraresi está fora do jogo contra o Corinthians no dia 18 por defender a Venezuela. Monzón deve assumir a zaga. O departamento médico corre contra o tempo para tentar recuperar Danilo. A vitória sobre o Timão pode decretar a salvação matemática do Glorioso.",
+  "scenes": [
+    {
+      "narration": "Cinco notícias agitam o Botafogo hoje: Edenílson marca e desabafa sobre o medo do rebaixamento, Tite ganha moral após vitória suada, Gabriel Batista exalta a torcida, Ferraresi desfalca o time contra o Corinthians e Danilo vira grande interrogação com lesão na coxa.",
+      "image_prompt": "Empty press conference room with microphones on a long table, Botafogo crest projected on a screen behind, soft overhead lighting, quiet atmosphere, 8k realism",
+      "stock_query": "press conference room microphones table"
+    },
+    {
+      "narration": "Primeira notícia: Edenílson faz o gol da vitória por um a zero sobre o Atlético Mineiro na 34ª rodada e revela tensão forte no vestiário. O volante de 36 anos admite dificuldade de blindar o grupo contra a pressão da zona de descenso e pede aproveitamento da pausa para evoluir.",
+      "image_prompt": "Night football stadium stands packed with fans wearing black and white, waving flags, dramatic floodlights cutting through mist, intense atmosphere, wide angle, 8k",
+      "stock_query": "football stadium night fans black white flags",
+      "grafico": {
+        "tipo": "numero",
+        "valor": "1 a 0",
+        "rotulo": "Placar da vitória na 34ª rodada"
+      }
+    },
+    {
+      "narration": "Segunda notícia: Tite alivia a pressão interna após o triunfo no Nilton Santos. Em sete jogos no comando, são duas vitórias, um empate e quatro derrotas. A diretoria blinda o treinador e entende que a experiência dele mudou a postura do time na reta final do Brasileiro.",
+      "image_prompt": "Tactical board with hand-drawn formations and arrows, coach marker pens beside it, subtle club colors in background, focused top-down lighting, 8k detail",
+      "stock_query": "tactical board football formations coach pens",
+      "grafico": {
+        "tipo": "comparacao",
+        "a": 2,
+        "a_rotulo": "Vitórias",
+        "b": 4,
+        "b_rotulo": "Derrotas",
+        "icone": "⚽"
+      }
+    },
+    {
+      "narration": "Terceira notícia: Gabriel Batista, titular no gol, passa em branco contra o Atlético e multiplica agradecimentos. Ele chama os três pontos de fundamentais para as pretensões do campeonato e destaca o apoio da torcida durante os noventa minutos no estádio.",
+      "image_prompt": "Goalkeeper gloves resting on a grass pitch near the goal line, net visible behind, morning dew on the grass, soft natural light, close-up texture, 8k",
+      "stock_query": "goalkeeper gloves grass pitch goal net"
+    },
+    {
+      "narration": "Quarta notícia: Danilo acumula ausências em 2026 entre convocações, afastamento e lesões. Foram 39 de 58 jogos disputados. Agora, lesão na coxa o tira da Seleção e o coloca como dúvida para o duelo de dia 18 na Neo Química Arena.",
+      "image_prompt": "Medical treatment table with ultrasound device and elastic bandages, club medical staff jersey hanging nearby, clinical lighting, sterile atmosphere, 8k realism",
+      "stock_query": "physiotherapy table ultrasound bandages medical",
+      "grafico": {
+        "tipo": "comparacao",
+        "a": 39,
+        "a_rotulo": "Jogos disputados",
+        "b": 58,
+        "b_rotulo": "Total no ano",
+        "icone": "📅"
+      }
+    },
+    {
+      "narration": "Última notícia: Ferraresi está fora do jogo contra o Corinthians no dia 18 por defender a Venezuela. Monzón deve assumir a zaga. O departamento médico corre contra o tempo para tentar recuperar Danilo. A vitória sobre o Timão pode decretar a salvação matemática do Glorioso.",
+      "image_prompt": "Airplane wing through window flying over São Paulo cityscape at dusk, Neo Química Arena visible in distance, golden hour lighting, travel mood, 8k cinematic",
+      "stock_query": "airplane wing window city stadium dusk",
+      "grafico": {
+        "tipo": "mapa",
+        "lugares": [
+          "Brazil"
+        ],
+        "cidade": "São Paulo",
+        "destaques": [
+          {
+            "pais": "Brazil",
+            "cor": "vermelho",
+            "rotulo": "Brasil",
+            "icone": "⚽",
+            "quantidade": 1
+          }
+        ],
+        "ano": 2026,
+        "ano_rotulo": "Rodada 35"
+      }
+    }
+  ]
+}
