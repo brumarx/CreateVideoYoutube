@@ -28,6 +28,7 @@ import sqlite3
 import subprocess
 import sys
 from contextlib import closing
+from datetime import date
 from pathlib import Path
 
 import yaml
