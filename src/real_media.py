@@ -141,6 +141,12 @@ def _commons_files(params: dict, kind: str) -> list[dict]:
     return [c for p in pages if (c := _candidate(p, kind))]
 
 
+def _fold_name(text: str) -> str:
+    import unicodedata
+
+    return " ".join("".join(c for c in unicodedata.normalize("NFKD", text.lower()) if not unicodedata.combining(c)).split())
+
+
 def _lead_image(subject: str) -> list[dict]:
     """Foto principal do verbete em inglês — se estiver no Commons."""
     try:
@@ -152,7 +158,13 @@ def _lead_image(subject: str) -> list[dict]:
         })
         page = next(iter(data["query"]["pages"].values()))
         name = page.get("pageimage")
+        title = page.get("title", "")
     except Exception:  # noqa: BLE001
+        return []
+    # identidade: a busca pode trazer o verbete de OUTRA pessoa de mesmo nome
+    # (ou um verbete que só cita o assunto). Só vale se o título é o próprio
+    # assunto (sem acento, sem maiúscula) — "Simone Biles" sim, "Gleisi (desambig.)" não
+    if _fold_name(title) != _fold_name(subject):
         return []
     if not name or not name.lower().endswith((".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp")):
         return []
@@ -200,6 +212,9 @@ def person_in_narration(text: str) -> str | None:
                 continue
             if 2 <= len(run) <= 3:
                 return " ".join(run)
+            if len(run) == 1 and len(run[0]) >= 5 and not sentence.startswith(run[0]):
+                # nome único no meio da frase ("...com Neymar no Santos"): entra
+                return run[0]
             run = []
     return None
 

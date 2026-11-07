@@ -497,3 +497,22 @@ def test_person_name_found_for_photo_search():
     assert person_in_narration("Em 2018, Nadia Murad recebeu o Nobel da Paz.") == "Nadia Murad"
     assert person_in_narration("Gleisi Hoffmann, do PT, falou.") == "Gleisi Hoffmann"
     assert person_in_narration("O Congresso aprovou a lei.") is None
+
+
+def test_lead_image_requires_exact_person_page(monkeypatch):
+    from src import real_media
+
+    class FakeWiki:
+        pass
+
+    def fake_get_json(url, params):
+        return {"query": {"pages": {"1": {"title": "Outra Pessoa", "pageimage": "Foto.jpg"}}}}
+
+    monkeypatch.setattr("src.wiki_cache.get_json", fake_get_json)
+    assert real_media._lead_image("Simone Biles") == []  # verbete de outra pessoa: não serve
+
+
+def test_single_name_mid_sentence_is_found():
+    from src.real_media import person_in_narration
+
+    assert person_in_narration("Ele começou jogando com Neymar no Santos.") == "Neymar"
