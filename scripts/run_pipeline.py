@@ -1449,7 +1449,9 @@ def run(
                                 if src in ("noticia", "repetida", "jogador")
                                 or (src == "arquivo" and i < len(script["scenes"]) and _archive_is_cited_person(script["scenes"][i], topic))},
                 # mapas da mesma região se parecem de propósito (mesmo mundo visual)
-                designed_scenes={i + 1 for i, src in enumerate(scene_sources) if src == "grafico"},
+                # cenas desenhadas por nós (gráfico e cartão de notícia, texto sobre fundo escuro):
+            # não são imagem de IA/banco, então não entram na checagem de "mesma imagem" (749: falso positivo)
+            designed_scenes={i + 1 for i, src in enumerate(scene_sources) if src in ("grafico", "noticia")},
             )
             bad = [int(m.group(1)) - 1 for p in qa_problems if (m := re.match(r"cena (\d+) fora de contexto", p))]
             if not bad or len(bad) != len(qa_problems) or visual_round == VISUAL_FIX_ROUNDS:
