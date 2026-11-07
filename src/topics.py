@@ -30,6 +30,8 @@ import random
 import re
 from pathlib import Path
 
+from . import idea_sources
+from .idea_sources import IDEA_SHARE
 from .providers import complete
 from .script_gen import current_date_rule
 from .web_search import search_topic_facts
@@ -407,10 +409,16 @@ def pick_topic(
     used_set = set(used)
 
     unused = [t for t in pool if t not in used_set and not repeats_subject(t, used)]
+    all_ideas = idea_sources.load_ideas(channel_name)
+    ideas = [t for t in all_ideas if t not in used_set and not repeats_subject(t, used)]
     # série em teste (channel.active_priority_topics): na ordem, antes de tudo
     topic = next((t for t in priority or [] if t not in used_set), None)
     if topic is not None:
         log.info("[%s] tema da série em teste: %s", channel_name, topic)
+    elif ideas and (not unused or random.random() < IDEA_SHARE):
+        # pool de ideias (projetos do GitHub + listas de projetos): ver src/idea_sources.py
+        topic = random.choice(ideas)
+        log.info("[%s] tema do pool de ideias: %s", channel_name, topic)
     elif viral_queries and (not unused or random.random() < viral_share):
         topic = _try_viral_topic(channel_name, niche, viral_queries, used)
     if topic is None and unused:
@@ -418,7 +426,7 @@ def pick_topic(
     elif topic is None:
         log.info("[%s] lista fixa de temas esgotada — pedindo tema novo ao LLM", channel_name)
         topic = _generate_new_topic(niche, used)
-    if topic not in pool and topic not in (priority or []):
+    if topic not in pool and topic not in all_ideas and topic not in (priority or []):
         # tema viral ou gerado na hora: grava no yaml pra aparecer no painel
         # (o da série já aparece no bloco `prioridade`)
         _append_topic_to_yaml(channel_name, topic)
