@@ -28,6 +28,7 @@ tudo) e a visão olha cada trecho.
 from __future__ import annotations
 
 import html
+import json
 import logging
 import re
 import subprocess
@@ -279,26 +280,103 @@ def _duration(url: str, timeout: float = 60) -> float:
         return 0.0
 
 
+# A Wikimedia pede um User-Agent identificável; o padrão do ffmpeg é recusado
+# em rajada (74 falhas "exit status 8" entre 20/10 e 07/11, sem o motivo no log)
+_FFMPEG_UA = "youtube-pipeline/1.0 (video de fundo; contato pelo repositorio do canal)"
+
+
+# Vídeo de origem: baixado UMA vez e cortado do disco. Antes o ffmpeg cortava
+# direto da URL, e cada -ss virava dezenas de pedidos de faixa à Wikimedia
+# (429 em rajada). O cache de consultas (wiki_cache) não cobria isso.
+MEDIA_CACHE = Path(__file__).resolve().parent.parent / "data" / "cache" / "media"
+MEDIA_MAX_MB = 100
+_media_last = 0.0
+
+
+MEDIA_BLOCK_FILE = MEDIA_CACHE.parent / "media_block.json"
+
+
+def _block_until() -> float:
+    try:
+        return float(json.loads(MEDIA_BLOCK_FILE.read_text())["until"])
+    except (OSError, ValueError, KeyError):
+        return 0.0
+
+
+def _set_block(seconds: int) -> None:
+    MEDIA_BLOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    MEDIA_BLOCK_FILE.write_text(json.dumps({"until": time.time() + seconds}))
+
+
+def _fetch_media(url: str) -> Path | None:
+    """Caminho local do arquivo de vídeo (baixa só se não estiver no cache)."""
+    global _media_last
+    import hashlib
+
+    import httpx
+
+    MEDIA_CACHE.mkdir(parents=True, exist_ok=True)
+    path = MEDIA_CACHE / (hashlib.sha1(url.encode()).hexdigest() + ".bin")
+    if path.exists() and path.stat().st_size > 0:
+        path.touch()  # uso recente: a limpeza não apaga
+        return path
+    if time.time() < _block_until():
+        log.info("Wikimedia em espera (429): vídeo %s não baixado agora", url[-50:])
+        return None
+    for attempt in range(3):
+        wait = 1.0 - (time.monotonic() - _media_last)
+        if wait > 0:
+            time.sleep(wait)  # pausa mínima entre pedidos à Wikimedia
+        _media_last = time.monotonic()
+        try:
+            with httpx.stream("GET", url, headers={"User-Agent": _FFMPEG_UA}, follow_redirects=True, timeout=180) as r:
+                if r.status_code == 429:
+                    # respeita o Retry-After da Wikimedia (ex.: 600s): insistir só piora o bloqueio
+                    wait = int(r.headers.get("retry-after") or 600)
+                    _set_block(wait)
+                    log.warning("Wikimedia 429: pausa de vídeos por %ds", wait)
+                    return None
+                r.raise_for_status()
+                size = int(r.headers.get("content-length") or 0)
+                if size > MEDIA_MAX_MB * 1024 * 1024:
+                    log.info("vídeo grande demais pro cache (%d MB): %s", size // 1048576, url[-60:])
+                    return None
+                tmp = path.with_suffix(".part")
+                with tmp.open("wb") as f:
+                    for chunk in r.iter_bytes(1 << 20):
+                        f.write(chunk)
+                tmp.replace(path)
+                return path
+        except Exception as exc:  # noqa: BLE001
+            log.warning("download do vídeo falhou (%s): %s", url[-60:], str(exc)[:160])
+    return None
+
+
 def _segment(url: str, start: float, timeout: float = 180) -> Path | None:
     """~20s a partir de `start`, sem áudio, direto da URL (o filme inteiro
-    pode ter centenas de MB). mkv aceita qualquer codec (webm/ogv/mp4)."""
-    tmp = tempfile.NamedTemporaryFile(suffix=".mkv", delete=False)
-    tmp.close()
-    path = Path(tmp.name)
-    try:
-        subprocess.run(
-            ["ffmpeg", "-v", "error", "-y", "-ss", f"{start:.1f}", "-i", url, "-t", str(SEGMENT_SECONDS),
-             "-an", "-c:v", "copy", str(path)],
-            capture_output=True, timeout=max(timeout, 5), check=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        log.warning("corte do vídeo falhou (%s): %s", url[-60:], exc)
+    pode ter centenas de MB). mkv aceita qualquer codec (webm/ogv/mp4).
+    Até 3 tentativas com espera (o erro real era HTTP 429 da Wikimedia) e o stderr
+    do ffmpeg vai pro log, pra saber o motivo da próxima falha."""
+    cmd = ["ffmpeg", "-v", "error", "-y", "-user_agent", _FFMPEG_UA, "-ss", f"{start:.1f}", "-i", url,
+           "-t", str(SEGMENT_SECONDS), "-an", "-c:v", "copy"]
+    last_err = ""
+    for attempt in range(3):
+        tmp = tempfile.NamedTemporaryFile(suffix=".mkv", delete=False)
+        tmp.close()
+        path = Path(tmp.name)
+        try:
+            proc = subprocess.run(cmd + [str(path)], capture_output=True, timeout=max(timeout, 5), text=True)
+            if proc.returncode == 0 and path.stat().st_size >= 50_000:
+                return path
+            last_err = (proc.stderr or f"exit {proc.returncode}").strip()[-300:]
+        except Exception as exc:  # noqa: BLE001
+            last_err = str(exc)[-300:]
         path.unlink(missing_ok=True)
-        return None
-    if path.stat().st_size < 50_000:
-        path.unlink(missing_ok=True)
-        return None
-    return path
+        if attempt < 2:
+            # 429 da Wikimedia (muitas requisições em rajada): espera crescente
+            time.sleep(10 * (attempt + 1))
+    log.warning("corte do vídeo falhou (%s): %s", url[-60:], last_err)
+    return None
 
 
 def _clip_candidates(subject: str) -> list[dict]:
@@ -330,6 +408,10 @@ def real_clip(subject: str, used: set[str], check: Callable[[bytes], bool | None
             url = cand["url"]
         if not url:
             continue
+        local = _fetch_media(url)
+        if local is None:
+            continue
+        url = str(local)  # daqui pra frente o corte é local: zero pedido à Wikimedia
         dur = _duration(url, deadline - time.monotonic())
         if dur < MIN_CLIP_SECONDS:
             continue

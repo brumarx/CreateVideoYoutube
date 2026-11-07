@@ -100,6 +100,24 @@ def clean_output(apply: bool, now: float) -> dict:
     return {"freed": freed, "actions": actions}
 
 
+MEDIA_CACHE = ROOT / "data" / "cache" / "media"
+MEDIA_CACHE_DAYS = 7
+
+
+def clean_media_cache(apply: bool, now: float) -> dict:
+    """Vídeos de origem baixados pro cache (real_media): sem uso há 7 dias saem.
+    Cada uso atualiza a data, então o que está em uso recente fica."""
+    freed, actions = 0, []
+    for path in MEDIA_CACHE.glob("*.bin") if MEDIA_CACHE.exists() else []:
+        if _age_days(path, now) > MEDIA_CACHE_DAYS:
+            size = path.stat().st_size
+            freed += size
+            actions.append(("cache de mídia sem uso", path.name, size))
+            if apply:
+                path.unlink()
+    return {"freed": freed, "actions": actions}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true", help="apaga de verdade (sem isso, só simula)")
@@ -108,6 +126,9 @@ def main() -> None:
     now = time.time()
     logs = clean_logs(args.apply, now)
     out = clean_output(args.apply, now)
+    media = clean_media_cache(args.apply, now)
+    out["freed"] += media["freed"]
+    out["actions"] += media["actions"]
     total = logs["freed"] + out["freed"]
     report = {
         "run_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
