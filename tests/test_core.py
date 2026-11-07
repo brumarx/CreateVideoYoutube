@@ -421,3 +421,27 @@ def test_same_visual_recompressed_and_zoomed_still_grouped():
     rec = Image.open(io.BytesIO(buf.getvalue())).convert("RGB")
     zoom = base.crop((24, 43, 456, 811)).resize((480, 854))
     assert video_qa.same_visual_share([base, rec, zoom]) == (3, 3)
+
+
+def test_description_fits_youtube_limit_keeping_start():
+    from src.youtube_text import YOUTUBE_DESCRIPTION_LIMIT, fit_description
+
+    head = "Descubra oito histórias.\n" * 100
+    sources = "\n\nFontes consultadas:\n" + "\n".join(f"- fonte {i}: https://exemplo.com/" + "x" * 120 for i in range(30))
+    out = fit_description(head + sources)
+    assert len(out) <= YOUTUBE_DESCRIPTION_LIMIT
+    assert out.startswith("Descubra oito histórias.")
+    assert "- fonte 0:" in out  # cabe pelo menos o início das fontes
+
+
+def test_description_without_sources_is_hard_cut_on_line():
+    from src.youtube_text import YOUTUBE_DESCRIPTION_LIMIT, fit_description
+
+    out = fit_description("linha\n" * 2000)
+    assert len(out) <= YOUTUBE_DESCRIPTION_LIMIT and out.endswith("linha")
+
+
+def test_short_description_untouched():
+    from src.youtube_text import fit_description
+
+    assert fit_description("curta") == "curta"

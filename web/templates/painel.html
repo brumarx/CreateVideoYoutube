@@ -267,6 +267,11 @@
           <span class="tag {{ p.status }}">{{ {'failed': 'falhou', 'abandoned': 'abandonado', 'retried': 'refeito'}.get(p.status, p.status) }}</span></div>
         <div class="topic">{{ p.topic }}</div>
         <div class="why clip" title="toque pra ver tudo">{{ p.error or "sem mensagem de erro registrada" }}</div>
+        {% if p.status in ('failed', 'ready') %}
+        <form method="post" action="{{ url_for('retry_job', job_id=p.id) }}" style="margin-top:8px">
+          <button type="submit">Reenviar</button>
+        </form>
+        {% endif %}
       </div>
       {% else %}
       <p class="hint">Nenhuma falha registrada.</p>

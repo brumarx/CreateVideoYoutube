@@ -476,9 +476,12 @@ def index():
         "saved": "Configuração salva.", "topic_added": "Fila de temas atualizada.",
         "approved": "Vídeo publicado.", "busy": "Já tem um vídeo sendo gerado. Espere ele terminar pra rodar outro.",
         "started": "Vídeo começou a ser gerado. Leva uns 20 minutos.",
+        "retry_ok": "Vídeo reenviado.",
     }
     flash = next((msg for key, msg in flashes.items() if request.args.get(key) == "1"), None)
-    if request.args.get("topic_error"):
+    if request.args.get("retry_error"):
+        flash = f"Não consegui reenviar: {request.args['retry_error']}"
+    elif request.args.get("topic_error"):
         flash = f"Tema recusado: {request.args['topic_error']}"
     elif request.args.get("approve_error"):
         flash = f"Não consegui publicar: {request.args['approve_error']}"
@@ -807,6 +810,24 @@ def delete_topic(channel: str):
         return redirect(url_for("index"))
     path.write_text(updated)
     return redirect(url_for("index", topic_added=1))
+
+
+@app.route("/retry/<int:job_id>", methods=["POST"])
+def retry_job(job_id: int):
+    """Reenvia o vídeo de um job que falhou no upload (ou que ficou só renderizado)."""
+    job = get_job(job_id)
+    if not job or job.status not in ("failed", "ready"):
+        return redirect(url_for("index", retry_error="este job não está parado no upload"))
+    subprocess.run(
+        [str(ROOT / ".venv" / "bin" / "python"), str(ROOT / "scripts" / "retry_uploads.py"),
+         "--status", job.status, "--job", str(job_id)],
+        cwd=str(ROOT), timeout=900, capture_output=True,
+    )
+    job = get_job(job_id)
+    if job and job.status in ("uploaded", "awaiting_approval"):
+        return redirect(url_for("index", retry_ok=1))
+    msg = (job.error or "reenvio não concluiu") if job else "job sumiu"
+    return redirect(url_for("index", retry_error=msg[:200]))
 
 
 @app.route("/approve/<int:job_id>", methods=["POST"])
