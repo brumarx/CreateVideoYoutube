@@ -995,11 +995,17 @@ def run(
         # duração REAL da narração, não do que foi pedido ao roteiro
         # nome estrangeiro com a tônica marcada só pra voz ("Pavlopétri");
         # a legenda volta pra grafia original (src/tts.py)
-        pronunciations = {
+        # dicionário do CANAL (channels/<nome>.yaml -> pronuncia) + o do roteiro;
+        # o do roteiro ganha quando os dois dizem a mesma coisa. Antes o dicionário
+        # do canal era lido e nunca usado.
+        from_script = {
             k: v for k, v in (script.get("pronuncia") or {}).items()
+        } if isinstance(script.get("pronuncia"), dict) else {}
+        pronunciations = {
+            k: v for k, v in {**channel.pronunciations, **from_script}.items()
             if isinstance(k, str) and isinstance(v, str) and 2 < len(k) <= 40 and 0 < len(v) <= 50
             and k.lower() != v.lower()
-        } if isinstance(script.get("pronuncia"), dict) else {}
+        }
         foreign: dict[str, str] = {}
         if channel.native_foreign:
             foreign, pronunciations = _foreign_terms(script, pronunciations)
