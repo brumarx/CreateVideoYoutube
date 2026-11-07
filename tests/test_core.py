@@ -227,3 +227,14 @@ def test_domain_is_not_repeated_word():
     from src.fact_check import broken_sentences
 
     assert broken_sentences(_scene("Acesse notebooklm.google.com com sua conta Google.")) == []
+
+
+def test_title_limit_is_60_chars():
+    # título acima de 60 caracteres rende menos (dados de 07/11): reprova
+    from src.script_gen import _packaging_ok
+
+    ok = {"titulo": "Baleia Rossi: R$ 377 mil de cota em 2025", "thumbnail_text": "R$ 377 mil"}
+    longo = {"titulo": "Baleia Rossi gastou R$ 377 mil da cota parlamentar em 2025 e isso é muito", "thumbnail_text": "R$ 377 mil"}
+    allowed = {"baleia", "rossi", "377", "mil", "2025", "cota"}
+    assert _packaging_ok(ok, allowed)
+    assert not _packaging_ok(longo, allowed)

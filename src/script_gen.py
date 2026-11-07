@@ -314,7 +314,7 @@ Número de cenas: {n_scenes}
 {facts_block}{web_facts_block}
 Gere um JSON com exatamente este formato:
 {{
-  "title": "título chamativo, até 100 caracteres",
+  "title": "título chamativo, até 60 caracteres (título curto rende mais)",
   "thumbnail_text": "gancho CURTÍSSIMO pra thumbnail, no máximo 4 palavras, em português correto (concordância certa, nenhuma palavra em inglês — saiu \"DOR É FUEL\" e \"A ÁLCOOL VERDADE\"), tipo manchete de banca de jornal — não é o título, é a frase que faz alguém parar de rolar o feed",
 {pronunciation_fields}  "thumbnail_image_prompt": "prompt em inglês pro momento MAIS marcante da história (não precisa ser a cena 1) — close-up, alto contraste, cor vibrante, um único foco. Se a história tem protagonista REAL (pessoa com nome, mesmo que o nome não esteja no prompt): NUNCA close no rosto, nem genérico ('a determined man') — o contexto entrega quem é e a IA erra o rosto; use mãos/objeto pessoal (crachá, número de peito, caneta), silhueta de costas ou símbolo/cenário. Se o personagem é fictício/genérico: rosto com emoção EXAGERADA (chocado, olhos arregalados) — o que mais gera clique. Sem pessoa: objeto/cenário de contraste forte que gere uma pergunta. SEM texto, palavras, logos, botões ou UI",
   "description": "descrição para o YouTube, 2-3 parágrafos, com contexto e call-to-action",
@@ -972,7 +972,7 @@ def compose_compilation(channel: ChannelConfig, facts: dict, revision_feedback: 
         if _fact_tokens(new_text) - allowed:
             return None
         title, thumb = str(data.get("title") or ""), str(data.get("thumbnail_text") or "")
-        if not (8 <= len(title) <= 70 and 0 < len(thumb.split()) <= 5):
+        if not (8 <= len(title) <= 60 and 0 < len(thumb.split()) <= 5):
             return None
         # título leva o número de histórias; palavra em Title Case ("Histórias
         # Reais") só reprova se não for palavra comum do português
@@ -1310,7 +1310,7 @@ _TITLE_RULE_RE = re.compile(r"T[IÍ]TULO:(.*?)(?:\n\s*\n|$)", re.DOTALL)
 def _packaging_ok(data: dict, allowed: set[str]) -> bool:
     title, thumb = str(data.get("titulo") or "").strip(), str(data.get("thumbnail_text") or "").strip()
     return (
-        8 <= len(title) <= 70 and 0 < len(thumb.split()) <= 5
+        8 <= len(title) <= 60 and 0 < len(thumb.split()) <= 5
         and not (_fact_tokens(title) | _fact_tokens(thumb)) - allowed
     )
 
@@ -1355,7 +1355,7 @@ def refresh_packaging(script: dict, channel: ChannelConfig, topic: str = "", ext
     except RuntimeError as exc:
         # troca só o que cita o que saiu: título vira o tema, thumb sem texto
         log.warning("título/thumb: nenhum provedor respondeu (%s) — trocando só %s", exc, ", ".join(stale))
-        fallback = {"title": (topic or script.get("title", ""))[:70], "thumbnail_text": None}
+        fallback = {"title": (topic or script.get("title", ""))[:60], "thumbnail_text": None}
         return {**script, **{k: fallback[k] for k in stale}}
 
 
