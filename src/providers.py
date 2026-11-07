@@ -9,9 +9,11 @@ no processo.
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 import time
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
@@ -183,22 +185,60 @@ def _fetch_gemini_models(api_key: str) -> list[str]:
     return models
 
 
+HEALTH_FILE = Path(__file__).resolve().parent.parent / "data" / "provider_health.json"
+
+
+def _key_id(key: str) -> str:
+    """Identificador da chave pro arquivo de saúde: hash, nunca a chave em si."""
+    import hashlib
+
+    return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+def _health_load() -> dict:
+    try:
+        return json.loads(HEALTH_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _health_update(key: str, **fields) -> None:
+    """Grava o estado de uma chave no disco (compartilhado entre processos)."""
+    import fcntl
+
+    HEALTH_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with HEALTH_FILE.open("a+") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        fh.seek(0)
+        raw = fh.read()
+        data = json.loads(raw) if raw.strip() else {}
+        data.setdefault(_key_id(key), {}).update(fields)
+        fh.seek(0)
+        fh.truncate()
+        fh.write(json.dumps(data, ensure_ascii=False))
+
+
 class KeyRotator:
     """Rodízio de chaves por provedor: cada chamada começa por uma chave
-    diferente (round-robin) e bane chaves com erro de auth/permissão
-    (401/403) pelo resto do processo — as demais continuam disponíveis.
-    Chave com 429 de cota entra em descanso para não ser tentada de novo a
-    cada chamada (TPD: até a virada do dia UTC; TPM: ~1 min).
-    """
+    diferente (round-robin). Chave com erro de auth/permissão (401/402/403)
+    fica banida, e chave com 429 de cota descansa até o prazo. O estado vai
+    pra data/provider_health.json: um job novo não repete a chave morta que o
+    anterior já descobriu (antes, cada execução começava do zero)."""
 
     def __init__(self, keys: list[str]):
         self._keys = list(keys)
-        self._banned: set[str] = set()
-        self._resting: dict[str, float] = {}
         self._next = 0
+        saved = _health_load()
+        self._banned = {k for k in self._keys if saved.get(_key_id(k), {}).get("banned")}
+        self._resting = {}
+        now = time.time()
+        for k in self._keys:
+            until = float(saved.get(_key_id(k), {}).get("until", 0) or 0)
+            if until > now:
+                self._resting[k] = until
 
     def order(self) -> list[str]:
-        now = time.monotonic()
+        now = time.time()
         active = [
             k for k in self._keys
             if k not in self._banned and self._resting.get(k, 0.0) <= now
@@ -211,11 +251,14 @@ class KeyRotator:
 
     def ban(self, key: str) -> None:
         self._banned.add(key)
+        _health_update(key, banned=True, reason="auth/permissão ou pagamento")
         log.warning("chave banida por erro de auth/permissão (…%s)", key[-4:])
 
     def rest(self, key: str, seconds: float) -> None:
         if seconds > 0:
-            self._resting[key] = time.monotonic() + seconds
+            until = time.time() + seconds
+            self._resting[key] = until
+            _health_update(key, until=until)
             log.warning("chave em descanso por %.0fs (cota, …%s)", seconds, key[-4:])
 
 
