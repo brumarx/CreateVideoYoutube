@@ -479,7 +479,7 @@ def test_name_mispronounced_is_flagged_but_correct_name_is_not():
     from src.video_qa import name_problems
 
     assert name_problems(["O Textor investiu no Botafogo."], "O Tech Store investiu no Botafogo.")
-    assert name_problems(["Svalbard fica no Ártico."], "Esvalbard fica no Ártico.")
+    assert name_problems(["O arquipélago de Svalbard fica no Ártico."], "O arquipélago de Esvalbard fica no Ártico.")
     assert name_problems(["O arquipélago de Svalbard está no Ártico."], "o arquipélago de svalbard está no ártico") == []
 
 
