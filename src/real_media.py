@@ -176,6 +176,34 @@ def _search(subject: str, kind: str) -> list[dict]:
     return _search_cache[key]
 
 
+_PERSON_STOP = {
+    "Fala", "Você", "Hoje", "Mas", "Quando", "Como", "Qual", "Quanto", "Ainda", "Agora", "Então", "Porque",
+    "Brasil", "Primeira", "Segunda", "Terceira", "Última", "Veja", "Imagine", "Esse", "Essa", "Isso", "Aqui",
+    "Pois", "Além", "Assim", "Depois", "Antes", "Também", "Nesse", "Nessa", "Neste", "Nesta", "Ele", "Ela",
+    "Eles", "Elas", "Em", "No", "Na", "Os", "As", "Um", "Uma", "Mais", "Menos", "Todo", "Toda", "Cada",
+    "Governo", "Congresso", "Senado", "Câmara", "Supremo", "Tribunal", "Federal", "Estado", "Portal",
+    "Transparência", "Reais", "Real", "Ano", "Mês", "Dia", "Segundo", "Nosso", "Nossa", "Seu", "Sua",
+}
+
+
+def person_in_narration(text: str) -> str | None:
+    """Nome de pessoa citado na narração ("Gleisi Hoffmann", "Simone Biles"):
+    a primeira sequência de 2 ou 3 palavras com maiúscula que não começa com
+    palavra comum. Só serve de assunto de BUSCA; a foto ainda passa pela
+    checagem visual e pela regra de contexto antes de ir ao ar."""
+    for sentence in re.split(r"(?<=[.!?])\s+", text or ""):
+        run: list[str] = []
+        for raw in sentence.split() + [""]:
+            core = raw.strip(".,;:!?…\"“”()'")
+            if core[:1].isupper() and core.isalpha() and not core.isupper() and len(core) >= 2 and core not in _PERSON_STOP:
+                run.append(core)
+                continue
+            if 2 <= len(run) <= 3:
+                return " ".join(run)
+            run = []
+    return None
+
+
 def real_photos(subject: str, used: set[str]) -> list[dict]:
     """Candidatos a foto real de `subject` ainda não usados neste vídeo,
     na ordem de preferência ({title, url, credit}). Quem chama baixa

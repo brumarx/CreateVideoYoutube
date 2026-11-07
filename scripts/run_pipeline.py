@@ -1239,6 +1239,12 @@ def run(
             grafico_path = None
             grafico = sanitize_grafico(scene.get("grafico"), scene["narration"]) if i < original_scene_count else None
             real_subject = (scene.get("real_subject") or "").strip() if channel.real_media else ""
+            if channel.real_media and not real_subject:
+                # o roteiro deixou null numa cena que cita pessoa pelo nome: a busca
+                # usa o nome da narração (foto do verbete, checada na visão)
+                from src.real_media import person_in_narration
+
+                real_subject = person_in_narration(scene.get("narration", "")) or ""
             # MESCLA desenho com material pronto: depois de uma cena desenhada,
             # a que tem foto/vídeo real do assunto tenta o real primeiro — vídeo
             # só de desenho cansa, e o arquivo do próprio assunto vale mais

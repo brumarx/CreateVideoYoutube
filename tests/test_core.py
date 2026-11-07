@@ -489,3 +489,11 @@ def test_acronyms_have_explicit_spoken_form():
     assert "Estados Unidos" in tts._for_speech("o EUA")[0]
     assert "cê pê efe" in tts._for_speech("o CPF")[0]
     assert "ésse tê efe" in tts._for_speech("o STF")[0]
+
+
+def test_person_name_found_for_photo_search():
+    from src.real_media import person_in_narration
+
+    assert person_in_narration("Em 2018, Nadia Murad recebeu o Nobel da Paz.") == "Nadia Murad"
+    assert person_in_narration("Gleisi Hoffmann, do PT, falou.") == "Gleisi Hoffmann"
+    assert person_in_narration("O Congresso aprovou a lei.") is None
