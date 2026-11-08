@@ -715,3 +715,14 @@ def test_compilation_review_checks_title_and_thumbnail():
     fora = {"title": "Mafia no Congresso revelada", "thumbnail_text": "Mafia",
             "scenes": [{"narration": "Svalbard tem tratado de Paris.", "_arquivo": True}]}
     assert review_script(fora, "Svalbard e Lechuguilla", facts, None) != []
+
+
+def test_compilation_review_ignores_common_words_and_country():
+    from src.fact_check import review_script
+
+    facts = {"tipo": "compilacao", "dados": [{"narracao": "Svalbard tem tratado de Paris.", "titulo": "Svalbard"}]}
+    script = {"title": "Dois casos", "thumbnail_text": "Dois casos", "scenes": [
+        {"narration": "Começamos no Brasil. Finalmente, veja a história."},
+        {"narration": "Svalbard tem tratado de Paris.", "_arquivo": True},
+    ]}
+    assert review_script(script, "Svalbard", facts, None) == []

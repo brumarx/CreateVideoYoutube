@@ -266,7 +266,12 @@ def _compilation_review(script: dict, topic: str, facts: dict) -> list[dict]:
 
     titulo = " ".join([str(script.get("title", "")), str(script.get("thumbnail_text", ""))])
     new_text = _re.sub(r"História \d+ de \d+\.", " ", " ".join(new) + " " + titulo)
-    extra = sorted(_fact_tokens(new_text) - allowed)
+    # palavra comum ou nome de país do próprio canal não é fato novo ("Brasil",
+    # "Começamos", "Finalmente" reprovaram o 780: regra certa é número/nome real)
+    comuns = {"brasil", "começamos", "finalmente", "hoje", "você", "agora", "então", "mas", "nesta",
+              "neste", "isso", "essa", "esse", "depois", "antes", "além", "assim", "veja", "confira",
+              "ainda", "também", "primeiro", "segundo", "terceira", "última", "história", "histórias"}
+    extra = sorted(t for t in _fact_tokens(new_text) - allowed if t.lower() not in comuns)
     return [{"tipo": "fato_nao_confirmado", "termo": t,
              "motivo": "no texto novo da compilação (abertura, transição, pergunta ou fechamento) e não está nas histórias"}
             for t in extra[:8]]
