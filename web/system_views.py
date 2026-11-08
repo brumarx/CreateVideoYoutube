@@ -75,6 +75,15 @@ def _mb(n: int) -> str:
     return f"{n / 1e6:.1f} MB"
 
 
+def _window() -> dict:
+    import sys
+
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from housekeeping import load_config
+
+    return load_config()
+
+
 def system_view() -> dict:
     disk = shutil.disk_usage(ROOT)
     logs = []
@@ -95,6 +104,7 @@ def system_view() -> dict:
         "logs": logs,
         "biggest_jobs": [{"name": d.name, "size": _mb(_du(d))} for d in job_dirs],
         "housekeeping": _read_json(HK_STATUS),
+        "window": _window(),
     }
 
 

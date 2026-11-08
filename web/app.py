@@ -478,6 +478,21 @@ def collect_performance():
     return redirect(url_for("index", perf_started=1) + "#desempenho")
 
 
+@app.route("/system/cleanup-window", methods=["POST"])
+def save_cleanup_window():
+    """Janela da limpeza: intermediários em horas (padrão 24) e vídeo final em dias."""
+    import sys
+
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from housekeeping import save_config
+
+    try:
+        save_config(float(request.form.get("intermediate_hours", 24)), float(request.form.get("final_days", 30)))
+    except (ValueError, TypeError) as exc:
+        return redirect(url_for("index", retry_error=str(exc)[:200]) + "#sistema")
+    return redirect(url_for("index", saved=1) + "#sistema")
+
+
 @app.route("/system/housekeeping", methods=["POST"])
 def run_housekeeping():
     subprocess.run(

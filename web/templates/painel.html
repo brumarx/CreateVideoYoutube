@@ -459,7 +459,14 @@
       {% if sy.housekeeping %}
       <div class="topic">última: {{ sy.housekeeping.run_at }} — liberou {{ (sy.housekeeping.freed_bytes / 1e6)|round(1) }} MB</div>
       {% else %}<div class="topic">ainda não rodou</div>{% endif %}
-      <div class="why">Logs com mais de 30 dias saem; logs acima de 10 MB são cortados. Intermediários de vídeo saem após 7 dias; vídeo final já no YouTube, após 30.</div>
+      <div class="why">Logs com mais de 30 dias saem; logs acima de 10 MB são cortados.</div>
+      <form method="post" action="{{ url_for('save_cleanup_window') }}" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:end">
+        <label>Intermediários de vídeo (cenas, áudio, legendas) apagados depois de
+          <input type="number" name="intermediate_hours" min="1" step="1" value="{{ sy.window.intermediate_hours|int }}" style="width:5em"> horas</label>
+        <label>Vídeo final já no YouTube apagado depois de
+          <input type="number" name="final_days" min="1" step="1" value="{{ sy.window.final_days|int }}" style="width:5em"> dias</label>
+        <button type="submit">Salvar janela</button>
+      </form>
       <form method="post" action="{{ url_for('run_housekeeping') }}" style="margin-top:8px">
         <button type="submit">Limpar agora</button>
       </form>

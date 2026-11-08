@@ -3,9 +3,9 @@
 Regras (só mexe em logs/ e em output/job_<id>/; nunca em data/, queue.db nem roteiros):
 - logs/*.log: maiores que LOG_MAX_MB são cortados (fica o final); com mais de LOG_KEEP_DAYS dias, apagados.
 - output/job_<id>/ de jobs já encerrados (uploaded, abandoned, deleted, failed, retried):
-  * depois de INTERMEDIATE_DAYS: apaga intermediários (scene_*.mp4, raw.mp4, scene_*.mp3/png/ass,
+  * depois de intermediate_hours (padrão 24 h): apaga intermediários (scene_*.mp4, raw.mp4, scene_*.mp3/png/ass,
     *.wordtimes.json). Roteiro, fatos e final.mp4 ficam.
-  * depois de FINAL_DAYS: apaga também o final.mp4 (vídeo já está no YouTube).
+  * depois de final_days (padrão 30 dias): apaga também o final.mp4 (vídeo já está no YouTube).
 
 Uso: python scripts/housekeeping.py [--apply]   (sem --apply só mostra o que sairia)
 Agendado diariamente pelo crontab com --apply; resultado em data/housekeeping_status.json.
@@ -26,8 +26,27 @@ STATUS_FILE = ROOT / "data" / "housekeeping_status.json"
 
 LOG_MAX_MB = 10
 LOG_KEEP_DAYS = 30
-INTERMEDIATE_DAYS = 7
-FINAL_DAYS = 30
+CONFIG_FILE = ROOT / "data" / "housekeeping_config.json"
+DEFAULT_INTERMEDIATE_HOURS = 24   # intermediários (cenas, áudio, legendas): 24 h por padrão
+DEFAULT_FINAL_DAYS = 30
+
+
+def load_config() -> dict:
+    """Janela de limpeza, editável na aba Sistema do painel."""
+    try:
+        cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        cfg = {}
+    return {
+        "intermediate_hours": float(cfg.get("intermediate_hours", DEFAULT_INTERMEDIATE_HOURS)),
+        "final_days": float(cfg.get("final_days", DEFAULT_FINAL_DAYS)),
+    }
+
+
+def save_config(intermediate_hours: float, final_days: float) -> None:
+    if intermediate_hours < 1 or final_days < 1:
+        raise ValueError("a janela mínima é 1 hora (intermediários) e 1 dia (final)")
+    CONFIG_FILE.write_text(json.dumps({"intermediate_hours": intermediate_hours, "final_days": final_days}))
 CLOSED = ("uploaded", "abandoned", "deleted", "failed", "retried")
 INTERMEDIATE_GLOBS = ("scene_*.mp4", "raw.mp4", "scene_*.mp3", "scene_*.png", "scene_*.ass", "*.wordtimes.json")
 
@@ -61,6 +80,9 @@ def clean_logs(apply: bool, now: float) -> dict:
     return {"freed": freed, "actions": actions}
 
 
+CFG = load_config()
+
+
 def clean_output(apply: bool, now: float) -> dict:
     freed = 0
     actions = []
@@ -82,7 +104,7 @@ def clean_output(apply: bool, now: float) -> dict:
             continue
         newest = max(p.stat().st_mtime for p in files)
         age = (now - newest) / 86400
-        if age > INTERMEDIATE_DAYS:
+        if age * 24 > CFG["intermediate_hours"]:
             for pattern in INTERMEDIATE_GLOBS:
                 for p in job_dir.glob(pattern):
                     size = p.stat().st_size
@@ -91,7 +113,7 @@ def clean_output(apply: bool, now: float) -> dict:
                     if apply:
                         p.unlink()
         final = job_dir / "final.mp4"
-        if final.exists() and status.get(job_id) == "uploaded" and age > FINAL_DAYS:
+        if final.exists() and status.get(job_id) == "uploaded" and age > CFG["final_days"]:
             size = final.stat().st_size
             freed += size
             actions.append(("vídeo final já no YouTube", f"{job_dir.name}/final.mp4", size))
