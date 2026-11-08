@@ -270,7 +270,8 @@ def _compilation_review(script: dict, topic: str, facts: dict) -> list[dict]:
     # "Começamos", "Finalmente" reprovaram o 780: regra certa é número/nome real)
     comuns = {"brasil", "começamos", "finalmente", "hoje", "você", "agora", "então", "mas", "nesta",
               "neste", "isso", "essa", "esse", "depois", "antes", "além", "assim", "veja", "confira",
-              "ainda", "também", "primeiro", "segundo", "terceira", "última", "história", "histórias"}
+              "ainda", "também", "primeiro", "segundo", "terceira", "última", "história", "histórias",
+              "um", "uma", "dois", "duas", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez"}
     extra = sorted(t for t in _fact_tokens(new_text) - allowed if t.lower() not in comuns)
     return [{"tipo": "fato_nao_confirmado", "termo": t,
              "motivo": "no texto novo da compilação (abertura, transição, pergunta ou fechamento) e não está nas histórias"}
