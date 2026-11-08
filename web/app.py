@@ -413,11 +413,39 @@ def _system_problems(statuses: dict[int, str]) -> list[dict]:
     return problems
 
 
+def _trends_now() -> dict:
+    """Tendências do cache de hoje (a mesma que a pipeline usa) e o tema que
+    cada canal escolheria a partir delas."""
+    try:
+        from src.trending_topics import filter_topics, topic_for_channel
+
+        cache = json.loads((ROOT / "data" / "trending_topics_cache.json").read_text())["BR"]
+        trends = cache.get("trends", [])
+        picks = {}
+        # palavras-chave de nicho (mesmas de src/trending_topics.topic_for_channel)
+        keywords = {
+            "aprendervia": ["ia", "inteligencia", "artificial", "python", "javascript", "tech", "programação",
+                            "carreira", "emprego", "trabalho", "algoritmo", "dados", "código", "startup", "desenvolvedor"],
+            "politica": ["política", "governo", "congresso", "deputado", "senador", "economia", "dólar", "moeda",
+                         "imposto", "reforma", "stf", "tribunal", "justiça", "lei", "votação"],
+        }
+        for path in sorted((ROOT / "channels").glob("*.yaml")):
+            canal = path.stem
+            if canal in keywords:
+                hits = [t for t in trends if any(kw in t.lower() for kw in keywords[canal])]
+                picks[canal] = hits[0] if hits else "sem tema do nicho hoje"
+            else:
+                picks[canal] = topic_for_channel(canal, trends) or "—"
+        return {"trends": trends, "cached_at": cache.get("cached_at", ""), "picks": picks}
+    except (OSError, KeyError, ValueError):
+        return {"trends": [], "cached_at": "", "picks": {}}
+
+
 def _load_trending_data() -> dict:
-    """Carrega dados do monitor de trending topics."""
+    """Carrega dados do monitor de trending topics + tendências de hoje."""
     monitor_file = ROOT / "data" / "trending_monitor.json"
     if not monitor_file.exists():
-        return {}
+        return {**_trends_now()}
 
     try:
         data = json.loads(monitor_file.read_text())
@@ -433,9 +461,10 @@ def _load_trending_data() -> dict:
             "sources": sources,
             "channels": data.get("channels", {}),
             "history": data.get("history", [])[-20:],
+            **_trends_now(),
         }
     except Exception:
-        return {}
+        return {**_trends_now()}
 
 
 @app.route("/performance/collect", methods=["POST"])
@@ -477,6 +506,28 @@ def _senha_opcional():
 @app.errorhandler(ValueError)
 def _config_invalida(exc: ValueError):
     return redirect(url_for("index", retry_error=str(exc)[:200]))
+
+
+@app.route("/video/<int:job_id>/delete", methods=["POST"])
+def delete_video(job_id: int):
+    """Apaga um vídeo publicado no YouTube (o botão pede confirmação antes).
+    Irreversível: o vídeo sai do canal e do painel."""
+    from src.upload import _load_credentials
+    from src.yt_quota import spend
+    from googleapiclient.discovery import build
+
+    job = get_job(job_id)
+    if not job or not job.youtube_video_id or job.status not in ("uploaded", "awaiting_approval"):
+        return {"ok": False, "erro": "este vídeo não está publicado"}, 400
+    try:
+        spend("delete")
+        youtube = build("youtube", "v3", credentials=_load_credentials(ChannelConfig.load(job.channel).token_file),
+                        cache_discovery=False)
+        youtube.videos().delete(id=job.youtube_video_id).execute()
+    except Exception as exc:  # noqa: BLE001 — mostra o erro, não derruba o painel
+        return {"ok": False, "erro": str(exc)[:200]}, 500
+    update(job_id, status="deleted", error="apagado no YouTube pelo painel")
+    return {"ok": True}
 
 
 @app.route("/logs/<name>")

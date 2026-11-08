@@ -507,6 +507,13 @@
 
   <section class="tab" id="tab-trending" hidden>
     <h2>📊 Trending Topics</h2>
+    <h3>Tendências de hoje</h3>
+    <p class="hint">Cache de {{ trending.cached_at or "nunca" }} (a mesma que a pipeline usa para temas virais)</p>
+    <div class="why">{% for t in trending.trends or [] %}<span class="badge">{{ t }}</span> {% else %}sem tendências no cache{% endfor %}</div>
+    <h3>Tema que cada canal escolheria</h3>
+    {% for canal, tema in (trending.picks or {}).items() %}
+    <div class="problem" style="--c:var(--off)"><div class="head"><span>{{ canal }}</span></div><div class="topic">{{ tema }}</div></div>
+    {% endfor %}
     {% if trending %}
       <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
         <div style="background: #f3f4f6; padding: 16px; border-radius: 8px;">
@@ -647,7 +654,19 @@ function renderVideos() {
     a.querySelector(".title").textContent = v.topic;
     const kind = v.seconds == null ? "" : `, ${isShort(v) ? "Short" : "longo"} de ${dur(v.seconds)}`;
     a.querySelector(".meta").textContent = `${TITLES[v.channel] || v.channel}, ${v.date_label}${kind}`;
-    return a;
+    const wrap = document.createElement("div");
+    wrap.className = "vwrap";
+    const del = document.createElement("button");
+    del.type = "button"; del.className = "btn danger small vdel"; del.textContent = "Apagar do YouTube";
+    del.addEventListener("click", async () => {
+      if (!confirm("Apagar este vídeo do YouTube? Não tem como desfazer.\n\n" + v.topic)) return;
+      del.disabled = true;
+      const r = await fetch(`/video/${v.id}/delete`, {method: "POST"});
+      const j = await r.json().catch(() => ({}));
+      if (j.ok) { wrap.remove(); } else { del.disabled = false; alert("Não consegui apagar: " + (j.erro || r.status)); }
+    });
+    wrap.append(a, del);
+    return wrap;
   }));
   document.getElementById("v-more").hidden = list.length <= vState.limit;
 }

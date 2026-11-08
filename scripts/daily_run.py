@@ -258,7 +258,11 @@ def run_channel(channel_name: str, cfg: dict) -> None:
     if channel_name == "botafogo":
         # 2 vídeos independentes: prévia/pós-jogo quando houver jogo (regras
         # de sempre, silêncio sem jogo) + 1 por dia com temas do botafogo.win
-        for task in ("jogo", "portal") if not ready else ("jogo",):
+        # um vídeo por dia no canal: tenta a prévia/pós-jogo; sem jogo (silêncio),
+        # cai no tema do botafogo.win. Se já há vídeo do dia, para aqui.
+        for task in ("jogo", "portal"):
+            if ready or _published_today(channel_name):
+                break
             _run_pipeline(channel_name, ["--botafogo-task", task], task)
         return
 
@@ -289,6 +293,17 @@ LONG_TIMEOUT_S = 150 * 60      # longo/compilação (48 cenas levou ~2 h)
 RETRY_TIMEOUT_S = 30 * 60
 
 
+def _published_today(channel_name: str) -> bool:
+    """Já tem vídeo do canal hoje (no ar, pronto ou aguardando)?"""
+    with closing(sqlite3.connect(DB_PATH, timeout=30)) as conn:
+        n = conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE channel = ? AND date(created_at, 'localtime') = date('now', 'localtime') "
+            "AND status IN ('uploaded', 'ready', 'awaiting_approval')",
+            (channel_name,),
+        ).fetchone()[0]
+    return n > 0
+
+
 def _timeout_for(cmd: list[str]) -> int:
     return LONG_TIMEOUT_S if "--long" in cmd else PIPELINE_TIMEOUT_S
 
@@ -312,6 +327,23 @@ def _acquire_lock():
     return handle
 
 
+def _channels_underperforming(limite: int = 20) -> list[str]:
+    """Canais cuja mediana de views dos últimos 10 Shorts publicados está abaixo
+    do limite. Só avisa: não muda formato nem tema sozinho."""
+    import statistics
+
+    out = []
+    with closing(sqlite3.connect(DB_PATH, timeout=30)) as conn:
+        for (canal,) in conn.execute("SELECT DISTINCT channel FROM video_performance").fetchall():
+            rows = conn.execute(
+                "SELECT views_current FROM video_performance WHERE channel = ? AND is_short = 1 "
+                "AND views_current IS NOT NULL ORDER BY published_at DESC LIMIT 10", (canal,)
+            ).fetchall()
+            if len(rows) >= 5 and statistics.median(r[0] for r in rows) < limite:
+                out.append(f"{canal} ({int(statistics.median(r[0] for r in rows))} views)")
+    return out
+
+
 def _alerta_do_dia() -> None:
     """Resumo no Telegram quando algo não saiu: canal sem vídeo no ar hoje,
     job travado, falha permanente ou vídeo/roteiro esperando você."""
@@ -320,16 +352,19 @@ def _alerta_do_dia() -> None:
     hoje = date.today().isoformat()
     with closing(sqlite3.connect(DB_PATH, timeout=30)) as conn:
         rows = conn.execute(
-            "SELECT channel, status, id FROM jobs WHERE date(created_at) = ?", (hoje,)
+            "SELECT channel, status, id FROM jobs WHERE date(created_at, 'localtime') = ?", (hoje,)
         ).fetchall()
     canais = [p.stem for p in sorted((ROOT / "channels").glob("*.yaml"))]
     no_ar = {c for c, st, _ in rows if st == "uploaded"}
     sem_video = [c for c in canais if c not in no_ar]
     problemas = [f"job {i} ({c}): {st}" for c, st, i in rows
                  if st in ("failed", "failed_permanent", "awaiting_approval", "ready", "script_ready", "pending")]
-    if not sem_video and not problemas:
+    fracos = _channels_underperforming()
+    if not sem_video and not problemas and not fracos:
         return
     linhas = ["📋 Resumo da rodada de hoje"]
+    if fracos:
+        linhas.append("Desempenho fraco (mediana dos últimos 10 Shorts): " + ", ".join(fracos))
     if sem_video:
         linhas.append("Sem vídeo no ar hoje: " + ", ".join(sem_video))
     linhas += problemas[:15]
