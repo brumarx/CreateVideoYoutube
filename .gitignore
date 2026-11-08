@@ -28,3 +28,5 @@ data/yt_quota.json
 data/provider_health.json
 data/queue.db-wal
 data/queue.db-shm
+data/provider_health.lock
+data/provider_health.tmp
