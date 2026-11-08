@@ -1106,13 +1106,13 @@ def run(
                 # (src/stock_media.py) e deixa passar imagem neutra (contrato,
                 # calendário, tribunal) — sem isso, canal estrito sem visão
                 # repetia a mesma foto em 12 de 15 cenas (job 249)
-                return matches_scene(image, _narration, visual_context)
+                # sem resposta da visão (None) a imagem NÃO entra: o fundo errado
+                # foi ao ar porque a checagem caiu e a foto passou (botafogo, 08/11).
+                # Sem imagem aprovada, a cena usa o fundo neutro.
+                return matches_scene(image, _narration, visual_context) is True
 
             def ai_in_context(image: bytes, _narration: str = scene["narration"]) -> bool | None:
-                verdict = matches_scene(image, _narration, visual_context)
-                if verdict is None and channel.strict_visual:
-                    return False  # IA sem checagem pode inventar jogador/escudo
-                return verdict
+                return matches_scene(image, _narration, visual_context) is True
             scene_durations.append(scene_duration)
 
             # Cascata de conteúdo visual, do mais vivo/crível pro último recurso:

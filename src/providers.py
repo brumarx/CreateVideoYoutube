@@ -224,11 +224,19 @@ def health_reset(key_id: str = "all") -> int:
     data = _health_load()
     if key_id == "all":
         n = len(data)
-        HEALTH_FILE.write_text("{}", encoding="utf-8")
+        tmp = HEALTH_FILE.with_suffix(".tmp")
+        tmp.write_text("{}", encoding="utf-8")
+        import os
+
+        os.replace(tmp, HEALTH_FILE)
         return n
     if key_id in data:
         del data[key_id]
-        HEALTH_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        tmp = HEALTH_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        import os
+
+        os.replace(tmp, HEALTH_FILE)
         return 1
     return 0
 

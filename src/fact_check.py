@@ -260,11 +260,12 @@ def _compilation_review(script: dict, topic: str, facts: dict) -> list[dict]:
     new = [sc.get("narration", "") for sc in script.get("scenes", []) if not sc.get("_arquivo")]
     dados = " ".join(str(item.get("narracao", "")) + " " + str(item.get("titulo", "")) for item in facts.get("dados") or [])
     allowed = _fact_tokens(" ".join(old) + " " + dados + " " + topic, every_capital=True)
-    # a numeração "História N de n." é do código, não é fato; palavra comum no
+    allowed |= {str(len(facts.get("dados") or []))}  # "N histórias" no título é contagem do código "História N de n." é do código, não é fato; palavra comum no
     # começo de frase ("Hoje", "Você") não conta como nome próprio
     import re as _re
 
-    new_text = _re.sub(r"História \d+ de \d+\.", " ", " ".join(new))
+    titulo = " ".join([str(script.get("title", "")), str(script.get("thumbnail_text", ""))])
+    new_text = _re.sub(r"História \d+ de \d+\.", " ", " ".join(new) + " " + titulo)
     extra = sorted(_fact_tokens(new_text) - allowed)
     return [{"tipo": "fato_nao_confirmado", "termo": t,
              "motivo": "no texto novo da compilação (abertura, transição, pergunta ou fechamento) e não está nas histórias"}
@@ -279,15 +280,15 @@ def review_script(
     (quem chama decide — o pipeline segue, já que a aprovação manual no
     painel é a segunda barreira)."""
     if facts and facts.get("tipo") == "compilacao":
+        # compilação: as histórias arquivadas já passaram na revisão; o texto novo
+        # (abertura, início, perguntas, fechamento, título, miniatura) é conferido
+        # só contra o que as histórias dizem — antes do filtro das cenas arquivadas
+        return _compilation_review(script, topic, facts)
+    if facts and facts.get("tipo") == "compilacao":
         # cenas que vieram dos Shorts publicados já passaram na revisão:
         # só o texto novo (abertura, transições, fechamento) e o título
         new = [sc for sc in script.get("scenes", []) if not sc.get("_arquivo")]
         script = {**script, "scenes": new or script.get("scenes", [])[:1]}
-    if facts and facts.get("tipo") == "compilacao":
-        # compilação: histórias arquivadas já passaram na revisão; o texto novo
-        # (abertura, início de cada história, perguntas, fechamento) só é conferido
-        # contra o que as histórias dizem, sem citação literal
-        return _compilation_review(script, topic, facts)
     copied = copied_from_source(script, facts, web_facts)
     if len(copied) >= 2:
         return copied

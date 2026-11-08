@@ -700,3 +700,18 @@ def test_compilation_review_flags_only_invented_facts():
     ]}
     termos = [p["termo"] for p in review_script(bad, "Svalbard", facts, None)]
     assert "1999" in termos and "7" in termos
+
+
+def test_compilation_review_checks_title_and_thumbnail():
+    from src.fact_check import review_script
+
+    facts = {"tipo": "compilacao", "dados": [
+        {"narracao": "Svalbard tem tratado de Paris.", "titulo": "Svalbard"},
+        {"narracao": "Lechuguilla é uma caverna.", "titulo": "Lechuguilla"}]}
+    ok = {"title": "2 casos que mudam o mapa", "thumbnail_text": "2 histórias",
+          "scenes": [{"narration": "Svalbard tem tratado de Paris.", "_arquivo": True},
+                     {"narration": "Lechuguilla é uma caverna."}]}
+    assert review_script(ok, "Svalbard e Lechuguilla", facts, None) == []
+    fora = {"title": "Mafia no Congresso revelada", "thumbnail_text": "Mafia",
+            "scenes": [{"narration": "Svalbard tem tratado de Paris.", "_arquivo": True}]}
+    assert review_script(fora, "Svalbard e Lechuguilla", facts, None) != []
