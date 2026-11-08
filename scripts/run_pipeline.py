@@ -1715,17 +1715,27 @@ def run(
             log.info("[%s] --no-upload: vídeo pronto em %s, sobe no próximo daily_run", job_id, final_video)
             return
 
-        video_id = upload_video(
-            channel,
-            final_video,
-            title=script["title"],
-            description=description,
-            tags=script["tags"],
-            thumbnail_path=thumb_path,
-            publish_at=publish_at,
-            synthetic=upload_meta["synthetic"],
-            private=bool(ressalvas),
-        )
+        from src.yt_quota import QuotaExceeded
+
+        try:
+            video_id = upload_video(
+                channel,
+                final_video,
+                title=script["title"],
+                description=description,
+                tags=script["tags"],
+                thumbnail_path=thumb_path,
+                publish_at=publish_at,
+                synthetic=upload_meta["synthetic"],
+                private=bool(ressalvas),
+            )
+        except QuotaExceeded as exc:
+            # cota do dia esgotada: o vídeo fica pronto (meta já gravada) e sobe no
+            # próximo ciclo, sem renderizar de novo e sem virar falha
+            update(job_id, status="ready", video_path=str(final_video), thumbnail_path=str(thumb_path),
+                   error=f"cota do YouTube esgotada hoje — sobe amanhã ({exc})"[:900])
+            log.warning("[%s] cota do dia esgotada: vídeo pronto, sobe amanhã", job_id)
+            return
         if ressalvas:
             update(job_id, status="awaiting_approval", youtube_video_id=video_id,
                    error="PRIVADO, aguardando aprovação — " + "; ".join(ressalvas)[:900])
