@@ -1,0 +1,90 @@
+{
+  "job_id": 774,
+  "video_id": "6jORKrG3Hxg",
+  "date": "2026-11-08",
+  "long": false,
+  "title": "Navegador automático: IA do GitHub em ação",
+  "narration": "Bora aprender com IA! Seu navegador pode trabalhar sozinho enquanto você faz outra coisa — preencher formulários, extrair dados, testar páginas — tudo automático com projetos de automatização no GitHub. O modo 'headless' faz o navegador rodar sem interface gráfica, controlado por código. O GitHub hospeda repositórios de código com gerenciamento de versão, servindo como hub central para colaboração e desenvolvimento. O n8n é o destaque: plataforma de fluxo de trabalho com centenas de integrações e etapas de IA nativas. A Licença de Uso Sustentável permite uso corporativo interno, pessoal e não comercial — alternativa ao Zapier que você mesmo hospeda. Projetos de código aberto no GitHub têm licenças que possibilitam estudar, modificar e distribuir. Alguns usam 'nightly builds' — integração automática diária — então o código base fica atualizado constantemente. Pra começar: entre no GitHub, busque por 'automação de navegador' ou 'n8n', filtre por estrelas e licença. Clone o repositório, siga o README com as instruções de instalação. Administração total na sua infraestrutura. Agora seu navegador executa tarefas repetitivas sozinho — preencher formulários, extrair dados, testar — enquanto você foca no que importa. Escolha um repositório hoje, rode o primeiro workflow e veja o tempo voltar pra você.",
+  "scenes": [
+    {
+      "narration": "Bora aprender com IA! Seu navegador pode trabalhar sozinho enquanto você faz outra coisa — preencher formulários, extrair dados, testar páginas — tudo automático com projetos de automatização no GitHub.",
+      "image_prompt": "Laptop screen showing multiple browser tabs opening and closing rapidly on their own, code snippets floating in background, dark room illuminated only by monitor glow",
+      "stock_query": "browser tabs opening automatically screen recording",
+      "real_subject": "Browser automation",
+      "grafico": {
+        "tipo": "comparacao",
+        "a": 1,
+        "a_rotulo": "Você clicando",
+        "b": 50,
+        "b_rotulo": "Automação faz",
+        "icone": "⚡"
+      }
+    },
+    {
+      "narration": "O modo 'headless' faz o navegador rodar sem interface gráfica, controlado por código. O GitHub hospeda repositórios de código com gerenciamento de versão, servindo como hub central para colaboração e desenvolvimento.",
+      "image_prompt": "Terminal window with command line running a headless browser script, green text on black background, lines of code executing, no graphical interface visible",
+      "stock_query": "terminal command line headless browser code running",
+      "real_subject": "Headless browser",
+      "grafico": {
+        "tipo": "mapa",
+        "lugares": [
+          "United States"
+        ],
+        "destaques": [
+          {
+            "pais": "United States",
+            "cor": "azul",
+            "rotulo": "EUA",
+            "icone": "💻",
+            "quantidade": 1
+          }
+        ],
+        "cidade": "San Francisco",
+        "nota": "GitHub HQ",
+        "palavra": "GitHub"
+      }
+    },
+    {
+      "narration": "O n8n é o destaque: plataforma de fluxo de trabalho com centenas de integrações e etapas de IA nativas. A Licença de Uso Sustentável permite uso corporativo interno, pessoal e não comercial — alternativa ao Zapier que você mesmo hospeda.",
+      "image_prompt": "Dashboard interface showing workflow nodes connected by lines, drag-and-drop automation builder, clean modern UI with AI step icons, desktop recording style",
+      "stock_query": "n8n workflow automation dashboard drag drop nodes",
+      "real_subject": "n8n workflow automation",
+      "grafico": {
+        "tipo": "numero",
+        "valor": "100+",
+        "rotulo": "integrações nativas no n8n"
+      }
+    },
+    {
+      "narration": "Projetos de código aberto no GitHub têm licenças que possibilitam estudar, modificar e distribuir. Alguns usam 'nightly builds' — integração automática diária — então o código base fica atualizado constantemente.",
+      "image_prompt": "plain solid black background, a single white five-pointed star centered, minimalist, no text, no logos, no emblem, no shield",
+      "real_subject": "Open source software GitHub",
+      "grafico": {
+        "tipo": "ano",
+        "de": "2024",
+        "ate": "2026",
+        "rotulo": "crescimento projetos IA no GitHub"
+      }
+    },
+    {
+      "narration": "Pra começar: entre no GitHub, busque por 'automação de navegador' ou 'n8n', filtre por estrelas e licença. Clone o repositório, siga o README com as instruções de instalação. Administração total na sua infraestrutura.",
+      "image_prompt": "Person typing on keyboard, GitHub search results page for browser automation, filtering by stars and license, repository README open with installation steps",
+      "stock_query": "GitHub search browser automation filter stars license",
+      "real_subject": "GitHub repository clone",
+      "grafico": {
+        "tipo": "comparacao",
+        "a": 0,
+        "a_rotulo": "Custo nuvem",
+        "b": 100,
+        "b_rotulo": "Controle local",
+        "icone": "🔒"
+      }
+    },
+    {
+      "narration": "Agora seu navegador executa tarefas repetitivas sozinho — preencher formulários, extrair dados, testar — enquanto você foca no que importa. Escolha um repositório hoje, rode o primeiro workflow e veja o tempo voltar pra você.",
+      "image_prompt": "Split screen: left side person relaxed drinking coffee, right side browser automating tasks rapidly, data flowing into spreadsheet, peaceful productive atmosphere",
+      "stock_query": "person relaxing while computer works automation split screen",
+      "real_subject": "Browser automation result"
+    }
+  ]
+}

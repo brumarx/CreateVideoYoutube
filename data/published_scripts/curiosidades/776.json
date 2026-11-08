@@ -1,0 +1,98 @@
+{
+  "job_id": 776,
+  "video_id": "HmUCMBLurDE",
+  "date": "2026-11-08",
+  "long": false,
+  "title": "Hoover Dam: 48 milhões de dólares e 96 mortos",
+  "narration": "E aí, mente curiosa! Como uma represa apareceu no meio do deserto, quando o país estava sem emprego e sem dinheiro? Essa é a pergunta que vamos responder, começando pelo acordo que dividiu o rio antes mesmo da obra existir. O Compacto de 1922, assinado por sete estados, definiu a distribuição de água entre as bacias, mas não reservou água para o meio ambiente, algo que só viria a ser discutido décadas depois. Então, em 1931, o projeto Boulder Dam teve início, envolvendo milhares de trabalhadores, mas poucos imaginavam que a obra custaria apenas 48 milhões de dólares. Mas a virada real veio quando engenheiros empregaram técnicas nunca antes testadas para viabilizar a edificação da barragem. Enquanto isso, 96 trabalhadores perderam a vida durante a obra. Com a barragem concluída em 1º de março de 1936, o reservatório Lago Mead surgiu, estendendo‑se por 185 km rio acima, tornando‑se um dos maiores lagos artificiais do planeta. A Hoover Dam foi considerada o maior projeto de represas do mundo, uma referência da engenharia que ainda controla o rio Colorado. Assim, a obra que nasceu da crise ainda regula a água de sete estados, mas o Compacto original não reservou água para o meio ambiente – você acha que o acordo de 1922 ainda serve ao Oeste americano?",
+  "scenes": [
+    {
+      "narration": "E aí, mente curiosa! Como uma represa apareceu no meio do deserto, quando o país estava sem emprego e sem dinheiro? Essa é a pergunta que vamos responder, começando pelo acordo que dividiu o rio antes mesmo da obra existir.",
+      "image_prompt": "dry desert landscape with a winding river cutting through, distant mountains, early 20th‑century surveyors with theodolite near the riverbank",
+      "stock_query": "Colorado River survey 1920s",
+      "real_subject": "Colorado River Compact",
+      "grafico": {
+        "tipo": "mapa",
+        "lugares": [
+          "United States"
+        ],
+        "destaques": [
+          {
+            "pais": "Estados Unidos",
+            "cor": "vermelho",
+            "rotulo": "Colorado River",
+            "icone": "💧",
+            "quantidade": 1
+          }
+        ],
+        "nota": "Colorado River Compact 1922"
+      }
+    },
+    {
+      "narration": "O Compacto de 1922, assinado por sete estados, definiu a distribuição de água entre as bacias, mas não reservou água para o meio ambiente, algo que só viria a ser discutido décadas depois.",
+      "image_prompt": "handwritten 1922 agreement on a wooden table, ink pen, vintage map of the Southwest in the background",
+      "stock_query": "1922 Colorado River Compact document",
+      "real_subject": "Colorado River Compact"
+    },
+    {
+      "narration": "Então, em 1931, o projeto Boulder Dam teve início, envolvendo milhares de trabalhadores, mas poucos imaginavam que a obra custaria apenas 48 milhões de dólares.",
+      "image_prompt": "construction workers in 1930s gear operating massive concrete mixers beside a canyon, steam rising, steel scaffolding",
+      "stock_query": "Hoover Dam construction 1930s workers",
+      "real_subject": "Hoover Dam",
+      "grafico": [
+        {
+          "tipo": "numero",
+          "valor": "48M",
+          "rotulo": "Custo da obra em dólares (1931)"
+        }
+      ]
+    },
+    {
+      "narration": "Mas a virada real veio quando engenheiros empregaram técnicas nunca antes testadas para viabilizar a edificação da barragem.",
+      "image_prompt": "steel diversion tunnels carved into canyon walls, water flowing through, workers inspecting the tunnel interior",
+      "stock_query": "Colorado River diversion tunnels Hoover Dam",
+      "real_subject": "Hoover Dam"
+    },
+    {
+      "narration": "Enquanto isso, 96 trabalhadores perderam a vida durante a obra.",
+      "image_prompt": "somber memorial with 96 engraved stones, desert sunset, silhouettes of workers in the distance",
+      "stock_query": "Hoover Dam workers memorial 96 deaths",
+      "real_subject": "Hoover Dam",
+      "grafico": [
+        {
+          "tipo": "numero",
+          "valor": "96",
+          "rotulo": "Trabalhadores mortos na obra"
+        }
+      ]
+    },
+    {
+      "narration": "Com a barragem concluída em 1º de março de 1936, o reservatório Lago Mead surgiu, estendendo‑se por 185 km rio acima, tornando‑se um dos maiores lagos artificiais do planeta.",
+      "image_prompt": "expansive blue lake surrounded by desert cliffs, early morning mist, small boats on the horizon",
+      "stock_query": "Lake Mead aerial view 1936",
+      "real_subject": "Lake Mead",
+      "grafico": [
+        {
+          "tipo": "mapa",
+          "lugares": [],
+          "cidade": "Lake Mead",
+          "destaques": [],
+          "ano": "1936",
+          "personagens": []
+        }
+      ]
+    },
+    {
+      "narration": "A Hoover Dam foi considerada o maior projeto de represas do mundo, uma referência da engenharia que ainda controla o rio Colorado.",
+      "image_prompt": "nighttime view of the dam with illuminated turbines, power lines stretching into a glowing city far away",
+      "stock_query": "Hoover Dam night lights power generation",
+      "real_subject": "Hoover Dam"
+    },
+    {
+      "narration": "Assim, a obra que nasceu da crise ainda regula a água de sete estados, mas o Compacto original não reservou água para o meio ambiente – você acha que o acordo de 1922 ainda serve ao Oeste americano?",
+      "image_prompt": "dry riverbed downstream of the dam, cracked soil, distant mountains under a blazing sun, hint of water scarcity",
+      "stock_query": "Colorado River drought 2020s",
+      "real_subject": "Colorado River"
+    }
+  ]
+}

@@ -22,3 +22,9 @@ data/performance_status.json
 data/housekeeping_status.json
 data/daily_run.lock
 data/backups/
+data/pipeline.lock
+data/daily_run.lock
+data/yt_quota.json
+data/provider_health.json
+data/queue.db-wal
+data/queue.db-shm

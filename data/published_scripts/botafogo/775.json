@@ -1,0 +1,73 @@
+{
+  "job_id": 775,
+  "video_id": "JC2DnD81SkE",
+  "date": "2026-11-08",
+  "long": false,
+  "title": "GDA Luma aporta R$ 400 mi ao Botafogo",
+  "narration": "Fala, Fogão! Cinco assuntos quentes hoje: o aporte de R$ 400 milhões via DIP, o raio-x do elenco pedindo reposições, Jair Cunha brilhando na Inglaterra, o empate molhado no Sub-20 e o risco de queda despencando para menos de 3%. Primeira notícia: a GDA Luma, do Gabriel de Alba, já colocou US$ 63 milhões no clube e mais US$ 11 milhões estão a caminho este mês. No total, US$ 74 milhões, algo perto de R$ 407 milhões, tudo via empréstimo DIP, mecanismo usado na recuperação judicial. Que fôlego financeiro! Segunda: o relatório semanal de scout escancara a dependência. Arthur Cabral tem 9 gols em 45 jogos, 0,29 participação a cada 90 minutos e zero nos últimos cinco. Danilo Santos lidera com 13 gols e 3 assistências, Edenílson faz 0,48 aos 36 anos. No miolo, Allan ganha só 36% dos duelos. A carência na referência e no meio é real. Terceira: Jair Cunha, criado no Santos e com seis meses no Fogão antes de ir por 12 milhões de euros ao Forest, marcou aos 6 minutos na vitória do Forest sobre o City. Tirou a bola de Gvardiol, avançou e finalizou no canto. Foi a terceira derrota seguida do Manchester City sob o comando do seu técnico. Orgulho da base alvinegra brilhando na Premier League. Quarta: no Sub-20, Botafogo e Fluminense empataram 1 a 1 no Nilton Santos sob dilúvio, com longa paralisação pela chuva. O Tricolor, com melhor campanha, joga pelo empate na volta; o Alvinegro precisa vencer para chegar à final. Última: após bater o Atlético Mineiro, o Glorioso soma 42 pontos e abriu cinco pontos do Z-4 a quatro rodadas do fim. O risco de queda caiu para entre 0,93% e 2,29% segundo modelos estatísticos. Precisa apenas de resultados pontuais contra Corinthians, São Paulo, Bahia e Santos. A permanência está encaminhada, mas a matemática ainda não fechou.",
+  "scenes": [
+    {
+      "narration": "Fala, Fogão! Cinco assuntos quentes hoje: o aporte de R$ 400 milhões via DIP, o raio-x do elenco pedindo reposições, Jair Cunha brilhando na Inglaterra, o empate molhado no Sub-20 e o risco de queda despencando para menos de 3%.",
+      "image_prompt": "A smartphone screen displaying multiple news headlines about a Brazilian football club, blurred background of a stadium at night, moody lighting, cinematic atmosphere",
+      "stock_query": "smartphone news headlines",
+      "grafico": [
+        {
+          "tipo": "numero",
+          "valor": "400M",
+          "rotulo": "Aporte DIP (R$)"
+        }
+      ]
+    },
+    {
+      "narration": "Primeira notícia: a GDA Luma, do Gabriel de Alba, já colocou US$ 63 milhões no clube e mais US$ 11 milhões estão a caminho este mês. No total, US$ 74 milhões, algo perto de R$ 407 milhões, tudo via empréstimo DIP, mecanismo usado na recuperação judicial. Que fôlego financeiro!",
+      "image_prompt": "A modern office building exterior with glass facade reflecting sunlight, Brazilian flag flying on a pole nearby, clear blue sky, architectural photography style",
+      "stock_query": "modern office building Brazil",
+      "grafico": {
+        "tipo": "numero",
+        "valor": "R$ 407 milhões",
+        "rotulo": "total aportado pela GDA Luma via DIP em 2026"
+      }
+    },
+    {
+      "narration": "Segunda: o relatório semanal de scout escancara a dependência. Arthur Cabral tem 9 gols em 45 jogos, 0,29 participação a cada 90 minutos e zero nos últimos cinco. Danilo Santos lidera com 13 gols e 3 assistências, Edenílson faz 0,48 aos 36 anos. No miolo, Allan ganha só 36% dos duelos. A carência na referência e no meio é real.",
+      "image_prompt": "A tactical football analysis board with player statistics charts and heat maps, green background, white lines and markers, top-down view, analytical atmosphere",
+      "stock_query": "tactical analysis board statistics",
+      "grafico": {
+        "tipo": "comparacao",
+        "a": 29,
+        "a_rotulo": "Arthur Cabral",
+        "b": 46,
+        "b_rotulo": "Danilo Santos",
+        "icone": "⚽"
+      }
+    },
+    {
+      "narration": "Terceira: Jair Cunha, criado no Santos e com seis meses no Fogão antes de ir por 12 milhões de euros ao Forest, marcou aos 6 minutos na vitória do Forest sobre o City. Tirou a bola de Gvardiol, avançou e finalizou no canto. Foi a terceira derrota seguida do Manchester City sob o comando do seu técnico. Orgulho da base alvinegra brilhando na Premier League.",
+      "image_prompt": "A Premier League football stadium exterior at night with floodlights on, English architecture, wet pitch reflecting lights, atmospheric perspective",
+      "stock_query": "Premier League stadium night",
+      "grafico": {
+        "tipo": "numero",
+        "valor": "12 milhões €",
+        "rotulo": "valor da venda de Jair Cunha ao Nottingham Forest em 2025"
+      }
+    },
+    {
+      "narration": "Quarta: no Sub-20, Botafogo e Fluminense empataram 1 a 1 no Nilton Santos sob dilúvio, com longa paralisação pela chuva. O Tricolor, com melhor campanha, joga pelo empate na volta; o Alvinegro precisa vencer para chegar à final.",
+      "image_prompt": "A football stadium stands empty under heavy rain, water pooling on the pitch, dramatic storm clouds, floodlights cutting through downpour, moody cinematic lighting",
+      "stock_query": "stadium heavy rain flooded pitch"
+    },
+    {
+      "narration": "Última: após bater o Atlético Mineiro, o Glorioso soma 42 pontos e abriu cinco pontos do Z-4 a quatro rodadas do fim. O risco de queda caiu para entre 0,93% e 2,29% segundo modelos estatísticos. Precisa apenas de resultados pontuais contra Corinthians, São Paulo, Bahia e Santos. A permanência está encaminhada, mas a matemática ainda não fechou.",
+      "image_prompt": "A Brazilian football league table graphic on a digital screen showing team positions and points, green and red zones highlighted, clean data visualization style",
+      "stock_query": "league table standings graphic",
+      "grafico": {
+        "tipo": "comparacao",
+        "a": 1,
+        "a_rotulo": "risco mínimo",
+        "b": 2,
+        "b_rotulo": "risco máximo",
+        "icone": "📉"
+      }
+    }
+  ]
+}
