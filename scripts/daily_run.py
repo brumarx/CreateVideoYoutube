@@ -162,7 +162,7 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
             log.warning("[%s] %s: última tentativa no formato curto", channel_name, label)
         log.info("[%s] %s (tentativa %d/%d)", channel_name, label, attempt, total)
         before = _max_job_id()
-        rc = _run_limited(cmd, _timeout_for(cmd))
+        rc = _run_limited(cmd, _timeout_for(cmd, channel_name))
         if rc == 0:
             return
         job = _last_job(channel_name, before)
@@ -173,7 +173,7 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
         job_id, status, video_path, topic, error = job
         if rc == 124:
             # travado além do limite: não repete (outra tentativa travaria de novo, horas de rodada)
-            update(job_id, status="failed", error=f"tempo esgotado ({_timeout_for(cmd) // 60} min)")
+            update(job_id, status="failed", error=f"tempo esgotado ({_timeout_for(cmd, channel_name) // 60} min)")
             log.error("[%s] %s: interrompido por tempo — job %d marcado como falha, sem repetir", channel_name, label, job_id)
             return
         if video_path:
@@ -210,16 +210,19 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
         base_cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name,
                     *same, *(["--no-upload"] if NO_UPLOAD else [])]
 
-def _render_approved(channel_name: str) -> None:
+def _render_approved(channel_name: str, lock_held: bool = False) -> None:
     """Renderiza (sem publicar) o roteiro aprovado mais antigo do canal com
     o comando salvo pelo --script-only. Falhou (ex.: revisão do vídeo):
     volta pra fila normal do dia, o job vira 'abandoned'."""
     from src.runlock import try_acquire
 
-    trava = try_acquire()
-    if trava is None:
-        log.info("[%s] trava ocupada — roteiro aprovado fica pra próxima rodada", channel_name)
-        return
+    # quem já segura a trava (a rodada diária) não tenta de novo: flock não é reentrante
+    trava = None
+    if not lock_held:
+        trava = try_acquire()
+        if trava is None:
+            log.info("[%s] trava ocupada — roteiro aprovado fica pra próxima rodada", channel_name)
+            return
     with closing(sqlite3.connect(DB_PATH)) as conn:
         row = conn.execute(
             "SELECT id FROM jobs WHERE channel = ? AND status = 'script_approved' ORDER BY id LIMIT 1",
@@ -233,8 +236,10 @@ def _render_approved(channel_name: str) -> None:
         return
     cmd = json.loads(cmd_file.read_text())
     log.info("[%s] renderizando roteiro aprovado (job %s)", channel_name, row[0])
-    rc = _run_limited([sys.executable, *cmd[1:]], _timeout_for(cmd))
-    update(row[0], status="rendered_from_script" if rc == 0 else "abandoned",
+    rc = _run_limited([sys.executable, *cmd[1:]], _timeout_for(cmd, channel_name))
+    # render ok = vídeo pronto pra subir (status 'ready', que o upload já conhece);
+    # falha = 'failed', que o painel consegue reenviar (não 'abandoned', que é descartado)
+    update(row[0], status="ready" if rc == 0 else "failed",
            error=None if rc == 0 else f"render do roteiro aprovado falhou (exit {rc})")
 
 
@@ -252,7 +257,7 @@ def run_channel(channel_name: str, cfg: dict) -> None:
     # com --no-upload ocupa a vaga do dia antes de gerar outro
     from retry_uploads import upload_pending
 
-    _render_approved(channel_name)
+    _render_approved(channel_name, lock_held=True)
     ready = 0 if NO_UPLOAD else upload_pending(channel_name, "ready", limit=1)
 
     if channel_name == "botafogo":
@@ -277,6 +282,10 @@ def run_channel(channel_name: str, cfg: dict) -> None:
         _run_pipeline(channel_name, ["--long", "--compilation"], "longo semanal", fallback_short=True)
         ready = 1
     for i in range(ready, uploads_per_day):
+        if _published_today(channel_name):
+            # já há vídeo do canal hoje (pronto, no ar ou aguardando): não gera outro
+            log.info("[%s] já tem vídeo do dia — não gera outro", channel_name)
+            break
         # sem --long/--no-long: run_pipeline.py lê channels/<nome>.yaml ->
         # daily_format sozinho (fonte única de verdade, editável no painel —
         # não duplica a decisão aqui pra nunca dessincronizar da UI).
@@ -304,8 +313,18 @@ def _published_today(channel_name: str) -> bool:
     return n > 0
 
 
-def _timeout_for(cmd: list[str]) -> int:
-    return LONG_TIMEOUT_S if "--long" in cmd else PIPELINE_TIMEOUT_S
+def _timeout_for(cmd: list[str], channel_name: str | None = None) -> int:
+    """Longo = flag --long OU canal cujo formato padrão é longo (YAML)."""
+    if "--long" in cmd:
+        return LONG_TIMEOUT_S
+    if channel_name:
+        try:
+            cfg = yaml.safe_load((ROOT / "channels" / f"{channel_name}.yaml").read_text()) or {}
+            if cfg.get("daily_format") == "long":
+                return LONG_TIMEOUT_S
+        except (OSError, yaml.YAMLError):
+            pass
+    return PIPELINE_TIMEOUT_S
 
 
 def _run_limited(cmd: list[str], timeout: int) -> int:
@@ -373,6 +392,14 @@ def _alerta_do_dia() -> None:
 
 def main() -> None:
     _lock = _acquire_lock()  # mantém a trava até o fim do processo
+    # órfãos: com a trava na mão, nenhum pipeline está rodando; job 'pending' parado há
+    # mais de 6 h virou fantasma (ex.: processo morreu) e é fechado como falha
+    with closing(sqlite3.connect(DB_PATH, timeout=30)) as conn:
+        conn.execute(
+            "UPDATE jobs SET status = 'failed', error = 'órfão: processo não existe mais' "
+            "WHERE status IN ('pending', 'scripted', 'narrated') AND updated_at < datetime('now', '-6 hours')"
+        )
+        conn.commit()
     channels_dir = ROOT / "channels"
     cleanup_output()
 

@@ -59,6 +59,14 @@ def fetch(channel: str, ids: list[str]) -> list[dict]:
     return out
 
 
+def _dia_semana(iso: str) -> int:
+    """0 = segunda ... 6 = domingo, do horário de publicação (UTC)."""
+    try:
+        return datetime.fromisoformat(iso.replace("Z", "+00:00")).weekday()
+    except ValueError:
+        return 0
+
+
 def _ensure_title_column(con: sqlite3.Connection) -> None:
     try:
         con.execute("ALTER TABLE video_performance ADD COLUMN title TEXT")
@@ -97,13 +105,20 @@ def main() -> None:
             job_id = ids[v["video_id"]]
             is_short = 0 < v["duration_seconds"] <= 180
             con.execute(
-                """INSERT OR REPLACE INTO video_performance
+                """INSERT INTO video_performance
                    (job_id, channel, published_at, duration_seconds, is_short, views_current, likes, comments,
                     engagement_rate, publish_hour, publish_day_of_week, title, created_at, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))""",
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+                   ON CONFLICT(job_id) DO UPDATE SET
+                    channel=excluded.channel, published_at=excluded.published_at,
+                    duration_seconds=excluded.duration_seconds, is_short=excluded.is_short,
+                    views_current=excluded.views_current, likes=excluded.likes, comments=excluded.comments,
+                    engagement_rate=excluded.engagement_rate, publish_hour=excluded.publish_hour,
+                    publish_day_of_week=excluded.publish_day_of_week, title=excluded.title,
+                    updated_at=excluded.updated_at""",
                 (job_id, channel, v["published_at"], v["duration_seconds"], int(is_short), v["views"],
                  v["likes"], v["comments"], (v["likes"] + v["comments"]) / v["views"] if v["views"] else 0.0,
-                 int(v["published_at"][11:13] or 0), 0, v["title"]),
+                 int(v["published_at"][11:13] or 0), _dia_semana(v["published_at"]), v["title"]),
             )
             results.append({**v, "channel": channel, "job_id": job_id, "is_short": int(is_short)})
         con.commit()

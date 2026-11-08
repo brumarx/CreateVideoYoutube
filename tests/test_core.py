@@ -637,3 +637,47 @@ def test_timeout_kills_child_processes():
     t = time.time()
     rc = run_limited(["sh", "-c", "sleep 60 & sleep 60"], 2)
     assert rc == 124 and time.time() - t < 45
+
+
+def test_render_approved_does_not_reacquire_held_lock(tmp_path, monkeypatch):
+    # integração: a rodada segura a trava e o roteiro aprovado ainda assim renderiza
+    import sys
+    from pathlib import Path
+
+    from src import runlock
+
+    monkeypatch.setattr(runlock, "LOCK_FILE", tmp_path / "p.lock")
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import daily_run as d
+
+    held = runlock.try_acquire()
+    assert held is not None
+    called = {}
+    import sqlite3
+    def fake_run(cmd, t):
+        called["ran"] = True
+        return 0
+
+    def fake_update(job_id, **fields):
+        # só o banco temporário: o teste nunca toca o queue.db real
+        c2 = sqlite3.connect(tmp_path / "q.db")
+        for k, v in fields.items():
+            c2.execute(f"update jobs set {k} = ? where id = ?", (v, job_id))
+        c2.commit()
+        c2.close()
+
+    monkeypatch.setattr(d, "_run_limited", fake_run)
+    monkeypatch.setattr(d, "update", fake_update)
+    monkeypatch.setattr(d, "DB_PATH", tmp_path / "q.db")
+    c = sqlite3.connect(tmp_path / "q.db")
+    c.execute("create table jobs (id integer primary key, channel text, status text, error text, video_path text, updated_at text)")
+    c.execute("insert into jobs (id, channel, status) values (1, 'politica', 'script_approved')")
+    c.commit(); c.close()
+    out = tmp_path / "output" / "job_1"
+    out.mkdir(parents=True)
+    (out / "render_cmd.json").write_text('[".venv/bin/python", "scripts/run_pipeline.py", "--channel", "politica"]')
+    monkeypatch.setattr(d, "ROOT", tmp_path)
+    d._render_approved("politica", lock_held=True)
+    assert called.get("ran") is True
+    c = sqlite3.connect(tmp_path / "q.db")
+    assert c.execute("select status from jobs where id=1").fetchone()[0] == "ready"
