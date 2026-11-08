@@ -726,3 +726,12 @@ def test_compilation_review_ignores_common_words_and_country():
         {"narration": "Svalbard tem tratado de Paris.", "_arquivo": True},
     ]}
     assert review_script(script, "Svalbard", facts, None) == []
+
+
+def test_channel_brand_words_are_not_new_facts():
+    from src.fact_check import review_script
+
+    facts = {"tipo": "compilacao", "dados": [{"narracao": "Svalbard tem tratado de Paris.", "titulo": "Svalbard"}]}
+    script = {"title": "Números da República: dois casos", "thumbnail_text": "Números", "scenes": [
+        {"narration": "Svalbard tem tratado de Paris.", "_arquivo": True}]}
+    assert review_script(script, "Svalbard", facts, None) == []

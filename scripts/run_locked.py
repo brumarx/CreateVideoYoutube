@@ -13,7 +13,14 @@ from src.proc_limit import run_limited  # noqa: E402
 
 
 def main() -> int:
-    handle = try_acquire()
+    import time
+
+    handle = None
+    for _ in range(60):  # a etapa anterior pode estar soltando a trava agora: espera até 1 min
+        handle = try_acquire()
+        if handle is not None:
+            break
+        time.sleep(1)
     if handle is None:
         print("trava ocupada: outra geração de vídeo está rodando")
         return 3
