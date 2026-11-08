@@ -983,7 +983,7 @@ def compose_compilation(channel: ChannelConfig, facts: dict, revision_feedback: 
         "Nesses textos novos, NENHUM fato, número, data ou nome que não esteja nas narrações abaixo; sem "
         "pergunta que fica sem resposta, sem pedir inscrição.\n"
         "Título (até 70 caracteres) e thumbnail (até 4 palavras): o fio comum das histórias com o número "
-        f"delas (ex.: \"{n} brasileiros que venceram o impossível\"), nunca uma história só e nunca "
+        f"delas (use o assunto REAL das histórias, sem exemplo pronto: o título tem que bater com elas), nunca uma história só e nunca "
         "\"compilação\".\n"
         + (f"Para cada trecho marcado [h.c], dê a busca de imagem em \"visuais\".\n" if missing else "")
         + (revision_feedback or "")

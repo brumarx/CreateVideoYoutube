@@ -681,3 +681,22 @@ def test_render_approved_does_not_reacquire_held_lock(tmp_path, monkeypatch):
     assert called.get("ran") is True
     c = sqlite3.connect(tmp_path / "q.db")
     assert c.execute("select status from jobs where id=1").fetchone()[0] == "ready"
+
+
+def test_compilation_review_flags_only_invented_facts():
+    from src.fact_check import review_script
+
+    facts = {"tipo": "compilacao", "dados": [{"narracao": "Svalbard tem 1920 tratado de Paris.", "titulo": "Svalbard"}]}
+    ok = {"scenes": [
+        {"narration": "Hoje vamos ver duas histórias."},
+        {"narration": "História 1 de 2. Svalbard e seu tratado de 1920."},
+        {"narration": "Svalbard tem 1920 tratado de Paris.", "_arquivo": True},
+        {"narration": "Você acha justo?"},
+    ]}
+    assert review_script(ok, "Svalbard", facts, None) == []
+    bad = {"scenes": [
+        {"narration": "Svalbard tem 1920 tratado de Paris.", "_arquivo": True},
+        {"narration": "Em 1999 a ilha teve 7 mil visitantes na história de Svalbard."},
+    ]}
+    termos = [p["termo"] for p in review_script(bad, "Svalbard", facts, None)]
+    assert "1999" in termos and "7" in termos
