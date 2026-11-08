@@ -55,6 +55,7 @@ _NON_CHAT_HINTS = (
 # Modelos que vão PRIMEIRO quando o provedor tem (a ordem do /models é
 # alfabética/aleatória, e os 4 primeiros nem sempre são os bons pra texto)
 _PREFERRED_MODELS = {
+    "xai": ["grok-3-mini", "grok-3"],  # /models dá 403 nesta conta: lista fixa pra não sumir do rodízio
     "mistral": ["mistral-medium-latest", "mistral-small-latest", "magistral-medium-latest"],
 }
 
@@ -137,7 +138,11 @@ def _fetch_models(provider: str, list_url: str, api_key: str) -> list[str]:
     if cache_key in _model_cache:
         return _model_cache[cache_key]
 
-    models: list[str] = []
+    # Falha do /models NÃO pode tirar a chave do rodízio: antes, o resultado
+    # vazio ficava no cache do processo e a chave (ex.: xAI com 403 em /models)
+    # nunca mais era tentada. Agora cai nos modelos conhecidos do provedor; o
+    # erro de verdade (chave inválida, cota) aparece no chat e é tratado lá.
+    known = list(dict.fromkeys(_STRONG_MODELS.get(provider, []) + _PREFERRED_MODELS.get(provider, [])))[:_MAX_MODEL_CANDIDATES]
     try:
         resp = httpx.get(list_url, headers={"Authorization": f"Bearer {api_key}"}, timeout=20)
         if resp.status_code == 200:
@@ -147,14 +152,13 @@ def _fetch_models(provider: str, list_url: str, api_key: str) -> list[str]:
                 all_ids = [m for m in all_ids if m.endswith(":free")]
             chat = [m for m in all_ids if _is_chat_model(m)]
             preferred = [m for m in _STRONG_MODELS.get(provider, []) + _PREFERRED_MODELS.get(provider, []) if m in chat]
-            models = (preferred + [m for m in chat if m not in preferred])[:_MAX_MODEL_CANDIDATES]
-        else:
-            log.warning("%s /models -> HTTP %s", provider, resp.status_code)
-    except Exception as exc:
-        log.warning("%s /models falhou: %s", provider, exc)
-
-    _model_cache[cache_key] = models
-    return models
+            models = (preferred + [m for m in chat if m not in preferred])[:_MAX_MODEL_CANDIDATES] or known
+            _model_cache[cache_key] = models  # só sucesso entra no cache
+            return models
+        log.warning("%s /models -> HTTP %s (usando modelos conhecidos)", provider, resp.status_code)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("%s /models falhou: %s (usando modelos conhecidos)", provider, exc)
+    return known
 
 
 def _fetch_gemini_models(api_key: str) -> list[str]:

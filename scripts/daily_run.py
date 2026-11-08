@@ -300,7 +300,7 @@ def run_channel(channel_name: str, cfg: dict) -> None:
         )
 
 
-PIPELINE_TIMEOUT_S = 45 * 60    # Short: render leva ~20 min
+PIPELINE_TIMEOUT_S = 90 * 60    # Short: revisão de fatos (até 20 min) + render de 35 cenas (~40 min)
 LONG_TIMEOUT_S = 150 * 60      # longo/compilação (48 cenas levou ~2 h)
 RETRY_TIMEOUT_S = 30 * 60
 

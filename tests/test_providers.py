@@ -102,3 +102,21 @@ def test_health_reset_clears_bans_and_rests():
     assert providers.health_reset("all") >= 2
     fresh = KeyRotator(["ka", "kb"])
     assert sorted(fresh.order()) == ["ka", "kb"]
+
+
+def test_models_endpoint_failure_does_not_drop_the_key(monkeypatch):
+    # /models com 403 não pode tirar a chave da rotação (bug de 08/11)
+    import httpx
+
+    providers._model_cache.clear()
+
+    class Resp:
+        status_code = 403
+
+        def json(self):
+            return {}
+
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: Resp())
+    models = providers._fetch_models("xai", "https://api.x.ai/v1/models", "chave-xyz-123")
+    assert models, "a chave precisa continuar sendo tentada mesmo sem /models"
+    assert not any("xyz-123"[-6:] in k for k in providers._model_cache)  # falha não fica no cache
