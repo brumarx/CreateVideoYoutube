@@ -18,6 +18,9 @@ from src.idea_sources import refresh_github  # noqa: E402
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help"):
+        print("Uso: python scripts/refresh_idea_pool.py [canal]   (padrão: aprendervia)")
+        raise SystemExit(0)
     channel = sys.argv[1] if len(sys.argv) > 1 else "aprendervia"
     topics = refresh_github(channel)
     for t in topics[:10]:

@@ -25,6 +25,7 @@ import re
 import shutil
 import sys
 import subprocess
+import time
 import unicodedata
 from functools import partial
 from pathlib import Path
@@ -530,6 +531,9 @@ def _get_viral_topics_with_trending(
     return queries or fallback_queries or []
 
 
+FACT_CHECK_BUDGET_S = 20 * 60  # teto de tempo do laço de revisão de fatos
+
+
 def run(
     channel_name: str,
     topic: str | None,
@@ -543,6 +547,7 @@ def run(
     script_only: bool = False,
     no_upload: bool = False,
     must_publish: bool = False,
+    approved: bool = False,
     compilation: bool = False,
 ) -> None:
     channel = ChannelConfig.load(channel_name)
@@ -812,7 +817,16 @@ def run(
             from src.fact_check import claim_sources as fontes_por_afirmacao, merge_web_facts
 
             web_facts = merge_web_facts(web_facts, fontes_por_afirmacao(script, topic))
-        for attempt in range(FACT_CHECK_REWRITES + 1):
+        # aprovado por humano: a revisão não roda de novo (o humano já leu); a
+        # aprovação manual é a barreira, e a revisão de fatos não a desfaz
+        fact_started = time.monotonic()
+        for attempt in range(0 if approved else FACT_CHECK_REWRITES + 1):
+            if time.monotonic() - fact_started > FACT_CHECK_BUDGET_S:
+                # orçamento de tempo do laço: sem convergir, sobe PRIVADO com as
+                # ressalvas em vez de perder o vídeo inteiro (motivacional 777, política 778)
+                log.warning("[%s] revisão de fatos passou de %d min sem convergir — sobe privado com ressalva", job_id, FACT_CHECK_BUDGET_S // 60)
+                script = {**script, "_ressalvas": [f"revisão de fatos sem convergir em {FACT_CHECK_BUDGET_S // 60} min: confira o roteiro antes de publicar"]}
+                break
             problems = review_script(script, topic, facts, web_facts)
             if problems is None:
                 # revisor fora do ar: tenta 1x de novo; sem revisão o vídeo
@@ -1757,6 +1771,8 @@ def main() -> None:
     )
     parser.add_argument("--facts-file", default=None, help="JSON com os dados reais do vídeo ({tema, dados} ou {noticias}) em vez de buscar/sortear")
     parser.add_argument("--script-file", default=None, help="JSON de roteiro pronto (mesmo formato do gerado) — pula a geração, mantém todas as revisões")
+    parser.add_argument("--approved", action="store_true",
+                        help="roteiro já aprovado por humano (painel): não refaz a revisão de fatos, só renderiza")
     parser.add_argument("--script-only", action="store_true", help="para depois do roteiro aprovado nas revisões; salva script.json/facts.json e o comando de render")
     parser.add_argument("--no-upload", action="store_true", help="renderiza e deixa 'ready' (com upload_meta) pro daily_run publicar")
     parser.add_argument("--compilation", action="store_true", help="longo semanal: junta os Shorts publicados na semana (data/published_scripts) num vídeo longo; com menos de 3, longo com tema da fila")
@@ -1769,7 +1785,7 @@ def main() -> None:
             args.channel, args.topic, args.dry_run, args.publish_at, long_form=args.long,
             fact_label=args.fact_label, botafogo_task=args.botafogo_task, script_file=args.script_file,
             facts_file=args.facts_file, script_only=args.script_only, no_upload=args.no_upload,
-            must_publish=args.must_publish, compilation=args.compilation,
+            must_publish=args.must_publish, compilation=args.compilation, approved=args.approved,
         )
     except ScriptRejected:
         sys.exit(EXIT_SCRIPT_REJECTED)

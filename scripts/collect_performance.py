@@ -12,6 +12,7 @@ import json
 import logging
 import re
 import sqlite3
+from src.db import connect_db
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -80,7 +81,7 @@ def main() -> None:
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-    con = sqlite3.connect(QUEUE_DB)
+    con = connect_db(QUEUE_DB)
     _ensure_title_column(con)
     rows = con.execute(
         "SELECT id, channel, youtube_video_id FROM jobs WHERE status='uploaded' "

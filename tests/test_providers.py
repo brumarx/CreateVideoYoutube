@@ -93,3 +93,12 @@ def test_health_file_does_not_store_raw_key():
     r = KeyRotator(["segredo-123"])
     r.ban("segredo-123")
     assert "segredo-123" not in providers.HEALTH_FILE.read_text()
+
+
+def test_health_reset_clears_bans_and_rests():
+    r = KeyRotator(["ka", "kb"])
+    r.ban("ka")
+    r.rest("kb", 300)
+    assert providers.health_reset("all") >= 2
+    fresh = KeyRotator(["ka", "kb"])
+    assert sorted(fresh.order()) == ["ka", "kb"]

@@ -503,6 +503,19 @@ def run_housekeeping():
 
 
 @app.before_request
+def _origem_confere():
+    """Proteção básica contra CSRF: um POST que vem de outro site (Origin
+    diferente do host do painel) é recusado. Navegador manda Origin em todo POST."""
+    from urllib.parse import urlparse
+
+    if request.method == "POST":
+        origin = request.headers.get("Origin")
+        if origin and urlparse(origin).netloc != request.host:
+            return ("Pedido de outro site recusado", 403)
+    return None
+
+
+@app.before_request
 def _senha_opcional():
     """Se PAINEL_SENHA estiver definida, o painel pede usuário e senha (qualquer
     usuário, a senha é a PAINEL_SENHA). Sem ela, o painel segue como antes."""

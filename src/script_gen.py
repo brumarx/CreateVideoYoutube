@@ -7,6 +7,7 @@ import logging
 import math
 import re
 import sqlite3
+from .db import connect_db
 from contextlib import closing
 from datetime import date
 from pathlib import Path
@@ -898,7 +899,7 @@ def recent_mistakes(channel_name: str, jobs: int = 8, max_items: int = 6) -> str
     pro LLM não repetir o mesmo tipo de erro (botafogo 09/10: 'jogo em casa'
     sendo fora, 'zona de rebaixamento' sem fonte, jobs 350-353)."""
     try:
-        with closing(sqlite3.connect(QUEUE_DB)) as conn:
+        with closing(connect_db(QUEUE_DB)) as conn:
             rows = conn.execute(
                 "SELECT error FROM jobs WHERE channel = ? AND status IN ('retried', 'failed') "
                 "AND (error LIKE ? OR error LIKE ?) ORDER BY id DESC LIMIT ?",

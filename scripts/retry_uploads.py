@@ -19,6 +19,7 @@ import json
 import logging
 import shutil
 import sqlite3
+from src.db import connect_db
 import sys
 from pathlib import Path
 
@@ -41,7 +42,7 @@ def _failed_jobs(channel: str | None, status: str = "failed") -> list[tuple[int,
     if channel:
         query += " AND channel = ?"
         params = (status, channel)
-    with sqlite3.connect(DB_PATH) as conn:
+    with connect_db(DB_PATH) as conn:
         rows = conn.execute(query + " ORDER BY id", params).fetchall()
     jobs = []
     for job_id, ch, video_path in rows:
@@ -87,7 +88,7 @@ def upload_pending(channel_filter: str | None, status: str = "failed", limit: in
         if channel_name in dead_tokens:
             continue
         # idempotência: job que já tem id no YouTube não sobe de novo (duplicaria o vídeo)
-        with sqlite3.connect(_DB) as _c:
+        with connect_db(_DB) as _c:
             row = _c.execute("SELECT youtube_video_id FROM jobs WHERE id = ?", (job_id,)).fetchone()
         if row and row[0]:
             log.warning("[%s] já tem vídeo no YouTube (%s) — não reenvio, marco como enviado", job_id, row[0])

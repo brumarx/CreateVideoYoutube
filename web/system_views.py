@@ -7,6 +7,10 @@ import sqlite3
 import statistics
 from datetime import datetime
 from pathlib import Path
+import sys as _sys
+
+_sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from src.db import connect_db  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 QUEUE_DB = ROOT / "data" / "queue.db"
@@ -27,7 +31,7 @@ def performance_view() -> dict:
     """Mediana de views dos vídeos curtos por canal, e o efeito do título (60 caracteres)."""
     rows: list[tuple] = []
     if QUEUE_DB.exists():
-        con = sqlite3.connect(QUEUE_DB)
+        con = connect_db(QUEUE_DB)
         rows = con.execute(
             "SELECT channel, is_short, views_current, COALESCE(title,'') FROM video_performance"
         ).fetchall()

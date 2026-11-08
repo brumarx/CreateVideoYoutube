@@ -25,6 +25,7 @@ import logging
 import os
 import shutil
 import sqlite3
+from src.db import connect_db
 import subprocess
 import sys
 from contextlib import closing
@@ -87,7 +88,7 @@ RETRY_KEEP_DAYS = 14
 
 def _last_job(channel_name: str, after_id: int):
     """Job criado por esta tentativa (id maior que o último antes dela)."""
-    with closing(sqlite3.connect(DB_PATH)) as conn:
+    with closing(connect_db(DB_PATH)) as conn:
         return conn.execute(
             "SELECT id, status, video_path, topic, error FROM jobs WHERE channel = ? AND id > ? ORDER BY id DESC LIMIT 1",
             (channel_name, after_id),
@@ -95,12 +96,12 @@ def _last_job(channel_name: str, after_id: int):
 
 
 def _max_job_id() -> int:
-    with closing(sqlite3.connect(DB_PATH)) as conn:
+    with closing(connect_db(DB_PATH)) as conn:
         return conn.execute("SELECT COALESCE(MAX(id), 0) FROM jobs").fetchone()[0]
 
 
 def cleanup_output() -> None:
-    with closing(sqlite3.connect(DB_PATH)) as conn, conn:
+    with closing(connect_db(DB_PATH)) as conn, conn:
         stale = conn.execute(
             f"UPDATE jobs SET status = 'abandoned', video_path = NULL, thumbnail_path = NULL "
             f"WHERE status IN ({','.join('?' * len(STALE_STATUSES))}) AND datetime(updated_at) < datetime('now', ?)",
@@ -109,7 +110,7 @@ def cleanup_output() -> None:
     if stale:
         log.info("limpeza: %d job(s) parado(s) há mais de %d dias, nunca publicado(s), marcado(s) como abandoned",
                  stale, CLEANUP_AFTER_DAYS)
-    with closing(sqlite3.connect(DB_PATH)) as conn:
+    with closing(connect_db(DB_PATH)) as conn:
         old = {
             row[0]: (row[1], row[2]) for row in conn.execute(
                 f"SELECT id, status, datetime(updated_at) < datetime('now', ?) FROM jobs "
@@ -223,7 +224,7 @@ def _render_approved(channel_name: str, lock_held: bool = False) -> None:
         if trava is None:
             log.info("[%s] trava ocupada — roteiro aprovado fica pra próxima rodada", channel_name)
             return
-    with closing(sqlite3.connect(DB_PATH)) as conn:
+    with closing(connect_db(DB_PATH)) as conn:
         row = conn.execute(
             "SELECT id FROM jobs WHERE channel = ? AND status = 'script_approved' ORDER BY id LIMIT 1",
             (channel_name,),
@@ -235,6 +236,8 @@ def _render_approved(channel_name: str, lock_held: bool = False) -> None:
         update(row[0], status="abandoned", error="render_cmd.json sumiu")
         return
     cmd = json.loads(cmd_file.read_text())
+    if "--approved" not in cmd:
+        cmd.append("--approved")  # o humano aprovou: não refaz a revisão de fatos
     log.info("[%s] renderizando roteiro aprovado (job %s)", channel_name, row[0])
     rc = _run_limited([sys.executable, *cmd[1:]], _timeout_for(cmd, channel_name))
     # render ok = vídeo pronto pra subir (status 'ready', que o upload já conhece);
@@ -304,7 +307,7 @@ RETRY_TIMEOUT_S = 30 * 60
 
 def _published_today(channel_name: str) -> bool:
     """Já tem vídeo do canal hoje (no ar, pronto ou aguardando)?"""
-    with closing(sqlite3.connect(DB_PATH, timeout=30)) as conn:
+    with closing(connect_db(DB_PATH)) as conn:
         n = conn.execute(
             "SELECT COUNT(*) FROM jobs WHERE channel = ? AND date(created_at, 'localtime') = date('now', 'localtime') "
             "AND status IN ('uploaded', 'ready', 'awaiting_approval')",
@@ -352,7 +355,7 @@ def _channels_underperforming(limite: int = 20) -> list[str]:
     import statistics
 
     out = []
-    with closing(sqlite3.connect(DB_PATH, timeout=30)) as conn:
+    with closing(connect_db(DB_PATH)) as conn:
         for (canal,) in conn.execute("SELECT DISTINCT channel FROM video_performance").fetchall():
             rows = conn.execute(
                 "SELECT views_current FROM video_performance WHERE channel = ? AND is_short = 1 "
@@ -369,7 +372,7 @@ def _alerta_do_dia() -> None:
     from src.notify import send_telegram
 
     hoje = date.today().isoformat()
-    with closing(sqlite3.connect(DB_PATH, timeout=30)) as conn:
+    with closing(connect_db(DB_PATH)) as conn:
         rows = conn.execute(
             "SELECT channel, status, id FROM jobs WHERE date(created_at, 'localtime') = ?", (hoje,)
         ).fetchall()
@@ -394,7 +397,7 @@ def main() -> None:
     _lock = _acquire_lock()  # mantém a trava até o fim do processo
     # órfãos: com a trava na mão, nenhum pipeline está rodando; job 'pending' parado há
     # mais de 6 h virou fantasma (ex.: processo morreu) e é fechado como falha
-    with closing(sqlite3.connect(DB_PATH, timeout=30)) as conn:
+    with closing(connect_db(DB_PATH)) as conn:
         conn.execute(
             "UPDATE jobs SET status = 'failed', error = 'órfão: processo não existe mais' "
             "WHERE status IN ('pending', 'scripted', 'narrated') AND updated_at < datetime('now', '-6 hours')"
@@ -417,11 +420,6 @@ def main() -> None:
     if not NO_UPLOAD:
         _run_limited([sys.executable, str(ROOT / "scripts" / "retry_uploads.py")], RETRY_TIMEOUT_S)
 
-    try:
-        _alerta_do_dia()
-    except Exception:  # noqa: BLE001 — o alerta nunca derruba a limpeza
-        log.exception("resumo do fim da rodada falhou")
-
     # consultas à Wikimedia (src/wiki_cache.py) só servem enquanto os vídeos
     # são feitos (e refeitos, no conserto em laço): apaga quando o vídeo já
     # foi feito E publicado — com vídeo ainda na esteira (roteiro aprovado,
@@ -429,7 +427,7 @@ def main() -> None:
     # Mapas/ícones/personagens (data/cache/infographic) ficam: são material.
     from src.wiki_cache import clear
 
-    with closing(sqlite3.connect(DB_PATH)) as conn:
+    with closing(connect_db(DB_PATH)) as conn:
         # job parado há semanas (morreu sem marcar) não segura o cache
         in_flight = conn.execute(
             "SELECT COUNT(*) FROM jobs WHERE (status IN ('pending', 'scripted', 'script_ready', 'script_approved', "
@@ -445,4 +443,14 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    if "-h" in sys.argv or "--help" in sys.argv:
+        print("Rodada diária: roda todos os canais (cron às 10h). Sem argumentos. Trava única em data/pipeline.lock.")
+        raise SystemExit(0)
+    try:
+        main()
+    finally:
+        # o resumo sai mesmo se a rodada quebrou no meio (alerta de falha operacional)
+        try:
+            _alerta_do_dia()
+        except Exception:  # noqa: BLE001
+            log.exception("resumo do fim da rodada falhou")

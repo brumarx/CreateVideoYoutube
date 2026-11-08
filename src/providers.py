@@ -203,19 +203,34 @@ def _health_load() -> dict:
 
 
 def _health_update(key: str, **fields) -> None:
-    """Grava o estado de uma chave no disco (compartilhado entre processos)."""
+    """Grava o estado de uma chave: arquivo temporário + troca atômica, pra
+    nenhum processo ler JSON pela metade."""
     import fcntl
+    import os
 
     HEALTH_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with HEALTH_FILE.open("a+") as fh:
-        fcntl.flock(fh, fcntl.LOCK_EX)
-        fh.seek(0)
-        raw = fh.read()
-        data = json.loads(raw) if raw.strip() else {}
+    lock = HEALTH_FILE.with_suffix(".lock")
+    with lock.open("w") as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        data = _health_load()
         data.setdefault(_key_id(key), {}).update(fields)
-        fh.seek(0)
-        fh.truncate()
-        fh.write(json.dumps(data, ensure_ascii=False))
+        tmp = HEALTH_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, HEALTH_FILE)
+
+
+def health_reset(key_id: str = "all") -> int:
+    """Zera o estado de saúde (um provedor/chave pelo id, ou todos). Devolve quantos."""
+    data = _health_load()
+    if key_id == "all":
+        n = len(data)
+        HEALTH_FILE.write_text("{}", encoding="utf-8")
+        return n
+    if key_id in data:
+        del data[key_id]
+        HEALTH_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        return 1
+    return 0
 
 
 class KeyRotator:

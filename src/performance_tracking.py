@@ -10,6 +10,7 @@ Estende o schema de queue.db com colunas adicionais:
 from __future__ import annotations
 
 import sqlite3
+from .db import connect_db
 from datetime import datetime
 from pathlib import Path
 
@@ -23,7 +24,7 @@ QUEUE_DB = DATA_DIR / "queue.db"
 
 def init_schema() -> None:
     """Cria tabelas extras se não existirem."""
-    with sqlite3.connect(QUEUE_DB) as conn:
+    with connect_db(QUEUE_DB) as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS video_performance (
                 job_id TEXT PRIMARY KEY,
@@ -77,7 +78,7 @@ def record_video_published(
     """Registra um vídeo como publicado."""
     now = datetime.now()
 
-    with sqlite3.connect(QUEUE_DB) as conn:
+    with connect_db(QUEUE_DB) as conn:
         conn.execute("""
             INSERT OR REPLACE INTO video_performance (
                 job_id, channel, published_at, thumbnail_type, opening_style,
@@ -106,7 +107,7 @@ def update_video_views(
     if views_current > 0:
         engagement_rate = (likes + comments) / views_current
 
-    with sqlite3.connect(QUEUE_DB) as conn:
+    with connect_db(QUEUE_DB) as conn:
         conn.execute("""
             UPDATE video_performance SET
                 views_24h = ?,
@@ -124,7 +125,7 @@ def update_video_views(
 
 def get_best_publish_time(channel: str) -> dict:
     """Retorna melhor hora e dia para publicar baseado em histórico."""
-    with sqlite3.connect(QUEUE_DB) as conn:
+    with connect_db(QUEUE_DB) as conn:
         conn.row_factory = sqlite3.Row
 
         # Hora melhor
@@ -162,7 +163,7 @@ def get_best_format_by_metric(
 
     metric: "opening_style", "closing_style", "thumbnail_type"
     """
-    with sqlite3.connect(QUEUE_DB) as conn:
+    with connect_db(QUEUE_DB) as conn:
         conn.row_factory = sqlite3.Row
 
         result = conn.execute(f"""
@@ -193,7 +194,7 @@ def update_channel_summary(channel: str) -> None:
     best_opening = get_best_format_by_metric(channel, "opening_style")
     best_thumbnail = get_best_format_by_metric(channel, "thumbnail_type")
 
-    with sqlite3.connect(QUEUE_DB) as conn:
+    with connect_db(QUEUE_DB) as conn:
         conn.execute("""
             INSERT OR REPLACE INTO channel_performance_summary (
                 channel, best_publish_hour, best_publish_day,

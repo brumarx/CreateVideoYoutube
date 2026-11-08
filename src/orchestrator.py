@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from .db import connect_db
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -39,7 +40,7 @@ CREATE TABLE IF NOT EXISTS jobs (
 
 def _connect() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=30)  # WAL + espera: painel, pipeline e coleta escrevem juntos
+    conn = connect_db(DB_PATH)  # WAL + espera: painel, pipeline e coleta escrevem juntos
     conn.execute(SCHEMA)
     return conn
 
