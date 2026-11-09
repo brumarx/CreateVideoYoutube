@@ -1027,6 +1027,64 @@ def _corte_scene(spec: dict, w: int, h: int, background: Image.Image | None) -> 
     return img.convert("RGB")
 
 
+def _perfil_scene(spec: dict, w: int, h: int, background: Image.Image | None) -> Image.Image | None:
+    """Coluna de água com a escala de profundidade e um valor em cada nível
+    (ex.: salinidade a 0 m, 20 m...). Como o Short do Lago Assal mostra 35%
+    e 40%."""
+    niveis = []
+    for n in spec.get("niveis") or []:
+        if isinstance(n, dict):
+            p, v = _as_float(n.get("prof")), _as_float(n.get("valor"))
+            if p is not None and v is not None and p >= 0:
+                niveis.append((p, v, str(n.get("rotulo") or f"{v:g}")))
+    if not (2 <= len(niveis) <= 5):
+        return None
+    niveis.sort()
+    max_p = max(p for p, _, _ in niveis) * 1.15 or 1.0
+    img = Image.new("RGBA", (w, h), (14, 20, 32, 255))
+    draw = ImageDraw.Draw(img)
+    top, bottom = h * 0.28, h * 0.8
+    col_l, col_r = w * 0.32, w * 0.68
+    for y in range(int(top), int(bottom)):  # água: mais escura quanto mais funda
+        t = (y - top) / (bottom - top)
+        draw.line((col_l, y, col_r, y), fill=(int(30 - 14 * t), int(120 - 70 * t), int(190 - 90 * t)))
+    label = _font(LABEL_FONT, int(w * 0.032))
+    big = _font(SERIF_FONT, int(w * 0.05), "Bold")
+    if spec.get("titulo"):
+        _shadowed_text(img, (w / 2, h * 0.14), str(spec["titulo"]), big, fill=(235, 235, 235))
+    for p, v, rotulo in niveis:
+        y = top + (bottom - top) * p / max_p
+        draw.line((col_l - w * 0.05, y, col_r + w * 0.05, y), fill=(235, 235, 235), width=2)
+        _shadowed_text(img, (col_l - w * 0.07, y), f"{p:g} m", label, fill=(235, 235, 235))
+        _shadowed_text(img, (col_r + w * 0.08, y), rotulo, big, fill=HIGHLIGHT)
+    return img.convert("RGB")
+
+
+def _termometro_scene(spec: dict, w: int, h: int, background: Image.Image | None) -> Image.Image | None:
+    """Termômetro com o valor escrito e o nível preenchido em proporção
+    (ex.: 52 °C). A escala vai até 70 ou até o valor, o que for maior."""
+    v = _as_float(spec.get("valor"))
+    if v is None or not (-50 <= v <= 1000):
+        return None
+    img = _backdrop(background, w, h)
+    draw = ImageDraw.Draw(img)
+    cx = w / 2
+    tube_w = w * 0.08
+    top, bottom = h * 0.3, h * 0.72
+    bulb_r = w * 0.085
+    scale_max = max(70.0, v)
+    level = bottom - (bottom - top) * max(v, 0) / scale_max
+    draw.rounded_rectangle((cx - tube_w / 2, top, cx + tube_w / 2, bottom), radius=int(tube_w / 2), fill=(40, 40, 46))
+    draw.rectangle((cx - tube_w * 0.3, level, cx + tube_w * 0.3, bottom), fill=(232, 88, 60))
+    draw.ellipse((cx - bulb_r, bottom - bulb_r * 0.6, cx + bulb_r, bottom + bulb_r * 1.4), fill=(232, 88, 60))
+    big = _font(SERIF_FONT, int(w * 0.16), "Bold")
+    unit = str(spec.get("unidade") or "°C")
+    _shadowed_text(img, (cx, h * 0.18), f"{v:g}{unit}", big, fill=HIGHLIGHT)
+    if spec.get("rotulo"):
+        _shadowed_text(img, (cx, h * 0.84), str(spec["rotulo"]), _font(LABEL_FONT, int(w * 0.04)), fill=(235, 235, 235))
+    return img.convert("RGB")
+
+
 class Renderer:
     """Um por vídeo: guarda o último mapa pra servir de fundo das cenas
     sem mapa (número, comparação, ano)."""
@@ -1148,6 +1206,10 @@ class Renderer:
                 return _ranking_scene(spec, self.w, self.h, self.last_base)
             if tipo == "corte":
                 return _corte_scene(spec, self.w, self.h, self.last_base)
+            if tipo == "perfil":
+                return _perfil_scene(spec, self.w, self.h, self.last_base)
+            if tipo == "termometro":
+                return _termometro_scene(spec, self.w, self.h, self.last_base)
         except Exception as exc:  # noqa: BLE001 — gráfico é bônus: cai pra cascata normal
             log.warning("gráfico %s falhou: %s", spec.get("tipo"), exc)
         return None
@@ -1308,6 +1370,18 @@ def _ground_beat(b: dict, narration: str) -> dict | None:
         if len(itens) < 2:
             return None
         return {**b, "itens": itens}
+    if tipo == "termometro":
+        if b.get("valor") is None or not spoken_numbers_ok({"valor": str(b["valor"])}, narration):
+            return None
+        return b
+    if tipo == "perfil":
+        # só nível cuja profundidade e valor a cena FALA
+        niveis = [n for n in b.get("niveis") or [] if isinstance(n, dict)
+                  and spoken_numbers_ok({"valor": str(n.get("valor", ""))}, narration)
+                  and (_as_float(n.get("prof")) == 0 or spoken_numbers_ok({"valor": str(n.get("prof", ""))}, narration))]
+        if len(niveis) < 2:
+            return None
+        return {**b, "niveis": niveis}
     if tipo == "corte":
         # os dois lugares do corte têm que ser citados na narração desta cena
         if not (_said(str(b.get("esquerda") or ""), nf) and _said(str(b.get("direita") or ""), nf)):

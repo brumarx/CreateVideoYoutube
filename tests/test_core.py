@@ -836,3 +836,19 @@ def test_ranking_e_corte_so_com_o_que_a_narracao_diz():
     assert _ground_beat(corte, "A água chega ao lago por baixo da terra.") is None
     assert _ranking_scene(out, 1080, 1920, None) is not None
     assert _corte_scene(corte, 1080, 1920, None) is not None
+
+
+def test_perfil_e_termometro_so_com_valor_falado():
+    # Fractal (Lago Assal): perfil de profundidade e termômetro; valor que a narração não fala sai
+    from src.infographic import _ground_beat, _perfil_scene, _termometro_scene
+
+    narr = "A salinidade chega a 35% na superfície e a 40% a 20 metros, e a água chega a 52 graus."
+    perfil = {"tipo": "perfil", "titulo": "Salinidade", "niveis": [
+        {"prof": 0, "valor": 35, "rotulo": "35%"}, {"prof": 20, "valor": 40, "rotulo": "40%"},
+        {"prof": 50, "valor": 60, "rotulo": "60%"}]}
+    out = _ground_beat(perfil, narr)
+    assert out is not None and len(out["niveis"]) == 2
+    assert _perfil_scene(out, 1080, 1920, None) is not None
+    assert _ground_beat({"tipo": "termometro", "valor": 52}, narr) is not None
+    assert _ground_beat({"tipo": "termometro", "valor": 99}, narr) is None
+    assert _termometro_scene({"tipo": "termometro", "valor": 52, "unidade": "°C"}, 1080, 1920, None) is not None
