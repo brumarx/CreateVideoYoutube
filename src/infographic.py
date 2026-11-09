@@ -916,7 +916,15 @@ def strong_number(narration: str) -> dict | None:
         if words and _fold(words[0]) in _MEASURE_UNITS:
             # medida: a unidade vai junto do número e não pega a palavra
             # seguinte ("4,3 / metros arremessa", job 708)
-            unit, words = f"{unit} {_MEASURE_UNITS[_fold(words[0])]}", []
+            base = _MEASURE_UNITS[_fold(words[0])]
+            # "metros cúbicos" é m³ e "por dia/ano" vira /dia: sem isso o cartão
+            # saía "190 mil m" (09/11, Fractal, job 793)
+            if base == "m" and len(words) > 1 and _fold(words[1]).startswith("cubic"):
+                base = "m³"
+            per = re.match(r"\s+por\s+(dia|ano|mês|mes|hora|semana)\b", narration[m.end():], re.I)
+            if per:
+                base += f"/{per[1].lower()}"
+            unit, words = f"{unit} {base}", []
         cand = {"tipo": "numero", "valor": f"{cur + ' ' if cur else ''}{num}{unit}".strip(), "rotulo": " ".join(words)}
         score = (2 if mult or cur else 0) + len(digits)
         if best is None or score > best[0]:
