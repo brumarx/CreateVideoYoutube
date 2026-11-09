@@ -914,3 +914,13 @@ def test_groq_pulado_quando_pedido_grande():
     assert _too_big_for("groq", grande) is True
     assert _too_big_for("groq", pequeno) is False
     assert _too_big_for("openrouter", grande) is False
+
+
+def test_cadeia_de_texto_sem_xai_cerebras_gemini_e_com_nemotron_no_openrouter():
+    # 09/11: revisão dos modelos (ver análise do run 800/801)
+    from src import providers as P
+
+    nomes = [p[0] for p in P.OPENAI_COMPAT_PROVIDERS]
+    assert "xai" not in nomes and "cerebras" not in nomes
+    assert P._GEMINI_TEXT_IN_CHAIN is False
+    assert P._STRONG_MODELS["openrouter"] == ["nvidia/nemotron-3-ultra-550b-a55b:free"]

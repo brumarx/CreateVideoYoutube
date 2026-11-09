@@ -59,23 +59,27 @@ _PREFERRED_MODELS = {
     "mistral": ["mistral-medium-latest", "mistral-small-latest", "magistral-medium-latest"],
 }
 
+_GEMINI_TEXT_IN_CHAIN = False  # ver complete(): Gemini só na visão
+
 # Modelo mais inteligente de cada provedor: tentado em TODAS as chaves do
 # rodízio antes de qualquer outro modelo (ver complete)
 _STRONG_MODELS = {
     "nvidia": ["nvidia/nemotron-3-ultra-550b-a55b"],
     "groq": ["openai/gpt-oss-120b"],
     "cerebras": ["gpt-oss-120b"],
+    # 09/11: a lista grátis do OpenRouter começava por modelos pequenos e o Nemotron 550B
+    # (contexto de 1 milhão) nunca era tentado; agora é o primeiro
+    "openrouter": ["nvidia/nemotron-3-ultra-550b-a55b:free"],
 }
 
 # (nome, atributo em LLMKeys, endpoint de chat, endpoint de listagem de modelos)
+# xAI (403 nas contas) e Cerebras (402, virou pago) saíram em 09/11: só geravam atraso e silêncio
 OPENAI_COMPAT_PROVIDERS = [
     # 1º: o maior modelo grátis que temos (Nemotron 550B). A cota diária do
     # gpt-oss-120b no Groq acabava à tarde (04/11) e sobrava modelo fraco
     # pra escrever e revisar o roteiro
     ("nvidia", "nvidia", "https://integrate.api.nvidia.com/v1/chat/completions", "https://integrate.api.nvidia.com/v1/models"),
-    ("xai", "xai", "https://api.x.ai/v1/chat/completions", "https://api.x.ai/v1/models"),
     ("groq", "groq", "https://api.groq.com/openai/v1/chat/completions", "https://api.groq.com/openai/v1/models"),
-    ("cerebras", "cerebras", "https://api.cerebras.ai/v1/chat/completions", "https://api.cerebras.ai/v1/models"),
     ("openrouter", "openrouter", "https://openrouter.ai/api/v1/chat/completions", "https://openrouter.ai/api/v1/models"),
     ("mistral", "mistral", "https://api.mistral.ai/v1/chat/completions", "https://api.mistral.ai/v1/models"),
 ]
@@ -531,7 +535,9 @@ def complete(
         if result is not None:
             return result
 
-    if keys.gemini:
+    # Gemini fora da cadeia de texto (09/11): gemini-2.5-flash retirado para contas novas (404) e
+    # o flash-latest dava timeout de 60 s em cada chamada. A visão usa visual_check.py.
+    if _GEMINI_TEXT_IN_CHAIN and keys.gemini:
         rotator = _rotator_for(keys.gemini)
         for api_key in rotator.order():
             models = _fetch_gemini_models(api_key)
