@@ -936,6 +936,97 @@ def strong_number(narration: str) -> dict | None:
     return best[1] if best else None
 
 
+def _as_float(value) -> float | None:
+    try:
+        return float(str(value).replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+
+
+def _ranking_scene(spec: dict, w: int, h: int, background: Image.Image | None) -> Image.Image | None:
+    """Barras de ranking com 2 a 6 itens na ordem dada (1º, 2º, 3º...), altura
+    proporcional ao valor, e o item de `destaque` em cor de destaque. O Short
+    de referência (Lago Assal) compara 3 lugares assim; antes só cabia
+    comparação de 2 valores."""
+    itens = []
+    for it in spec.get("itens") or []:
+        if isinstance(it, dict) and it.get("nome") is not None:
+            v = _as_float(it.get("valor"))
+            if v is not None and v > 0:
+                itens.append((str(it["nome"]), v, str(it.get("valor_rotulo") or "")))
+    if not (2 <= len(itens) <= 6):
+        return None
+    img = _backdrop(background, w, h)
+    title_font = _font(SERIF_FONT, int(w * 0.055), "Bold")
+    name_font = _font(LABEL_FONT, int(w * 0.034))
+    val_font = _font(SERIF_FONT, int(w * 0.05), "Bold")
+    if spec.get("titulo"):
+        _shadowed_text(img, (w / 2, h * 0.12), str(spec["titulo"]), title_font, fill=(235, 235, 235))
+    base_y, max_h = h * 0.72, h * 0.42
+    top_v = max(v for _, v, _ in itens)
+    slot = w * 0.8 / len(itens)
+    bar_w = min(w * 0.17, slot * 0.7)
+    destaque = _fold(str(spec.get("destaque") or ""))
+    draw = ImageDraw.Draw(img)
+    for k, (nome, v, shown) in enumerate(itens):
+        cx = w * 0.1 + slot * (k + 0.5)
+        bh = max_h * v / top_v
+        is_hi = bool(destaque) and _fold(nome) == destaque
+        color = HIGHLIGHT if is_hi else (190, 190, 190)
+        draw.rounded_rectangle((cx - bar_w / 2, base_y - bh, cx + bar_w / 2, base_y), radius=int(bar_w * 0.12), fill=color)
+        _shadowed_text(img, (cx, base_y - bh - w * 0.03), shown or f"{v:g}", val_font, fill=color if is_hi else (240, 240, 240))
+        words = nome.split()
+        lines = [" ".join(words[:len(words) // 2 or 1]), " ".join(words[len(words) // 2 or 1:])] if len(nome) > 11 and len(words) > 1 else [nome]
+        for li, line in enumerate(lines):
+            _shadowed_text(img, (cx, base_y + w * 0.04 + li * name_font.size * 1.1), line, name_font, fill=(235, 235, 235))
+    return img.convert("RGB")
+
+
+def _corte_scene(spec: dict, w: int, h: int, background: Image.Image | None) -> Image.Image | None:
+    """Corte do terreno: mar de um lado, lago do outro, e uma seta de água
+    por baixo da terra de um para o outro (como o Short do Lago Assal). Os
+    rótulos vêm do roteiro; o desenho é só o mecanismo."""
+    esq, dir_ = str(spec.get("esquerda") or "").strip(), str(spec.get("direita") or "").strip()
+    if not esq or not dir_:
+        return None
+    img = Image.new("RGBA", (w, h), (14, 20, 32, 255))
+    draw = ImageDraw.Draw(img)
+    for y in range(int(h * 0.5)):  # céu
+        t = y / (h * 0.5)
+        draw.line((0, y, w, y), fill=(int(20 + 30 * t), int(40 + 40 * t), int(70 + 40 * t)))
+    def ground(x: float) -> float:  # serra no meio, bacia que desce à direita
+        ridge = h * 0.56 - h * 0.13 * math.exp(-((x - w * 0.5) / (w * 0.13)) ** 2)
+        t = min(max((x - w * 0.7) / (w * 0.25), 0.0), 1.0)
+        return ridge + h * 0.12 * t * t * (3 - 2 * t)
+    pts = [(x, ground(x)) for x in range(0, w + 1, 4)]
+    draw.polygon([(0, h)] + pts + [(w, h)], fill=(118, 86, 58))
+    # água só onde o terreno está abaixo da linha dela: mar à esquerda, lago na bacia
+    sea_y, lake_y = h * 0.5, h * 0.62
+    for x in range(0, w, 3):
+        g = ground(x)
+        if x < w * 0.25 and g > sea_y:
+            draw.rectangle((x, sea_y, x + 3, g), fill=(28, 110, 190))
+        if x > w * 0.7 and g > lake_y:
+            draw.rectangle((x, lake_y, x + 3, g), fill=HIGHLIGHT)
+    # água subterrânea: seta tracejada por baixo da serra
+    path = [(w * 0.12 + i * (w * 0.76 / 40), h * 0.76 + math.sin(i / 3.0) * h * 0.02) for i in range(41)]
+    if str(spec.get("fluxo") or "") == "direita_para_esquerda":
+        path = path[::-1]
+    for i in range(0, len(path) - 3, 4):
+        draw.line((path[i], path[i + 2]), fill=(120, 200, 255), width=max(3, w // 180))
+    tip = path[-1]
+    prev = path[-4]
+    ang = math.atan2(tip[1] - prev[1], tip[0] - prev[0])
+    head = w * 0.03
+    draw.polygon([tip, (tip[0] - head * math.cos(ang - 0.45), tip[1] - head * math.sin(ang - 0.45)),
+                  (tip[0] - head * math.cos(ang + 0.45), tip[1] - head * math.sin(ang + 0.45))], fill=(120, 200, 255))
+    label = _font(LABEL_FONT, int(w * 0.038))
+    _shadowed_text(img, (w * 0.14, h * 0.44), esq, label, fill=(235, 235, 235))
+    _shadowed_text(img, (w * 0.84, h * 0.6), dir_, label, fill=HIGHLIGHT)
+    _shadowed_text(img, (w * 0.5, h * 0.84), str(spec.get("legenda") or "água por baixo da terra"), label, fill=(235, 235, 235))
+    return img.convert("RGB")
+
+
 class Renderer:
     """Um por vídeo: guarda o último mapa pra servir de fundo das cenas
     sem mapa (número, comparação, ano)."""
@@ -1053,6 +1144,10 @@ class Renderer:
                 return _number_scene(spec, self.w, self.h, self.last_base)
             if tipo == "ano":
                 return _year_scene(spec, self.w, self.h, self.last_base)
+            if tipo == "ranking":
+                return _ranking_scene(spec, self.w, self.h, self.last_base)
+            if tipo == "corte":
+                return _corte_scene(spec, self.w, self.h, self.last_base)
         except Exception as exc:  # noqa: BLE001 — gráfico é bônus: cai pra cascata normal
             log.warning("gráfico %s falhou: %s", spec.get("tipo"), exc)
         return None
@@ -1204,6 +1299,19 @@ def _ground_beat(b: dict, narration: str) -> dict | None:
     if tipo in ("numero", "ano"):
         if b.get("rotulo") and not _label_ok(str(b["rotulo"]), nf):
             b = {**b, "rotulo": ""}
+        return b
+    if tipo == "ranking":
+        # só entra item cujo valor a cena FALA (número sem narração = invenção)
+        itens = [it for it in b.get("itens") or []
+                 if isinstance(it, dict) and it.get("nome") and _said(str(it["nome"]), nf)
+                 and spoken_numbers_ok({"valor": re.sub(r"\D", "", str(it.get("valor", "")))[:6] or ""}, narration)]
+        if len(itens) < 2:
+            return None
+        return {**b, "itens": itens}
+    if tipo == "corte":
+        # os dois lugares do corte têm que ser citados na narração desta cena
+        if not (_said(str(b.get("esquerda") or ""), nf) and _said(str(b.get("direita") or ""), nf)):
+            return None
         return b
     if tipo == "comparacao":
         for k in ("a_rotulo", "b_rotulo"):

@@ -818,3 +818,21 @@ def test_conserto_respeita_prazo_da_revisao(monkeypatch):
                                     [{"tipo": "x", "termo": "y", "motivo": "z"}],
                                     "tema", None, None, "job", deadline=0.0)
     assert out is None
+
+
+def test_ranking_e_corte_so_com_o_que_a_narracao_diz():
+    # Fractal (Lago Assal): ranking e corte novos; item sem valor falado e lugar não citado saem
+    from src.infographic import _ground_beat, _corte_scene, _ranking_scene
+
+    narr = "O Mar Morto fica a 430 metros e o Lago Assal fica a 155 metros abaixo do nível do mar."
+    rk = {"tipo": "ranking", "itens": [
+        {"nome": "Mar Morto", "valor": 430}, {"nome": "Lago Assal", "valor": 155},
+        {"nome": "Mar da Galileia", "valor": 212}]}
+    out = _ground_beat(rk, narr)
+    assert out is not None and [i["nome"] for i in out["itens"]] == ["Mar Morto", "Lago Assal"]
+    assert _ground_beat({"tipo": "ranking", "itens": [{"nome": "Mar Morto", "valor": 430}]}, narr) is None
+    corte = {"tipo": "corte", "esquerda": "Oceano", "direita": "Lago Assal"}
+    assert _ground_beat(corte, "A água do Oceano chega ao Lago Assal por baixo da terra.") is not None
+    assert _ground_beat(corte, "A água chega ao lago por baixo da terra.") is None
+    assert _ranking_scene(out, 1080, 1920, None) is not None
+    assert _corte_scene(corte, 1080, 1920, None) is not None
