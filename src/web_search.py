@@ -52,6 +52,10 @@ def search_topic_facts(query: str, max_results: int = 5) -> list[dict] | None:
         seen = {w["url"] for w in wiki}
         facts = wiki + [{**f, "trecho": f["trecho"][:500]} for f in facts if f["url"] not in seen
                         and "wikipedia.org" not in f["url"]][:2]
+    # dados estruturados (Wikidata: coordenadas, datas) e artigos abertos (OpenAlex, só em tema de ciência)
+    extras = wikidata_facts(query) + openalex_facts(query)
+    have = {f["url"] for f in facts}
+    facts = facts + [f for f in extras if f["url"] not in have]
     return facts or None
 
 
@@ -345,3 +349,99 @@ def _tavily(query: str, max_results: int) -> list[dict] | None:
         return facts
 
     return None
+
+
+# ---------------------------------------------------------------- Wikidata e OpenAlex
+# APIs abertas, sem chave. Pedem um User-Agent com o nome do projeto (sem e-mail
+# pessoal, ver regra de dados do usuário).
+OPEN_HEADERS = {"User-Agent": "faceless-video-bot/1.0 (+https://github.com/brumarx/CreateVideoYoutube)"}
+WIKIDATA_API = "https://www.wikidata.org/w/api.php"
+OPENALEX_API = "https://api.openalex.org/works"
+_SCIENCE_RE = re.compile(
+    r"ciênc|cientist|science|vulcão|vulcan|geolog|biolog|química|quimic|física|fisic|clima|climát|"
+    r"espécie|species|oceano|ocean|dessaliniz|desaliniz|lago|lake|mineral|fóssil|fossil|astronom|"
+    r"planeta|planet|genética|genetic|vacina|vaccine|doença|disease|solo|soil|rocha|rock",
+    re.IGNORECASE,
+)
+
+
+def _wd_time(value: str) -> str:
+    """"+2016-12-14T00:00:00Z" -> "14/12/2016" (ou só o ano, se o mês/dia são 00)."""
+    m = re.match(r"[+-]?(\d{4})-(\d{2})-(\d{2})", value or "")
+    if not m:
+        return ""
+    y, mo, d = m.groups()
+    return f"{d}/{mo}/{y}" if d != "00" and mo != "00" else y
+
+
+def wikidata_facts(query: str) -> list[dict]:
+    """Ficha do assunto no Wikidata: coordenadas, data de fundação/evento e
+    descrição. Dados estruturados, então entram com número e data exatos."""
+    if not query:
+        return []
+    try:
+        with httpx.Client(headers=OPEN_HEADERS, timeout=20) as c:
+            found = c.get(WIKIDATA_API, params={"action": "wbsearchentities", "search": query,
+                                                "language": "pt", "format": "json", "limit": 1}).json().get("search", [])
+            if not found:
+                return []
+            qid = found[0]["id"]
+            ent = c.get(WIKIDATA_API, params={"action": "wbgetentities", "ids": qid, "format": "json",
+                                              "languages": "pt|en", "props": "labels|descriptions|claims"}).json()
+            e = ent.get("entities", {}).get(qid, {})
+    except Exception as exc:  # noqa: BLE001 — fonte extra: falha não derruba a pesquisa
+        log.warning("wikidata falhou (%r): %s", query, exc)
+        return []
+    label = (e.get("labels", {}).get("pt") or e.get("labels", {}).get("en") or {}).get("value", query)
+    desc = (e.get("descriptions", {}).get("pt") or e.get("descriptions", {}).get("en") or {}).get("value", "")
+    claims = e.get("claims", {})
+    parts = [f"{label}: {desc}." if desc else f"{label}."]
+    coord = (claims.get("P625") or [{}])[0].get("mainsnak", {}).get("datavalue", {}).get("value")
+    if isinstance(coord, dict) and "latitude" in coord:
+        parts.append(f"Coordenadas: {coord['latitude']:.4f}, {coord['longitude']:.4f}.")
+    for prop, nome in (("P571", "Fundação/criação"), ("P585", "Data do evento")):
+        t = (claims.get(prop) or [{}])[0].get("mainsnak", {}).get("datavalue", {}).get("value")
+        if isinstance(t, dict) and t.get("time"):
+            when = _wd_time(t["time"])
+            if when:
+                parts.append(f"{nome}: {when}.")
+    trecho = " ".join(parts)
+    if len(trecho) <= len(label) + 2:
+        return []
+    return [{"titulo": f"Wikidata: {label}", "url": f"https://www.wikidata.org/wiki/{qid}", "trecho": trecho[:900]}]
+
+
+def _openalex_abstract(index: dict | None) -> str:
+    """OpenAlex guarda o resumo como índice invertido (palavra -> posições)."""
+    if not index:
+        return ""
+    slots: dict[int, str] = {}
+    for word, pos in index.items():
+        for p in pos:
+            slots[p] = word
+    return " ".join(slots[i] for i in sorted(slots))
+
+
+def openalex_facts(query: str, n: int = 2) -> list[dict]:
+    """Artigos científicos de acesso aberto (OpenAlex) com resumo e ano. Só
+    quando o tema tem termo de ciência/natureza; senão não chama."""
+    if not query or not _SCIENCE_RE.search(query):
+        return []
+    try:
+        with httpx.Client(headers=OPEN_HEADERS, timeout=20) as c:
+            works = c.get(OPENALEX_API, params={"search": query[:120], "filter": "is_oa:true",
+                                                "per-page": n}).json().get("results", [])
+    except Exception as exc:  # noqa: BLE001
+        log.warning("openalex falhou (%r): %s", query, exc)
+        return []
+    out = []
+    for w in works[:n]:
+        title = w.get("display_name") or ""
+        abstract = _openalex_abstract(w.get("abstract_inverted_index"))
+        if not title or not abstract:
+            continue
+        year = w.get("publication_year") or ""
+        url = w.get("doi") or w.get("id") or ""
+        out.append({"titulo": f"Artigo ({year}): {title}", "url": url,
+                    "trecho": f"{title} ({year}). {abstract}"[:900]})
+    return out

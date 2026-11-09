@@ -894,3 +894,12 @@ def test_apresentador_vetorial_tres_poses():
     for pose in PRESENTER_POSES:
         img = presenter(300, pose)
         assert img is not None and max(img.size) == 300 and img.mode == "RGBA"
+
+
+def test_wikidata_e_openalex_formatos():
+    # datas do Wikidata e resumo da OpenAlex (índice invertido) sem depender da rede
+    from src.web_search import _openalex_abstract, _wd_time
+
+    assert _wd_time("+2016-00-00T00:00:00Z") == "2016"
+    assert _wd_time("+2016-12-14T00:00:00Z") == "14/12/2016"
+    assert _openalex_abstract({"salt": [0, 3], "lake": [1], "brine": [2]}) == "salt lake brine salt"
