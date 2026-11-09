@@ -1534,6 +1534,33 @@ def character(name: str, look: str, mood: str, size: int) -> Image.Image | None:
     return img
 
 
+PRESENTER_LOOK = ("friendly presenter, man with round glasses and short dark beard, brown jacket, "
+                  "waving hand, smiling, upper body")
+
+
+def presenter(size: int) -> Image.Image | None:
+    """Apresentador fixo do canal (o mesmo desenho em todos os segmentos do
+    vídeo, como no reel de referência). Gerado uma vez com o mesmo modelo de
+    imagem grátis dos personagens e guardado em cache; não é pessoa real."""
+    path = CACHE / "apresentador" / "apresentador.png"
+    if not path.exists():
+        from .visuals import _try_cloudflare
+
+        data = _try_cloudflare(f"{PRESENTER_LOOK}, {CHAR_STYLE}", 1)
+        sticker = _cutout(data, 900) if data else None
+        if sticker is None:
+            # cota de imagem grátis esgotada (como em 09/10): ícone de pessoa do
+            # OpenMoji, já usado pelos outros gráficos — sem custo e sem cota
+            sticker = icon("🧑‍💻", 900)
+            if sticker is None:
+                return None
+        path.parent.mkdir(parents=True, exist_ok=True)
+        sticker.save(path)
+    img = Image.open(path).convert("RGBA")
+    img.thumbnail((size, size), Image.Resampling.LANCZOS)
+    return img
+
+
 def _place_characters(img: Image.Image, view: "View | None", specs: list) -> None:
     """Personagem AO LADO do país dele (nunca em cima: o país é a
     informação), do lado com mais espaço, e longe do outro personagem."""
