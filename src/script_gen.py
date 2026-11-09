@@ -138,6 +138,8 @@ SYSTEM_PROMPT = (
 # número/nome sem fonte.
 ACCURACY_RULES = """REGRAS DE PRECISÃO (obrigatórias — o roteiro passa por revisão de fatos e é descartado se violar):
 - O título, o thumbnail_text e a descrição só podem prometer o que as cenas realmente narram. Nada de título sobre um assunto que o roteiro não cobre.
+- Título com número: o número tem que ter o MESMO sentido que a narração dá a ele. Capacidade planejada, meta, previsão ou "pode chegar a" nunca vira "fixou", "fez", "entregou" ou "em 2021" no título (09/11: título "fixa 4.000 t" com a narração dizendo que 4.000 t/ano é só capacidade declarada).
+- Linguagem de quem não conhece o assunto: termo técnico (mineralização, geotérmica, captura direta do ar, basalto) só com explicação em palavra comum na mesma frase, ou fica de fora. Sigla só se for explicada na primeira vez. No máximo um número por cena, e cada cena fala de uma ideia só. Nada de cena que repete a anterior.
 - Tempo verbal de eventos: compare cada data com a DATA DE HOJE acima. Se a data de um jogo/evento é futura, fale no futuro ("vai enfrentar", "no dia 07/10"); se não houver data completa (dia E mês) nos dados, NÃO afirme se já aconteceu ou não — cite só o que a fonte diz.
 - O que JÁ ACONTECEU (carreira, medalha, infância, obra, decisão) se narra no PASSADO: "ganhou", "chegou a Tóquio", "tinha 13 anos", "treinava". Nada de presente histórico ("ela chega", "sente o peso", "o skate que a levará") — soa como se fosse hoje (Rayssa Leal, 30/10). Presente só pro que é verdade agora; "Imagine..." só como hipótese de quem assiste.
 - Números, valores, placares, nomes e cargos: só os que aparecem nos DADOS REAIS/fontes. Na dúvida, deixe de fora em vez de arredondar, estimar ou completar.

@@ -39,6 +39,12 @@ _SEARCHABLE = {"ferramenta_inexistente", "fato_nao_confirmado"}
 
 def _review_prompt(script: dict, topic: str, facts: dict | None, web_facts: list[dict] | None) -> str:
     narration = "\n".join(f"[cena {i + 1}] {s.get('narration', '')}" for i, s in enumerate(script.get("scenes", [])))
+    # título e miniatura também são conferidos contra a narração (09/11: título
+    # "fixa 4.000 t" com o roteiro dizendo que 4.000 t/ano é só capacidade)
+    narration = (
+        f"TÍTULO DO VÍDEO: {script.get('title', '')}\n"
+        f"TEXTO DA MINIATURA: {script.get('thumbnail_text', '')}\n\nNARRAÇÃO:\n{narration}"
+    )
     sources = "NENHUMA — o roteiro foi escrito só com conhecimento geral."
     web_block = "Trechos de pesquisa na internet fornecidos ao roteirista:\n" + "\n".join(
         f"- {f['titulo']}: {f['trecho']}" for f in web_facts or []
@@ -64,6 +70,10 @@ abaixo ANTES de ele virar vídeo. Aponte SÓ problemas concretos destes tipos:
 - "atribuicao_falsa": diz que algo foi "revelado", "mostrado" ou "está nos
   dados" de uma fonte (Portal da Transparência, TSE, dados oficiais etc.)
   mas as FONTES não trazem esse dado.
+- "titulo_nao_confere": o TÍTULO ou o TEXTO DA MINIATURA afirma um fato ou
+  número com sentido DIFERENTE do que a narração diz. Ex.: título "fixa 4.000 t
+  de CO₂ em 2021" e a narração diz que 4.000 t/ano é a CAPACIDADE declarada
+  de uma fábrica (planejado não é feito). Aponte só quando o sentido muda.
 - "frase_quebrada": frase sem sentido ou incompleta, com palavra faltando ou
   trocada ("a milhas" sem o número, "St." cortado). Só aponte se a frase NÃO se entende.
 - "promessa_sem_conteudo": o roteiro manda fazer ou usar algo que nunca entrega
@@ -164,6 +174,44 @@ _fora_da_fonte_web = """- "fora_da_fonte": fato ESPECÍFICO (número, data, nome
 """
 _checagem_campo = '"checagem": [{"afirmacao": "...", "trecho": "trecho literal da fonte ou null"}], '
 
+
+
+def _title_problems(script: dict) -> list[dict]:
+    """Checagem própria só de título/miniatura × narração. O revisor geral
+    deixou passar "fixa 4.000 t" com a narração dizendo que é capacidade
+    (09/11): ele olha o roteiro inteiro e não marca isso. Aqui é uma pergunta
+    só, com o título e a narração. Sem resposta válida = não bloqueia."""
+    narration = " ".join(sc.get("narration", "") for sc in script.get("scenes", []))
+    title, thumb = script.get("title", ""), script.get("thumbnail_text", "")
+    if not (title and narration):
+        return []
+    prompt = (
+        "Você confere se o TÍTULO e o TEXTO DA MINIATURA de um vídeo afirmam a mesma coisa "
+        "que a NARRAÇÃO, no mesmo sentido.\n"
+        f"TÍTULO: {title}\nMINIATURA: {thumb}\nNARRAÇÃO: {narration}\n\n"
+        "Reprove (ok=false) se o título ou a miniatura afirma um fato ou número com sentido "
+        "DIFERENTE: ex.: capacidade planejada/meta/previsão apresentada como feito; número "
+        "que a narração dá a outra coisa; ação que a narração não diz que aconteceu. "
+        "Título que só resume o assunto sem afirmar nada novo é ok.\n"
+        'Responda SÓ JSON: {"ok": true ou false, "motivo": "1 frase"}'
+    )
+
+    def _valid(raw: str) -> bool:
+        m = re.search(r"\{.*\}", raw, re.DOTALL)
+        try:
+            return bool(m) and isinstance(json.loads(m.group(0)).get("ok"), bool)
+        except (ValueError, json.JSONDecodeError):
+            return False
+
+    try:
+        raw = complete([{"role": "user", "content": prompt}], max_tokens=300, validate=_valid, temperature=0.1)
+    except RuntimeError as exc:
+        log.warning("checagem de título indisponível (%s) — seguindo", exc)
+        return []
+    verdict = json.loads(re.search(r"\{.*\}", raw, re.DOTALL).group(0))
+    if verdict["ok"]:
+        return []
+    return [{"tipo": "titulo_nao_confere", "termo": title, "motivo": str(verdict.get("motivo", ""))}]
 
 
 def _parse(raw: str) -> list[dict] | None:
@@ -350,7 +398,7 @@ def review_script(
             continue
         problems.append(p)
     known = {**facts, "_internet": [f.get("trecho", "") for f in web_facts or []]} if facts else None
-    problems = problems + unknown + numbers_not_in_facts(script, known) + (
+    problems = problems + _title_problems(script) + unknown + numbers_not_in_facts(script, known) + (
         [] if facts else numbers_not_in_sources(script, web_facts)) + broken_sentences(script) + unfulfilled_promises(script)
     if not problems and (facts or web_facts):
         # aprovado pelo revisor: só então a prova por citação (1 chamada a

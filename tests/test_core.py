@@ -762,3 +762,12 @@ def test_escudo_do_botafogo_vira_estrela_mesmo_com_palavra_em_ingles():
     assert out["scenes"][0]["image_prompt"] == _CREST_SAFE_PROMPT
     assert out["scenes"][1]["image_prompt"] == "Coach at a tactical board, subtle club colors"
     assert out["thumbnail_image_prompt"] == _CREST_SAFE_PROMPT
+
+
+def test_revisao_le_titulo_e_miniatura():
+    # job 792: a revisão só lia a narração, então o título "fixa 4.000 t" passou
+    from src.fact_check import _review_prompt
+
+    p = _review_prompt({"title": "TITULO_TESTE", "thumbnail_text": "MINI_TESTE",
+                        "scenes": [{"narration": "frase"}]}, "tema", None, None)
+    assert "TITULO_TESTE" in p and "MINI_TESTE" in p
