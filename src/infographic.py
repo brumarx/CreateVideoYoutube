@@ -1534,28 +1534,66 @@ def character(name: str, look: str, mood: str, size: int) -> Image.Image | None:
     return img
 
 
-PRESENTER_LOOK = ("friendly presenter, man with round glasses and short dark beard, brown jacket, "
-                  "waving hand, smiling, upper body")
+PRESENTER_POSES = ("acenando", "apontando", "pensando")
+_PRESENTER_CANVAS = (400, 500)
 
 
-def presenter(size: int) -> Image.Image | None:
-    """Apresentador fixo do canal (o mesmo desenho em todos os segmentos do
-    vídeo, como no reel de referência). Gerado uma vez com o mesmo modelo de
-    imagem grátis dos personagens e guardado em cache; não é pessoa real."""
-    path = CACHE / "apresentador" / "apresentador.png"
+def _presenter_draw(pose: str) -> Image.Image:
+    """Apresentador vetorial do canal, desenhado em código (sem cota de IA):
+    cabelo castanho, óculos redondos, barba curta, jaqueta marrom e braços em
+    uma de três poses. Mesmo traço e cores em todos os segmentos."""
+    S = 4  # desenha em 4x e reduz: borda limpa
+    W, H = _PRESENTER_CANVAS[0] * S, _PRESENTER_CANVAS[1] * S
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    ink, skin, hair = (34, 26, 26, 255), (240, 196, 160, 255), (92, 58, 34, 255)
+    jacket, shirt, beard = (146, 92, 52, 255), (250, 250, 248, 255), (60, 40, 30, 255)
+    k = lambda v: int(v * S)  # coordenadas no desenho de 400x500
+
+    def limb(a, b, color=jacket, width=34):
+        d.line([(k(a[0]), k(a[1])), (k(b[0]), k(b[1]))], fill=ink, width=k(width) + k(10))
+        d.line([(k(a[0]), k(a[1])), (k(b[0]), k(b[1]))], fill=color, width=k(width))
+        for x, y in (a, b):
+            d.ellipse((k(x - width / 2 - 5), k(y - width / 2 - 5), k(x + width / 2 + 5), k(y + width / 2 + 5)), fill=ink)
+            d.ellipse((k(x - width / 2), k(y - width / 2), k(x + width / 2), k(y + width / 2)), fill=color)
+
+    # poses: ombro -> mão
+    arms = {"acenando": ((118, 290), (62, 410), (300, 290), (352, 190)),
+            "apontando": ((118, 290), (66, 400), (300, 290), (372, 300)),
+            "pensando": ((118, 290), (66, 400), (300, 290), (250, 230))}
+    l_sh, l_hand, r_sh, r_hand = arms.get(pose, arms["acenando"])
+    # corpo: jaqueta com contorno
+    d.rounded_rectangle((k(96), k(250), k(304), k(500)), radius=k(60), fill=ink)
+    d.rounded_rectangle((k(102), k(256), k(298), k(500)), radius=k(56), fill=jacket)
+    d.polygon([(k(176), k(256)), (k(224), k(256)), (k(200), k(318))], fill=shirt)
+    limb(l_sh, l_hand)
+    limb(r_sh, r_hand)
+    # cabeça e cabelo
+    d.ellipse((k(115), k(75), k(285), k(245)), fill=ink)
+    d.ellipse((k(121), k(81), k(279), k(239)), fill=skin)
+    d.chord((k(112), k(60), k(288), k(200)), 180, 360, fill=ink)
+    d.chord((k(118), k(66), k(282), k(196)), 180, 360, fill=hair)
+    d.chord((k(150), k(200), k(250), k(248)), 0, 180, fill=beard)
+    # óculos redondos, ponte e olhos
+    for cx in (166, 234):
+        d.ellipse((k(cx - 27), k(143), k(cx + 27), k(197)), outline=ink, width=k(7))
+        d.ellipse((k(cx - 6), k(161), k(cx + 6), k(173)), fill=ink)
+    d.line([(k(193), k(168)), (k(207), k(168))], fill=ink, width=k(6))
+    d.arc((k(176), k(192), k(224), k(222)), 20, 160, fill=ink, width=k(6))
+    # mão por cima do braço (dedos simples) já está na ponta; devolve reduzido
+    return img.resize(_PRESENTER_CANVAS, Image.Resampling.LANCZOS)
+
+
+def presenter(size: int, pose: str = "acenando") -> Image.Image | None:
+    """Apresentador fixo do canal (mesmo desenho em todos os segmentos, como
+    no reel de referência). Desenhado em código, sem cota de IA e sem custo.
+    Cache por pose em data/cache/apresentador/."""
+    if pose not in PRESENTER_POSES:
+        pose = "acenando"
+    path = CACHE / "apresentador" / f"{pose}.png"
     if not path.exists():
-        from .visuals import _try_cloudflare
-
-        data = _try_cloudflare(f"{PRESENTER_LOOK}, {CHAR_STYLE}", 1)
-        sticker = _cutout(data, 900) if data else None
-        if sticker is None:
-            # cota de imagem grátis esgotada (como em 09/10): ícone de pessoa do
-            # OpenMoji, já usado pelos outros gráficos — sem custo e sem cota
-            sticker = icon("🧑‍💻", 900)
-            if sticker is None:
-                return None
         path.parent.mkdir(parents=True, exist_ok=True)
-        sticker.save(path)
+        _presenter_draw(pose).save(path)
     img = Image.open(path).convert("RGBA")
     img.thumbnail((size, size), Image.Resampling.LANCZOS)
     return img

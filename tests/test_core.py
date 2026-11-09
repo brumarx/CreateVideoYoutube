@@ -884,3 +884,13 @@ def test_selo_crescente_de_lista():
     assert rp._item_banner(scenes[0], scenes) is None
     assert "2/3" in _chapter_banner_filter(b, 1080, 1920, "#ffd400")
     assert rp._item_banner({"item": 1}, [{"item": 1}]) is None
+
+
+def test_apresentador_vetorial_tres_poses():
+    # apresentador do canal desenhado em código (sem cota de IA): as três poses existem e têm o tamanho pedido
+    from src.infographic import PRESENTER_POSES, presenter
+
+    assert len(PRESENTER_POSES) == 3
+    for pose in PRESENTER_POSES:
+        img = presenter(300, pose)
+        assert img is not None and max(img.size) == 300 and img.mode == "RGBA"
