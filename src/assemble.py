@@ -311,6 +311,33 @@ def _keyword_index(group: list[dict]) -> int | None:
     return best
 
 
+def _fit_hook(text: str, width: int, height: int) -> tuple[int, list[str]]:
+    """Tamanho e quebra do gancho do topo: até 2 linhas, no máximo 86% da
+    largura, medidas com a fonte da legenda (FiraSans-Bold). Começa no
+    tamanho do estilo Hook e reduz de 4 em 4 px até caber; `*palavra*`
+    conta sem os asteriscos."""
+    font_path = str(CAPTION_FONT_DIR / "FiraSans-Bold.ttf")
+    max_w = width * 0.86
+    words = text.split()
+    base = min(width, height) // 13
+    size, wrapped = base, [text]
+    for size in range(base, 35, -4):
+        font = ImageFont.truetype(font_path, size)
+        wrapped, current = [], ""
+        for word in words:
+            candidate = f"{current} {word}".strip()
+            if current and font.getlength(candidate.replace("*", "")) > max_w:
+                wrapped.append(current)
+                current = word
+            else:
+                current = candidate
+        if current:
+            wrapped.append(current)
+        if len(wrapped) <= 2:
+            break
+    return size, wrapped
+
+
 def _build_ass_captions(
     word_boundaries: list[dict], width: int, height: int, accent: str, output_path: Path,
     hook_text: str | None = None,
@@ -345,10 +372,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     if hook_text and word_boundaries:
         # gancho do vídeo num cartão no topo durante a 1ª cena; *palavra* sai
         # em amarelo (mesma marcação do thumbnail_text)
-        hook = _escape_ass_text(hook_text.strip().upper())
+        # o estilo Hook não quebra linha (WrapStyle 2): sem medir, a manchete
+        # saía dos dois lados do vídeo (job 746, "EDENÍLSON DECIDE E DANILO
+        # FORA"). Aqui ela é quebrada e reduzida até caber
+        hook_size, hook_lines = _fit_hook(hook_text.strip().upper(), width, height)
+        hook = "\\N".join(_escape_ass_text(part) for part in hook_lines)
         hook = re.sub(r"\*([^*]+)\*", lambda m: f"{{\\c&H00{accent_bgr}&}}{m[1]}{{\\c&H00FFFFFF&}}", hook).replace("*", "")
         end = word_boundaries[-1]["end"] + 0.3
-        lines.append(f"Dialogue: 1,{_ass_time(0)},{_ass_time(end)},Hook,,0,0,0,,{{\\fad(150,0)}}{hook}\n")
+        lines.append(f"Dialogue: 1,{_ass_time(0)},{_ass_time(end)},Hook,,0,0,0,,{{\\fs{hook_size}\\fad(150,0)}}{hook}\n")
     groups = _caption_groups(word_boundaries, font, max_width)
     for gi, group in enumerate(groups):
         start = group[0]["start"]

@@ -735,3 +735,15 @@ def test_channel_brand_words_are_not_new_facts():
     script = {"title": "Números da República: dois casos", "thumbnail_text": "Números", "scenes": [
         {"narration": "Svalbard tem tratado de Paris.", "_arquivo": True}]}
     assert review_script(script, "Svalbard", facts, None) == []
+
+
+def test_fit_hook_cabe_na_largura():
+    # gancho do topo (job 746): sem quebra e tamanho fixo saía dos dois lados
+    from PIL import ImageFont
+    from src.assemble import CAPTION_FONT_DIR, _fit_hook
+
+    for text in ["EDENÍLSON DECIDE E *DANILO FORA*", "NÚMEROS QUE ASSOMBRAM", "R$ 353.248,04 EM UM ANO"]:
+        size, lines = _fit_hook(text, 1080, 1920)
+        assert len(lines) <= 2
+        font = ImageFont.truetype(str(CAPTION_FONT_DIR / "FiraSans-Bold.ttf"), size)
+        assert all(font.getlength(line.replace("*", "")) <= 1080 * 0.86 for line in lines)
