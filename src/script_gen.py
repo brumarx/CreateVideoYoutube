@@ -294,6 +294,9 @@ Câmara"):
     web_facts_block = ""
     if web_facts:
         trechos = "\n\n".join(f"- [{f['titulo']}]({f['url']}): {f['trecho']}" for f in web_facts)
+        # teto do texto de fontes no pedido: Wikipédia + Wikidata + OpenAlex passaram de 4000 tokens e o
+        # Groq recusou com 413 (09/11, job 799); sem fonte de sobra, o roteiro cai em todos os provedores
+        trechos = trechos[:7000]
         web_facts_block = f"""
 PESQUISA REAL NA INTERNET (o tema foi digitado por uma pessoa — use estes
 trechos como base factual; NÃO invente nome, número, data ou evento que
@@ -1121,9 +1124,12 @@ def generate_script(
             return compose_compilation(channel, facts, revision_feedback)
         except RuntimeError as exc:
             raise ValueError(f"compilação: {exc}") from exc
+    # etapa 1: o plano (estrutura e fatos escolhidos) antes de escrever a narração
+    plan = plan_story(topic, facts, web_facts)
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": _prompt_for(channel, topic, facts, scenes, min_minutes, max_minutes, web_facts)
+        {"role": "user", "content": (plan + "\n\n" if plan else "")
+         + _prompt_for(channel, topic, facts, scenes, min_minutes, max_minutes, web_facts)
          + recent_mistakes(channel.name) + (revision_feedback or "")},
     ]
 
@@ -1769,3 +1775,46 @@ def art_direction(script: dict, channel: ChannelConfig) -> dict:
         log.info("diretor de arte: gráfico em %d de %d cenas (%s)", len(picked), len(todo),
                  ", ".join(sorted({b["tipo"] for g in picked.values() for b in g})))
     return {**script, "scenes": [{**sc, "grafico": picked[i]} if i in picked else sc for i, sc in enumerate(scenes)]}
+
+
+# ---------------------------------------------------------------- plano antes de escrever
+PLAN_KEYS = ("gancho", "premissa", "virada_1", "virada_2", "climax_factual", "fechamento_reflexivo")
+
+
+def _plan_valid(raw: str) -> bool:
+    m = re.search(r"\{.*\}", raw, re.DOTALL)
+    try:
+        data = json.loads(m.group(0)) if m else None
+    except json.JSONDecodeError:
+        return False
+    return isinstance(data, dict) and all(isinstance(data.get(k), str) and data[k].strip() for k in PLAN_KEYS)
+
+
+def plan_story(topic: str, facts: dict | None, web_facts: list[dict] | None) -> str | None:
+    """Etapa 1 (só estrutura, sem narração): escolhe os 4 fatos mais surpreendentes
+    das FONTES e monta o arco (gancho, premissa, duas viradas, clímax factual,
+    fechamento). Devolve um bloco de texto para o pedido do roteiro, ou None se
+    o modelo não responder com o JSON (aí o roteiro segue como antes)."""
+    sources = ""
+    if facts:
+        sources += json.dumps(facts, ensure_ascii=False, separators=(",", ":"))[:6000] + "\n"
+    sources += "\n".join(f"- {f.get('titulo', '')}: {f.get('trecho', '')}" for f in (web_facts or []))[:2500]
+    if not sources.strip():
+        return None
+    prompt = (
+        f"Tema: {topic}\n\nFONTES (use SÓ o que está aqui):\n{sources}\n\n"
+        "Não escreva narração. Monte o PLANO do vídeo em JSON estrito com as chaves: "
+        "gancho (a coisa concreta que o espectador não acredita, em 1 frase), premissa (onde estamos e "
+        "por que importa, 1 frase), virada_1 e virada_2 (fatos que mudam o que se achava saber, 1 frase "
+        "cada), climax_factual (o fato mais surpreendente de todos, 1 frase), fechamento_reflexivo "
+        "(consequência ou comparação com o cotidiano, 1 frase). Cada item tem que ser um fato que está nas "
+        "FONTES. Responda SÓ o JSON."
+    )
+    try:
+        raw = complete([{"role": "user", "content": prompt}], max_tokens=700, validate=_plan_valid, temperature=0.2)
+    except RuntimeError as exc:
+        log.warning("plano do roteiro indisponível (%s) — segue sem plano", exc)
+        return None
+    data = json.loads(re.search(r"\{.*\}", raw, re.DOTALL).group(0))
+    lines = [f"{k.replace('_', ' ').upper()}: {data[k].strip()}" for k in PLAN_KEYS]
+    return "PLANO APROVADO (siga esta ordem e use só estes fatos; cada item vira uma parte do roteiro):\n" + "\n".join(lines)
