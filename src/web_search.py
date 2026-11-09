@@ -62,7 +62,7 @@ def search_topic_facts(query: str, max_results: int = 5) -> list[dict] | None:
 # com data/número sobre o tema, sustenta a história toda.
 _WIKI_API = "https://{lang}.wikipedia.org/w/api.php"
 _WIKI_HEADERS = {"User-Agent": "FractalCurioso-video-bot/1.0 (https://www.youtube.com/@fractalcurioso)"}
-WIKI_CHARS = {"pt": 1400, "en": 1000}
+WIKI_CHARS = {"pt": 5000, "en": 5000}  # 10 mil no total: cabe no teto de 12 mil das fontes do roteiro (antes 1400/1000 deixava o roteiro com um pedaço do artigo)
 
 
 def _wiki_get(lang: str, params: dict) -> dict:
