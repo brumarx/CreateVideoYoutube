@@ -297,7 +297,7 @@ Câmara"):
         trechos = "\n\n".join(f"- [{f['titulo']}]({f['url']}): {f['trecho']}" for f in web_facts)
         # teto do texto de fontes no pedido: Wikipédia + Wikidata + OpenAlex passaram de 4000 tokens e o
         # Groq recusou com 413 (09/11, job 799); sem fonte de sobra, o roteiro cai em todos os provedores
-        trechos = trechos[:7000]
+        trechos = trechos[:3000]
         web_facts_block = f"""
 PESQUISA REAL NA INTERNET (o tema foi digitado por uma pessoa — use estes
 trechos como base factual; NÃO invente nome, número, data ou evento que
