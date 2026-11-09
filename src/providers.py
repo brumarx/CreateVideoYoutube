@@ -421,16 +421,17 @@ def is_strong_model(model: str) -> bool:
 
 
 # limite de tokens por minuto (entrada + saída) por requisição em contas grátis, quando conhecido
-_SMALL_TPM = {"groq": 7000}
+_SMALL_TPM = {"groq": 8000}  # limite por requisição (entrada + max_tokens), medido no 413
 
 
-def _too_big_for(name: str, messages: list[dict]) -> bool:
-    """Estimativa grosseira (~3 caracteres por token em pt-BR): pedido maior que o limite do provedor."""
+def _too_big_for(name: str, messages: list[dict], max_tokens: int = 0) -> bool:
+    """Medido em 09/11: ~3,7 caracteres por token em pt-BR. O pedido inteiro (entrada + saída
+    reservada em max_tokens) não pode passar do limite do provedor, com 200 de folga."""
     limit = _SMALL_TPM.get(name)
     if limit is None:
         return False
     chars = sum(len(str(m.get("content", ""))) for m in messages)
-    return chars // 3 > limit
+    return chars / 3.7 + max_tokens > limit - 200
 
 def complete(
     messages: list[dict],
@@ -478,7 +479,7 @@ def complete(
         provider_keys = getattr(keys, key_attr)
         if not provider_keys:
             continue
-        if _too_big_for(name, messages):
+        if _too_big_for(name, messages, max_tokens):
             # 09/11: o pedido do roteiro passou de 8 mil tokens e o Groq recusava com 413 em todas
             # as contas; pular o provedor poupa a tentativa e deixa o pedido chegar aos de contexto grande
             log.info("pulando %s: pedido maior que o limite por minuto dele", name)

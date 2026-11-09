@@ -914,6 +914,8 @@ def test_groq_pulado_quando_pedido_grande():
     assert _too_big_for("groq", grande) is True
     assert _too_big_for("groq", pequeno) is False
     assert _too_big_for("openrouter", grande) is False
+    # 27 mil caracteres (~7,3 mil tokens) + 1,5 mil de saída passam do limite de 8 mil
+    assert _too_big_for("groq", [{"role": "user", "content": "x" * 27000}], 1500) is True
 
 
 def test_cadeia_de_texto_sem_xai_cerebras_gemini_e_com_nemotron_no_openrouter():
