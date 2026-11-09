@@ -926,6 +926,10 @@ def strong_number(narration: str) -> dict | None:
                 base += f"/{per[1].lower()}"
             unit, words = f"{unit} {base}", []
         cand = {"tipo": "numero", "valor": f"{cur + ' ' if cur else ''}{num}{unit}".strip(), "rotulo": " ".join(words)}
+        if not cand["rotulo"]:
+            # número sem o que ele conta ("190 mil m³/dia" sozinho) não explica
+            # nada pra quem assiste (09/11): sem rótulo, não vira cartão
+            continue
         score = (2 if mult or cur else 0) + len(digits)
         if best is None or score > best[0]:
             best = (score, cand)

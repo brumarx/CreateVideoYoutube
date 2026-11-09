@@ -787,9 +787,10 @@ def test_frase_vaga_e_tautologia_e_superlativo_sem_fonte():
     assert _vague_problems(normal) == []
 
 
-def test_cartao_metro_cubico_por_dia():
-    # job 793: o cartão saía "190 mil m" (perdia "cúbicos" e "por dia")
+def test_cartao_numero_precisa_de_rotulo():
+    # job 793: "190 mil m³/dia" sozinho não diz o que é; número sem rótulo não vira cartão
     from src.infographic import strong_number
 
-    assert strong_number("a planta bombeia 190 mil metros cúbicos por dia")["valor"] == "190 mil m³/dia"
-    assert strong_number("o salto teve 4,3 metros de distância")["valor"] == "4,3 m"
+    assert strong_number("a planta bombeia 190 mil metros cúbicos por dia") is None
+    assert strong_number("o salto teve 4,3 metros de distância") is None
+    assert strong_number("o governo mobilizou 5 mil militares")["rotulo"] == "militares"
