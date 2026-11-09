@@ -7,6 +7,7 @@ import logging
 import math
 import re
 import sqlite3
+import time
 from .db import connect_db
 from contextlib import closing
 from datetime import date
@@ -1238,6 +1239,11 @@ def generate_script(
         except (ValueError, json.JSONDecodeError, RuntimeError) as exc:
             last_error = exc
             log.warning("tentativa %d/3: roteiro malformado (%s), tentando de novo", attempt + 1, exc)
+            if "Nenhum provedor" in str(exc) and attempt < 2:
+                # 09/11: as 3 tentativas caíam em 2 s, dentro do descanso de 75 s das chaves (429).
+                # Espera o descanso acabar antes de tentar de novo.
+                log.info("esperando 80 s o descanso das chaves antes de tentar de novo")
+                time.sleep(80)
 
     if best_script is not None:
         log.warning(
