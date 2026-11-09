@@ -803,7 +803,7 @@ def _is_risky_face_prompt(prompt: str) -> bool:
 # (botafogo, 07/11). Quando o prompt pede escudo, a cena vira só uma estrela
 # branca de cinco pontas num fundo preto — nunca um escudo inventado.
 _CREST_RE = re.compile(
-    r"\b(escudo|brasão|brasao|emblema do clube|escudo do clube|crest|badge|club emblem|team emblem|club crest|team crest)\b",
+    r"\b(escudo|brasão|brasao|emblema do clube|escudo do clube|crest|badge|shield|coat of arms|club emblem|team emblem|club crest|team crest|club logo|team logo|logo do clube|logo do time)\b",
     re.IGNORECASE,
 )
 _CREST_SAFE_PROMPT = (

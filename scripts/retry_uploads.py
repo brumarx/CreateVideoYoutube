@@ -19,12 +19,13 @@ import json
 import logging
 import shutil
 import sqlite3
-from src.db import connect_db
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+from src.db import connect_db  # noqa: E402
 
 from google.auth.exceptions import RefreshError  # noqa: E402
 

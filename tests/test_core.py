@@ -747,3 +747,18 @@ def test_fit_hook_cabe_na_largura():
         assert len(lines) <= 2
         font = ImageFont.truetype(str(CAPTION_FONT_DIR / "FiraSans-Bold.ttf"), size)
         assert all(font.getlength(line.replace("*", "")) <= 1080 * 0.86 for line in lines)
+
+
+def test_escudo_do_botafogo_vira_estrela_mesmo_com_palavra_em_ingles():
+    # job 787: "Botafogo crest projected on a screen" passou pela trava no roteiro
+    # escrito à mão porque o caminho --script-file não aplicava as trocas
+    from src.script_gen import _CREST_SAFE_PROMPT, _sanitize_club_crests
+
+    script = {"thumbnail_image_prompt": "club shield on a dark wall", "scenes": [
+        {"image_prompt": "Empty press conference room, Botafogo crest projected on a screen behind"},
+        {"image_prompt": "Coach at a tactical board, subtle club colors"},
+    ]}
+    out = _sanitize_club_crests(script)
+    assert out["scenes"][0]["image_prompt"] == _CREST_SAFE_PROMPT
+    assert out["scenes"][1]["image_prompt"] == "Coach at a tactical board, subtle club colors"
+    assert out["thumbnail_image_prompt"] == _CREST_SAFE_PROMPT

@@ -25,7 +25,6 @@ import logging
 import os
 import shutil
 import sqlite3
-from src.db import connect_db
 import subprocess
 import sys
 from contextlib import closing
@@ -37,6 +36,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from src.db import connect_db  # noqa: E402
 from src.orchestrator import DB_PATH, update  # noqa: E402
 from src.upload import UPLOAD_META_FILE  # noqa: E402
 

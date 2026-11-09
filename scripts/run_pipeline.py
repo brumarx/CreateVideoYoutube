@@ -797,9 +797,13 @@ def run(
         if script_file:
             # roteiro escrito à mão (ex.: quando só sobra modelo fraco que copia
             # a fonte) — passa pelas MESMAS revisões; reprovado não é reescrito
-            from src.script_gen import _drop_repeated_scenes
+            from src.script_gen import _drop_repeated_scenes, _sanitize_club_crests, _sanitize_person_images
 
-            script = _drop_repeated_scenes(json.loads(Path(script_file).read_text()))
+            # as mesmas trocas de prompt da geração (escudo de clube, rosto de
+            # pessoa real): sem elas o arquivo escrito à mão trazia de volta o
+            # escudo inventado que o gerador já bloqueava (787, 09/11)
+            script = _sanitize_club_crests(_sanitize_person_images(
+                topic, _drop_repeated_scenes(json.loads(Path(script_file).read_text()))))
             log.info("[%s] roteiro do arquivo %s (%d cenas)", job_id, script_file, len(script["scenes"]))
         else:
             script = generate_script(
@@ -1426,8 +1430,10 @@ def run(
                     grayscale=channel.fallback_grayscale and stock_clip_path is not None and scene_sources[-1] != "grafico",
                     # cartão (gol, manchete, canal) e foto encaixada: zoom leve
                     composed=scene_sources[-1] in ("noticia", "jogador", "repetida", "grafico") or real_frame is not None,
-                    # gancho de dilema no topo da 1ª cena ("COVARDE OU GÊNIO?")
-                    hook_text=script.get("thumbnail_text") if i == 0 else None,
+                    # sem cartão de texto no topo da 1ª cena: o gancho em cima do
+                    # vídeo ficou feio e desnecessário (09/11). O renderizador
+                    # ainda aceita hook_text; só não é mais passado aqui.
+                    hook_text=None,
                 )
             finally:
                 # sem finally, um clipe baixado (10-20MB) vaza pro /tmp toda vez
