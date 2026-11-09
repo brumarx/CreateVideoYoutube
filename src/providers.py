@@ -416,6 +416,18 @@ def is_strong_model(model: str) -> bool:
     return any(model in ms for ms in _STRONG_MODELS.values())
 
 
+# limite de tokens por minuto (entrada + saída) por requisição em contas grátis, quando conhecido
+_SMALL_TPM = {"groq": 7000}
+
+
+def _too_big_for(name: str, messages: list[dict]) -> bool:
+    """Estimativa grosseira (~3 caracteres por token em pt-BR): pedido maior que o limite do provedor."""
+    limit = _SMALL_TPM.get(name)
+    if limit is None:
+        return False
+    chars = sum(len(str(m.get("content", ""))) for m in messages)
+    return chars // 3 > limit
+
 def complete(
     messages: list[dict],
     keys: LLMKeys | None = None,
@@ -461,6 +473,11 @@ def complete(
     for name, key_attr, chat_endpoint, models_endpoint in OPENAI_COMPAT_PROVIDERS:
         provider_keys = getattr(keys, key_attr)
         if not provider_keys:
+            continue
+        if _too_big_for(name, messages):
+            # 09/11: o pedido do roteiro passou de 8 mil tokens e o Groq recusava com 413 em todas
+            # as contas; pular o provedor poupa a tentativa e deixa o pedido chegar aos de contexto grande
+            log.info("pulando %s: pedido maior que o limite por minuto dele", name)
             continue
         rotator = _rotator_for(provider_keys)
         order = rotator.order()

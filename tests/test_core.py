@@ -903,3 +903,14 @@ def test_wikidata_e_openalex_formatos():
     assert _wd_time("+2016-00-00T00:00:00Z") == "2016"
     assert _wd_time("+2016-12-14T00:00:00Z") == "14/12/2016"
     assert _openalex_abstract({"salt": [0, 3], "lake": [1], "brine": [2]}) == "salt lake brine salt"
+
+
+def test_groq_pulado_quando_pedido_grande():
+    # 09/11: o roteiro (~9 mil tokens) passava do limite de 8 mil por minuto do Groq
+    from src.providers import _too_big_for
+
+    grande = [{"role": "user", "content": "x" * 30000}]
+    pequeno = [{"role": "user", "content": "x" * 3000}]
+    assert _too_big_for("groq", grande) is True
+    assert _too_big_for("groq", pequeno) is False
+    assert _too_big_for("openrouter", grande) is False
