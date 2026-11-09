@@ -1289,7 +1289,9 @@ def run(
                     "foto antiga, preto e branco, granulada, de museu ou reconstrução do objeto é normal, "
                     "e também o que é do MESMO caso (o local, outro achado do mesmo sítio, o museu onde está) "
                     "— no job 533 as estátuas do naufrágio de Anticítera foram recusadas. Reprove se for "
-                    "quase só texto moderno (placa de museu, painel, legenda impressa)."
+                    "quase só texto moderno (placa de museu, painel, legenda impressa). "
+                    "Se a foto é da pessoa citada na narração, o rosto dela é normal (foto de verdade, "
+                    "não IA): não reprove pelo rosto; reprove só se for outra pessoa."
                 )
 
                 def real_check(image: bytes, _narration: str = scene["narration"], _ctx: str = real_context) -> bool | None:

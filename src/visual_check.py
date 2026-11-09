@@ -52,7 +52,10 @@ _RULES = """Responda NÃO (ok=false) se a imagem:
   cena sobre dinheiro brasileiro, reais ou gasto público do Brasil;
 - mostra o ROSTO de uma pessoa em destaque numa cena que cita uma pessoa
   real pelo nome (político, jogador, técnico) — quem assiste acha que é
-  ela, e não é. Silhueta, mãos ou pessoa de costas estão OK;
+  ela, e não é. Silhueta, mãos ou pessoa de costas estão OK. EXCEÇÃO: se
+  o contexto diz que é FOTO REAL de arquivo da pessoa citada, o rosto dela
+  é normal (foto de verdade, com licença e crédito). Imagem gerada por IA
+  com rosto de pessoa real continua NÃO, mesmo que a narração cite a pessoa;
 - mostra JOGO PROFISSIONAL de verdade (transmissão de TV, estádio cheio,
   uniformes de clube) numa cena sobre um atleta real citado pelo nome —
   quem assiste procura o atleta e acha outro jogador famoso (cena do
