@@ -332,10 +332,16 @@ def _cooldown_seconds(status: int | None, body: str) -> int:
     return 75
 
 
+# último instante em que o Groq recebeu pedido: a janela de 60 s do TPM fecha depois disso
+_LAST_GROQ_CALL = {"at": 0.0}
+
+
 def _call_openai_compat(
     endpoint: str, api_key: str, model: str, messages: list[dict], max_tokens: int, temperature: float = 0.8,
     _fitted: bool = False,
 ) -> tuple[str | None, int | None, int]:
+    if "api.groq.com" in endpoint:
+        _LAST_GROQ_CALL["at"] = time.monotonic()
     payload = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
     if "gpt-oss" in model:
         # o raciocínio sai do mesmo max_tokens: no padrão o gpt-oss gastava

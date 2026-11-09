@@ -996,6 +996,13 @@ def generate_script(
     best_distance = float("inf")
     filler_fallback: dict | None = None
     for attempt in range(3):
+        # 09/11: o plano e as outras chamadas gastaram a janela de 60 s do Groq; espera ela fechar
+        # antes do roteiro, em vez de queimar as 3 tentativas em 429
+        from .providers import _LAST_GROQ_CALL
+        since = time.monotonic() - _LAST_GROQ_CALL["at"]
+        if _LAST_GROQ_CALL["at"] and since < 62:
+            log.info("esperando %.0f s a janela de 60 s do Groq antes do roteiro", 62 - since)
+            time.sleep(62 - since)
         try:
             # `validate` já garante que `raw` é JSON parseável com os campos
             # obrigatórios — cascata inteira de provedores/modelos é
