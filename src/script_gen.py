@@ -219,46 +219,7 @@ _PRONUNCIATION_FIELD = """  "pronuncia": {"OPCIONAL — só nomes estrangeiros/d
 # cena desenhada por código (src/infographic.py) — o que deixa o vídeo com
 # cara de canal de mapa/história, em vez de banco de imagem genérico
 _GRAFICO_FIELD = json.dumps(
-    "OPCIONAL, mas use em boa parte das cenas (meta: metade ou mais) quando a cena falar de um LUGAR real "
-    "(país, cidade), de uma DATA marcante, de UM número forte ou de uma comparação entre 2 números pequenos. "
-    "É desenhado por código no estilo dos canais de mapa (satélite da NASA, país colorido em relevo, ícones) "
-    "e fica muito mais bonito e claro que filmagem genérica. Formato: um objeto, ou uma lista de até 3 "
-    "objetos (batidas que trocam na tela no instante em que a narração fala a 'palavra' de cada uma). "
-    "Tipos: {'tipo': 'mapa', 'lugares': [nomes de PAÍS em inglês], 'noite': true só se a cena fala "
-    "de luz/energia/noite, 'destaques': [{'pais': nome em inglês, 'cor': vermelho|azul|dourado|verde|"
-    "cinza|roxo|laranja, 'rotulo': nome em português, 'icone': 1 emoji do que a cena cita (🏭 fábrica, "
-    "🛢️ petróleo, 🌾 colheita, ⚓ porto, 💧 água), 'quantidade': 1 a 6}], 'cidade': nome em inglês "
-    "(opcional), 'ano': opcional, 'ano_rotulo': 2-3 palavras, 'bandeira': true pra pintar o país com a "
-    "própria bandeira (bom quando o país é PERSONAGEM: França x Inglaterra), 'rota': {'de': cidade ou país em "
-    "inglês, 'para': idem, 'icone': emoji (⛵ frota, ✈️ voo, 🚂 trem)} pra viagem/fuga/invasão/comércio, 'nota': "
-    "bilhete de papel com o DOCUMENTO/prova que a cena cita, até 6 palavras ('SECRETO · Londres, out/1807'), "
-    "'personagens': [{'nome': nome próprio em inglês da figura HISTÓRICA (morta antes de 1950) ou papel "
-    "genérico em inglês sem maiúscula ('french soldier', 'portuguese sailor'), 'visual': roupa/época em inglês "
-    "('bicorne hat, blue coat'), 'expressao': em inglês (worried, smug, angry, shocked), 'pais': onde fica "
-    "no mapa}] até 2 — caricatura que dá cara à história; NUNCA pessoa viva ou recente (político, atleta), "
-    "'palavra': '...'}. 'rotulo' do destaque é SEMPRE o nome do país em português (região ou cidade vai em "
-    "'cidade'); {'tipo': 'numero', "
-    "'valor': '90%', 'rotulo': o que o número mede, até 8 palavras}; {'tipo': 'comparacao', 'a': 1, "
-    "'a_rotulo': '...', 'b': 14, 'b_rotulo': '...', 'icone': emoji} (a e b de 1 a 20); "
-    "{'tipo': 'ranking', 'titulo': 'o que se compara', 'itens': [{'nome': 'Mar Morto', 'valor': 430, "
-    "'valor_rotulo': '430 m abaixo do mar'}, ...] (2 a 6 itens, na ordem da narração), 'destaque': 'nome do "
-    "item que a cena destaca'} — use quando a cena compara 3 ou mais lugares/coisas com número de fonte; "
-    "{'tipo': 'corte', 'esquerda': 'Oceano', 'direita': 'Lago Assal', 'legenda': 'o que a água faz por "
-    "baixo da terra', 'fluxo': 'esquerda_para_direita'} — use para explicar COMO um fenômeno acontece "
-    "entre dois lugares (água que passa por baixo, um rio que alimenta um lago); "
-    "{'tipo': 'perfil', 'titulo': 'o que muda com a profundidade', 'niveis': [{'prof': 0, 'valor': 35, "
-    "'rotulo': '35%'}, {'prof': 20, 'valor': 40, 'rotulo': '40%'}] (2 a 5 níveis, com profundidade e valor "
-    "FALADOS na cena) — use para mostrar como uma medida muda com a profundidade; "
-    "{'tipo': 'termometro', 'valor': 52, 'unidade': '°C', 'rotulo': 'o que se mede'} — use para uma "
-    "temperatura falada na cena; "
-    "{'tipo': 'cartao', 'titulo': 'Limite estourou?', 'linhas': ['modelo atual', 'próximo modelo']} (2 a 4 "
-    "linhas curtas, cada uma com palavras que a cena FALA) — desenha um item de lista como cartão de "
-    "interface: use quando o item é um passo, uma ferramenta ou um problema com solução; "
-    "{'tipo': 'ano', "
-    "'de': '1950', 'ate': '1964' (opcional), 'rotulo': '...'}. Use aspas duplas no JSON de verdade. Todo "
-    "número ou ano do gráfico TEM que estar escrito em algarismos na narração DESTA cena. A mesma cor marca "
-    "o mesmo lado da história no vídeo inteiro. null quando a cena não tem lugar, data nem número (passo a "
-    "passo de app, reflexão).",
+    "OPCIONAL, em boa parte das cenas (metade ou mais) que falam de LUGAR real, DATA marcante, UM número forte ou comparação de 2 números. Desenhado por código (mapa NASA, relevo, ícones). Um objeto, ou lista de até 3 batidas (cada uma com 'palavra' da narração em que entra). Tipos: mapa {'lugares': [país em inglês], 'destaques': [{'pais', 'cor': vermelho|azul|dourado|verde|cinza|roxo|laranja, 'rotulo': país em português, 'icone': emoji, 'quantidade': 1-6}], 'cidade', 'ano', 'ano_rotulo', 'bandeira', 'rota': {'de','para','icone'}, 'nota' (documento, até 6 palavras), 'personagens' (só figura histórica morta antes de 1950, nunca viva ou recente)}; numero {'valor', 'rotulo' (o que mede, até 8 palavras)}; comparacao {'a','a_rotulo','b','b_rotulo','icone'} (1 a 20); ranking {'titulo','itens':[{'nome','valor','valor_rotulo'}] (2 a 6, na ordem da narração), 'destaque'} (use para 3 ou mais lugares); corte {'esquerda','direita','legenda','fluxo'} (use para COMO algo passa entre dois lugares); perfil {'titulo','niveis':[{'prof','valor','rotulo'}] (2 a 5, falados na cena)} (use para medida que muda com a profundidade); termometro {'valor','unidade','rotulo'} (temperatura falada); cartao {'titulo','linhas':[2 a 4 linhas com palavras que a cena FALA]} (use para passo, ferramenta ou problema com solução); ano {'de','ate' (opcional),'rotulo'}. Todo número ou ano do gráfico TEM que estar em algarismos na narração DESTA cena. Mesma cor = mesmo lado da história no vídeo. Aspas duplas no JSON. null quando a cena não tem lugar, data nem número.",
     ensure_ascii=False,
 )
 
