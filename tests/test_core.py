@@ -926,3 +926,21 @@ def test_cadeia_de_texto_sem_xai_cerebras_gemini_e_com_nemotron_no_openrouter():
     assert "xai" not in nomes and "cerebras" not in nomes
     assert P._GEMINI_TEXT_IN_CHAIN is False
     assert P._STRONG_MODELS["openrouter"] == ["nvidia/nemotron-3-ultra-550b-a55b:free"]
+
+
+def test_filtro_local_descarta_imagem_pequena_sem_chamar_visao():
+    # filtro local: imagem com lado menor < 400 px não vai pra visão (sem API, sem cota)
+    import io as _io
+    from PIL import Image as _Image
+    from src import visual_check as vc
+
+    buf = _io.BytesIO()
+    _Image.new("RGB", (200, 300), (120, 120, 120)).save(buf, "PNG")
+    chamadas = []
+    original = vc.ask_vision
+    vc.ask_vision = lambda *a, **k: chamadas.append(1) or None
+    try:
+        assert vc.matches_scene(buf.getvalue(), "narração", "") is False
+    finally:
+        vc.ask_vision = original
+    assert chamadas == []

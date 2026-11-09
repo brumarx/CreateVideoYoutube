@@ -29,6 +29,9 @@ from .providers import _rotator_for
 
 log = logging.getLogger("visual_check")
 
+# lado menor mínimo pra uma foto servir de cena 1080 px (abaixo disso fica borrada)
+MIN_SIDE_PX = 400
+
 # lite primeiro (cota diária maior no free tier), flash se ele falhar
 _MODELS = ("gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-flash-latest")
 _URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -255,7 +258,17 @@ def matches_scene(image: bytes, narration: str, context: str) -> bool | None:
     if not image:
         return None
     try:
-        jpeg = _jpeg(Image.open(io.BytesIO(image)))
+        raw = Image.open(io.BytesIO(image))
+        raw_w, raw_h = raw.size
+    except Exception:  # noqa: BLE001 — imagem ilegível: não usa
+        return False
+    # filtro local (sem API, sem cota): imagem pequena demais vira pixel no vídeo de 1080 px
+    # e não precisa ir pra visão. Ela só chega à visão se tiver resolução útil.
+    if min(raw_w, raw_h) < MIN_SIDE_PX:
+        log.info("imagem descartada localmente: %dx%d (menor lado < %d px)", raw_w, raw_h, MIN_SIDE_PX)
+        return False
+    try:
+        jpeg = _jpeg(raw)
     except Exception:  # noqa: BLE001 — imagem ilegível: não usa
         return False
     prompt = (
