@@ -38,6 +38,7 @@ from src.assemble import SFX_DIR, _ffprobe_duration, add_background_music, conca
 from src.config import ChannelConfig
 from src.goal_card import goal_card
 from src.infographic import CREDIT as INFOGRAPHIC_CREDIT, Renderer as InfographicRenderer, sanitize as sanitize_grafico
+from src.infographic import compose_presenter, presenter_pose
 from src.news_card import headline_card
 from src.fact_check import BLOCKING_TYPES, feedback_for_rewrite, review_script
 from src.orchestrator import enqueue, update
@@ -1424,6 +1425,9 @@ def run(
                     image_bytes = _gray(image_bytes)
                 image_path = work_dir / f"scene_{i}.png"
                 image_path.write_bytes(image_bytes)
+                if channel.apresentador:
+                    # apresentador fixo no canto (desenhado em código, ver infographic.presenter)
+                    compose_presenter(image_path, presenter_pose(scene["narration"], scene_sources[-1]), width, height)
                 last_still = image_bytes
                 same_photo_run = 0
             else:

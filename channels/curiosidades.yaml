@@ -196,6 +196,7 @@ topics:
   - "Como o CarbFix da Islândia transforma CO₂ em pedra e desafia a crise climática"
   - "Como a planta de dessalinização de Carlsbad resolveu a escassez de água na Califórnia"
   - "Como a ilha vulcânica de Surtsey surgiu do oceano e se tornou um laboratório natural de vida"
+  - "Por que a Turquia investiu US$ 25 bilhões na usina nuclear Akkuyu, construída pela Rússia?"
 prompt_base: >
   Escreva um roteiro envolvente no estilo de canais de curiosidades/histórias
   do YouTube (tipo Reddit stories / fatos incríveis). O ângulo deste canal é
@@ -238,3 +239,5 @@ afiliado_amazon:
   texto: "📚 Pra saber mais, na Amazon"
   busca: "livro curiosidades do mundo"
   fixo: false
+# apresentador vetorial fixo nas cenas com imagem (09/11, ver src/infographic.py)
+apresentador: true

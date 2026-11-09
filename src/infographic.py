@@ -1623,3 +1623,24 @@ def _place_characters(img: Image.Image, view: "View | None", specs: list) -> Non
         pos = (min(max(pos[0], size * 0.55), w - size * 0.55), min(max(pos[1], h * 0.22), h * 0.62))
         placed.append(pos)
         _paste_icon(img, ch, pos)
+
+
+def presenter_pose(narration: str, source: str) -> str:
+    """Pose do apresentador pela cena: pergunta pensa, gráfico aponta, o resto acena."""
+    if source == "grafico":
+        return "apontando"
+    if "?" in narration:
+        return "pensando"
+    return "acenando"
+
+
+def compose_presenter(image_path: Path, pose: str, width: int, height: int) -> None:
+    """Cola o apresentador no canto inferior direito da imagem da cena (no
+    mesmo arquivo). Tamanho: 22% da altura, fora da área da legenda do meio."""
+    host = presenter(int(height * 0.22), pose)
+    if host is None:
+        return
+    base = Image.open(image_path).convert("RGBA").resize((width, height))
+    margin = int(width * 0.04)
+    base.alpha_composite(host, (width - host.width - margin, height - host.height - int(height * 0.12)))
+    base.convert("RGB").save(image_path)
