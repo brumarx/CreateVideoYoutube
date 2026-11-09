@@ -210,6 +210,21 @@ def _vague_problems(script: dict) -> list[dict]:
             if repeated:
                 problems.append({"tipo": "frase_vaga", "termo": sentence.strip()[:80],
                                  "motivo": f"cena {i + 1}: palavra repetida na mesma frase ({', '.join(sorted(repeated))})"})
+    # mesma palavra-chave em 3 cenas ou mais: a cena só repete a anterior
+    # (job 794: "dessalinizada", "potável", "maior" espalhados pelo roteiro)
+    title_stems = {w[:7] for w in re.findall(r"\w{7,}", _fold(str(script.get("title", ""))))}
+    per_scene = [
+        {w[:7] for w in re.findall(r"\w{7,}", _fold(str(sc.get("narration", ""))))} - title_stems
+        for sc in script.get("scenes", [])
+    ]
+    counts: dict[str, int] = {}
+    for stems in per_scene:
+        for st in stems:
+            counts[st] = counts.get(st, 0) + 1
+    for st, n in sorted(counts.items()):
+        if n >= 3:
+            problems.append({"tipo": "frase_vaga", "termo": st,
+                             "motivo": f"a mesma palavra-chave ('{st}...') aparece em {n} cenas: repetição"})
     narration = _fold(" ".join(str(sc.get("narration", "")) for sc in script.get("scenes", [])))
     for sup in _SUPERLATIVE_RE.findall(str(script.get("title", ""))):
         if _fold(sup) not in narration:
