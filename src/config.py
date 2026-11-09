@@ -58,7 +58,8 @@ FREE_TTS_VOICES = ("pt-BR-AntonioNeural", "pt-BR-FranciscaNeural", "pt-BR-Thalit
 
 POLLINATIONS_API_KEYS = _keys("POLLINATIONS_API_KEYS")
 PEXELS_API_KEYS = _keys("PEXELS_API_KEYS")
-PIXABAY_API_KEYS = _keys("PIXABAY_API_KEYS")  # 2º banco de vídeo/foto grátis
+PIXABAY_API_KEYS = _keys("PIXABAY_API_KEYS")
+SMITHSONIAN_API_KEYS = _keys("SMITHSONIAN_API_KEY")  # acervo do Smithsonian (CC0), grátis  # 2º banco de vídeo/foto grátis
 COVERR_API_KEYS = _keys("COVERR_API_KEYS")  # 3º banco de vídeo grátis (coverr.co/developers)
 CLOUDFLARE_AI_KEYS = _keys("CLOUDFLARE_AI_KEYS")
 TAVILY_API_KEYS = _keys("TAVILY_API_KEYS")

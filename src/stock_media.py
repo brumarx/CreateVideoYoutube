@@ -24,7 +24,7 @@ from typing import Callable
 
 import httpx
 
-from .config import COVERR_API_KEYS, PEXELS_API_KEYS, PIXABAY_API_KEYS
+from .config import COVERR_API_KEYS, PEXELS_API_KEYS, PIXABAY_API_KEYS, SMITHSONIAN_API_KEYS
 from .providers import _rotator_for
 from .visual_check import frames_from_clip
 
@@ -178,7 +178,46 @@ def search_stock_photo(
     query: str, width: int, height: int, check: Callable[[bytes], bool | None] | None = None, region: str = "",
 ) -> bytes | None:
     """Pexels e, sem nada no contexto, Pixabay (2º banco grátis)."""
-    return _pexels_photo(query, width, height, check, region) or _pixabay_photo(query, width, height, check, region)
+    return (_pexels_photo(query, width, height, check, region)
+            or _pixabay_photo(query, width, height, check, region)
+            or _smithsonian_photo(query, width, height, check, region))
+
+
+SMITHSONIAN_SEARCH_URL = "https://api.si.edu/openaccess/api/v1.0/search"
+
+
+def _smithsonian_photo(query: str, width: int, height: int, check, region: str = "") -> bytes | None:
+    """Foto do acervo do Smithsonian (domínio público, CC0): só mídia do tipo
+    imagem com licença CC0 declarada. Último recurso, depois dos bancos —
+    o acervo cobre história, ciência e objetos, não fotos de cena comum."""
+    if not SMITHSONIAN_API_KEYS or not query:
+        return None
+    try:
+        resp = httpx.get(SMITHSONIAN_SEARCH_URL, timeout=30, params={
+            "q": _normalize_query(query)[:100], "rows": 30, "api_key": SMITHSONIAN_API_KEYS[0]})
+        resp.raise_for_status()
+        rows = resp.json().get("response", {}).get("rows", [])
+    except Exception as exc:  # noqa: BLE001
+        log.warning("busca smithsonian falhou (%r): %s", query, exc)
+        return None
+    tried = 0
+    for row in rows:
+        dn = (row.get("content") or {}).get("descriptiveNonRepeating") or {}
+        for m in ((dn.get("online_media") or {}).get("media") or []):
+            if m.get("type") != "Images" or "CC0" not in str(m.get("usage", "")) or not m.get("content"):
+                continue
+            if tried >= 6:  # teto de downloads por busca
+                return None
+            tried += 1
+            try:
+                data = httpx.get(m["content"], timeout=30, follow_redirects=True).content
+            except Exception as exc:  # noqa: BLE001
+                log.warning("download smithsonian falhou: %s", exc)
+                continue
+            if data and _passes(check, data, query):
+                log.info("foto do Smithsonian (CC0) pra %r: %s", query, row.get("title", "")[:80])
+                return data
+    return None
 
 
 PIXABAY_VIDEO_URL = "https://pixabay.com/api/videos/"
