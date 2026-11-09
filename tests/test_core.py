@@ -771,3 +771,17 @@ def test_revisao_le_titulo_e_miniatura():
     p = _review_prompt({"title": "TITULO_TESTE", "thumbnail_text": "MINI_TESTE",
                         "scenes": [{"narration": "frase"}]}, "tema", None, None)
     assert "TITULO_TESTE" in p and "MINI_TESTE" in p
+
+
+def test_frase_vaga_e_tautologia_e_superlativo_sem_fonte():
+    # job 793: enchimento, palavra repetida na mesma frase e "a maior" no título sem a narração
+    from src.fact_check import _vague_problems
+
+    enchimento = {"title": "Usina dessaliniza", "scenes": [{"narration": "A planta usa tecnologia avançada e eficiente."}]}
+    assert any(p["tipo"] == "frase_vaga" for p in _vague_problems(enchimento))
+    tautologia = {"title": "Usina dessaliniza", "scenes": [{"narration": "A agência compra a água por meio de acordos de compra de água."}]}
+    assert any(p["tipo"] == "frase_vaga" for p in _vague_problems(tautologia))
+    superlativo = {"title": "A maior usina do país", "scenes": [{"narration": "A usina bombeia água do mar."}]}
+    assert any(p["tipo"] == "titulo_nao_confere" for p in _vague_problems(superlativo))
+    normal = {"title": "Usina dessaliniza", "scenes": [{"narration": "A usina bombeia água do mar e filtra o sal com membranas."}]}
+    assert _vague_problems(normal) == []

@@ -176,6 +176,48 @@ _checagem_campo = '"checagem": [{"afirmacao": "...", "trecho": "trecho literal d
 
 
 
+# Enchimento e frase vazia que o revisor do LLM deixou passar (job 793):
+# "tecnologia avançada e eficiente", "a torneira mais segura", "um marco".
+_FILLER_RE = re.compile(
+    r"tecnologia (?:avançad[ao]|moderna|eficiente)|(?:avançad[ao]|eficiente) e (?:eficiente|avançad[ao])|"
+    r"a torneira mais (?:segura|eficiente)|é o que faz a diferença|um marco (?:histórico|para)|"
+    r"revoluciona(?:r|ndo)? o (?:mundo|setor)",
+    re.IGNORECASE,
+)
+_SUPERLATIVE_RE = re.compile(
+    r"\b(maior|maiores|menor|menores|primeir[oa]s?|únic[oa]s?|mais (?:antig|alt|grand|rápid|barat|potent)[oa]s?)\b",
+    re.IGNORECASE,
+)
+
+
+def _fold(text: str) -> str:
+    return unicodedata.normalize("NFKD", text.lower()).encode("ascii", "ignore").decode()
+
+
+def _vague_problems(script: dict) -> list[dict]:
+    """Frase vazia (enchimento) e frase com a mesma palavra repetida (tautologia:
+    "compra a água por meio de acordos de compra de água"), e superlativo no
+    título que a narração não diz. Determinístico, sem chamar o LLM."""
+    problems: list[dict] = []
+    for i, sc in enumerate(script.get("scenes", [])):
+        text = str(sc.get("narration", ""))
+        m = _FILLER_RE.search(text)
+        if m:
+            problems.append({"tipo": "frase_vaga", "termo": m.group(0), "motivo": f"cena {i + 1}: enchimento sem informação"})
+        for sentence in re.split(r"(?<=[.!?])\s+", text):
+            words = [w for w in re.findall(r"\w{6,}", _fold(sentence)) if w not in {"quando", "porque", "entre", "pessoas"}]
+            repeated = {w for w in words if words.count(w) >= 2}
+            if repeated:
+                problems.append({"tipo": "frase_vaga", "termo": sentence.strip()[:80],
+                                 "motivo": f"cena {i + 1}: palavra repetida na mesma frase ({', '.join(sorted(repeated))})"})
+    narration = _fold(" ".join(str(sc.get("narration", "")) for sc in script.get("scenes", [])))
+    for sup in _SUPERLATIVE_RE.findall(str(script.get("title", ""))):
+        if _fold(sup) not in narration:
+            problems.append({"tipo": "titulo_nao_confere", "termo": script.get("title", ""),
+                             "motivo": f"título diz '{sup}' e a narração não diz"})
+    return problems
+
+
 def _title_problems(script: dict) -> list[dict]:
     """Checagem própria só de título/miniatura × narração. O revisor geral
     deixou passar "fixa 4.000 t" com a narração dizendo que é capacidade
@@ -398,7 +440,7 @@ def review_script(
             continue
         problems.append(p)
     known = {**facts, "_internet": [f.get("trecho", "") for f in web_facts or []]} if facts else None
-    problems = problems + _title_problems(script) + unknown + numbers_not_in_facts(script, known) + (
+    problems = problems + _title_problems(script) + _vague_problems(script) + unknown + numbers_not_in_facts(script, known) + (
         [] if facts else numbers_not_in_sources(script, web_facts)) + broken_sentences(script) + unfulfilled_promises(script)
     if not problems and (facts or web_facts):
         # aprovado pelo revisor: só então a prova por citação (1 chamada a
