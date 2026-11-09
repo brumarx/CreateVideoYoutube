@@ -137,27 +137,19 @@ SYSTEM_PROMPT = (
 # título prometendo o que o roteiro não entrega, evento futuro narrado como
 # passado ("o clássico já passou" com o jogo marcado pra dali 9 dias),
 # número/nome sem fonte.
-ACCURACY_RULES = """REGRAS DE PRECISÃO (obrigatórias — o roteiro passa por revisão de fatos e é descartado se violar):
-- O título, o thumbnail_text e a descrição só podem prometer o que as cenas realmente narram. Nada de título sobre um assunto que o roteiro não cobre.
-- Título com número: o número tem que ter o MESMO sentido que a narração dá a ele. Capacidade planejada, meta, previsão ou "pode chegar a" nunca vira "fixou", "fez", "entregou" ou "em 2021" no título (09/11: título "fixa 4.000 t" com a narração dizendo que 4.000 t/ano é só capacidade declarada).
-- Linguagem de quem não conhece o assunto: termo técnico (mineralização, geotérmica, captura direta do ar, basalto) só com explicação em palavra comum na mesma frase, ou fica de fora. Sigla só se for explicada na primeira vez. No máximo um número por cena, e cada cena fala de uma ideia só. Nada de cena que repete a anterior.
-- Nada de enchimento: "tecnologia avançada e eficiente", "a torneira mais segura", "um marco", "revoluciona o setor" não dizem nada. Se a frase não ensina um fato, corte.
-- Nada de tautologia: não repita a mesma palavra na mesma frase ("acordos de compra de água" quando o sujeito já é quem compra). Diga quem faz o quê com sujeito, verbo e objeto distintos.
-- Cada cena traz um fato NOVO que nenhuma outra cena diz. Não repita a mesma informação com outras palavras (job 794: "maior" em três cenas, "dessalinizada" e "potável" duas vezes, 190 mil m³ e 69 milhões de m³ no mesmo sentido). Antes de fechar o roteiro, releia e corte a cena que só repete.
-- Explique o COMO e o PORQUÊ do assunto com palavras simples em pelo menos uma cena (ex.: "a água passa por membranas com pressão tão alta que o sal fica para trás"). Quem não conhece o assunto precisa entender o mecanismo, não só ver números.
-- Quando a fonte é uma autoridade ou empresa, diga quem afirma ("segundo a autoridade de água do condado..."). Superlativo de órgão público vira a declaração dele, não fato do canal.
-- Termine com o que o espectador leva (uma consequência ou uma comparação que ele entende), não com um resumo que repete a abertura.
-- Superlativo ("a maior", "a primeira", "a única") no título e na narração só com fonte que diga isso. Sem fonte, use o dado concreto ("190 mil m³ por dia") em vez do superlativo.
-- Tempo verbal de eventos: compare cada data com a DATA DE HOJE acima. Se a data de um jogo/evento é futura, fale no futuro ("vai enfrentar", "no dia 07/10"); se não houver data completa (dia E mês) nos dados, NÃO afirme se já aconteceu ou não — cite só o que a fonte diz.
-- O que JÁ ACONTECEU (carreira, medalha, infância, obra, decisão) se narra no PASSADO: "ganhou", "chegou a Tóquio", "tinha 13 anos", "treinava". Nada de presente histórico ("ela chega", "sente o peso", "o skate que a levará") — soa como se fosse hoje (Rayssa Leal, 30/10). Presente só pro que é verdade agora; "Imagine..." só como hipótese de quem assiste.
-- Números, valores, placares, nomes e cargos: só os que aparecem nos DADOS REAIS/fontes. Na dúvida, deixe de fora em vez de arredondar, estimar ou completar.
-- Detalhe técnico, medida, capacidade, custo, data de inauguração, recorde ou "o primeiro do mundo" que NÃO está nas fontes: não use, mesmo que você ache que sabe. É o que mais reprova roteiro. Menos detalhe certo vale mais que muito detalhe sem fonte.
-- Não faça contas com os números das fontes (diferença, soma, média, "o dobro", "X vezes mais", "o maior", "o terceiro maior"): cite os valores como estão e deixe o espectador comparar. Conta feita pelo roteiro saiu errada ("quase o dobro" pra 1,12x) e reprova.
-- Possibilidade não é fato: se a fonte diz "pode", "deve", "negocia", "avalia", narre como possibilidade.
-- Não tire conclusão, consequência ou impacto que a fonte não diz. Leia a relação de cada pessoa com o assunto exatamente como está: "emprestado pelo clube X" = joga em OUTRO clube (não desfalca X agora); "ex-X" = já saiu antes (não é saída de agora).
-- Nunca acuse ninguém de irregularidade sem que a fonte diga isso com todas as letras.
-- A VIRADA tem que ser um fato da fonte, não um contraste inventado pra soar surpreendente: negação ("a batalha não foi naval", "nunca houve", "ninguém sabia") só se a fonte disser exatamente isso. Saiu "a batalha não foi naval" sobre a Guerra do Pacífico, que teve batalhas navais famosas (job 702).
-- Sem ENFEITE que a fonte não diz: superlativo e recorde ("o mais voado da história", "o maior", "o primeiro", "o único", "recorde", "histórico"), exclusividade ("a única medida", "só ele") e generalização ("todo o mercado", "o mundo inteiro") só com a fonte dizendo exatamente isso. Cada um desses reprovou o roteiro inteiro em 04/11 (jobs 723 e 724)."""
+ACCURACY_RULES = """REGRAS DE PRECISÃO (obrigatórias: roteiro que violar é reprovado na revisão de fatos):
+- Título, miniatura e descrição prometem só o que a narração diz, no mesmo sentido. Capacidade, meta ou previsão nunca vira "fixou", "fez" ou "entregou".
+- Números, datas, nomes, cargos, valores, medidas e recordes: só os que estão nas fontes, nunca estimados ou completados. Sem conta feita pelo roteiro (diferença, soma, "o dobro", "X vezes mais").
+- Superlativo, exclusividade ou generalização ("a maior", "a primeira", "a única", "o mundo inteiro"): só se a fonte disser exatamente isso; senão use o dado concreto.
+- Quem afirma: se a fonte é autoridade ou empresa, diga quem ("segundo a autoridade do condado"). Possibilidade ("pode", "avalia") fica como possibilidade. Nunca acuse sem a fonte dizer com todas as letras.
+- Relações de pessoas e clubes como estão na fonte ("emprestado" não é saída agora; "ex-X" já saiu). Não tire conclusão, consequência ou impacto que a fonte não diz.
+- A virada é um fato da fonte, não contraste inventado: negação ("não foi", "nunca houve") só se a fonte disser isso. "Imagine..." como hipótese de quem assiste é permitido.
+- Datas: compare com a DATA DE HOJE. Futuro se ainda não aconteceu; sem dia e mês completos na fonte, não afirme se aconteceu. Fatos passados no passado, sem presente histórico.
+- Termo técnico só com explicação em palavra comum na mesma frase; sigla explicada na primeira vez; no máximo um número por cena; uma ideia por cena.
+- Cada cena traz um fato novo que nenhuma outra diz. Explique o COMO e o PORQUÊ em pelo menos uma cena, com palavras simples.
+- Sem enchimento ("tecnologia avançada", "um marco", "revoluciona o setor") e sem tautologia (mesma palavra na mesma frase).
+- Termine com o que o espectador leva (consequência ou comparação que ele entende), não com um resumo da abertura.
+- Detalhe que não está na fonte não entra, mesmo que você ache que sabe. Menos detalhe certo vale mais que muito detalhe sem fonte."""
 
 
 def current_date_rule() -> str:
