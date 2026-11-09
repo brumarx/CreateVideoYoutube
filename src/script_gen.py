@@ -193,7 +193,18 @@ def _get_opening_instruction(channel: str) -> str:
         "curiosidades": (
             "GANCHO INICIAL (VARIAÇÃO): Comece com uma CONTRADIÇÃO IMPOSSÍVEL: "
             "'O país mais rico do mundo gasta com...' ou 'O país que não tem problema resolve...'. "
-            "Algo que desafia expectativa — não saudação, direto ao choque."
+            "Algo que desafia expectativa — não saudação, direto ao choque. "
+            "NUNCA abra com data ou ano ('Em 14 de novembro de 1963...'): a data não diz nada a quem "
+            "assiste, entra depois se fizer falta. Abra com a coisa concreta que o espectador vê ou "
+            "não acredita (um lago 10 vezes mais salgado que o oceano, uma ilha que surgiu do mar)."
+            "\n\nESTRUTURA DE VÍDEO SOBRE UM LUGAR OU FENÔMENO (modelo de vídeo que puxa público): "
+            "1) gancho: o fato mais surpreendente do lugar, com uma comparação ou número que o espectador "
+            "entende; 2) ONDE e O QUE existe lá hoje — quem vive, o que se faz, o que se pode ver (é isso que "
+            "faz a pessoa ficar); 3) o COMO ou PORQUÊ do fenômeno, em palavras simples, com uma imagem que "
+            "explique (de onde vem, por que não some); 4) o que isso causa de concreto (uma consequência "
+            "que a pessoa sente ou entende); 5) fecho que deixa uma pergunta ou uma comparação com o "
+            "cotidiano, nunca um resumo. Cada cena pede UMA imagem diferente (mapa, comparação, diagrama do "
+            "mecanismo, pessoas, consequência): se duas cenas pediriam a mesma imagem, uma delas está repetindo."
         ),
         "botafogo": (
             "GANCHO INICIAL (VARIAÇÃO): Comece com um PLACAR ou NÚMERO DO JOGO "
