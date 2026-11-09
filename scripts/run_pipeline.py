@@ -480,6 +480,18 @@ def _chapter_starts(n: int) -> list[int]:
     return list(range(0, n, group_size))
 
 
+def _item_banner(scene: dict, scenes: list[dict]) -> dict | None:
+    """Selo crescente "2/5" na cena que abre o item 2 de uma lista de 5. Vem do
+    campo "item" do roteiro (ver script_gen). None quando a cena não abre item."""
+    item = scene.get("item")
+    if not isinstance(item, int) or item < 1:
+        return None
+    total = max([s["item"] for s in scenes if isinstance(s.get("item"), int)], default=0)
+    if total < 2 or item > total:
+        return None
+    return {"index": item, "total": total, "kicker": f"{item}/{total}"}
+
+
 def _build_chapters(scenes: list[dict], durations: list[float]) -> str:
     n = len(scenes)
     if n < 3 or len(durations) != n:
@@ -1425,6 +1437,8 @@ def run(
             # i < original_scene_count: a cena de CTA (adicionada por código,
             # depois das da LLM) nunca é uma das cenas numeradas da lista.
             list_number = (list_count - i) if list_count and i < original_scene_count else None
+            if _item_banner(scene, script["scenes"]):
+                list_number = None  # lista com selo crescente: sem a contagem regressiva por cima
             scene_video_path = work_dir / f"scene_{i}.mp4"
             try:
                 render_scene(
@@ -1442,6 +1456,8 @@ def run(
                     # vídeo ficou feio e desnecessário (09/11). O renderizador
                     # ainda aceita hook_text; só não é mais passado aqui.
                     hook_text=None,
+                    # vídeo de lista com "item": selo "2/5" no lugar da contagem regressiva
+                    chapter_banner=_item_banner(scene, script["scenes"]),
                 )
             finally:
                 # sem finally, um clipe baixado (10-20MB) vaza pro /tmp toda vez

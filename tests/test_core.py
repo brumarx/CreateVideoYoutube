@@ -864,3 +864,23 @@ def test_cartao_de_item_so_com_linhas_faladas():
     assert out is not None and out["linhas"] == ["limite estourou", "próximo modelo"]
     assert _ground_beat({"tipo": "cartao", "linhas": ["x"]}, narr) is None
     assert _cartao_scene(out, 1080, 1920, None) is not None
+
+
+def test_selo_crescente_de_lista():
+    # vídeo de lista: "2/5" no item 2, sem selo fora de lista
+    import importlib
+    import sys as _sys
+    from pathlib import Path as _P
+
+    root = _P(__file__).resolve().parent.parent
+    if str(root) not in _sys.path:
+        _sys.path.insert(0, str(root))
+    rp = importlib.import_module("scripts.run_pipeline")
+    from src.assemble import _chapter_banner_filter
+
+    scenes = [{"item": None}, {"item": 1}, {"item": None}, {"item": 2}, {"item": None}, {"item": 3}]
+    b = rp._item_banner(scenes[3], scenes)
+    assert b == {"index": 2, "total": 3, "kicker": "2/3"}
+    assert rp._item_banner(scenes[0], scenes) is None
+    assert "2/3" in _chapter_banner_filter(b, 1080, 1920, "#ffd400")
+    assert rp._item_banner({"item": 1}, [{"item": 1}]) is None

@@ -117,7 +117,8 @@ def _chapter_banner_filter(banner: dict, width: int, height: int, accent: str) -
     size = max(height // 24, 20)
     margin = size * 2
     hexcolor = accent.lstrip("#")
-    kicker = _escape_drawtext(f"PARTE {banner['index']} DE {banner['total']}")
+    # vídeo de lista ("1/5", "2/5"...): selo crescente; capítulo longo: "PARTE 3 DE 7"
+    kicker = _escape_drawtext(banner.get("kicker") or f"PARTE {banner['index']} DE {banner['total']}")
     return (
         f",drawtext=fontfile='{WATERMARK_FONT}':text='{kicker}':expansion=none:"
         f"fontsize={size}:fontcolor=0x{hexcolor}:alpha='{alpha}':enable='{enable}':"
