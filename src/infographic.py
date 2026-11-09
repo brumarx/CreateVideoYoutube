@@ -1085,6 +1085,34 @@ def _termometro_scene(spec: dict, w: int, h: int, background: Image.Image | None
     return img.convert("RGB")
 
 
+def _cartao_scene(spec: dict, w: int, h: int, background: Image.Image | None) -> Image.Image | None:
+    """Cartão de interface com título e 2 a 4 linhas curtas (ex.: "Limite
+    estourou?" / "modelo atual → próximo modelo"). É o desenho de cada item de
+    lista do vídeo de referência (99hud): o espectador entende o conceito
+    olhando, em vez de ouvir uma lista de nomes."""
+    linhas = [str(x).strip() for x in spec.get("linhas") or [] if str(x).strip()]
+    if not (2 <= len(linhas) <= 4):
+        return None
+    img = _backdrop(background, w, h)
+    card_l, card_r = w * 0.1, w * 0.9
+    card_t = h * 0.36
+    row_h = w * 0.1
+    card_b = card_t + w * 0.16 + row_h * len(linhas) + w * 0.06
+    draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle((card_l, card_t, card_r, card_b), radius=int(w * 0.04), fill=(236, 238, 244))
+    title_font = _font(SERIF_FONT, int(w * 0.07), "Bold")
+    row_font = _font(LABEL_FONT, int(w * 0.05))
+    if spec.get("titulo"):
+        draw.text((w / 2, card_t + w * 0.08), str(spec["titulo"]), font=title_font, fill=(20, 24, 40), anchor="mm")
+    y = card_t + w * 0.16
+    for linha in linhas:
+        draw.rounded_rectangle((card_l + w * 0.05, y + row_h * 0.15, card_r - w * 0.05, y + row_h * 0.85),
+                               radius=int(row_h * 0.2), fill=(255, 255, 255), outline=(200, 205, 215), width=2)
+        draw.text((card_l + w * 0.09, y + row_h * 0.5), linha, font=row_font, fill=(30, 34, 50), anchor="lm")
+        y += row_h
+    return img.convert("RGB")
+
+
 class Renderer:
     """Um por vídeo: guarda o último mapa pra servir de fundo das cenas
     sem mapa (número, comparação, ano)."""
@@ -1210,6 +1238,8 @@ class Renderer:
                 return _perfil_scene(spec, self.w, self.h, self.last_base)
             if tipo == "termometro":
                 return _termometro_scene(spec, self.w, self.h, self.last_base)
+            if tipo == "cartao":
+                return _cartao_scene(spec, self.w, self.h, self.last_base)
         except Exception as exc:  # noqa: BLE001 — gráfico é bônus: cai pra cascata normal
             log.warning("gráfico %s falhou: %s", spec.get("tipo"), exc)
         return None
@@ -1370,6 +1400,12 @@ def _ground_beat(b: dict, narration: str) -> dict | None:
         if len(itens) < 2:
             return None
         return {**b, "itens": itens}
+    if tipo == "cartao":
+        # cada linha do cartão tem que ser o que a cena FALA (sem linha inventada)
+        linhas = [x for x in b.get("linhas") or [] if isinstance(x, str) and _label_ok(x, nf)]
+        if len(linhas) < 2:
+            return None
+        return {**b, "linhas": linhas}
     if tipo == "termometro":
         if b.get("valor") is None or not spoken_numbers_ok({"valor": str(b["valor"])}, narration):
             return None

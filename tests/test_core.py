@@ -852,3 +852,15 @@ def test_perfil_e_termometro_so_com_valor_falado():
     assert _ground_beat({"tipo": "termometro", "valor": 52}, narr) is not None
     assert _ground_beat({"tipo": "termometro", "valor": 99}, narr) is None
     assert _termometro_scene({"tipo": "termometro", "valor": 52, "unidade": "°C"}, 1080, 1920, None) is not None
+
+
+def test_cartao_de_item_so_com_linhas_faladas():
+    # cartão de interface por item (estilo do reel 99hud): linha que a cena não fala sai
+    from src.infographic import _cartao_scene, _ground_beat
+
+    narr = "Quando o limite estourou, a ferramenta troca sozinha para o próximo modelo."
+    out = _ground_beat({"tipo": "cartao", "titulo": "Limite estourou?",
+                        "linhas": ["limite estourou", "próximo modelo", "pagar nada extra"]}, narr)
+    assert out is not None and out["linhas"] == ["limite estourou", "próximo modelo"]
+    assert _ground_beat({"tipo": "cartao", "linhas": ["x"]}, narr) is None
+    assert _cartao_scene(out, 1080, 1920, None) is not None
