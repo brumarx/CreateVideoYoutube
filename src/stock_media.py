@@ -180,7 +180,8 @@ def search_stock_photo(
     """Pexels e, sem nada no contexto, Pixabay (2º banco grátis)."""
     return (_pexels_photo(query, width, height, check, region)
             or _pixabay_photo(query, width, height, check, region)
-            or _smithsonian_photo(query, width, height, check, region))
+            or _smithsonian_photo(query, width, height, check, region)
+            or _met_photo(query, width, height, check, region))
 
 
 SMITHSONIAN_SEARCH_URL = "https://api.si.edu/openaccess/api/v1.0/search"
@@ -490,4 +491,46 @@ def _pexels_photo(query: str, width: int, height: int, check: Callable[[bytes], 
         log.info("pexels: nenhuma foto no contexto da cena pra %r", query)
         return None
 
+    return None
+
+
+MET_SEARCH_URL = "https://collectionapi.metmuseum.org/public/collection/v1.1/search"
+MET_OBJECT_URL = "https://collectionapi.metmuseum.org/public/collection/v1/objects/{id}"
+MET_HEADERS = {"User-Agent": "faceless-video-bot/1.0 (educational video project)"}
+
+
+def _met_photo(query: str, width: int, height: int, check, region: str = "") -> bytes | None:
+    """Foto de objeto do Museu Metropolitan (API pública, sem chave), só de
+    obra em domínio público (isPublicDomain). Último recurso: arte e objetos
+    antigos, útil para história; sem retrato de pessoa (mesma regra do Smithsonian)."""
+    if not query:
+        return None
+    try:
+        resp = httpx.get(MET_SEARCH_URL, timeout=30, headers=MET_HEADERS, params={"q": _normalize_query(query)[:100], "hasImages": "true", "limit": 20})
+        resp.raise_for_status()
+        ids = resp.json().get("objectIDs") or []
+    except Exception as exc:  # noqa: BLE001
+        log.warning("busca met falhou (%r): %s", query, exc)
+        return None
+    tried = 0
+    for oid in ids[:20]:
+        try:
+            obj = httpx.get(MET_OBJECT_URL.format(id=oid), timeout=30, headers=MET_HEADERS).json()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("objeto met %s falhou: %s", oid, exc)
+            continue
+        title = f"{obj.get('title', '')} {obj.get('objectName', '')}"
+        if obj.get("isPublicDomain") is not True or not obj.get("primaryImageSmall") or _SI_PERSON_RE.search(title):
+            continue
+        if tried >= 6:
+            return None
+        tried += 1
+        try:
+            data = httpx.get(obj["primaryImageSmall"], timeout=30, follow_redirects=True).content
+        except Exception as exc:  # noqa: BLE001
+            log.warning("download met falhou: %s", exc)
+            continue
+        if data and _passes(check, data, query):
+            log.info("foto do Met (domínio público) pra %r: %s", query, title[:80])
+            return data
     return None
