@@ -184,6 +184,7 @@ def search_stock_photo(
 
 
 SMITHSONIAN_SEARCH_URL = "https://api.si.edu/openaccess/api/v1.0/search"
+_SI_PERSON_RE = re.compile(r"portrait|unidentified|\bman\b|woman|soldier|\bboy\b|\bgirl\b|family|people|cabinet card", re.IGNORECASE)
 
 
 def _smithsonian_photo(query: str, width: int, height: int, check, region: str = "") -> bytes | None:
@@ -202,6 +203,10 @@ def _smithsonian_photo(query: str, width: int, height: int, check, region: str =
         return None
     tried = 0
     for row in rows:
+        title = str(row.get("title") or "")
+        # retrato de pessoa não identificada não serve à cena (pela regra do rosto)
+        if _SI_PERSON_RE.search(title):
+            continue
         dn = (row.get("content") or {}).get("descriptiveNonRepeating") or {}
         for m in ((dn.get("online_media") or {}).get("media") or []):
             if m.get("type") != "Images" or "CC0" not in str(m.get("usage", "")) or not m.get("content"):
