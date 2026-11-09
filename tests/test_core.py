@@ -794,3 +794,27 @@ def test_cartao_numero_precisa_de_rotulo():
     assert strong_number("a planta bombeia 190 mil metros cúbicos por dia") is None
     assert strong_number("o salto teve 4,3 metros de distância") is None
     assert strong_number("o governo mobilizou 5 mil militares")["rotulo"] == "militares"
+
+
+def test_conserto_respeita_prazo_da_revisao(monkeypatch):
+    # 795: o laço de conserto rodou mais de 50 min porque o prazo só era
+    # conferido entre tentativas; agora ele para na hora se o prazo já passou
+    import importlib
+    import sys as _sys
+    from pathlib import Path as _P
+
+    root = _P(__file__).resolve().parent.parent
+    if str(root) not in _sys.path:
+        _sys.path.insert(0, str(root))
+    run_pipeline = importlib.import_module("scripts.run_pipeline")
+
+    def _nao_deve_chamar(*a, **k):
+        raise AssertionError("não devia chamar o conserto depois do prazo")
+
+    monkeypatch.setattr(run_pipeline, "repair_script", _nao_deve_chamar, raising=False)
+    import src.script_gen as sg
+    monkeypatch.setattr(sg, "repair_script", _nao_deve_chamar)
+    out = run_pipeline._repair_loop({"title": "t", "scenes": [{"narration": "a"}]},
+                                    [{"tipo": "x", "termo": "y", "motivo": "z"}],
+                                    "tema", None, None, "job", deadline=0.0)
+    assert out is None

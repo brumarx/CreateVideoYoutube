@@ -390,16 +390,22 @@ def _cut_flagged_sentences(
     return {**script, "scenes": new_scenes}
 
 
-def _repair_loop(script: dict, problems: list[dict], topic: str, facts, web_facts, job_id) -> dict | None:
+def _repair_loop(script: dict, problems: list[dict], topic: str, facts, web_facts, job_id,
+                 deadline: float | None = None) -> dict | None:
     """Laço conserta → revisa até a revisão vir limpa. O roteiro reescrito do
     zero trocava 1 detalhe inventado por outros (21/10: curiosidades
     555-557, 3 reescritas cada, sempre um detalhe novo sem fonte). O
     conserto não pode trazer número/nome novo (trava em
     script_gen.repair_script), então cada rodada só tira ou generaliza e o
     laço converge; teto de MAX_REPAIR_ROUNDS, e sai antes se parou de mudar.
-    None se não chegou numa versão aprovada."""
+    `deadline` (monotonic) é o prazo da revisão de fatos: o 795 passou de 50
+    min porque o orçamento só era conferido entre tentativas, não dentro
+    deste laço. None se não chegou numa versão aprovada."""
     fixed, fix_problems = script, problems
     for _ in range(MAX_REPAIR_ROUNDS):
+        if deadline is not None and time.monotonic() > deadline:
+            log.warning("[%s] conserto passou do prazo da revisão de fatos — para aqui", job_id)
+            return None
         before = fixed
         fixed = repair_script(fixed, fix_problems, facts, web_facts, topic)
         if fixed is None or fixed["scenes"] == before["scenes"] and fixed.get("title") == before.get("title"):
@@ -853,7 +859,8 @@ def run(
 
             web_facts = merge_web_facts(web_facts, evidence_for_problems(problems, topic)) or web_facts
             if script_file:
-                fixed = _repair_loop(script, problems, topic, facts, web_facts, job_id)
+                fixed = _repair_loop(script, problems, topic, facts, web_facts, job_id,
+                                deadline=fact_started + FACT_CHECK_BUDGET_S)
                 if fixed is not None:
                     script = fixed
                     break
@@ -867,7 +874,8 @@ def run(
                 )
             # conserta as frases apontadas com base nas fontes ANTES de
             # reescrever (ver _repair_loop)
-            fixed = _repair_loop(script, problems, topic, facts, web_facts, job_id)
+            fixed = _repair_loop(script, problems, topic, facts, web_facts, job_id,
+                                deadline=fact_started + FACT_CHECK_BUDGET_S)
             if fixed is not None:
                 script = fixed
                 break
