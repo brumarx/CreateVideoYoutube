@@ -989,10 +989,19 @@ def generate_script(
             raise ValueError(f"compilação: {exc}") from exc
     # etapa 1: o plano (estrutura e fatos escolhidos) antes de escrever a narração
     plan = plan_story(topic, facts, web_facts)
+    writer_sources = web_facts
+    if web_facts and channel.name in FATOS_CANAIS:
+        # 10/11: o escritor não lê o texto bruto das fontes (misturava números e completava de
+        # memória, job 824); recebe só a lista de fatos literais extraída e checada
+        fatos = extract_verified_facts(topic, web_facts)
+        if not fatos:
+            raise ValueError("fatos verificados indisponíveis (extração das fontes falhou)")
+        writer_sources = [{"titulo": "FATOS VERIFICADOS (única base; cada cena usa um destes)", "url": "",
+                           "trecho": "\n".join(f"F{i + 1}: {f}" for i, f in enumerate(fatos))}]
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": (plan + "\n\n" if plan else "")
-         + _prompt_for(channel, topic, facts, scenes, min_minutes, max_minutes, web_facts)
+         + _prompt_for(channel, topic, facts, scenes, min_minutes, max_minutes, writer_sources)
          + recent_mistakes(channel.name) + (revision_feedback or "")},
     ]
 
@@ -1663,6 +1672,53 @@ def _plan_valid(raw: str) -> bool:
     except json.JSONDecodeError:
         return False
     return isinstance(data, dict) and all(isinstance(data.get(k), str) and data[k].strip() for k in PLAN_KEYS)
+
+
+# canais que escrevem a partir de uma lista de fatos verificados (passo de extração)
+FATOS_CANAIS = {"curiosidades"}
+
+
+def _numeros(texto: str) -> set[str]:
+    """Números do texto sem separadores: '65,23' e '65.23' viram '6523'; '1.155' vira '1155'."""
+    return {re.sub(r"[.,]", "", m) for m in re.findall(r"\d+(?:[.,]\d+)*", texto)}
+
+
+def fatos_com_numeros_da_fonte(fatos: list[str], fontes: str) -> list[str]:
+    """Fica só o fato cujos números aparecem nas fontes. Fato sem número passa; fato com
+    número que não está nas fontes é descartado (é como o 1.430 e o 53,85 saíram do texto)."""
+    na_fonte = _numeros(fontes)
+    return [f for f in fatos if _numeros(f) <= na_fonte]
+
+
+def extract_verified_facts(topic: str, web_facts: list[dict] | None) -> list[str] | None:
+    """Passo A: lista fechada de fatos literais das FONTES (Wikipédia primeiro). Cada número
+    tem de constar nas fontes (checado em código). None se sobrarem menos de 8 fatos."""
+    fontes = "\n".join(f"[{f.get('titulo', '')}]: {f.get('trecho', '')}" for f in (web_facts or []))[:9000]
+    if not fontes.strip():
+        return None
+    prompt = (
+        f"Tema: {topic}\n\nFONTES:\n{fontes}\n\n"
+        "Extraia de 10 a 12 FATOS que estão LITERALMENTE nas FONTES, com o mesmo número, data, "
+        "nome e unidade. Prefira o que a Wikipédia diz. Cada fato numa frase curta. Não acrescente "
+        "nada que não esteja nas fontes e não junte fontes diferentes num número novo. "
+        "Responda SÓ JSON: {\"fatos\": [\"fato 1\", \"fato 2\", \"...\"]}"
+    )
+    from .providers import is_strong_model
+    try:
+        raw = complete([{"role": "user", "content": prompt}], max_tokens=12000, temperature=0.1,
+                       validate=lambda r: '"fatos"' in r, model_filter=is_strong_model)
+    except RuntimeError as exc:
+        log.warning("extração de fatos indisponível: %s", exc)
+        return None
+    try:
+        fatos = [str(x).strip() for x in _extract_json(raw).get("fatos", []) if str(x).strip()]
+    except (ValueError, json.JSONDecodeError):
+        log.warning("extração de fatos: resposta sem JSON válido (%d caracteres)", len(raw))
+        return None
+    ok = fatos_com_numeros_da_fonte(fatos, fontes)
+    if len(fatos) != len(ok):
+        log.warning("extração de fatos: %d de %d descartados (número fora das fontes)", len(fatos) - len(ok), len(fatos))
+    return ok if len(ok) >= 8 else None
 
 
 def plan_story(topic: str, facts: dict | None, web_facts: list[dict] | None) -> str | None:

@@ -32,3 +32,17 @@ def test_orcamento_do_roteiro_cobre_12_cenas_do_fractal():
     from src.script_gen import _script_max_tokens
     assert _script_max_tokens(350, 12) >= 4000
     assert _script_max_tokens(10_000, 200) <= 16000
+
+
+def test_numeros_com_separador_brasileiro_e_ingles_batem():
+    from src.script_gen import fatos_com_numeros_da_fonte
+    fontes = "com 65,23 quilômetros; 23,3 km sob o leito; custo de ¥ 538,4 bilhões; 1155 pessoas"
+    fatos = ["O túnel tem 65.23 km", "Trecho de 23,3 km", "Custo de 538,4 bilhões", "Naufrágio matou 1.155 pessoas"]
+    assert fatos_com_numeros_da_fonte(fatos, fontes) == fatos
+
+
+def test_fato_com_numero_fora_das_fontes_e_descartado():
+    from src.script_gen import fatos_com_numeros_da_fonte
+    fontes = "com 65,23 quilômetros; 1155 pessoas"
+    fatos = ["Tem 53,85 km", "Tem 65,23 km", "Matou 1.430 pessoas", "Foi uma obra ferroviária", "Inaugurada em 1988"]
+    assert fatos_com_numeros_da_fonte(fatos, fontes) == ["Tem 65,23 km", "Foi uma obra ferroviária"]
