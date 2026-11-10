@@ -24,3 +24,11 @@ def test_campo_faltando_e_recusado_com_motivo(caplog):
 
 def test_roteiro_completo_passa():
     assert _is_parseable_script('{"title":"a","description":"b","tags":[],"scenes":[]}', REQ) is True
+
+
+def test_orcamento_do_roteiro_cobre_12_cenas_do_fractal():
+    # 10/11: o roteiro de 12 cenas veio com 9.171 caracteres (~2.450 tokens) e foi cortado.
+    # Com 350 palavras (1,5-2,5 min) e 12 cenas, o orçamento tem de passar disso com folga.
+    from src.script_gen import _script_max_tokens
+    assert _script_max_tokens(350, 12) >= 4000
+    assert _script_max_tokens(10_000, 200) <= 16000

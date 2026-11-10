@@ -619,6 +619,14 @@ def _trim_muletas(script: dict) -> dict:
     return {**script, "scenes": scenes}
 
 
+def _script_max_tokens(total_max_words: int, n_scenes: int) -> int:
+    """Orçamento de saída do roteiro: ~1,5 token por palavra em pt-BR, mais o JSON de
+    cada cena (narração, image_prompt, stock_query, gráfico e campos extras, cerca de
+    200 tokens por cena), mais folga de 40%. Em 10/11 a conta usava 60 tokens por cena e
+    o Nemotron cortou o JSON de 12 cenas em 9.171 caracteres (2.443 tokens)."""
+    return min(int((total_max_words * 1.5 + n_scenes * 220 + 500) * 1.4), 16000)
+
+
 def _is_parseable_script(raw: str, required: set[str]) -> bool:
     """Validador passado pra `complete()` — rejeita na hora qualquer
     resposta que não vira roteiro utilizável, pra cascata de provedores já
@@ -993,11 +1001,7 @@ def generate_script(
     # o configurado (visto na prática: canal configurado pra 8min saiu com
     # 12min porque só existia checagem de mínimo, nunca de máximo).
     max_words_ceiling = round(total_max_words * MAX_WORDS_RATIO)
-    # ~1.5 tokens/palavra em pt-BR + overhead de JSON/image_prompt (em
-    # inglês, ~30-50 palavras por cena) + folga de 40% — sem isso a resposta
-    # trunca no meio do JSON pra roteiros longos (visto na prática: 31
-    # cenas cortou em ~3100 caracteres com o default baixo do provedor).
-    max_tokens = min(int((total_max_words * 1.5 + n_scenes * 60 + 500) * 1.4), 16000)
+    max_tokens = _script_max_tokens(total_max_words, n_scenes)
     last_error: Exception | None = None
     best_script: dict | None = None
     best_distance = float("inf")
