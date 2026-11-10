@@ -93,3 +93,9 @@ def test_casos_reais_que_devem_casar(channel, topic):
 ])
 def test_casos_reais_que_nao_devem_casar(channel, topic):
     assert topic_for_channel(channel, [topic]) is None
+
+
+@pytest.mark.parametrize("topic", ["Seca no Nordeste chega ao pior nível", "Plantio de árvores avança no semiárido"])
+def test_curiosidades_pega_agua_e_clima(topic):
+    # temas de água/deserto/árvores são os que mais rendem no canal (público, 07/11)
+    assert topic_for_channel("curiosidades", [topic]) == topic

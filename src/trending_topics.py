@@ -410,6 +410,14 @@ CURIOSIDADES_KEYWORDS = [
     "aeroporto",
     "metrô",
     "metro",
+    "água",
+    "agua",
+    "árvores",
+    "arvores",
+    "seca",
+    "clima",
+    "desertificação",
+    "desertificacao",
 ]
 
 MOTIVACIONAL_KEYWORDS = [
