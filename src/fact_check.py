@@ -1149,6 +1149,17 @@ Responda SÓ com JSON: {{"itens": [{{"n": 0, "veredito": "ok", "concreto": true}
 (n=0 é o título)"""
 
 
+def _has_key(key: str):
+    """Validador do juiz: a resposta tem de trazer a chave. Quando recusa, registra o
+    tamanho e o fim da resposta (10/11: a recusa do Nemotron não dizia o motivo)."""
+    def check(r: str) -> bool:
+        if f'"{key}"' in r:
+            return True
+        log.warning("checador recusado: sem a chave %r; %d caracteres; fim %r", key, len(r), r[-120:])
+        return False
+    return check
+
+
 def _judge(prompt: str, key: str, max_tokens: int = 3000, whole: dict | None = None) -> list | None:
     """Pergunta ao modelo FORTE (Nemotron 550B, gpt-oss-120b) e devolve a
     lista `key` do JSON. Sem modelo forte = None (modelo pequeno aprova o que
@@ -1157,7 +1168,7 @@ def _judge(prompt: str, key: str, max_tokens: int = 3000, whole: dict | None = N
 
     try:
         raw = complete([{"role": "user", "content": prompt}], max_tokens=max_tokens, temperature=0,
-                       validate=lambda r: f'"{key}"' in r, model_filter=is_strong_model)
+                       validate=_has_key(key), model_filter=is_strong_model)
         m = re.search(r"\{.*\}", raw, re.S)
         data = json.loads(m.group(0)) if m else {}
         items = data.get(key)
