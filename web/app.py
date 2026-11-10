@@ -422,21 +422,19 @@ def _trends_now() -> dict:
         cache = json.loads((ROOT / "data" / "trending_topics_cache.json").read_text())["BR"]
         trends = cache.get("trends", [])
         picks = {}
-        # palavras-chave de nicho (mesmas de src/trending_topics.topic_for_channel)
-        keywords = {
-            "aprendervia": ["ia", "inteligencia", "artificial", "python", "javascript", "tech", "programação",
-                            "carreira", "emprego", "trabalho", "algoritmo", "dados", "código", "startup", "desenvolvedor"],
-            "politica": ["política", "governo", "congresso", "deputado", "senador", "economia", "dólar", "moeda",
-                         "imposto", "reforma", "stf", "tribunal", "justiça", "lei", "votação"],
-        }
-        for path in sorted((ROOT / "channels").glob("*.yaml")):
-            canal = path.stem
-            if canal in keywords:
-                hits = [t for t in trends if any(kw in t.lower() for kw in keywords[canal])]
-                picks[canal] = hits[0] if hits else "sem tema do nicho hoje"
-            else:
-                picks[canal] = topic_for_channel(canal, trends) or "—"
-        return {"trends": trends, "cached_at": cache.get("cached_at", ""), "picks": picks}
+        # mesma regra da pipeline (src/trending_topics.topic_for_channel)
+        trends = filter_topics(trends)
+        # só os canais que a pipeline alimenta com trends (run_pipeline._get_viral_topics_with_trending)
+        for canal in ("aprendervia", "curiosidades", "motivacional"):
+            picks[canal] = topic_for_channel(canal, trends) or "sem tema do nicho hoje"
+        cached_at = cache.get("cached_at", "")
+        stale = True
+        try:
+            from datetime import datetime, timedelta, timezone
+            stale = datetime.now(timezone.utc) - datetime.fromisoformat(cached_at) > timedelta(hours=1)
+        except (TypeError, ValueError):
+            pass
+        return {"trends": trends, "cached_at": cached_at, "stale": stale, "picks": picks}
     except (OSError, KeyError, ValueError):
         return {"trends": [], "cached_at": "", "picks": {}}
 

@@ -256,6 +256,49 @@ def filter_topics(
     return filtered
 
 
+APRENDERVIA_KEYWORDS = [
+    "ia", "inteligencia", "inteligência", "artificial", "python", "javascript",
+    "tech", "programação", "carreira", "emprego", "trabalho",
+    "algoritmo", "dados", "código", "startup", "desenvolvedor",
+]
+
+POLITICA_KEYWORDS = [
+    "política", "governo", "congresso", "deputado", "senador",
+    "economia", "dólar", "moeda", "imposto", "reforma",
+    "STF", "tribunal", "justiça", "lei", "votação",
+]
+
+
+CURIOSIDADES_KEYWORDS = [
+    "história", "historia", "ciência", "ciencia", "descoberta", "descobrem", "construção",
+    "construcao", "construiu", "construída", "construida", "usina", "ponte", "túnel", "tunel",
+    "ilha", "rio", "montanha", "vulcão", "vulcao", "deserto", "oceano", "mar", "planeta",
+    "espaço", "espaco", "universo", "fóssil", "fossil", "dinossauro", "animal", "cidade",
+    "país", "pais", "invenção", "invencao", "natureza", "barragem", "represa", "canal",
+]
+
+MOTIVACIONAL_KEYWORDS = [
+    "vida", "superação", "superacao", "sucesso", "treino", "esporte", "atleta", "carreira",
+    "saúde", "saude", "força", "coragem", "determinação", "determinacao", "trabalho",
+    "dinheiro", "família", "familia", "medalha", "recorde", "idoso", "tratamento",
+]
+
+
+def _has_keyword(text: str, keywords: list[str]) -> bool:
+    """Palavra inteira (com fronteira), sem acento/caixa: 'ia' não casa com 'dias'
+    e 'lei' não casa com 'brasileira'."""
+    import unicodedata
+
+    def norm(s: str) -> str:
+        return unicodedata.normalize("NFKD", s.lower()).encode("ascii", "ignore").decode()
+
+    t = norm(text)
+    for kw in keywords:
+        if re.search(r"(?<![a-z0-9])" + re.escape(norm(kw)) + r"(?![a-z0-9])", t):
+            return True
+    return False
+
+
 def topic_for_channel(
     channel_name: str,
     trending: list[str] | None = None,
@@ -263,10 +306,10 @@ def topic_for_channel(
     """Escolhe um trending topic adequado para um canal específico.
 
     Estratégia por canal:
-    - aprendervia: temas com palavras-chave tech/IA/carreira
+    - aprendervia: só tema com palavra-chave tech/IA/carreira; sem match → None
+    - politica: só tema com palavra-chave de política/economia; sem match → None
     - curiosidades: qualquer trending serve
     - motivacional: evita política/polêmica; procura temas inspiradores
-    - politica: prioriza política/economia; evita celebridade/memes
     """
     if not trending:
         return None
@@ -274,21 +317,18 @@ def topic_for_channel(
     channel = channel_name.lower()
 
     if channel == "aprendervia":
-        # Procura temas tech, IA, carreira, educação
-        keywords = [
-            "ia", "inteligencia", "artificial", "python", "javascript",
-            "tech", "programação", "carreira", "emprego", "trabalho",
-            "algoritmo", "dados", "código", "startup", "desenvolvedor",
-        ]
+        # Sem fallback: tema fora do nicho (ex.: nome de pessoa) não entra
         for topic in trending:
-            if any(kw in topic.lower() for kw in keywords):
+            if _has_keyword(topic, APRENDERVIA_KEYWORDS):
                 return topic
-        # Se não achar palavra-chave, pega o 1º trending (pode virar "IA grátis para X")
-        return trending[0] if trending else None
+        return None
 
     elif channel == "curiosidades":
-        # Qualquer trending topic pode virar curiosidade
-        return trending[0] if trending else None
+        # Só tema de lugar, obra, ciência ou história; sem match → None (fica a config)
+        for topic in trending:
+            if _has_keyword(topic, CURIOSIDADES_KEYWORDS):
+                return topic
+        return None
 
     elif channel == "motivacional":
         # Evita política, crime, tragédia; procura temas que dão "gancho"
@@ -297,22 +337,16 @@ def topic_for_channel(
             "imposto", "direita", "esquerda", "deputado", "senador",
         ]
         for topic in trending:
-            if not any(bad in topic.lower() for bad in exclude_bad):
+            if _has_keyword(topic, MOTIVACIONAL_KEYWORDS) and not any(bad in topic.lower() for bad in exclude_bad):
                 return topic
         return None  # Sem tema adequado, volta pro fallback
 
     elif channel == "politica":
-        # Prioriza política, economia, social
-        keywords = [
-            "política", "governo", "congresso", "deputado", "senador",
-            "economia", "dólar", "moeda", "imposto", "reforma",
-            "STF", "tribunal", "justiça", "lei", "votação",
-        ]
+        # Só política/economia; sem match → None (não vira "superliga de vôlei")
         for topic in trending:
-            if any(kw in topic.lower() for kw in keywords):
+            if _has_keyword(topic, POLITICA_KEYWORDS):
                 return topic
-        # Fallback: pega 1º trending mesmo que não seja política (notícia quente)
-        return trending[0] if trending else None
+        return None
 
     return trending[0] if trending else None
 

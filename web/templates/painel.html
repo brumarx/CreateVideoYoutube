@@ -515,7 +515,7 @@
   <section class="tab" id="tab-trending" hidden>
     <h2>📊 Trending Topics</h2>
     <h3>Tendências de hoje</h3>
-    <p class="hint">Cache de {{ trending.cached_at or "nunca" }} (a mesma que a pipeline usa para temas virais)</p>
+    <p class="hint">Cache de {{ trending.cached_at or "nunca" }} (a mesma que a pipeline usa para temas virais){% if trending.stale %} — <strong>DESATUALIZADO (mais de 1 h): a pipeline busca de novo na próxima rodada</strong>{% endif %}</p>
     <div class="why">{% for t in trending.trends or [] %}<span class="badge">{{ t }}</span> {% else %}sem tendências no cache{% endfor %}</div>
     <h3>Tema que cada canal escolheria</h3>
     {% for canal, tema in (trending.picks or {}).items() %}
