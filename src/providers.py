@@ -378,6 +378,12 @@ def _call_openai_compat(
             return None, resp.status_code, _cooldown_seconds(resp.status_code, resp.text)
         data = resp.json()
         content = data["choices"][0]["message"]["content"]
+        finish = data["choices"][0].get("finish_reason")
+        if finish not in (None, "stop"):
+            # 10/11: resposta cortada sem motivo registrado (revisão do job 817 parou no meio
+            # de uma string com 3000 de max_tokens); o provedor diz por quê
+            log.warning("%s (%s): finish_reason=%s, uso=%s, max_tokens=%d, %d caracteres",
+                        endpoint, model, finish, data.get("usage"), max_tokens, len(content or ""))
         if content and _strip_reasoning(content) is None:
             # <think> sem fechamento: resposta cortada no meio do raciocínio (max_tokens)
             log.warning("%s (%s): resposta cortada dentro de <think> (%d caracteres, fim %r)",
