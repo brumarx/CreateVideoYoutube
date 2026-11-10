@@ -385,6 +385,16 @@ def _compilation_review(script: dict, topic: str, facts: dict) -> list[dict]:
             for t in extra[:8]]
 
 
+def _review_valid(r: str) -> bool:
+    """Validador da revisão do roteiro: registra o motivo quando recusa (10/11: a recusa
+    do NVIDIA no job 815 não deixou rastro)."""
+    if _parse(r) is not None:
+        return True
+    log.warning("revisão do roteiro recusada: %d caracteres; sem JSON com 'problemas' em lista; fim %r",
+                len(r), r[-120:])
+    return False
+
+
 def review_script(
     script: dict, topic: str, facts: dict | None = None, web_facts: list[dict] | None = None,
 ) -> list[dict] | None:
@@ -413,7 +423,7 @@ def review_script(
         raw = complete(
             [{"role": "user", "content": _review_prompt(script, topic, facts, web_facts)}],
             max_tokens=3000,
-            validate=lambda r: _parse(r) is not None,
+            validate=_review_valid,
             # modelo pequeno aprovava "pesquisador Trent-Von Haesler" e
             # "o caso de Dobelle" inventados (job 306)
             model_filter=lambda m: not _SMALL_MODEL_RE.search(m),
