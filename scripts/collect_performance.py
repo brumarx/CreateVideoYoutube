@@ -12,15 +12,15 @@ import json
 import logging
 import re
 import sqlite3
-from src.db import connect_db
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT))  # antes de qualquer import de src (cron não põe o projeto no path)
 
 from googleapiclient.discovery import build  # noqa: E402
+from src.db import connect_db  # noqa: E402
 
 from src.config import ChannelConfig  # noqa: E402
 from src.notify import send_telegram  # noqa: E402
