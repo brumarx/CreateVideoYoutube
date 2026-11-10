@@ -509,8 +509,13 @@ def complete(
         for only, pass_keys in passes:
             for api_key in pass_keys:
                 if api_key in rotator._banned or rotator._resting.get(api_key, 0.0) > time.monotonic():
+                    # 10/11: pulada em silêncio (o juiz do job 815 não deixou rastro no log)
+                    log.info("%s: chave %s pulada (%s) no passe %s", name, _key_id(api_key),
+                             "banida" if api_key in rotator._banned else "em descanso", only or "forte")
                     continue
                 models = _fetch_models(name, models_endpoint, api_key)
+                if not models:
+                    log.warning("%s: chave %s sem modelos em /models (passe %s)", name, _key_id(api_key), only or "forte")
                 for model in models:
                     if (only is not None and model != only) or (only is None and model in _STRONG_MODELS.get(name, [])):
                         continue
