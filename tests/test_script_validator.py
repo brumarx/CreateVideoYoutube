@@ -46,3 +46,19 @@ def test_fato_com_numero_fora_das_fontes_e_descartado():
     fontes = "com 65,23 quilômetros; 1155 pessoas"
     fatos = ["Tem 53,85 km", "Tem 65,23 km", "Matou 1.430 pessoas", "Foi uma obra ferroviária", "Inaugurada em 1988"]
     assert fatos_com_numeros_da_fonte(fatos, fontes) == ["Tem 65,23 km", "Foi uma obra ferroviária"]
+
+
+def test_moeda_simbolo_vira_extenso_no_titulo_e_na_narracao():
+    from src.script_gen import _normalize_currency
+    script = {"title": "Túnel de ¥ 538 bi", "thumbnail_text": "US$ 3,6 bilhões",
+              "scenes": [{"narration": "Custou ¥ 538,4 bilhões, antes US$ 3,6 bilhões."}]}
+    out = _normalize_currency(script)
+    assert out["title"] == "Túnel de 538 bi de ienes"
+    assert out["thumbnail_text"] == "3,6 bilhões de dólares"
+    assert out["scenes"][0]["narration"] == "Custou 538,4 bilhões de ienes, antes 3,6 bilhões de dólares."
+
+
+def test_moeda_sem_simbolo_nao_muda():
+    from src.script_gen import _normalize_currency
+    s = {"title": "Custou 538 bilhões de ienes", "scenes": [{"narration": "R$ 2 milhões"}]}
+    assert _normalize_currency(s) == s

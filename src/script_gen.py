@@ -141,7 +141,7 @@ Câmara"):
         # Groq recusou com 413 (09/11, job 799); sem fonte de sobra, o roteiro cai em todos os provedores
         # 10/11: Nemotron (contexto grande) passou a escrever; 5.500 mantém os números do
         # corpo do artigo (53,85 km, 23,3 km, 538,4 bilhões) visíveis ao escritor
-        trechos = trechos[:5500]
+        trechos = trechos[:5500 if channel.name in FATOS_CANAIS else 3000]
         web_facts_block = f"""
 PESQUISA REAL NA INTERNET (o tema foi digitado por uma pessoa — use estes
 trechos como base factual; NÃO invente nome, número, data ou evento que
@@ -961,6 +961,30 @@ def compose_compilation(channel: ChannelConfig, facts: dict, revision_feedback: 
     }
 
 
+_MOEDA_RE = re.compile(
+    r"(¥|US\$)\s*(\d[\d.,]*(?:\s*(?:bilh(?:ão|ões|oes|ao)|bi|milh(?:ão|ões|oes|ao)|mi|mil))?)")
+
+
+def _normalize_currency(script: dict) -> dict:
+    """Símbolo de moeda vira extenso, em código (não depende do LLM obedecer): '¥ 538,4 bilhões'
+    -> '538,4 bilhões de ienes'; 'US$ 3,6 bilhões' -> '3,6 bilhões de dólares'. Título, thumbnail
+    e narração."""
+    def sub(m: re.Match) -> str:
+        return f"{m.group(2)} de {'ienes' if m.group(1) == '¥' else 'dólares'}"
+
+    def fix(text: str) -> str:
+        return _MOEDA_RE.sub(sub, text) if isinstance(text, str) else text
+
+    out = {**script}
+    for key in ("title", "thumbnail_text"):
+        if key in out:
+            out[key] = fix(out[key])
+    if isinstance(out.get("scenes"), list):
+        out["scenes"] = [{**sc, "narration": fix(sc.get("narration", ""))} if isinstance(sc, dict) else sc
+                         for sc in out["scenes"]]
+    return out
+
+
 def generate_script(
     channel: ChannelConfig,
     topic: str,
@@ -998,6 +1022,7 @@ def generate_script(
         fatos = extract_verified_facts(topic, web_facts)
         if not fatos:
             raise ValueError("fatos verificados indisponíveis (extração das fontes falhou)")
+        log.info("escritor recebe só a lista fechada: %d fatos verificados", len(fatos))
         writer_sources = [{"titulo": "FATOS VERIFICADOS (única base; cada cena usa um destes)", "url": "",
                            "trecho": "\n".join(f"F{i + 1}: {f}" for i, f in enumerate(fatos))}]
     messages = [
@@ -1100,7 +1125,7 @@ def generate_script(
                 continue
             word_count = sum(len(s.get("narration", "").split()) for s in script["scenes"])
             if min_total_words <= word_count <= max_words_ceiling:
-                return _sanitize_club_crests(_sanitize_person_images(topic, script))
+                return _normalize_currency(_sanitize_club_crests(_sanitize_person_images(topic, script)))
 
             distance = (
                 min_total_words - word_count if word_count < min_total_words
@@ -1126,10 +1151,10 @@ def generate_script(
             "usando o melhor roteiro obtido mesmo fora da faixa de %d-%d palavras",
             min_total_words, max_words_ceiling,
         )
-        return _sanitize_club_crests(_sanitize_person_images(topic, best_script))
+        return _normalize_currency(_sanitize_club_crests(_sanitize_person_images(topic, best_script)))
     if filler_fallback is not None:
         log.warning("3 tentativas com bordão repetido — usando a última mesmo assim")
-        return _sanitize_club_crests(_sanitize_person_images(topic, filler_fallback))
+        return _normalize_currency(_sanitize_club_crests(_sanitize_person_images(topic, filler_fallback)))
 
     raise ValueError(f"LLM não devolveu roteiro válido após 3 tentativas: {last_error}")
 
@@ -1249,7 +1274,7 @@ Responda só com JSON: {{"titulo": "título (o mesmo, se não foi apontado)", "c
     title = str(data.get("titulo") or "").strip()
     if not title or _fact_tokens(title) - allowed:
         title = script.get("title")
-    return {**script, "title": title, "scenes": scenes}
+    return _normalize_currency({**script, "title": title, "scenes": scenes})
 
 
 def refresh_description(script: dict) -> str:
@@ -1718,8 +1743,10 @@ def extract_verified_facts(topic: str, web_facts: list[dict] | None) -> list[str
         log.warning("extração de fatos: resposta sem JSON válido (%d caracteres)", len(raw))
         return None
     ok = fatos_com_numeros_da_fonte(fatos, fontes)
+    log.info("extração de fatos: %d propostos, %d com números confirmados nas fontes, %d descartados",
+             len(fatos), len(ok), len(fatos) - len(ok))
     if len(fatos) != len(ok):
-        log.warning("extração de fatos: %d de %d descartados (número fora das fontes)", len(fatos) - len(ok), len(fatos))
+        log.warning("extração de fatos: números fora das fontes em %d fato(s)", len(fatos) - len(ok))
     return ok if len(ok) >= 8 else None
 
 
