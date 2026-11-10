@@ -1678,7 +1678,10 @@ def plan_story(topic: str, facts: dict | None, web_facts: list[dict] | None) -> 
         "por que importa, 1 frase), virada_1 e virada_2 (fatos que mudam o que se achava saber, 1 frase "
         "cada), climax_factual (o fato mais surpreendente de todos, 1 frase), fechamento_reflexivo "
         "(consequência ou comparação com o cotidiano, 1 frase). Cada item tem que ser um fato que está nas "
-        "FONTES. Responda SÓ o JSON."
+        "FONTES. ANTES de escrever, confirme o ÂNGULO do tema (a afirmação central: método, causa, "
+        "consequência): ele tem de aparecer nas FONTES com as mesmas palavras e números. Se não aparecer, "
+        "não use esse ângulo: escolha o que as FONTES dizem (ex.: datas, custo, comparação). "
+        "Responda SÓ o JSON."
     )
     try:
         raw = complete([{"role": "user", "content": prompt}], max_tokens=700, validate=_plan_valid, temperature=0.2)
