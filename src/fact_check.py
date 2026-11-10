@@ -45,17 +45,10 @@ def _review_prompt(script: dict, topic: str, facts: dict | None, web_facts: list
         f"TÍTULO DO VÍDEO: {script.get('title', '')}\n"
         f"TEXTO DA MINIATURA: {script.get('thumbnail_text', '')}\n\nNARRAÇÃO:\n{narration}"
     )
-    sources = "NENHUMA — o roteiro foi escrito só com conhecimento geral."
-    web_block = "Trechos de pesquisa na internet fornecidos ao roteirista:\n" + "\n".join(
-        f"- {f['titulo']}: {f['trecho']}" for f in web_facts or []
-    )
-    if facts:
-        sources = "DADOS REAIS fornecidos ao roteirista:\n" + json.dumps(facts, ensure_ascii=False, separators=(",", ":"))
-        if web_facts:
-            # perfil do banco + internet (politica_data.perfil_parlamentar)
-            sources += "\n\n" + web_block
-    elif web_facts:
-        sources = web_block
+    from .fontes import bloco_fontes
+    bloco = bloco_fontes(facts, web_facts)
+    sources = ("FONTES (o mesmo bloco que o roteirista e o conserto leem):\n" + bloco) if bloco else \
+        "NENHUMA — o roteiro foi escrito só com conhecimento geral."
 
     today = date.today().strftime("%d/%m/%Y")
     return f"""Você é revisor de fatos de um canal do YouTube. Revise o roteiro
@@ -1192,11 +1185,10 @@ def _judge(prompt: str, key: str, max_tokens: int = 3000, whole: dict | None = N
     return items if isinstance(items, list) else None
 
 
-def _sources_text(facts: dict | None, web_facts: list[dict] | None, limit: int = 12000) -> str:
-    parts = [f"{f.get('titulo', '')}: {f.get('trecho', '')}" for f in web_facts or []]
-    if facts:
-        parts.append(json.dumps(facts, ensure_ascii=False))
-    return "\n\n".join(parts)[:limit]
+def _sources_text(facts: dict | None, web_facts: list[dict] | None, limit: int | None = None) -> str:
+    """Mesmo bloco de fontes da extração e do conserto (src/fontes.py); `limit` não é mais usado."""
+    from .fontes import bloco_fontes
+    return bloco_fontes(facts, web_facts)
 
 
 def verify_full_script(script: dict, topic: str, facts: dict | None, web_facts: list[dict] | None,

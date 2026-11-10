@@ -1234,6 +1234,18 @@ def generate_script(
 _SENTENCES = re.compile(r"(?<=[.!?])\s+")
 
 
+def _cenas_apontadas(script: dict, problems: list[dict]) -> list[int]:
+    """Índices das cenas cuja narração contém o trecho apontado pela revisão."""
+    indices: list[int] = []
+    termos = [str(p.get("termo", "")).strip().lower() for p in problems]
+    termos = [t[:40] for t in termos if len(t) >= 12]
+    for i, sc in enumerate(script.get("scenes", [])):
+        nar = str(sc.get("narration", "")).lower()
+        if any(t in nar for t in termos):
+            indices.append(i)
+    return indices
+
+
 def _repair_parse(raw: str, n: int) -> dict | None:
     try:
         data = _extract_json(raw)
@@ -1288,12 +1300,16 @@ def repair_script(
     fontes, e mantém o resto do roteiro igual. Reescrever do zero trocava um
     detalhe sem fonte por outros (curiosidades 555-557, 21/10); cortar
     deixava buraco na história. None se o modelo não devolver o formato."""
-    narrations = [str(sc.get("narration", "")) for sc in script["scenes"]]
-    if facts or web_facts:
-        sources = json.dumps(facts, ensure_ascii=False, separators=(",", ":")) if facts else ""
-        sources += "\n".join(f"- {f['titulo']}: {f['trecho']}" for f in web_facts or [])
-    else:
-        sources = "(sem fontes: só conhecimento geral verdadeiro e amplamente conhecido)"
+    from .fontes import bloco_fontes
+    todas = [str(sc.get("narration", "")) for sc in script["scenes"]]
+    bloco = bloco_fontes(facts, web_facts)
+    sources = bloco or "(sem fontes: só conhecimento geral verdadeiro e amplamente conhecido)"
+    # só as cenas que a revisão apontou vão ao conserto; as demais ficam intocadas.
+    # Sem mapeamento (o termo não bate com nenhuma narração), manda todas, como antes.
+    alvo = _cenas_apontadas(script, problems)
+    if not alvo:
+        alvo = list(range(len(todas)))
+    narrations = [todas[i] for i in alvo]
     apontados = "\n".join(f"- {p.get('termo', '')}: {p.get('motivo', '')}" for p in problems)
     prompt = f"""Um roteiro de vídeo foi reprovado na revisão de fatos. Conserte SÓ os
 pontos apontados, usando as FONTES. Para cada ponto:
@@ -1340,7 +1356,11 @@ Responda só com JSON: {{"titulo": "título (o mesmo, se não foi apontado)", "c
     cenas, novos = _drop_new_facts(data["cenas"], allowed)
     if novos:
         log.warning("conserto tentou acrescentar fato novo (%s) — frase apagada", ", ".join(sorted(novos)))
-    scenes = [{**sc, "narration": text} for sc, text in zip(script["scenes"], cenas) if text]
+    # troca só as posições enviadas; cena que ficou vazia sai (frase apagada)
+    scenes = list(script["scenes"])
+    for pos, i in enumerate(alvo):
+        scenes[i] = {**scenes[i], "narration": cenas[pos]} if cenas[pos] else None
+    scenes = [sc for sc in scenes if sc]
     if len(scenes) < 2:
         return None
     title = str(data.get("titulo") or "").strip()
@@ -1868,7 +1888,8 @@ def fatos_com_numeros_da_fonte(fatos: list[str], fontes: str) -> list[str]:
 def extract_verified_facts(topic: str, web_facts: list[dict] | None) -> list[str] | None:
     """Passo A: lista fechada de fatos literais das FONTES (Wikipédia primeiro). Cada número
     tem de constar nas fontes (checado em código). None se sobrarem menos de 8 fatos."""
-    fontes = "\n".join(f"[{f.get('titulo', '')}]: {f.get('trecho', '')}" for f in (web_facts or []))[:9000]
+    from .fontes import bloco_fontes
+    fontes = bloco_fontes(None, web_facts)
     if not fontes.strip():
         return None
     prompt = (
