@@ -1209,7 +1209,9 @@ Responda só com JSON: {{"titulo": "título (o mesmo, se não foi apontado)", "c
 
     try:
         raw = complete(
-            [{"role": "user", "content": prompt}], max_tokens=4000,
+            # temperatura 0.3 liga o raciocínio do Nemotron, que come o orçamento (+4096):
+            # conserto de 12 cenas saía cortado em 7.889 caracteres (job 819)
+            [{"role": "user", "content": prompt}], max_tokens=12000,
             validate=lambda r: _repair_parse(r, len(narrations)) is not None,
             model_filter=lambda m: not _SMALL_MODEL_RE.search(m), temperature=0.3,
         )
@@ -1375,7 +1377,7 @@ CENAS (narração, na ordem):
 Responda só com JSON: {{"cenas": ["narração da cena 1", "..."]}} — exatamente {len(narrations)} cenas."""
     try:
         raw = complete(
-            [{"role": "user", "content": prompt}], max_tokens=4000, temperature=0.3,
+            [{"role": "user", "content": prompt}], max_tokens=12000, temperature=0.3,
             validate=lambda r: _repair_parse(r, len(narrations)) is not None,
         )
     except RuntimeError as exc:
