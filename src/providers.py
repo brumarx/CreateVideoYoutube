@@ -361,7 +361,9 @@ def _call_openai_compat(
             endpoint,
             headers={"Authorization": f"Bearer {api_key}"},
             json=payload,
-            timeout=180 if "nemotron" in model else 60,
+            # julgamento (raciocínio ligado, temperatura baixa) passa de 3 min: 21/10 o juiz
+            # do job 821 deu timeout aos 180 s e o roteiro morreu sem revisão
+            timeout=(420 if temperature < 0.5 else 180) if "nemotron" in model else 60,
         )
         m = _TOO_LARGE_RE.search(resp.text) if resp.status_code == 413 else None
         if m and not _fitted:
