@@ -280,9 +280,10 @@ def run_channel(channel_name: str, cfg: dict) -> None:
 
     if not ready and weekday_index(cfg.get("longo_semanal")) == date.today().weekday():
         # longo semanal no lugar do Short do dia (a cota de upload é uma só
-        # pros 5 canais): compilação dos Shorts da semana; a última tentativa
-        # sai em curto, pro dia não ficar sem vídeo
-        _run_pipeline(channel_name, ["--long", "--compilation"], "longo semanal", fallback_short=True)
+        # pros 5 canais). Longo é tema próprio da fila do canal, não compilação
+        # de Shorts (o dono não quer compilação). A última tentativa sai em
+        # curto, pro dia não ficar sem vídeo
+        _run_pipeline(channel_name, ["--long"], "longo semanal", fallback_short=True)
         ready = 1
     for i in range(ready, uploads_per_day):
         if _published_today(channel_name):
