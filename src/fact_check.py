@@ -422,7 +422,9 @@ def review_script(
     try:
         raw = complete(
             [{"role": "user", "content": _review_prompt(script, topic, facts, web_facts)}],
-            max_tokens=3000,
+            # julgamento (temperatura baixa) liga o raciocínio do Nemotron, que come o
+            # orçamento: com 3000 (+4096) o JSON saía cortado (job 818: 7.096 tokens, finish=length)
+            max_tokens=12000,
             validate=_review_valid,
             # modelo pequeno aprovava "pesquisador Trent-Von Haesler" e
             # "o caso de Dobelle" inventados (job 306)
@@ -1216,7 +1218,7 @@ def verify_full_script(script: dict, topic: str, facts: dict | None, web_facts: 
         for i, s in enumerate(sentences)])
     whole: dict = {}
     items = _judge(_VERIFY_PROMPT.format(fontes=source, tema=topic, itens=itens), "itens",
-                   max_tokens=600 + 80 * len(sentences), whole=whole)
+                   max_tokens=max(12000, 600 + 80 * len(sentences)), whole=whole)
     if items is None:
         return None
     judged = set()
