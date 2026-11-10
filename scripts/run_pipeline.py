@@ -45,6 +45,7 @@ from src.orchestrator import enqueue, update
 from src.people_photos import names_in, person_photo
 from src.real_media import real_clip, real_photos
 from src.script_gen import (
+    FATOS_CANAIS,
     art_direction,
     trim_teaser_ending,
     chapter_titles, clean_stat_overlays, engagement_question, fix_dangling_hooks, generate_script, refresh_packaging,
@@ -847,6 +848,10 @@ def run(
             if time.monotonic() - fact_started > FACT_CHECK_BUDGET_S:
                 # orçamento de tempo do laço: sem convergir, sobe PRIVADO com as
                 # ressalvas em vez de perder o vídeo inteiro (motivacional 777, política 778)
+                if channel_name in FATOS_CANAIS:
+                    # 10/11: no canal de fatos verificados, roteiro sem revisão completa não sobe
+                    # nem privado (job 827 tinha contradições reais entre cenas)
+                    raise ScriptRejected(f"revisão de fatos sem convergir em {FACT_CHECK_BUDGET_S // 60} min — canal de fatos não sobe sem revisão completa")
                 log.warning("[%s] revisão de fatos passou de %d min sem convergir — sobe privado com ressalva", job_id, FACT_CHECK_BUDGET_S // 60)
                 script = {**script, "_ressalvas": [f"revisão de fatos sem convergir em {FACT_CHECK_BUDGET_S // 60} min: confira o roteiro antes de publicar"]}
                 break

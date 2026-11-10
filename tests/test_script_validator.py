@@ -103,3 +103,39 @@ def test_correcao_troca_so_as_cenas_afetadas(monkeypatch):
     out = _corrige_numeros_fora_da_lista(script, fatos)
     assert out["scenes"][0]["narration"] == "Tem 53,85 km."
     assert out["scenes"][1]["narration"] == "Fica no Japão."
+
+
+def test_numeros_por_extenso_viram_digitos():
+    from src.script_gen import _numeros
+    assert {"34", "200", "240"} <= _numeros("trinta e quatro operários; duzentos metros; duzentos e quarenta metros")
+    assert "87" in _numeros("oitenta e sete km")
+    assert "1155" in _numeros("mil cento e cinquenta e cinco mortos")
+    assert "538400000000" in _numeros("quinhentos e trinta e oito bilhões e quatrocentos milhões de ienes")
+    assert "5385" in _numeros("cinquenta e três vírgula oitenta e cinco quilômetros")
+    assert "3" in _numeros("custou três vezes o previsto")
+
+
+def test_artigo_um_nao_vira_numero():
+    from src.script_gen import _numeros
+    assert _numeros("um túnel e uma ponte") == set()
+
+
+def test_checagem_pega_numero_por_extenso_fora_da_lista():
+    from src.script_gen import numeros_fora_da_lista
+    fatos = ["O túnel tem 53,85 km", "Trecho de 23,3 km"]
+    script = {"title": "Túnel", "scenes": [{"narration": "Duzentos metros de profundidade."},
+                                          {"narration": "Cinquenta e três vírgula oitenta e cinco km."}]}
+    assert numeros_fora_da_lista(script, fatos) == {"200"}
+
+
+def test_artigo_depois_de_escala_nao_soma():
+    from src.script_gen import _numeros
+    nums = _numeros("quinhentos e trinta e oito bilhões e quatrocentos milhões, um rombo que ecoou")
+    assert "538400000000" in nums and "538400000001" not in nums
+
+
+def test_escala_por_digito_e_por_extenso_batem():
+    from src.script_gen import _numeros
+    assert "538400000000" in _numeros("custo de 538,4 bilhões de ienes")
+    assert "538400000000" in _numeros("quinhentos e trinta e oito bilhões e quatrocentos milhões de ienes")
+    assert "200000000000" in _numeros("200 bilhões")

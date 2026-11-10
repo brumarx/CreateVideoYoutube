@@ -1039,6 +1039,8 @@ def _corrige_numeros_fora_da_lista(script: dict, fatos: list[str]) -> dict:
             novas[i] = {**novas[i], "narration": texto}
             trocadas += 1
     out = {**script, "scenes": novas}
+    log.info("correção de números: %d cena(s) devolvida(s), %d aplicada(s)",
+             len(data.get("cenas", []) or []), trocadas)
     if titulo_afetado and str(data.get("titulo", "")).strip():
         out["title"] = str(data["titulo"]).strip()
     log.info("checagem de números: %d número(s) fora da lista; %d cena(s) reescrita(s)", len(fora), trocadas)
@@ -1775,9 +1777,85 @@ def _plan_valid(raw: str) -> bool:
 FATOS_CANAIS = {"curiosidades"}
 
 
+_PT_UNIDADES = {"zero": 0, "um": 1, "uma": 1, "dois": 2, "duas": 2, "três": 3, "tres": 3, "quatro": 4,
+                "cinco": 5, "seis": 6, "sete": 7, "oito": 8, "nove": 9, "dez": 10, "onze": 11, "doze": 12,
+                "treze": 13, "catorze": 14, "quatorze": 14, "quinze": 15, "dezesseis": 16, "dezessete": 17,
+                "dezoito": 18, "dezenove": 19, "vinte": 20, "trinta": 30, "quarenta": 40, "cinquenta": 50,
+                "sessenta": 60, "setenta": 70, "oitenta": 80, "noventa": 90, "cem": 100, "cento": 100,
+                "duzentos": 200, "duzentas": 200, "trezentos": 300, "trezentas": 300, "quatrocentos": 400,
+                "quatrocentas": 400, "quinhentos": 500, "quinhentas": 500, "seiscentos": 600,
+                "seiscentas": 600, "setecentos": 700, "setecentas": 700, "oitocentos": 800,
+                "oitocentas": 800, "novecentos": 900, "novecentas": 900}
+_PT_ESCALAS = {"mil": 1000, "milhão": 10**6, "milhao": 10**6, "milhões": 10**6, "milhoes": 10**6,
+               "bilhão": 10**9, "bilhao": 10**9, "bilhões": 10**9, "bilhoes": 10**9}
+
+
+def _numeros_por_extenso(texto: str) -> set[str]:
+    """Números escritos por extenso em pt-BR ('trinta e quatro', 'mil cento e cinquenta e cinco',
+    'quinhentos e trinta e oito bilhões', 'cinquenta e três vírgula oitenta e cinco') viram
+    dígitos sem separador, como _numeros. Artigo solto ('um', 'uma') não conta."""
+    palavras = re.findall(r"[a-zà-úç]+", texto.lower())
+    runs: list[tuple[int, int]] = []
+    i = 0
+    while i < len(palavras):
+        if palavras[i] in _PT_UNIDADES or palavras[i] in _PT_ESCALAS:
+            j = i
+            # "um"/"uma" só abrem sequência (artigo: "milhões, um rombo" não soma 1)
+            while j < len(palavras) and ((palavras[j] in _PT_UNIDADES and (j == i or palavras[j] not in ("um", "uma")))
+                                         or palavras[j] in _PT_ESCALAS
+                                         or (palavras[j] == "e" and j + 1 < len(palavras)
+                                             and (palavras[j + 1] in _PT_UNIDADES or palavras[j + 1] in _PT_ESCALAS))):
+                j += 1
+            runs.append((i, j))
+            i = j
+        else:
+            i += 1
+
+    def valor(run: list[str]) -> int:
+        total = corrente = 0
+        for w in run:
+            if w == "e":
+                continue
+            if w in _PT_ESCALAS:
+                escala = _PT_ESCALAS[w]
+                total += (corrente or 1) * escala
+                corrente = 0
+            else:
+                corrente += _PT_UNIDADES[w]
+        return total + corrente
+
+    out: set[str] = set()
+    k = 0
+    while k < len(runs):
+        a, b = runs[k]
+        palavras_run = palavras[a:b]
+        if palavras_run in (["um"], ["uma"]):
+            k += 1
+            continue
+        v = valor(palavras_run)
+        # decimal por extenso: "cinquenta e três vírgula oitenta e cinco" -> 5385 (como 53,85)
+        if k + 1 < len(runs) and runs[k + 1][0] == b + 1 and palavras[b] == "vírgula" if b < len(palavras) else False:
+            c, d = runs[k + 1]
+            out.add(str(v) + str(valor(palavras[c:d])))
+            k += 2
+            continue
+        out.add(str(v))
+        k += 1
+    return out
+
+
 def _numeros(texto: str) -> set[str]:
-    """Números do texto sem separadores: '65,23' e '65.23' viram '6523'; '1.155' vira '1155'."""
-    return {re.sub(r"[.,]", "", m) for m in re.findall(r"\d+(?:[.,]\d+)*", texto)}
+    """Números do texto sem separadores: '65,23' e '65.23' viram '6523'; '1.155' vira '1155'.
+    Números por extenso também entram (ver _numeros_por_extenso)."""
+    digitos = {re.sub(r"[.,]", "", m) for m in re.findall(r"\d+(?:[.,]\d+)*", texto)}
+    # "538,4 bilhões" também vira o valor inteiro (538400000000), para casar com "quinhentos e trinta
+    # e oito bilhões e quatrocentos milhões" escrito por extenso
+    from decimal import Decimal
+    escalas = {"bilh": 10**9, "milh": 10**6, "mil": 10**3}
+    for m in re.finditer(r"(\d+(?:[.,]\d+)*)\s*(bilh\w*|milh\w*|mil)\b", texto.lower()):
+        escala = next(v for k, v in escalas.items() if m.group(2).startswith(k))
+        digitos.add(str(int(Decimal(m.group(1).replace(".", "").replace(",", ".")) * escala)))
+    return digitos | _numeros_por_extenso(texto)
 
 
 def fatos_com_numeros_da_fonte(fatos: list[str], fontes: str) -> list[str]:
