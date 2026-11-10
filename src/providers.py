@@ -378,6 +378,10 @@ def _call_openai_compat(
             return None, resp.status_code, _cooldown_seconds(resp.status_code, resp.text)
         data = resp.json()
         content = data["choices"][0]["message"]["content"]
+        if content and _strip_reasoning(content) is None:
+            # <think> sem fechamento: resposta cortada no meio do raciocínio (max_tokens)
+            log.warning("%s (%s): resposta cortada dentro de <think> (%d caracteres, fim %r)",
+                        endpoint, model, len(content), content[-120:])
         return (_strip_reasoning(content) if content else None), 200, 0
     except Exception as exc:  # rede, timeout, JSON malformado, etc.
         log.warning("%s (%s) falhou: %s", endpoint, model, exc)

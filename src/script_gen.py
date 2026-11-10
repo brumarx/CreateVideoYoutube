@@ -628,9 +628,16 @@ def _is_parseable_script(raw: str, required: set[str]) -> bool:
     cascata sempre parava no primeiro "não vazio")."""
     try:
         script = _extract_json(raw)
-    except (ValueError, json.JSONDecodeError):
+    except (ValueError, json.JSONDecodeError) as exc:
+        log.warning("roteiro recusado: não é JSON (%s); %d caracteres; início %r; fim %r",
+                    type(exc).__name__, len(raw), raw[:120], raw[-120:])
         return False
-    return required <= script.keys()
+    missing = required - script.keys()
+    if missing:
+        log.warning("roteiro recusado: faltam campos %s; campos presentes %s",
+                    sorted(missing), sorted(script.keys()))
+        return False
+    return True
 
 
 # Trava de CÓDIGO (não só instrução de prompt) contra rosto de pessoa real
