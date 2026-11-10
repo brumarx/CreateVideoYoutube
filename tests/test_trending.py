@@ -24,9 +24,14 @@ REAL_TRENDS = [
 ]
 
 
-@pytest.mark.parametrize("channel", ["aprendervia", "politica"])
-def test_nicho_sem_match_nao_recebe_tema_aleatorio(channel):
-    assert topic_for_channel(channel, REAL_TRENDS) is None
+def test_politica_sem_match_nao_recebe_tema_aleatorio():
+    assert topic_for_channel("politica", REAL_TRENDS) is None
+
+
+def test_aprendervia_pega_anthropic_mas_nao_o_resto():
+    # 'anthropic' é a empresa de IA: tema do nicho de verdade
+    assert topic_for_channel("aprendervia", REAL_TRENDS) == "anthropic"
+    assert topic_for_channel("aprendervia", REAL_TRENDS[1:]) is None
 
 
 def test_leo_dias_nao_casa_ia_por_substring():
@@ -59,3 +64,32 @@ def test_curiosidades_pega_tema_de_lugar_ou_ciencia():
 def test_motivacional_exige_nicho():
     assert topic_for_channel("motivacional", REAL_TRENDS) is None
     assert topic_for_channel("motivacional", ["Atleta supera lesão e volta a treinar"]) == "Atleta supera lesão e volta a treinar"
+
+
+# Casos reais (histórico do cache + feed ao vivo, 10/11): o que deve e o que não deve casar
+@pytest.mark.parametrize("channel, topic", [
+    ("politica", "copom"),
+    ("politica", "desenrola brasil"),
+    ("politica", "calendário bolsa família 2026"),
+    ("politica", "índice de preços ao consumidor"),
+    ("politica", "câmara municipal"),
+    ("curiosidades", "terremoto"),
+    ("curiosidades", "serra das araras"),
+    ("aprendervia", "ciberataque"),
+])
+def test_casos_reais_que_devem_casar(channel, topic):
+    assert topic_for_channel(channel, [topic]) == topic
+
+
+@pytest.mark.parametrize("channel, topic", [
+    ("politica", "superliga masculina"),
+    ("politica", "dira paes"),
+    ("aprendervia", "leo dias"),
+    ("motivacional", "calendário bolsa família 2026"),
+    ("motivacional", "esporte clube juventude"),
+    ("motivacional", "estação de tratamento de água do guandu"),
+    ("curiosidades", "anthropic"),
+    ("curiosidades", "romarinho"),
+])
+def test_casos_reais_que_nao_devem_casar(channel, topic):
+    assert topic_for_channel(channel, [topic]) is None
