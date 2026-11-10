@@ -139,13 +139,18 @@ Câmara"):
         trechos = "\n\n".join(f"- [{f['titulo']}]({f['url']}): {f['trecho']}" for f in web_facts)
         # teto do texto de fontes no pedido: Wikipédia + Wikidata + OpenAlex passaram de 4000 tokens e o
         # Groq recusou com 413 (09/11, job 799); sem fonte de sobra, o roteiro cai em todos os provedores
-        trechos = trechos[:3000]
+        # 10/11: Nemotron (contexto grande) passou a escrever; 5.500 mantém os números do
+        # corpo do artigo (53,85 km, 23,3 km, 538,4 bilhões) visíveis ao escritor
+        trechos = trechos[:5500]
         web_facts_block = f"""
 PESQUISA REAL NA INTERNET (o tema foi digitado por uma pessoa — use estes
 trechos como base factual; NÃO invente nome, número, data ou evento que
 não apareça aqui ou nos DADOS REAIS acima; se os trechos não bastarem pra
 cobrir o tema com segurança, foque no que ESTÁ confirmado neles em vez de
-completar com suposição):
+completar com suposição). TRAVA DE FATOS: todo número, data e método da
+narração e do título tem de constar LITERALMENTE nestes trechos (mesmo valor,
+mesma unidade). Sem arredondar e sem completar de memória; se o número exato
+não estiver nos trechos, não cite número nenhum sobre aquilo):
 {trechos}
 """
 
