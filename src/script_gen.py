@@ -151,7 +151,9 @@ completar com suposição). TRAVA DE FATOS: todo número, data e método da
 narração e do título tem de constar LITERALMENTE nestes trechos ou nos DADOS REAIS
 acima (mesmo valor, mesma unidade). Sem arredondar e sem completar de memória; se o
 número exato não estiver em nenhum dos dois, não cite número nenhum sobre aquilo. Moeda por extenso
-(ienes, reais, dólares), nunca os símbolos ¥ ou US$. Se o título tiver número,
+(ienes, reais, dólares), nunca os símbolos ¥ ou US$. Nada de multiplicador
+(triplicou, dobrou, metade, quase o dobro) se não constar literalmente nestes
+trechos. Se o título tiver número,
 ele tem de estar na narração):
 {trechos}
 """
@@ -985,6 +987,72 @@ def _normalize_currency(script: dict) -> dict:
     return out
 
 
+def numeros_fora_da_lista(script: dict, fatos: list[str]) -> set[str]:
+    """Números (só dígitos) do título, da miniatura e das narrações que não estão na lista
+    fechada de fatos. Verificação em Python, sem chamada de API."""
+    permitidos = _numeros(" ".join(fatos))
+    textos = [str(script.get("title", "")), str(script.get("thumbnail_text", ""))]
+    textos += [str(sc.get("narration", "")) for sc in script.get("scenes", []) if isinstance(sc, dict)]
+    usados: set[str] = set()
+    for t in textos:
+        usados |= _numeros(t)
+    return usados - permitidos
+
+
+def _corrige_numeros_fora_da_lista(script: dict, fatos: list[str]) -> dict:
+    """Se houver número fora da lista: UMA chamada pedindo a remoção desses números exatos e a
+    reescrita só das frases afetadas. Qualquer falha devolve o roteiro como estava (nunca trava)."""
+    fora = numeros_fora_da_lista(script, fatos)
+    if not fora:
+        return script
+    cenas = script.get("scenes", [])
+    afetadas = [{"i": i, "narration": sc.get("narration", "")} for i, sc in enumerate(cenas)
+                if isinstance(sc, dict) and _numeros(sc.get("narration", "")) & fora]
+    titulo_afetado = bool(_numeros(str(script.get("title", ""))) & fora)
+    lista = "\n".join(f"F{i + 1}: {f}" for i, f in enumerate(fatos))
+    prompt = (
+        "Estes números NÃO estão na lista de fatos verificados e precisam sair do roteiro: "
+        + ", ".join(sorted(fora)) + ".\n\nFATOS VERIFICADOS (única base):\n" + lista
+        + "\n\nReescreva SOMENTE as frases que contêm esses números, sem eles, usando só os fatos acima "
+        "(sem multiplicadores como 'triplicou' ou 'dobrou' se não constarem nos fatos). "
+        + ('Se o título tiver número fora da lista, reescreva o título também. ' if titulo_afetado else "")
+        + "Responda SÓ JSON: {\"cenas\": [{\"i\": 0, \"narration\": \"...\"}]"
+        + (", \"titulo\": \"...\"" if titulo_afetado else "") + "}\n\nCENAS AFETADAS:\n"
+        + json.dumps(afetadas, ensure_ascii=False)
+        + ("\n\nTÍTULO ATUAL: " + str(script.get("title", "")) if titulo_afetado else "")
+    )
+    try:
+        raw = complete([{"role": "user", "content": prompt}], max_tokens=12000, temperature=0.2)
+        data = _extract_json(raw)
+    except (RuntimeError, ValueError, json.JSONDecodeError) as exc:
+        log.warning("checagem de números: correção indisponível (%s) — roteiro segue como estava", exc)
+        return script
+    novas = list(cenas)
+    trocadas = 0
+    for item in data.get("cenas", []) or []:
+        try:
+            i = int(item["i"])
+            texto = str(item["narration"]).strip()
+        except (KeyError, TypeError, ValueError):
+            continue
+        if 0 <= i < len(novas) and texto and isinstance(novas[i], dict):
+            novas[i] = {**novas[i], "narration": texto}
+            trocadas += 1
+    out = {**script, "scenes": novas}
+    if titulo_afetado and str(data.get("titulo", "")).strip():
+        out["title"] = str(data["titulo"]).strip()
+    log.info("checagem de números: %d número(s) fora da lista; %d cena(s) reescrita(s)", len(fora), trocadas)
+    return out
+
+
+def _finaliza(script: dict, fatos: list[str] | None) -> dict:
+    """Pós-escrita: moeda por extenso (código) e, no canal de fatos verificados, a checagem de números."""
+    script = _normalize_currency(script)
+    if fatos:
+        script = _normalize_currency(_corrige_numeros_fora_da_lista(script, fatos))
+    return script
+
+
 def generate_script(
     channel: ChannelConfig,
     topic: str,
@@ -1016,12 +1084,14 @@ def generate_script(
     # etapa 1: o plano (estrutura e fatos escolhidos) antes de escrever a narração
     plan = plan_story(topic, facts, web_facts)
     writer_sources = web_facts
+    fatos_verificados: list[str] | None = None
     if web_facts and channel.name in FATOS_CANAIS:
         # 10/11: o escritor não lê o texto bruto das fontes (misturava números e completava de
         # memória, job 824); recebe só a lista de fatos literais extraída e checada
         fatos = extract_verified_facts(topic, web_facts)
         if not fatos:
             raise ValueError("fatos verificados indisponíveis (extração das fontes falhou)")
+        fatos_verificados = fatos
         log.info("escritor recebe só a lista fechada: %d fatos verificados", len(fatos))
         writer_sources = [{"titulo": "FATOS VERIFICADOS (única base; cada cena usa um destes)", "url": "",
                            "trecho": "\n".join(f"F{i + 1}: {f}" for i, f in enumerate(fatos))}]
@@ -1125,7 +1195,7 @@ def generate_script(
                 continue
             word_count = sum(len(s.get("narration", "").split()) for s in script["scenes"])
             if min_total_words <= word_count <= max_words_ceiling:
-                return _normalize_currency(_sanitize_club_crests(_sanitize_person_images(topic, script)))
+                return _finaliza(_sanitize_club_crests(_sanitize_person_images(topic, script)), fatos_verificados)
 
             distance = (
                 min_total_words - word_count if word_count < min_total_words
@@ -1151,10 +1221,10 @@ def generate_script(
             "usando o melhor roteiro obtido mesmo fora da faixa de %d-%d palavras",
             min_total_words, max_words_ceiling,
         )
-        return _normalize_currency(_sanitize_club_crests(_sanitize_person_images(topic, best_script)))
+        return _finaliza(_sanitize_club_crests(_sanitize_person_images(topic, best_script)), fatos_verificados)
     if filler_fallback is not None:
         log.warning("3 tentativas com bordão repetido — usando a última mesmo assim")
-        return _normalize_currency(_sanitize_club_crests(_sanitize_person_images(topic, filler_fallback)))
+        return _finaliza(_sanitize_club_crests(_sanitize_person_images(topic, filler_fallback)), fatos_verificados)
 
     raise ValueError(f"LLM não devolveu roteiro válido após 3 tentativas: {last_error}")
 

@@ -62,3 +62,44 @@ def test_moeda_sem_simbolo_nao_muda():
     from src.script_gen import _normalize_currency
     s = {"title": "Custou 538 bilhões de ienes", "scenes": [{"narration": "R$ 2 milhões"}]}
     assert _normalize_currency(s) == s
+
+
+def test_numero_fora_da_lista_e_detectado():
+    from src.script_gen import numeros_fora_da_lista
+    fatos = ["O túnel tem 53,85 km", "Trecho de 23,3 km sob o mar", "Custo de 538,4 bilhões de ienes"]
+    script = {"title": "Túnel de 538,4 bilhões", "thumbnail_text": "34 mortes",
+              "scenes": [{"narration": "Tem 65 km e 53,85 km."}, {"narration": "Trecho de 23,3 km."}]}
+    assert numeros_fora_da_lista(script, fatos) == {"65", "34"}
+
+
+def test_sem_numero_fora_da_lista_nao_chama_api(monkeypatch):
+    from src import script_gen
+    from src.script_gen import _corrige_numeros_fora_da_lista
+    def boom(*a, **k):
+        raise AssertionError("não devia chamar a API")
+    monkeypatch.setattr(script_gen, "complete", boom)
+    fatos = ["O túnel tem 53,85 km"]
+    script = {"title": "Túnel de 53,85 km", "scenes": [{"narration": "São 53,85 km."}]}
+    assert _corrige_numeros_fora_da_lista(script, fatos) is script
+
+
+def test_falha_da_correcao_nao_trava_o_roteiro(monkeypatch):
+    from src import script_gen
+    from src.script_gen import _corrige_numeros_fora_da_lista
+    def falha(*a, **k):
+        raise RuntimeError("sem provedor")
+    monkeypatch.setattr(script_gen, "complete", falha)
+    fatos = ["O túnel tem 53,85 km"]
+    script = {"title": "Túnel", "scenes": [{"narration": "Tem 65 km."}]}
+    assert _corrige_numeros_fora_da_lista(script, fatos) is script
+
+
+def test_correcao_troca_so_as_cenas_afetadas(monkeypatch):
+    from src import script_gen
+    from src.script_gen import _corrige_numeros_fora_da_lista
+    monkeypatch.setattr(script_gen, "complete", lambda *a, **k: '{"cenas": [{"i": 0, "narration": "Tem 53,85 km."}]}')
+    fatos = ["O túnel tem 53,85 km"]
+    script = {"title": "Túnel", "scenes": [{"narration": "Tem 65 km."}, {"narration": "Fica no Japão."}]}
+    out = _corrige_numeros_fora_da_lista(script, fatos)
+    assert out["scenes"][0]["narration"] == "Tem 53,85 km."
+    assert out["scenes"][1]["narration"] == "Fica no Japão."
