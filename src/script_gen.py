@@ -1184,13 +1184,15 @@ def repair_script(
     apontados = "\n".join(f"- {p.get('termo', '')}: {p.get('motivo', '')}" for p in problems)
     prompt = f"""Um roteiro de vídeo foi reprovado na revisão de fatos. Conserte SÓ os
 pontos apontados, usando as FONTES. Para cada ponto:
-- se as FONTES trazem a informação certa, troque pelo que elas dizem;
-- se não trazem, diga de forma mais geral o que elas sustentam, ou apague a
-  frase se ela não fizer falta.
+- "fora_da_fonte" ou "fato_nao_confirmado": APAGUE o detalhe não comprovado
+  (a frase, ou só o trecho com o número, nome ou causa sem fonte). Não reformule
+  o detalhe e não o troque por outro. Se a frase ficar sem sentido, apague a frase.
+- "titulo_nao_confere": o título tem de dizer exatamente o número e o fato que a
+  narração diz (mesmo valor, mesma unidade).
 Não acrescente número, medida, data, nome ou detalhe que não esteja nas
 FONTES. Ao generalizar, não deixe frase vaga que não diz nada ("Ele
 participou das partidas", "teve papel importante") — apague a frase. Não mexa no que não foi apontado: mesmo tom, mesmo tamanho, mesmo
-número de cenas. Se o TÍTULO foi apontado, devolva um título novo.
+número de cenas. Se o TÍTULO foi apontado, devolva um título novo, alinhado à narração.
 
 TÍTULO: {script.get("title", "")}
 
