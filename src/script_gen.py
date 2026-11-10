@@ -148,9 +148,9 @@ trechos como base factual; NÃO invente nome, número, data ou evento que
 não apareça aqui ou nos DADOS REAIS acima; se os trechos não bastarem pra
 cobrir o tema com segurança, foque no que ESTÁ confirmado neles em vez de
 completar com suposição). TRAVA DE FATOS: todo número, data e método da
-narração e do título tem de constar LITERALMENTE nestes trechos (mesmo valor,
-mesma unidade). Sem arredondar e sem completar de memória; se o número exato
-não estiver nos trechos, não cite número nenhum sobre aquilo. Moeda por extenso
+narração e do título tem de constar LITERALMENTE nestes trechos ou nos DADOS REAIS
+acima (mesmo valor, mesma unidade). Sem arredondar e sem completar de memória; se o
+número exato não estiver em nenhum dos dois, não cite número nenhum sobre aquilo. Moeda por extenso
 (ienes, reais, dólares), nunca os símbolos ¥ ou US$. O título usa um número que
 esteja na narração):
 {trechos}
