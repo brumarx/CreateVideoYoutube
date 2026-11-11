@@ -773,6 +773,22 @@ def _numeros(texto: str) -> set[str]:
     return {_canon(n) for n in re.findall(r"\d+(?:[.,]\d+)*", texto)}
 
 
+_FRONTEIRAS = (": ", "; ", ", e ", ", mas ", ", enquanto ")
+
+
+def _estima_antes_do_numero(frase: str, numeros: set[str]) -> str:
+    """"Estima-se que" entra no começo da ORAÇÃO que tem o número, não da frase toda:
+    "O preço humano foi alto: estima-se que 34 operários morreram"."""
+    posicao = min((m.start() for m in re.finditer(r"\d+(?:[.,]\d+)*", frase) if _canon(m.group(0)) in numeros),
+                  default=0)
+    corte = max((frase.rfind(f, 0, posicao) + len(f) for f in _FRONTEIRAS if frase.rfind(f, 0, posicao) >= 0),
+                default=0)
+    if corte == 0:
+        return "Estima-se que " + frase[0].lower() + frase[1:]
+    resto = frase[corte:]
+    return frase[:corte] + "estima-se que " + resto[0].lower() + resto[1:]
+
+
 def ajustar_origem_dos_numeros(script: dict, fontes_oficiais: list[dict]) -> dict:
     """Regra em CÓDIGO (não no prompt), depois da validação, para o canal de fatos com fontes oficiais:
     - valor de orçamento/planejamento oficial escrito como custo final vira "orçamento estimado";
@@ -811,7 +827,7 @@ def ajustar_origem_dos_numeros(script: dict, fontes_oficiais: list[dict]) -> dic
                 mudou = True
                 continue
             if fora and not re.search(r"estima", nova, re.I):
-                nova = "Estima-se que " + nova[0].lower() + nova[1:]
+                nova = _estima_antes_do_numero(nova, fora)
             if nova != frase:
                 mudou = True
             saida.append(nova)

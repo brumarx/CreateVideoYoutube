@@ -405,3 +405,11 @@ def test_sem_fontes_oficiais_nao_mexe():
 def test_regra_roda_antes_do_titulo_e_das_imagens():
     src = _fonte_pipeline()
     assert src.index("script = ajustar_origem_dos_numeros(script, fontes_oficiais)") < src.index("empacotado = packaging_from_final(")
+
+
+def test_estima_se_entra_antes_da_oracao_do_numero():
+    lista = ["morte de 34 operários", "museu fechado em 2006"]
+    out = fc.ajustar_origem_dos_numeros(_rot("O preço humano foi alto: 34 operários morreram na obra.",
+                                             "Elas serviam de abrigo, e o museu funcionou até 2006.", lista=lista), _OFICIAIS)
+    assert out["scenes"][0]["narration"] == "O preço humano foi alto: estima-se que 34 operários morreram na obra."
+    assert out["scenes"][1]["narration"] == "Elas serviam de abrigo, e estima-se que o museu funcionou até 2006."
