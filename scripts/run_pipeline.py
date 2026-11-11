@@ -86,6 +86,14 @@ MAX_TOPIC_CHECKS = 3
 MAX_SPEEDUP = 1.2
 
 
+def _comentario_do_texto(script: dict, n_cenas: int) -> str:
+    """Canal de fatos: o comentário fixado é a última pergunta da própria narração aprovada (nada fora
+    do texto validado — job 858: a pergunta gerada citava o ferry, que o roteiro não diz)."""
+    perguntas = [f.strip() for sc in script.get("scenes", [])[:n_cenas]
+                 for f in re.split(r"(?<=[.!?])\s+", sc.get("narration", "")) if f.strip().endswith("?")]
+    return perguntas[-1] if perguntas else ""
+
+
 def _fit_short(narrations: list, total_seconds: float, job_id: int) -> list:
     """Short acima de 3 min sai do feed de Shorts: no politica, vídeos de
     3:05-3:34 tiveram 0-1 view e um de 2:56 teve 167 (out/26). Acelera a
@@ -1852,7 +1860,8 @@ def run(
             "tags": script["tags"],
             "publish_at": publish_at,
             # comentário com pergunta postado pelo canal logo depois do upload
-            "comment": fix_text(engagement_question(script["title"], script["scenes"][:original_scene_count]), channel.language)
+            "comment": _comentario_do_texto(script, original_scene_count) if channel_name in FATOS_CANAIS
+            else fix_text(engagement_question(script["title"], script["scenes"][:original_scene_count]), channel.language)
             + (f"\n\n{channel.website_cta}: {channel.website}" if channel.website else ""),
         }
         (work_dir / UPLOAD_META_FILE).write_text(json.dumps(upload_meta, ensure_ascii=False, indent=2))

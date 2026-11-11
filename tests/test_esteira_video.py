@@ -325,3 +325,12 @@ def test_miniatura_cortada_no_meio_vira_o_nome_do_assunto(monkeypatch):
 def test_revisao_visual_considera_o_assunto_do_video():
     assert "A imagem tem de combinar com o ASSUNTO do vídeo, não só com a frase da cena" in PIPELINE
     assert "and termina_em_fronteira(str(script[\"thumbnail_text\"]), _narr_final)" in PIPELINE
+
+
+def test_comentario_do_fractal_e_a_pergunta_final_da_narracao():
+    import importlib
+    rp = importlib.import_module("scripts.run_pipeline")
+    roteiro = {"scenes": [{"narration": "Como isso é possível? O túnel tem 53,85 km."},
+                          {"narration": "Você teria coragem de atravessar esse túnel? Deixe nos comentários."}]}
+    assert rp._comentario_do_texto(roteiro, 2) == "Você teria coragem de atravessar esse túnel?"
+    assert "_comentario_do_texto(script, original_scene_count) if channel_name in FATOS_CANAIS" in PIPELINE
