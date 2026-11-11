@@ -532,3 +532,19 @@ def encurtar_roteiro(script: dict, max_palavras: int) -> dict:
     novas = [{**sc, "narration": " ".join(f for j, f in enumerate(cenas[i]) if (i, j) not in tirar)}
              for i, sc in enumerate(script.get("scenes", []))]
     return {**script, "scenes": [sc for sc in novas if sc["narration"].strip()]}
+
+
+
+def termina_em_fronteira(trecho: str, narracao: str) -> bool:
+    """O trecho copiado termina onde a frase da narração termina (pontuação ou fim da frase):
+    "53,85 km que atravessa" (a narração continua "o mar...") é recusado."""
+    alvo = _palavras_seguidas(trecho)
+    if not alvo:
+        return False
+    for frase in re.split(r"(?<=[.!?:;,])\s+", narracao):
+        palavras = _palavras_seguidas(frase)
+        n = len(alvo)
+        for i in range(len(palavras) - n + 1):
+            if palavras[i:i + n] == alvo and i + n == len(palavras):
+                return True
+    return False

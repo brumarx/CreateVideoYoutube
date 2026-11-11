@@ -133,7 +133,7 @@ def test_miniatura_errada_duas_vezes_sai_sem_texto_e_o_titulo_certo_fica(monkeyp
     ruim = json.dumps({"titulo": "Túnel Seikan: 53,85 km de extensão", "thumbnail_text": "53,85 KM SOB O MAR", "thumbnail_image_prompt": "p"})
     out, _ = _pacote(monkeypatch, [ruim, ruim])
     assert out is not None
-    assert out["title"] == "Túnel Seikan: 53,85 km de extensão" and out["thumbnail_text"] is None
+    assert out["title"] == "Túnel Seikan: 53,85 km de extensão" and out["thumbnail_text"] == "TÚNEL SEIKAN"
 
 
 def test_titulo_errado_duas_vezes_vira_o_assunto(monkeypatch):
@@ -205,7 +205,7 @@ def test_texto_curto_cortado_no_meio(texto, solto):
 def test_miniatura_cortada_e_refeita_ou_sai_sem_texto(monkeypatch):
     cortada = json.dumps({"titulo": "Túnel Seikan: 53,85 km de extensão", "thumbnail_text": "23,3 km sob o", "thumbnail_image_prompt": "p"})
     out, _ = _pacote(monkeypatch, [cortada, cortada])
-    assert out["thumbnail_text"] is None and out["title"] == "Túnel Seikan: 53,85 km de extensão"
+    assert out["thumbnail_text"] == "TÚNEL SEIKAN" and out["title"] == "Túnel Seikan: 53,85 km de extensão"
 
 
 @pytest.mark.parametrize("prompt,busca,esperado", [
@@ -305,3 +305,23 @@ def test_assunto_vazio_do_texto_final_nao_vira_busca_por_nome():
     finally:
         mp.undo()
     assert out["_imagens_do_texto_final"] is True and out["scenes"][0]["real_subject"] == ""
+
+
+
+# ---------- job 857: miniatura termina onde a frase termina; revisão visual pelo assunto do vídeo
+@pytest.mark.parametrize("trecho,ok", [("53,85 km que atravessa", False), ("53,85 km de extensão", True),
+                                       ("23,3 km sob o leito", False), ("23,3 km sob o leito marinho", True)])
+def test_miniatura_termina_onde_a_frase_termina(trecho, ok):
+    from src.fatos import termina_em_fronteira
+    assert termina_em_fronteira(trecho, NARR) is ok
+
+
+def test_miniatura_cortada_no_meio_vira_o_nome_do_assunto(monkeypatch):
+    cortada = json.dumps({"titulo": "Túnel Seikan: 53,85 km de extensão", "thumbnail_text": "53,85 km que atravessa", "thumbnail_image_prompt": "p"})
+    out, _ = _pacote(monkeypatch, [cortada, cortada])
+    assert out["thumbnail_text"] == "TÚNEL SEIKAN"
+
+
+def test_revisao_visual_considera_o_assunto_do_video():
+    assert "A imagem tem de combinar com o ASSUNTO do vídeo, não só com a frase da cena" in PIPELINE
+    assert "and termina_em_fronteira(str(script[\"thumbnail_text\"]), _narr_final)" in PIPELINE

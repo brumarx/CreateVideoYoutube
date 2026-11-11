@@ -1585,11 +1585,15 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
         # canal de fatos: o título e a miniatura novos são conferidos contra a narração final —
         # primeiro em código (número com o mesmo contexto da narração), depois pela IA
         from .fact_check import _title_problems
-        from .fatos import copiado_do_texto, termina_solto, titulo_copiado
+        from .fatos import copiado_do_texto, termina_em_fronteira, termina_solto, titulo_copiado
+
+        def _mini_ok(txt: str) -> bool:
+            return (copiado_do_texto(txt, narration) and not termina_solto(txt)
+                    and termina_em_fronteira(txt, narration))
+
         fora = [x for x, ok in ((novo["title"], titulo_copiado(novo["title"], narration) and not termina_solto(novo["title"])),
                                 (str(novo.get("thumbnail_text") or ""), not novo.get("thumbnail_text")
-                                 or (copiado_do_texto(str(novo.get("thumbnail_text")), narration)
-                                     and not termina_solto(str(novo.get("thumbnail_text")))))) if not ok]
+                                 or _mini_ok(str(novo.get("thumbnail_text"))))) if not ok]
         problemas = ([{"tipo": "titulo_nao_confere", "termo": x,
                        "motivo": f"'{x}' não está escrito assim na narração aprovada"} for x in fora]
                      or _title_problems(novo))
@@ -1601,23 +1605,23 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
                                            _retry=True)
             if (refeito is not None and refeito is not script and titulo_copiado(refeito["title"], narration)
                     and not termina_solto(refeito["title"])
-                    and (not refeito.get("thumbnail_text") or (copiado_do_texto(str(refeito["thumbnail_text"]), narration)
-                                                                and not termina_solto(str(refeito["thumbnail_text"]))))
+                    and (not refeito.get("thumbnail_text") or _mini_ok(str(refeito["thumbnail_text"])))
                     and not _title_problems(refeito)):
                 return refeito
             # saída sem reprovar o roteiro já validado: o que não confere sai sem número
             final = refeito if refeito is not None and refeito is not script else novo
             titulo_ok = titulo_copiado(final["title"], narration) and not termina_solto(final["title"])
-            miniatura_ok = not final.get("thumbnail_text") or (copiado_do_texto(str(final["thumbnail_text"]), narration)
-                                                               and not termina_solto(str(final["thumbnail_text"])))
+            miniatura_ok = not final.get("thumbnail_text") or _mini_ok(str(final["thumbnail_text"]))
             # o assunto também tem de estar escrito na narração; senão, o primeiro trecho com número dela
             assunto = _corta_titulo((topic or str(final.get("title") or "")).split(":")[0].strip())
             if not copiado_do_texto(assunto, narration):
                 assunto = _corta_titulo((_frases_com_numero(narration) or [assunto])[0])
             log.warning("título/miniatura não conferem após refazer — %s%s", "" if titulo_ok else "título vira o assunto; ",
                         "" if miniatura_ok else "miniatura sem texto")
+            # miniatura sem trecho bom: o nome do assunto (texto completo, escrito na narração)
+            assunto_mini = assunto.upper() if copiado_do_texto(assunto, narration) and len(assunto.split()) <= 4 else None
             return {**final, "title": final["title"] if titulo_ok else assunto,
-                    "thumbnail_text": final.get("thumbnail_text") if miniatura_ok else None}
+                    "thumbnail_text": final.get("thumbnail_text") if miniatura_ok else assunto_mini}
     log.info("título/miniatura gerados do roteiro final: %r / %r", novo["title"], novo["thumbnail_text"])
     return novo
 

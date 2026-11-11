@@ -1056,14 +1056,15 @@ def run(
         # 11/11: o texto está final e validado. SÓ AGORA saem título, miniatura, prompt da
         # miniatura e os prompts das imagens de cada cena, todos a partir deste texto.
         is_compilation_final = isinstance(facts, dict) and facts.get("tipo") == "compilacao"
-        from src.fatos import copiado_do_texto, termina_solto, titulo_copiado
+        from src.fatos import copiado_do_texto, termina_em_fronteira, termina_solto, titulo_copiado
         _narr_final = " ".join(sc.get("narration", "") for sc in script.get("scenes", []))
         ja_empacotado = bool(approved and script_file and script.get("title") and all(
             sc.get("image_prompt") for sc in script.get("scenes", []))
             and (channel_name not in FATOS_CANAIS or (
                 titulo_copiado(script["title"], _narr_final) and not termina_solto(script["title"])
                 and (not script.get("thumbnail_text") or (copiado_do_texto(str(script["thumbnail_text"]), _narr_final)
-                                                          and not termina_solto(str(script["thumbnail_text"])))))))
+                                                          and not termina_solto(str(script["thumbnail_text"]))
+                                                          and termina_em_fronteira(str(script["thumbnail_text"]), _narr_final))))))
         if ja_empacotado:
             log.info("[%s] roteiro aprovado com título e imagens do texto validado — mantidos", job_id)
         elif channel_name in FATOS_CANAIS:
@@ -1189,6 +1190,14 @@ def run(
         if audio_problems:
             raise ScriptRejected("áudio reprovado antes da montagem: " + "; ".join(audio_problems))
         visual_context = f"Canal: {channel.channel_title} — {channel.niche}.\nTema do vídeo: {topic}."
+        if channel_name in FATOS_CANAIS:
+            # 11/11 (job 857): túnel de ESTRADA na abertura de um vídeo sobre túnel FERROVIÁRIO passou,
+            # porque a frase da cena era genérica. Vale o assunto do vídeo, não só a frase
+            visual_context += (
+                "\nA imagem tem de combinar com o ASSUNTO do vídeo, não só com a frase da cena: outro tipo da mesma "
+                "coisa (estrada com carros num vídeo sobre ferrovia, avião num vídeo sobre navio), outro país ou "
+                "outra época está fora de contexto, mesmo que a frase seja genérica."
+            )
         if channel.country:
             visual_context += (
                 f"\nO vídeo é sobre o {channel.country}: bandeira, prédio de governo, parlamento, placa de rua, "
