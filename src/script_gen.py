@@ -1117,7 +1117,7 @@ def generate_script(
         log.info("escritor recebe só a lista fechada: %d fatos verificados", len(fatos))
         writer_sources = [{"titulo": "FATOS VERIFICADOS (única base; cada cena usa um destes)", "url": "",
                            "trecho": "\n".join(f"F{i + 1}: {f}" for i, f in enumerate(fatos))
-                           + "\nNADA ALÉM DESTA LISTA: nenhuma causa, nome, data, número ou detalhe de contexto que não esteja nos F acima."}]
+                           + "\nNADA ALÉM DESTA LISTA: nenhuma causa, nome, data, número ou detalhe de contexto que não esteja nos F acima. ""Se um F veio de fonte secundária (não oficial), escreva com 'estima-se' ou 'segundo estimativas', sem citar a fonte. ""Número de orçamento ou custo previsto é ESTIMATIVA: 'orçamento estimado de X', nunca 'custou X'."}]
     # 11/11: o plano também só lê a lista fechada nos canais de fatos. Com as fontes brutas,
     # ele trazia detalhes fora da lista (causa de morte, Kuroshio II) e o escritor os copiava
     plan = plan_story(topic, facts, writer_sources if fatos_verificados else web_facts)
