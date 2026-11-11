@@ -43,6 +43,11 @@ def search_topic_facts(query: str, max_results: int = 5) -> list[dict] | None:
     DuckDuckGo (grátis, sem chave)."""
     if not query:
         return None
+    from . import disk_cache
+    guardado = disk_cache.get("busca_web", [query, max_results])
+    if guardado:
+        log.info("busca em cache: %r (%d fontes)", query[:60], len(guardado))
+        return guardado
     facts = _tavily(query, max_results) or _duckduckgo(query, max_results)
     facts = _enrich(facts, query) if facts else []
     wiki = wikipedia_facts(query)
@@ -56,6 +61,7 @@ def search_topic_facts(query: str, max_results: int = 5) -> list[dict] | None:
     extras = wikidata_facts(query) + openalex_facts(query)
     have = {f["url"] for f in facts}
     facts = facts + [f for f in extras if f["url"] not in have]
+    disk_cache.put("busca_web", [query, max_results], facts)
     return facts or None
 
 

@@ -1512,7 +1512,9 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
     na narração ou no tema. Se a IA falhar ou a checagem reprovar, mantém os
     valores atuais e registra no log."""
     narration = " ".join(sc.get("narration", "") for sc in script.get("scenes", []))
-    allowed = _fact_tokens(narration + " " + topic, every_capital=True)
+    # canal de fatos: SÓ a narração final validada. O tema não entra: "53,85 km" vinha do tema e
+    # virou "53,85 km submersos" na miniatura com a narração dizendo outra coisa (job 847, 11/11)
+    allowed = _fact_tokens(narration + ("" if script.get("_fatos_verificados") else " " + topic), every_capital=True)
     rule = _TITLE_RULE_RE.search(channel.prompt_base or "")
     prompt = (
         "Crie o TÍTULO, o TEXTO DA MINIATURA e o PROMPT DA IMAGEM DA MINIATURA de um vídeo do YouTube, "
@@ -2008,6 +2010,11 @@ def extract_verified_facts(topic: str, web_facts: list[dict] | None) -> list[str
     fontes = bloco_fontes(None, web_facts)
     if not fontes.strip():
         return None
+    from . import disk_cache
+    guardado = disk_cache.get("fatos_verificados", [topic, fontes])
+    if guardado:
+        log.info("extração de fatos em cache: %d fatos (mesmo tema e mesmas fontes)", len(guardado))
+        return guardado
     prompt = (
         f"Tema: {topic}\n\nFONTES:\n{fontes}\n\n"
         "Extraia de 10 a 12 FATOS que estão LITERALMENTE nas FONTES, com o mesmo número, data, "
@@ -2032,7 +2039,10 @@ def extract_verified_facts(topic: str, web_facts: list[dict] | None) -> list[str
              len(fatos), len(ok), len(fatos) - len(ok))
     if len(fatos) != len(ok):
         log.warning("extração de fatos: números fora das fontes em %d fato(s)", len(fatos) - len(ok))
-    return ok if len(ok) >= 8 else None
+    if len(ok) >= 8:
+        disk_cache.put("fatos_verificados", [topic, fontes], ok)
+        return ok
+    return None
 
 
 def plan_story(topic: str, facts: dict | None, web_facts: list[dict] | None) -> str | None:

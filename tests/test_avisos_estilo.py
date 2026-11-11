@@ -282,3 +282,29 @@ def test_titulo_continua_revisado_nos_outros_canais(revisor, monkeypatch):
     roteiro = _roteiro("Texto normal sem problema.", title="Título que não confere")  # sem _fatos_verificados
     res = fc.review_script_result(roteiro, "Tema", None, None)
     assert any(p["tipo"] == "titulo_nao_confere" for p in res.blocking)
+
+
+def test_miniatura_nao_pode_usar_numero_do_tema_que_nao_esta_na_narracao(monkeypatch):
+    from src import script_gen as sg
+    from src.config import ChannelConfig
+    respostas = iter([
+        json.dumps({"titulo": "Túnel Seikan: 53,85 km e 34 vidas", "thumbnail_text": "53,85 km submersos",
+                    "thumbnail_image_prompt": "undersea tunnel, no text"}),
+        json.dumps({"titulo": "Túnel Seikan: 23,3 km sob o mar", "thumbnail_text": "23,3 km sob o mar",
+                    "thumbnail_image_prompt": "undersea tunnel, no text"}),
+    ])
+
+    def fake(messages, validate=None, **kw):
+        for r in respostas:  # devolve a primeira resposta que passa na validação
+            if validate is None or validate(r):
+                return r
+        raise RuntimeError("nenhuma válida")
+
+    monkeypatch.setattr(sg, "complete", fake)
+    import src.fact_check as fcm
+    monkeypatch.setattr(fcm, "_title_problems", lambda s: [])
+    roteiro = {"title": "x", "thumbnail_text": "x", "_fatos_verificados": ["Trecho submarino de 23,3 km"],
+               "scenes": [{"narration": "Debaixo do mar, o Túnel Seikan tem 23,3 km sob o mar."}]}
+    out = sg.packaging_from_final(roteiro, ChannelConfig.load("curiosidades"),
+                                  "Túnel Seikan: túnel submarino de 53,85 km")
+    assert "53,85" not in out["title"] and "53,85" not in (out["thumbnail_text"] or "")
