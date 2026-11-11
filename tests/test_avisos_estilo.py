@@ -240,3 +240,9 @@ def test_numero_ja_na_lista_com_outro_substantivo_e_resolvido():
                "scenes": [{"narration": "Durante a obra, 34 pessoas morreram."}]}
     out, restantes = fc.substituir_pela_lista(roteiro, [{"tipo": "fora_da_fonte", "termo": "34 pessoas morreram", "motivo": "x"}])
     assert restantes == []
+
+
+def test_titulo_nao_e_revisado_antes_da_validacao(revisor):
+    roteiro = _roteiro("O túnel tem 53,85 km de extensão, com 23,3 km sob o mar.", title="53,85 km sob o mar")
+    res = fc.review_script_result(roteiro, "Túnel Seikan", None, None)
+    assert not any(p.get("tipo") in ("titulo_nao_confere", "titulo_enganoso") for p in res.blocking)

@@ -551,6 +551,11 @@ def review_script_result(
     if style:
         log.info("revisão: %d aviso(s) de estilo (não reprovam): %s", len(style),
                  "; ".join(str(p.get("motivo", ""))[:80] for p in style[:5]))
+    # 11/11: título e miniatura não são revisados aqui. Eles são gerados DEPOIS da validação, a
+    # partir do roteiro final (ver script_gen.packaging_from_final); revisar o título antigo reprovava
+    # roteiro certo por causa de um título que ainda ia ser trocado
+    problems = [p for p in problems if p.get("tipo") not in ("titulo_nao_confere", "titulo_enganoso")]
+    style = style
     return ReviewResult(problems, style)
 
 
