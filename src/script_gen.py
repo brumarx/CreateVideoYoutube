@@ -1516,7 +1516,9 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
     prompt = (
         "Crie o TÍTULO, o TEXTO DA MINIATURA e o PROMPT DA IMAGEM DA MINIATURA de um vídeo do YouTube, "
         "em português. Use SÓ fatos, números e nomes que estão na NARRAÇÃO FINAL abaixo. "
-        "Título até 60 caracteres, com o fato mais forte. Miniatura até 4 palavras, manchete curta. "
+        "Título até 60 caracteres, com o fato mais forte. Não sugira que tudo está debaixo d'água nem "
+        "misture total com parte submersa: diga o total e a parte submarina separadamente. "
+        "Miniatura até 4 palavras, manchete curta. "
         "Prompt da imagem em inglês, cena visual concreta do assunto, sem texto, letras, logos ou rostos reais.\n"
         + (f"Regra de título do canal:{rule.group(1).strip()}\n" if rule else "")
         + (f"Regra deste vídeo (vale mais que a do canal): {extra_rule}\n" if extra_rule else "")
