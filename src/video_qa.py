@@ -161,7 +161,7 @@ _CF_WHISPER_URL = "https://api.cloudflare.com/client/v4/accounts/{account}/ai/ru
 # ninguém ouvir a fala ("criátiva"). A cota do Groq é por minuto/hora:
 # espera e tenta de novo antes de desistir — e sem transcrição não publica
 _TRANSCRIBE_ROUNDS = 4
-_TRANSCRIBE_WAIT = 75
+_TRANSCRIBE_WAIT = 90
 
 
 def _transcribe_once(audio: bytes) -> str | None:

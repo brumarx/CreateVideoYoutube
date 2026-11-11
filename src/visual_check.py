@@ -181,7 +181,7 @@ _OPENAI_COMPAT_VISION = [
 ]
 
 
-def _openai_compat(prompt: str, jpeg: bytes) -> str | None:
+def _openai_compat(prompt: str, jpeg: bytes, falhas: list | None = None) -> str | None:
     llm = LLMKeys()
     data_url = "data:image/jpeg;base64," + base64.b64encode(jpeg).decode()
     for provider, url, models in _OPENAI_COMPAT_VISION:
@@ -209,6 +209,8 @@ def _openai_compat(prompt: str, jpeg: bytes) -> str | None:
                     if resp.status_code == 429:
                         _rest(slot, _COOLDOWN_429)
                         continue
+                    if resp.status_code >= 500 and falhas is not None:
+                        falhas.append(provider)  # provedor caiu agora: não é cota
                     if resp.status_code == 200:
                         content = resp.json()["choices"][0]["message"]["content"]
                         if content:
@@ -216,16 +218,28 @@ def _openai_compat(prompt: str, jpeg: bytes) -> str | None:
                 except httpx.TimeoutException:
                     log.warning("visão %s (%s) sem resposta em %ds — fora por %d min", provider, model, _TIMEOUT, _COOLDOWN_TIMEOUT // 60)
                     _rest(f"{provider}:{model}", _COOLDOWN_TIMEOUT)
+                    if falhas is not None:
+                        falhas.append(provider)
                 except Exception as exc:  # noqa: BLE001
                     log.warning("visão %s (%s) falhou: %s", provider, model, exc)
+                    if falhas is not None:
+                        falhas.append(provider)
     return None
 
 
-def ask_vision(prompt: str, jpeg: bytes) -> str | None:
+def ask_vision(prompt: str, jpeg: bytes, _nova_tentativa: bool = False) -> str | None:
     """Resposta de texto de um modelo com visão: NVIDIA super-vl, Mistral,
     Groq, OpenRouter grátis, Gemini e Cloudflare. None se nenhum respondeu.
-    A NVIDIA vem antes do Gemini (cota grátis do Gemini esgotada desde 09/10)."""
-    return _openai_compat(prompt, jpeg) or _gemini(prompt, jpeg) or _cloudflare_vision(prompt, jpeg)
+    A NVIDIA vem antes do Gemini (cota grátis do Gemini esgotada desde 09/10).
+    Se nenhum respondeu e algum provedor CAIU (rede, timeout, 5xx; cota 429
+    não conta), espera 90 s e tenta a cadeia de novo uma vez."""
+    falhas: list = []
+    resposta = _openai_compat(prompt, jpeg, falhas) or _gemini(prompt, jpeg) or _cloudflare_vision(prompt, jpeg)
+    if resposta is None and falhas and not _nova_tentativa:
+        log.warning("visão: provedor caiu (%s) — espera 90 s e tenta de novo", ", ".join(sorted(set(falhas))))
+        time.sleep(90)
+        return ask_vision(prompt, jpeg, _nova_tentativa=True)
+    return resposta
 
 
 def _cloudflare_vision(prompt: str, jpeg: bytes) -> str | None:

@@ -164,6 +164,16 @@
 </header>
 <main>
   {% if flash %}<div class="toast {{ 'bad' if 'recusado' in flash or 'Não consegui' in flash }}" role="status">{{ flash }}</div>{% endif %}
+  {% if paid and paid.configurada %}
+  <div class="toast {{ 'bad' if paid.sem_saldo_desde else '' }}" role="status" style="font-size:14px">
+    <strong>DeepSeek (pago, último recurso)</strong> ·
+    {% if paid.sem_saldo_desde %}<b>SEM SALDO</b> desde {{ paid.sem_saldo_desde[:16].replace('T', ' ') }} — recarregue em platform.deepseek.com; enquanto isso a cascata segue sem ela.
+    {% else %}ativa{% endif %}
+    · saldo: {{ paid.saldo or ('indisponível (' ~ (paid.saldo_erro or 'sem consulta') ~ ')') }}
+    · hoje: {{ paid.chamadas_hoje }} chamada(s) · total: {{ paid.chamadas_total }}
+    {% if paid.ultimo_sucesso %}· última resposta: {{ paid.ultimo_sucesso[:16].replace('T', ' ') }} UTC{% endif %}
+  </div>
+  {% endif %}
   {% if total_uploads > 5 %}<div class="toast bad">São {{ total_uploads }} vídeos por dia no total. A cota da API do YouTube só aguenta uns 5 uploads por dia, então os últimos canais da rodada vão falhar.</div>{% endif %}
 
   <!-- HOJE -->

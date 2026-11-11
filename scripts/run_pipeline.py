@@ -40,7 +40,7 @@ from src.goal_card import goal_card
 from src.infographic import CREDIT as INFOGRAPHIC_CREDIT, Renderer as InfographicRenderer, sanitize as sanitize_grafico
 from src.infographic import compose_presenter, presenter_pose
 from src.news_card import headline_card
-from src.fact_check import BLOCKING_TYPES, feedback_for_rewrite, review_script
+from src.fact_check import BLOCKING_TYPES, feedback_for_rewrite, review_script, substituir_pela_lista
 from src.orchestrator import enqueue, update
 from src.people_photos import names_in, person_photo
 from src.real_media import real_clip, real_photos
@@ -49,7 +49,7 @@ from src.script_gen import (
     art_direction,
     trim_teaser_ending,
     chapter_titles, clean_stat_overlays, engagement_question, fix_dangling_hooks, generate_script, refresh_packaging,
-    repair_script, vary_close_repeats,
+    repair_script, vary_close_repeats, packaging_from_final,
 )
 from src.spellcheck import fix_script, fix_text
 from src.stock_media import search_stock_clip, search_stock_photo
@@ -115,7 +115,7 @@ MAX_LIST_ITEMS = 10
 # reescritas do roteiro depois de reprovado na revisão de fatos
 FACT_CHECK_REWRITES = 2
 # rodadas do laço conserta → revisa por reprovação (ver o loop da revisão)
-MAX_REPAIR_ROUNDS = 5
+MAX_REPAIR_ROUNDS = 1  # 11/11: uma correção factual (com evidência), depois a validação; sem laço
 # rodadas de troca de imagem da cena reprovada na revisão do vídeo pronto
 VISUAL_FIX_ROUNDS = 2
 
@@ -410,7 +410,8 @@ def _repair_loop(script: dict, problems: list[dict], topic: str, facts, web_fact
             return None
         before = fixed
         fixed = repair_script(fixed, fix_problems, facts, web_facts, topic)
-        if fixed is None or fixed["scenes"] == before["scenes"] and fixed.get("title") == before.get("title"):
+        if fixed is None or fixed["scenes"] == before["scenes"] and fixed.get("title") == before.get("title") \
+                and fixed.get("thumbnail_text") == before.get("thumbnail_text"):
             return None
         fix_problems = review_script(fixed, topic, facts, web_facts)
         if fix_problems == []:
@@ -561,6 +562,7 @@ def run(
     publish_at: str | None,
     long_form: bool | None = None,
     fact_label: str | None = None,
+    fontes_file: str | None = None,
     botafogo_task: str | None = None,
     script_file: str | None = None,
     facts_file: str | None = None,
@@ -813,6 +815,15 @@ def run(
 
                     news = [f for f in web_facts if "wikipedia.org" not in f.get("url", "")]
                     web_facts = (wikipedia_facts(topic) + news) or web_facts
+        if fontes_file:
+            # 11/11: fontes oficiais escolhidas à mão (JSON: lista de {titulo, url, trecho}) entram
+            # nas fontes do job: a extração e a revisão leem o mesmo bloco
+            extra = json.loads(Path(fontes_file).read_text(encoding="utf-8"))
+            from src.fact_check import merge_web_facts as _merge_fontes
+            web_facts = _merge_fontes(web_facts, extra) or web_facts
+            log.info("[%s] fontes oficiais do arquivo: %d", job_id, len(extra))
+        from src import paid_usage as _paid
+        _paid.set_job(job_id)
         log.info("[%s] gerando roteiro (%s) para: %s (voz: %s)", job_id, "longo" if long_form else "curto", topic, tts_voice)
         if script_file:
             # roteiro escrito à mão (ex.: quando só sobra modelo fraco que copia
@@ -861,13 +872,21 @@ def run(
                 # NÃO sai (não existe mais aprovação manual depois)
                 problems = review_script(script, topic, facts, web_facts)
                 if problems is None:
-                    if must_publish:
+                    if must_publish and channel_name not in FATOS_CANAIS:
                         log.warning("[%s] revisor de fatos indisponível — última tentativa do dia, segue sem revisão", job_id)
                         ressalvas.append("revisão de fatos não rodou (revisor indisponível)")
                         break
                     raise ScriptRejected("revisor de fatos indisponível — vídeo não sai sem revisão")
             if not problems:
                 break
+            if channel_name in FATOS_CANAIS:
+                # 11/11: número errado com correspondência segura na lista de fatos verificados
+                # é trocado na hora (default, sem reprovar); o que não tem correspondência segura
+                # segue como bloqueio
+                script, problems = substituir_pela_lista(script, problems)
+                if not problems:
+                    log.warning("[%s] números trocados pelo valor da lista de fatos verificados — sem reprovar", job_id)
+                    break
             log.warning(
                 "[%s] revisão de fatos reprovou (tentativa %d): %s", job_id, attempt + 1,
                 "; ".join(f"{p.get('tipo')}: {p.get('termo')}" for p in problems),
@@ -908,6 +927,12 @@ def run(
                          "; ".join(f"{p.get('tipo')}: {p.get('termo')}" for p in recheck or []) or "revisor fora")
             else:
                 log.info("[%s] não deu pra cortar só as frases apontadas — reescrevendo", job_id)
+            if channel_name in FATOS_CANAIS:
+                # 11/11: uma correção (conserto + corte) e a validação de novo; se o bloqueio
+                # continua, o job termina reprovado. Nada de reescrever o roteiro do zero em
+                # laço (job 835: 20 min sem convergir, afirmações sem fonte voltando)
+                raise ScriptRejected("bloqueio factual depois de uma correção: " + "; ".join(
+                    f"{p.get('tipo')}: {p.get('termo')}" for p in problems)[:600])
             if attempt == FACT_CHECK_REWRITES:
                 if not any(p.get("tipo") in BLOCKING_TYPES for p in problems):
                     log.warning("[%s] só sobraram ressalvas leves da revisão — sobe PRIVADO pra aprovação", job_id)
@@ -964,6 +989,9 @@ def run(
         if trimmed is not script:
             script = {**trimmed, "_edited": True}
         ressalvas.extend(script.pop("_ressalvas", None) or [])
+        # 11/11: título, miniatura e prompt da imagem SEMPRE saem do roteiro final validado
+        is_compilation_final = isinstance(facts, dict) and facts.get("tipo") == "compilacao"
+        script = packaging_from_final(script, channel, topic, extra_rule=facts["aviso"] if is_compilation_final else "")
         if script.pop("_edited", False):
             # conserto/corte mudou o que o vídeo narra: a descrição gerada
             # junto com o roteiro prometia o que saiu (job 558)
@@ -1821,6 +1849,7 @@ def main() -> None:
         help="só canal 'botafogo': 'jogo' = prévia/pós-jogo; 'portal' = vídeo diário do botafogo.win",
     )
     parser.add_argument("--facts-file", default=None, help="JSON com os dados reais do vídeo ({tema, dados} ou {noticias}) em vez de buscar/sortear")
+    parser.add_argument("--fontes-file", default=None, help="JSON com fontes oficiais extras [{titulo, url, trecho}] para o roteiro")
     parser.add_argument("--script-file", default=None, help="JSON de roteiro pronto (mesmo formato do gerado) — pula a geração, mantém todas as revisões")
     parser.add_argument("--approved", action="store_true",
                         help="roteiro já aprovado por humano (painel): não refaz a revisão de fatos, só renderiza")
@@ -1835,6 +1864,7 @@ def main() -> None:
         run(
             args.channel, args.topic, args.dry_run, args.publish_at, long_form=args.long,
             fact_label=args.fact_label, botafogo_task=args.botafogo_task, script_file=args.script_file,
+            fontes_file=args.fontes_file,
             facts_file=args.facts_file, script_only=args.script_only, no_upload=args.no_upload,
             must_publish=args.must_publish, compilation=args.compilation, approved=args.approved,
         )

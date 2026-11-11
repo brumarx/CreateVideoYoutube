@@ -19,6 +19,7 @@ import json
 import logging
 import re
 import unicodedata
+from dataclasses import dataclass, field
 from datetime import date
 
 from .providers import complete
@@ -36,6 +37,34 @@ _TYPES = {
 # existe); os outros são problema de redação/atribuição e reprovam direto.
 _SEARCHABLE = {"ferramenta_inexistente", "fato_nao_confirmado"}
 
+# avisos de qualidade textual: entram em style_warnings e NUNCA reprovam, nem disparam
+# conserto, reescrita ou nova tentativa (ver review_script_result)
+STYLE_TYPES = {"frase_vaga"}
+
+
+@dataclass
+class ReviewResult:
+    """Resultado da revisão em duas listas independentes.
+    blocking: erros que reprovam o roteiro (dispararam conserto/reescrita).
+    style: avisos de redação, só informativos."""
+    blocking: list[dict] = field(default_factory=list)
+    style: list[dict] = field(default_factory=list)
+
+
+def _com_fatos_verificados(fontes: str, script: dict) -> str:
+    """Os fatos que a extração já confirmou nas fontes entram como fonte: o revisor
+    não pode reprovar o que disserem literalmente (rodada 5: 538,4 bilhões, 23,3 km e
+    a data voltavam a cada rodada, mesmo confirmados)."""
+    fatos = script.get("_fatos_verificados") or []
+    if not fatos:
+        return fontes
+    bloco = ("FATOS JÁ CONFIRMADOS NAS FONTES OFICIAIS (extraídos e checados; contam como fonte). "
+             "Não reprove o que disserem literalmente, nem número, data ou valor igual a eles. "
+             "Se outra fonte (ex.: Wikipédia, buscador) der número diferente, vale a lista: "
+             "a fonte primária manda sobre a secundária:\n"
+             + "\n".join(f"- {x}" for x in fatos))
+    return f"{fontes}\n\n{bloco}" if fontes else bloco
+
 
 def _review_prompt(script: dict, topic: str, facts: dict | None, web_facts: list[dict] | None) -> str:
     narration = "\n".join(f"[cena {i + 1}] {s.get('narration', '')}" for i, s in enumerate(script.get("scenes", [])))
@@ -49,10 +78,14 @@ def _review_prompt(script: dict, topic: str, facts: dict | None, web_facts: list
     bloco = bloco_fontes(facts, web_facts)
     sources = ("FONTES (o mesmo bloco que o roteirista e o conserto leem):\n" + bloco) if bloco else \
         "NENHUMA — o roteiro foi escrito só com conhecimento geral."
+    sources = _com_fatos_verificados(sources, script)
 
     today = date.today().strftime("%d/%m/%Y")
     return f"""Você é revisor de fatos de um canal do YouTube. Revise o roteiro
 abaixo ANTES de ele virar vídeo. Aponte SÓ problemas concretos destes tipos:
+
+Pergunta dirigida ao espectador ("Você teria coragem...?", "O que você acha...?") não
+é afirmação: não exija fonte para ela e não a aponte, a menos que embuta um fato falso.
 
 - "ferramenta_inexistente": cita pelo nome um produto, app, ferramenta,
   recurso ou empresa que você não tem certeza de que existe, ou atribui a
@@ -187,10 +220,51 @@ def _fold(text: str) -> str:
     return unicodedata.normalize("NFKD", text.lower()).encode("ascii", "ignore").decode()
 
 
-def _vague_problems(script: dict) -> list[dict]:
-    """Frase vazia (enchimento) e frase com a mesma palavra repetida (tautologia:
-    "compra a água por meio de acordos de compra de água"), e superlativo no
-    título que a narração não diz. Determinístico, sem chamar o LLM."""
+# palavras que se repetem em qualquer texto sem prejudicar a leitura (forma sem acento)
+_PALAVRAS_NEUTRAS = {
+    "quando", "porque", "entre", "pessoas", "tambem", "depois", "durante", "atraves", "mesmo", "mesma",
+    "outro", "outra", "outros", "outras", "cada", "onde", "assim", "entao", "apenas", "ainda", "sempre",
+    "muito", "muitos", "muitas", "pouco", "pouca", "fazer", "feito", "podem", "pode", "todos", "todas",
+    "sobre", "forma", "parte", "lugar", "coisa", "vezes", "grande", "grandes", "ficou", "estava",
+    "estavam", "foram", "sendo", "agora", "antes", "pelos", "pelas", "pelo", "pela", "desde", "embora",
+}
+# unidades e escalas: "quilômetros" duas vezes numa frase é precisão, não repetição
+_UNIDADES = {
+    "quilometro", "quilometros", "metro", "metros", "milhao", "milhoes", "bilhao", "bilhoes",
+    "trilhao", "trilhoes", "ano", "anos", "dias", "horas", "hora", "ienes", "iene", "dolar", "dolares",
+    "reais", "euros", "libras", "tonelada", "toneladas", "graus", "porcento", "centimetros", "quilos",
+    "quilograma", "quilogramas", "segundos", "minutos", "semanas", "meses", "seculo", "seculos",
+}
+_DISTANCIA_REPETICAO = 8  # palavras: a mesma palavra a até 8 posições na mesma frase
+
+
+def _repeticoes_prejudiciais(sentence: str, tema: set[str]) -> list[str]:
+    """Palavra de conteúdo repetida na MESMA frase e a pouca distância (ou 3 vezes).
+    Não conta número, unidade, nome próprio, palavra neutra nem vocabulário do tema:
+    o assunto do vídeo é para ser repetido."""
+    posicoes: dict[str, list[int]] = {}
+    palavras: dict[str, str] = {}
+    for idx, tok in enumerate(re.findall(r"\w+", sentence)):
+        if len(tok) < 5 or any(ch.isdigit() for ch in tok) or tok[:1].isupper():
+            continue
+        lw = _fold(tok)
+        if lw in _PALAVRAS_NEUTRAS or lw in _UNIDADES or lw[:6] in tema:
+            continue
+        posicoes.setdefault(lw[:6], []).append(idx)
+        palavras.setdefault(lw[:6], lw)
+    achados = []
+    for stem, idxs in posicoes.items():
+        perto = any(b - a <= _DISTANCIA_REPETICAO for a, b in zip(idxs, idxs[1:]))
+        if perto or len(idxs) >= 3:
+            achados.append(palavras[stem])
+    return achados
+
+
+def _vague_problems(script: dict, topic: str = "") -> list[dict]:
+    """Avisos de REDAÇÃO (tipo frase_vaga): enchimento sem informação e palavra repetida
+    perto na mesma frase. Não reprovam (ver review_script_result). Superlativo no título
+    que a narração não diz continua sendo erro (titulo_nao_confere). Sem LLM."""
+    tema = {w[:6] for w in re.findall(r"\w{5,}", _fold(str(script.get("title", "")) + " " + topic))}
     problems: list[dict] = []
     for i, sc in enumerate(script.get("scenes", [])):
         text = str(sc.get("narration", ""))
@@ -198,30 +272,13 @@ def _vague_problems(script: dict) -> list[dict]:
         if m:
             problems.append({"tipo": "frase_vaga", "termo": m.group(0), "motivo": f"cena {i + 1}: enchimento sem informação"})
         for sentence in re.split(r"(?<=[.!?])\s+", text):
-            words = [w for w in re.findall(r"\w{6,}", _fold(sentence)) if w not in {"quando", "porque", "entre", "pessoas"}]
-            repeated = {w for w in words if words.count(w) >= 2}
-            if repeated:
+            for word in _repeticoes_prejudiciais(sentence, tema):
                 problems.append({"tipo": "frase_vaga", "termo": sentence.strip()[:80],
-                                 "motivo": f"cena {i + 1}: palavra repetida na mesma frase ({', '.join(sorted(repeated))})"})
-    # mesma palavra-chave em 3 cenas ou mais: a cena só repete a anterior
-    # (job 794: "dessalinizada", "potável", "maior" espalhados pelo roteiro)
-    title_stems = {w[:7] for w in re.findall(r"\w{7,}", _fold(str(script.get("title", ""))))}
-    per_scene = [
-        {w[:7] for w in re.findall(r"\w{7,}", _fold(str(sc.get("narration", ""))))} - title_stems
-        for sc in script.get("scenes", [])
-    ]
-    counts: dict[str, int] = {}
-    for stems in per_scene:
-        for st in stems:
-            counts[st] = counts.get(st, 0) + 1
-    for st, n in sorted(counts.items()):
-        if n >= 3:
-            problems.append({"tipo": "frase_vaga", "termo": st,
-                             "motivo": f"a mesma palavra-chave ('{st}...') aparece em {n} cenas: repetição"})
+                                 "motivo": f"cena {i + 1}: palavra repetida perto na mesma frase ({word})"})
     narration = _fold(" ".join(str(sc.get("narration", "")) for sc in script.get("scenes", [])))
     for sup in _SUPERLATIVE_RE.findall(str(script.get("title", ""))):
         if _fold(sup) not in narration:
-            problems.append({"tipo": "titulo_nao_confere", "termo": script.get("title", ""),
+            problems.append({"tipo": "titulo_nao_confere", "termo": f"título diz '{sup}'",
                              "motivo": f"título diz '{sup}' e a narração não diz"})
     return problems
 
@@ -388,9 +445,9 @@ def _review_valid(r: str) -> bool:
     return False
 
 
-def review_script(
+def review_script_result(
     script: dict, topic: str, facts: dict | None = None, web_facts: list[dict] | None = None,
-) -> list[dict] | None:
+) -> ReviewResult | None:
     """Devolve a lista de problemas que sobraram depois da confirmação na
     internet ([] = aprovado), ou None se o revisor não conseguiu responder
     (quem chama decide — o pipeline segue, já que a aprovação manual no
@@ -399,7 +456,8 @@ def review_script(
         # compilação: as histórias arquivadas já passaram na revisão; o texto novo
         # (abertura, início, perguntas, fechamento, título, miniatura) é conferido
         # só contra o que as histórias dizem — antes do filtro das cenas arquivadas
-        return _compilation_review(script, topic, facts)
+        res = _compilation_review(script, topic, facts)
+        return None if res is None else ReviewResult(res, [])
     if facts and facts.get("tipo") == "compilacao":
         # cenas que vieram dos Shorts publicados já passaram na revisão:
         # só o texto novo (abertura, transições, fechamento) e o título
@@ -407,7 +465,7 @@ def review_script(
         script = {**script, "scenes": new or script.get("scenes", [])[:1]}
     copied = copied_from_source(script, facts, web_facts)
     if len(copied) >= 2:
-        return copied
+        return ReviewResult(copied, [])
     unknown = unknown_names(script, topic, facts, web_facts)
     raw_problems: list[dict] | None = None
     from .topics import _SMALL_MODEL_RE
@@ -460,8 +518,12 @@ def review_script(
             continue
         problems.append(p)
     known = {**facts, "_internet": [f.get("trecho", "") for f in web_facts or []]} if facts else None
-    problems = problems + _title_problems(script) + _vague_problems(script) + unknown + numbers_not_in_facts(script, known) + (
+    problems = problems + _title_problems(script) + _vague_problems(script, topic) + unknown + numbers_not_in_facts(script, known) + (
         [] if facts else numbers_not_in_sources(script, web_facts)) + broken_sentences(script) + unfulfilled_promises(script)
+    # separação: avisos de estilo saem da lista bloqueante. Daqui em diante só erros
+    # bloqueantes decidem (a checagem factual roda mesmo com avisos de estilo)
+    style = [p for p in problems if p.get("tipo") in STYLE_TYPES]
+    problems = [p for p in problems if p.get("tipo") not in STYLE_TYPES]
     if not problems and (facts or web_facts):
         # aprovado pelo revisor: só então a prova por citação (1 chamada a
         # mais por roteiro, não por rodada). Fora do ar = revisão incompleta
@@ -486,7 +548,100 @@ def review_script(
         problems = verdict
     if facts and facts.get("tipo") == "compilacao":
         problems = _only_in_reviewed(problems, script)
-    return problems
+    if style:
+        log.info("revisão: %d aviso(s) de estilo (não reprovam): %s", len(style),
+                 "; ".join(str(p.get("motivo", ""))[:80] for p in style[:5]))
+    return ReviewResult(problems, style)
+
+
+def review_script(
+    script: dict, topic: str, facts: dict | None = None, web_facts: list[dict] | None = None,
+) -> list[dict] | None:
+    """Só os erros BLOQUEANTES ([] = aprovado), ou None se o revisor não respondeu.
+    Os avisos de estilo ficam de fora: não reprovam, não disparam conserto nem reescrita
+    (ver review_script_result)."""
+    res = review_script_result(script, topic, facts, web_facts)
+    return None if res is None else res.blocking
+
+
+_NUM_UNIDADE = re.compile(
+    r"(\d+(?:[.,]\d+)*)\s*(km|quilômetros?|quilometros?|metros?|bilhões|bilhão|bilhoes|milhões|milhão|milhoes|"
+    r"mil|toneladas?|anos?|dias?|pessoas?|mortos?|mortes?|%|por cento|ienes|dólares?|dolares|graus)?",
+    re.IGNORECASE)
+_UNIDADE_NORMAL = {"quilômetros": "km", "quilometros": "km", "quilômetro": "km", "metros": "m", "metro": "m",
+                   "bilhões": "bi", "bilhão": "bi", "bilhoes": "bi", "milhões": "mi", "milhão": "mi", "milhoes": "mi",
+                   "toneladas": "t", "tonelada": "t", "anos": "ano", "ano": "ano", "dias": "dia", "dia": "dia",
+                   "pessoas": "pessoa", "pessoa": "pessoa", "mortos": "morte", "morto": "morte", "mortes": "morte",
+                   "morte": "morte", "por cento": "%", "%": "%", "dólares": "dolar", "dólar": "dolar", "dolares": "dolar",
+                   "ienes": "iene", "graus": "grau", "km": "km", "m": "m", "t": "t", "mil": "mil"}
+
+
+def _pares_numero_unidade(texto: str) -> list[tuple[str, str]]:
+    """Números com a unidade logo depois (normalizada). Sem unidade, unidade vazia."""
+    out = []
+    for m in _NUM_UNIDADE.finditer(texto):
+        numero = m.group(1).replace(".", "").replace(",", ".")
+        unidade = _UNIDADE_NORMAL.get((m.group(2) or "").lower(), "")
+        out.append((numero, unidade))
+    return out
+
+
+def _conteudo(texto: str) -> set[str]:
+    neutras = {"sobre", "entre", "depois", "durante", "quando", "porque", "ainda", "apenas", "mesmo", "outro"}
+    return {w for w in (_fold(x) for x in re.findall(r"[^\W\d_]{5,}", texto)) if w not in neutras}
+
+
+def substituir_pela_lista(script: dict, problems: list[dict]) -> tuple[dict, list[dict]]:
+    """Troca o NÚMERO de uma frase reprovada pelo valor da lista de fatos verificados,
+    quando há correspondência segura: mesma unidade e mesmo assunto (pelo menos 2
+    palavras de conteúdo em comum), e só um valor candidato. A frase não é reescrita:
+    só o número muda, e o número novo já está na lista (validado). Sem correspondência
+    segura, o problema continua bloqueante. Devolve (roteiro, problemas que sobraram)."""
+    lista = script.get("_fatos_verificados") or []
+    if not lista:
+        return script, problems
+    fatos_pares = [(numero, unidade, fato) for fato in lista for numero, unidade in _pares_numero_unidade(fato)
+                   if unidade]
+    if not fatos_pares:
+        return script, problems
+    scenes = [dict(sc) for sc in script.get("scenes", [])]
+    restantes = []
+    for p in problems:
+        if p.get("tipo") not in ("fato_nao_confirmado", "fora_da_fonte"):
+            restantes.append(p)
+            continue
+        termo = str(p.get("termo", "")).strip()
+        achou = False
+        for sc in scenes:
+            for frase in re.split(r"(?<=[.!?])\s+", sc.get("narration", "")):
+                if not termo or _fold(termo)[:40] not in _fold(frase):
+                    continue
+                novo = frase
+                ok = True
+                for numero, unidade in _pares_numero_unidade(frase):
+                    if not unidade or any(n == numero and u == unidade for n, u, _ in fatos_pares):
+                        continue
+                    candidatos = {n for n, u, fato in fatos_pares
+                                  if u == unidade and len(_conteudo(frase) & _conteudo(fato)) >= 2}
+                    if len(candidatos) != 1:
+                        ok = False
+                        break
+                    alvo = candidatos.pop()
+                    # troca a primeira ocorrência do número original pelo número da lista
+                    original = next(m.group(1) for m in _NUM_UNIDADE.finditer(novo)
+                                    if m.group(1).replace(".", "").replace(",", ".") == numero)
+                    novo = novo.replace(original, alvo.replace(".", ","), 1)
+                if ok and novo != frase:
+                    sc["narration"] = sc.get("narration", "").replace(frase, novo, 1)
+                    achou = True
+                break
+            if achou:
+                break
+        if not achou:
+            restantes.append(p)
+    if len(restantes) == len(problems):
+        return script, problems
+    return {**script, "scenes": scenes, "_edited": True}, restantes
 
 
 def _only_in_reviewed(problems: list[dict], script: dict) -> list[dict]:
@@ -1196,7 +1351,7 @@ def verify_full_script(script: dict, topic: str, facts: dict | None, web_facts: 
     """Roteiro inteiro, de uma vez, pro checador forte: [] = tudo real;
     problemas "fora_da_fonte" (frase) e "titulo_enganoso" (título); None =
     checador fora do ar (revisão incompleta)."""
-    source = _sources_text(facts, web_facts)
+    source = _com_fatos_verificados(_sources_text(facts, web_facts), script)
     if not source.strip():
         return None
     sentences = [f.strip() for sc in script.get("scenes", []) for f in _GROUND_SPLIT.split(sc.get("narration", ""))

@@ -59,6 +59,28 @@ _PREFERRED_MODELS = {
     "mistral": ["mistral-medium-latest", "mistral-small-latest", "magistral-medium-latest"],
 }
 
+PAID_PROVIDER = "deepseek"
+
+
+def _registra_pago_ok(result: str) -> None:
+    from .paid_usage import record_success
+    record_success(len(result or ""))
+
+
+def _registra_pago_uso(model: str, usage: dict) -> None:
+    """Tokens cobrados pela DeepSeek contam no teto. Falha aqui nunca derruba a chamada."""
+    try:
+        from .paid_usage import record_usage
+        record_usage(model, int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0))
+    except Exception as exc:  # noqa: BLE001
+        log.warning("não consegui contar o gasto do provedor pago: %s", exc)
+
+
+def _registra_pago_sem_saldo(detail: str) -> None:
+    from .paid_usage import record_exhausted
+    record_exhausted(detail or "402 sem saldo")
+
+
 _GEMINI_TEXT_IN_CHAIN = False  # ver complete(): Gemini só na visão
 
 # Modelo mais inteligente de cada provedor: tentado em TODAS as chaves do
@@ -70,6 +92,7 @@ _STRONG_MODELS = {
     # 09/11: a lista grátis do OpenRouter começava por modelos pequenos e o Nemotron 550B
     # (contexto de 1 milhão) nunca era tentado; agora é o primeiro
     "openrouter": ["nvidia/nemotron-3-ultra-550b-a55b:free"],
+    "deepseek": ["deepseek-flash"],
 }
 
 # (nome, atributo em LLMKeys, endpoint de chat, endpoint de listagem de modelos)
@@ -82,6 +105,8 @@ OPENAI_COMPAT_PROVIDERS = [
     ("groq", "groq", "https://api.groq.com/openai/v1/chat/completions", "https://api.groq.com/openai/v1/models"),
     ("openrouter", "openrouter", "https://openrouter.ai/api/v1/chat/completions", "https://openrouter.ai/api/v1/models"),
     ("mistral", "mistral", "https://api.mistral.ai/v1/chat/completions", "https://api.mistral.ai/v1/models"),
+    # DeepSeek é PAGO: fica por último, então só é chamada quando todos os grátis falharam nesta chamada
+    ("deepseek", "deepseek", "https://api.deepseek.com/chat/completions", "https://api.deepseek.com/models"),
 ]
 
 GEMINI_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -343,6 +368,11 @@ def _call_openai_compat(
     if "api.groq.com" in endpoint:
         _LAST_GROQ_CALL["at"] = time.monotonic()
     payload = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
+    if "api.deepseek.com" in endpoint:
+        # sem raciocínio: o Flash gastava os 12 mil tokens de saída pensando e cortava o JSON
+        # (rodada 5, 11/11). O roteiro, a revisão e o conserto saem direto, e o raciocínio
+        # também é cobrado como saída
+        payload["thinking"] = {"type": "disabled"}
     if "gpt-oss" in model:
         # o raciocínio sai do mesmo max_tokens: no padrão o gpt-oss gastava
         # os 3 mil pensando e devolvia o roteiro vazio (teste de 20/10)
@@ -379,6 +409,8 @@ def _call_openai_compat(
             log.warning("%s (%s) -> HTTP %s: %s", endpoint, model, resp.status_code, resp.text[:200])
             return None, resp.status_code, _cooldown_seconds(resp.status_code, resp.text)
         data = resp.json()
+        if "api.deepseek.com" in endpoint:
+            _registra_pago_uso(model, data.get("usage") or {})
         content = data["choices"][0]["message"]["content"]
         finish = data["choices"][0].get("finish_reason")
         if finish not in (None, "stop"):
@@ -458,6 +490,7 @@ def complete(
     validate: Callable[[str], bool] | None = None,
     model_filter: Callable[[str], bool] | None = None,
     temperature: float = 0.8,
+    _nova_tentativa: bool = False,
 ) -> str:
     """Roda a cascata de provedores (com rodízio de chaves e descoberta
     dinâmica de modelo dentro de cada um) e devolve a primeira resposta não
@@ -493,10 +526,19 @@ def complete(
     def _ok(result: str | None) -> bool:
         return bool(result) and (validate is None or validate(result))
 
+    # falha transitória = rede caiu ou 5xx (o provedor está fora do ar agora,
+    # não sem cota). Se nenhum provedor respondeu e houve dessas, a cascata
+    # roda de novo UMA vez depois de 90 s, em vez de o roteiro morrer (job 830)
+    transitoria = False
+
     for name, key_attr, chat_endpoint, models_endpoint in OPENAI_COMPAT_PROVIDERS:
         provider_keys = getattr(keys, key_attr)
         if not provider_keys:
             continue
+        if name == PAID_PROVIDER:
+            from .paid_usage import dentro_do_teto
+            if not dentro_do_teto():
+                continue  # teto de gasto (dia ou job) atingido: a DeepSeek não é chamada
         if _too_big_for(name, messages, max_tokens):
             # 09/11: o pedido do roteiro passou de 8 mil tokens e o Groq recusava com 413 em todas
             # as contas; pular o provedor poupa a tentativa e deixa o pedido chegar aos de contexto grande
@@ -534,11 +576,17 @@ def complete(
                     )
                     if _ok(result):
                         log.info("resposta via %s/%s", name, model)
+                        if name == PAID_PROVIDER:
+                            _registra_pago_ok(result)
                         return result  # type: ignore[return-value]
                     if result and validate is not None:
                         log.warning("resposta de %s/%s não passou na validação, tentando próximo modelo", name, model)
+                    if result is None and (status is None or status >= 500):
+                        transitoria = True
                     if status == 413:
                         too_large.add((api_key, model))
+                    if status == 402 and name == PAID_PROVIDER:
+                        _registra_pago_sem_saldo(result or "")
                     if status in (401, 402, 403):
                         # 401 = chave inválida (permanente). 402 "pagamento" e 403
                         # podem voltar (crédito, região, modelo): descansam por
@@ -574,6 +622,11 @@ def complete(
                     return result  # type: ignore[return-value]
                 if result and validate is not None:
                     log.warning("resposta de gemini/%s não passou na validação, tentando próximo modelo", model)
+
+    if transitoria and not _nova_tentativa:
+        log.warning("nenhum provedor respondeu e houve falha de rede/5xx — espera 90 s e tenta a cascata de novo")
+        time.sleep(90)
+        return complete(messages, keys, max_tokens, validate, model_filter, temperature, _nova_tentativa=True)
 
     raise RuntimeError(
         "Nenhum provedor LLM respondeu (ou nenhuma resposta passou na validação). "

@@ -50,6 +50,8 @@ class LLMKeys:
     # Cloudflare Workers AI grátis (10 mil neurons/dia por conta): cada item
     # é "ACCOUNT_ID:API_TOKEN" — várias contas somam cota
     cloudflare: list[str] = field(default_factory=lambda: _keys("CLOUDFLARE_AI_KEYS"))
+    # DeepSeek é PAGO (saldo na conta): só entra como último recurso da cascata de texto
+    deepseek: list[str] = field(default_factory=lambda: _keys("DEEPSEEK_API_KEYS"))
 
 
 # Únicas 3 vozes pt-BR grátis do edge-tts (checado ao vivo via

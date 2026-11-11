@@ -568,6 +568,15 @@ def view_log(name: str):
         n=name, t=text)
 
 
+def _paid_view() -> dict:
+    """Card do provedor pago (DeepSeek): uso de hoje, saldo e aviso quando acabou."""
+    try:
+        from src.paid_usage import summary
+        return summary()
+    except Exception as exc:  # noqa: BLE001 — o painel não pode cair por causa do aviso
+        return {"configurada": False, "erro": str(exc)[:200]}
+
+
 @app.route("/")
 def index():
     channels = _load_channels()
@@ -615,7 +624,7 @@ def index():
         scripts_ready=[_script_preview(j) for j in raw_jobs if j.status == "script_ready"],
         ready_jobs=[{"id": j.id, "channel": j.channel, "topic": j.topic, "date_label": _date_label(j.created_at)}
                     for j in raw_jobs if j.status == "ready"],
-        perf=performance_view(), system=system_view(),
+        perf=performance_view(), system=system_view(), paid=_paid_view(),
     # Trending topics monitor
     trending=_load_trending_data(),
     )

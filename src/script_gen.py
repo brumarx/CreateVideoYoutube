@@ -31,7 +31,7 @@ WORDS_PER_MINUTE = 140
 MIN_WORDS_RATIO = 0.7  # abaixo disso, tenta de novo antes de aceitar
 MAX_WORDS_RATIO = 1.15  # acima disso, também tenta de novo (nunca tinha teto)
 
-SYSTEM_PROMPT = "Você é um roteirista de vídeos do YouTube no estilo 'faceless' (sem apresentador, só narração + imagens). Responda SEMPRE em JSON válido, sem markdown, sem texto fora do JSON. REGRA CRÍTICA de voz: o roteiro é a voz do CANAL — nunca copie trecho de matéria/coluna palavra por palavra, e ironia ou deboche de colunista (\"esse eu não lembro quem é\", \"aguardando a aposentadoria\") nunca vira fala do canal. Nunca ridicularize, apelide ou zombe de pessoa real (idade, aparência, desempenho), mesmo que a fonte faça; aviso de rodapé de site (\"os comentários não representam...\") nunca entra. REGRA CRÍTICA para todo 'image_prompt': a IA de imagem SEMPRE erra letras/palavras e não deve imitar logos de marcas (YouTube, etc.) — por isso NUNCA peça texto, palavras, letras, números escritos, botões, ícones de interface, logos ou telas de 'inscreva-se'/'curta' na imagem. Descreva só cenário, objetos, pessoas e atmosfera visual. REGRA CRÍTICA sobre pessoas reais nomeadas (política, magistrado, empresário, atleta, figura histórica — QUALQUER pessoa real identificável pelo nome, não só política): se a história tem essa pessoa como protagonista de uma cena, o 'image_prompt' NUNCA pode ser um CLOSE NO ROSTO, mesmo descrito de forma genérica tipo 'a woman's face' ou 'a determined man' — isso NÃO livra a regra, porque o contexto (uniforme, número de peito, cargo, brasão, veste) deixa claro pra quem assiste que aquele rosto genérico É pra ser ela, e a IA de imagem não sabe gerar o rosto real dessa pessoa (pode confundir o nome com outra coisa). Regra prática: quando o protagonista é uma pessoa real, a câmera NUNCA foca no rosto dela — descreva de costas, silhueta ao longe, mãos/pés/objetos pessoais em close (um crachá, número de peito, uniforme, uma caneta assinando), o ambiente ao redor, ou um prédio/símbolo relacionado — nunca um retrato ou close facial dramático que o espectador vá interpretar como sendo o rosto daquela pessoa. Isso vale pro 'image_prompt' de toda cena E pro 'thumbnail_image_prompt'. REGRA CRÍTICA sobre lugares reais: se a cena menciona um país, cidade, monumento ou acidente geográfico REAL específico (ex.: Portugal, Amazônia, Holanda), o 'image_prompt' tem que descrever as características visuais REAIS e reconhecíveis daquele lugar exato (arquitetura, paisagem, clima, cor típica) — nunca um lugar genérico nem de outro país. Errar isso (ex.: pedir imagem de Nova York numa cena sobre o Rio de Janeiro) é o pior erro possível neste roteiro. REGRA CRÍTICA sobre vídeos de lista ('N fatos/coisas/dicas sobre...'): NUNCA sugira ou escreva um título/tema com mais de 10 itens — nada de '20 fatos', '30 coisas', '50 curiosidades'. O máximo é sempre 10; prefira listas menores (5, 7, 10) a forçar uma lista longa e repetitiva. REGRA CRÍTICA sobre o gancho inicial: mais da metade de quem assiste decide continuar ou não nos primeiros 3 segundos, então a PRIMEIRA frase da primeira cena tem que entregar o fato mais chocante/intrigante ou uma pergunta que gera curiosidade imediata — NUNCA comece com saudação, apresentação do canal, contexto histórico/geográfico ou 'hoje vamos falar sobre...'. Vá direto ao ponto mais interessante e só depois explique o contexto. REGRA CRÍTICA sobre reter até o fim (não só abrir bem): gancho forte só na cena 1 não basta — feedback direto de quem assistiu vários vídeos publicados foi que o meio 'fica chato', gente abandona antes do fim. TODA cena, não só a primeira, tem que terminar puxando pra próxima: uma pergunta em aberto, uma contradição ainda não explicada, uma promessa ('mas o que aconteceu depois é ainda mais surpreendente'), nunca uma frase que soa como ponto final de assunto encerrado. A pergunta ou promessa do fim de uma cena TEM que ser respondida logo na 1ª frase da cena seguinte, sobre o MESMO assunto — se a próxima cena fala de outra coisa, a ponte anuncia esse outro assunto (nunca pergunte sobre o adversário e comece a cena seguinte falando de dívida). Varie o ritmo das frases (curtas e diretas misturadas com uma mais longa, nunca a mesma estrutura sintática repetida cena após cena), fale direto com quem assiste ('você', 'imagina se...', perguntas retóricas) em vez de tom de verbete/enciclopédia, e nunca deixe duas cenas seguidas em tom puramente informativo sem reação, tensão ou surpresa nenhuma — isso é o que mais mata retenção no meio do vídeo. REGRA CRÍTICA de narrativa em CADEIA (o molde do Short 'Por que a Coreia do Norte se apaga à noite?', 530 mil views em 4 dias): 1) abre com uma PERGUNTA ou um paradoxo que se VÊ; 2) dá o contexto em 1-2 frases; 3) solta a VIRADA, o dado que inverte o que a pessoa esperava; 4) no meio, repete a pergunta com outras palavras ('Então, como...?'); 5) responde com UMA causa principal, às vezes numa frase de uma palavra só; 6) encadeia as consequências como dominós, cada uma com data ou número; 7) mostra o contraste (o outro lado, o vizinho, o antes); 8) fecha com um número concreto que dá pra imaginar ('1 sul-coreano gasta a luz de 14 norte-coreanos') e um detalhe humano; 9) a ÚLTIMA frase retoma o começo com uma ironia ou virada ('Em 1948 o Norte cortou a luz do Sul. Agora não consegue manter as próprias acesas'). Cada frase precisa trazer um fato NOVO que leve à próxima: se dá pra tirar a frase sem perder nada, ela não entra. Nunca termine com 'o futuro permanece indefinido', 'só o tempo dirá', 'resta saber' ou parecido: isso é admitir que a história não tem final. Molde de DILEMA ('X ou Y?') também serve, com a virada documentada no fim. ADAPTE a cadeia ao formato: NOTÍCIAS: cada notícia é uma mini-cadeia (fato, por que surpreende, consequência com número), na ordem pedida; PASSO A PASSO: gancho é o problema de quem assiste, virada é o erro comum ou o atalho, fim mostra o resultado; PESSOA: obstáculo com número, virada, fim que retoma o começo; DADOS PÚBLICOS: número que choca, comparação que dá pra imaginar, fim que volta ao bolso de quem assiste."
+SYSTEM_PROMPT = "Você é um roteirista de vídeos do YouTube no estilo 'faceless' (sem apresentador, só narração + imagens). Responda SEMPRE em JSON válido, sem markdown, sem texto fora do JSON. REGRA CRÍTICA de voz: o roteiro é a voz do CANAL — nunca copie trecho de matéria/coluna palavra por palavra, e ironia ou deboche de colunista (\"esse eu não lembro quem é\", \"aguardando a aposentadoria\") nunca vira fala do canal. Nunca ridicularize, apelide ou zombe de pessoa real (idade, aparência, desempenho), mesmo que a fonte faça; aviso de rodapé de site (\"os comentários não representam...\") nunca entra. REGRA CRÍTICA para todo 'image_prompt': a IA de imagem SEMPRE erra letras/palavras e não deve imitar logos de marcas (YouTube, etc.) — por isso NUNCA peça texto, palavras, letras, números escritos, botões, ícones de interface, logos ou telas de 'inscreva-se'/'curta' na imagem. Descreva só cenário, objetos, pessoas e atmosfera visual. REGRA CRÍTICA sobre pessoas reais nomeadas (política, magistrado, empresário, atleta, figura histórica — QUALQUER pessoa real identificável pelo nome, não só política): se a história tem essa pessoa como protagonista de uma cena, o 'image_prompt' NUNCA pode ser um CLOSE NO ROSTO, mesmo descrito de forma genérica tipo 'a woman's face' ou 'a determined man' — isso NÃO livra a regra, porque o contexto (uniforme, número de peito, cargo, brasão, veste) deixa claro pra quem assiste que aquele rosto genérico É pra ser ela, e a IA de imagem não sabe gerar o rosto real dessa pessoa (pode confundir o nome com outra coisa). Regra prática: quando o protagonista é uma pessoa real, a câmera NUNCA foca no rosto dela — descreva de costas, silhueta ao longe, mãos/pés/objetos pessoais em close (um crachá, número de peito, uniforme, uma caneta assinando), o ambiente ao redor, ou um prédio/símbolo relacionado — nunca um retrato ou close facial dramático que o espectador vá interpretar como sendo o rosto daquela pessoa. Isso vale pro 'image_prompt' de toda cena E pro 'thumbnail_image_prompt'. REGRA CRÍTICA sobre lugares reais: se a cena menciona um país, cidade, monumento ou acidente geográfico REAL específico (ex.: Portugal, Amazônia, Holanda), o 'image_prompt' tem que descrever as características visuais REAIS e reconhecíveis daquele lugar exato (arquitetura, paisagem, clima, cor típica) — nunca um lugar genérico nem de outro país. Errar isso (ex.: pedir imagem de Nova York numa cena sobre o Rio de Janeiro) é o pior erro possível neste roteiro. REGRA CRÍTICA sobre vídeos de lista ('N fatos/coisas/dicas sobre...'): NUNCA sugira ou escreva um título/tema com mais de 10 itens — nada de '20 fatos', '30 coisas', '50 curiosidades'. O máximo é sempre 10; prefira listas menores (5, 7, 10) a forçar uma lista longa e repetitiva. REGRA CRÍTICA sobre o gancho inicial: mais da metade de quem assiste decide continuar ou não nos primeiros 3 segundos, então a PRIMEIRA frase da primeira cena tem que entregar o fato mais chocante/intrigante ou uma pergunta que gera curiosidade imediata — NUNCA comece com saudação, apresentação do canal, contexto histórico/geográfico ou 'hoje vamos falar sobre...'. Vá direto ao ponto mais interessante e só depois explique o contexto. REGRA CRÍTICA sobre reter até o fim (não só abrir bem): gancho forte só na cena 1 não basta — feedback direto de quem assistiu vários vídeos publicados foi que o meio 'fica chato', gente abandona antes do fim. TODA cena, não só a primeira, tem que terminar puxando pra próxima: uma pergunta em aberto, uma contradição ainda não explicada, uma promessa ('mas o que aconteceu depois é ainda mais surpreendente'), nunca uma frase que soa como ponto final de assunto encerrado. EXCETO a ÚLTIMA cena do roteiro: ela pode terminar com UMA pergunta direta ao espectador sobre o tema ('Você teria coragem de atravessar isso?', 'O que você acha?') para puxar comentário, desde que a pergunta não traga fato novo nem número que não esteja na narração. Nunca termina com promessa ('a resposta está', 'será que', 'o que vem depois'), porque não há próxima cena. A pergunta ou promessa do fim de uma cena TEM que ser respondida logo na 1ª frase da cena seguinte, sobre o MESMO assunto — se a próxima cena fala de outra coisa, a ponte anuncia esse outro assunto (nunca pergunte sobre o adversário e comece a cena seguinte falando de dívida). Varie o ritmo das frases (curtas e diretas misturadas com uma mais longa, nunca a mesma estrutura sintática repetida cena após cena), fale direto com quem assiste ('você', 'imagina se...', perguntas retóricas) em vez de tom de verbete/enciclopédia, e nunca deixe duas cenas seguidas em tom puramente informativo sem reação, tensão ou surpresa nenhuma — isso é o que mais mata retenção no meio do vídeo. REGRA CRÍTICA de narrativa em CADEIA (o molde do Short 'Por que a Coreia do Norte se apaga à noite?', 530 mil views em 4 dias): 1) abre com uma PERGUNTA ou um paradoxo que se VÊ; 2) dá o contexto em 1-2 frases; 3) solta a VIRADA, o dado que inverte o que a pessoa esperava; 4) no meio, repete a pergunta com outras palavras ('Então, como...?'); 5) responde com UMA causa principal, às vezes numa frase de uma palavra só; 6) encadeia as consequências como dominós, cada uma com data ou número; 7) mostra o contraste (o outro lado, o vizinho, o antes); 8) fecha com um número concreto que dá pra imaginar ('1 sul-coreano gasta a luz de 14 norte-coreanos') e um detalhe humano; 9) a ÚLTIMA frase retoma o começo com uma ironia ou virada ('Em 1948 o Norte cortou a luz do Sul. Agora não consegue manter as próprias acesas'). Cada frase precisa trazer um fato NOVO que leve à próxima: se dá pra tirar a frase sem perder nada, ela não entra. Nunca termine com 'o futuro permanece indefinido', 'só o tempo dirá', 'resta saber' ou parecido: isso é admitir que a história não tem final. Molde de DILEMA ('X ou Y?') também serve, com a virada documentada no fim. ADAPTE a cadeia ao formato: NOTÍCIAS: cada notícia é uma mini-cadeia (fato, por que surpreende, consequência com número), na ordem pedida; PASSO A PASSO: gancho é o problema de quem assiste, virada é o erro comum ou o atalho, fim mostra o resultado; PESSOA: obstáculo com número, virada, fim que retoma o começo; DADOS PÚBLICOS: número que choca, comparação que dá pra imaginar, fim que volta ao bolso de quem assiste."
 
 
 # Regras anti-erro que valem pra todo roteiro de todo canal — cada uma saiu
@@ -86,7 +86,7 @@ def _get_opening_instruction(channel: str) -> str:
             "Resultado concreto em português, números, nada de saudação."
         ),
         "curiosidades": (
-            "GANCHO INICIAL (VARIAÇÃO): Comece com uma CONTRADIÇÃO IMPOSSÍVEL que desafie a expectativa, direto ao choque. NUNCA abra com data ou ano; abra com a coisa concreta que o espectador vê ou não acredita. ESTRUTURA DE LUGAR OU FENÔMENO: 1) gancho com o fato mais surpreendente, com número ou comparação que o espectador entende; 2) onde e o que existe lá hoje (quem vive, o que se faz, o que se vê); 3) o COMO ou PORQUÊ, em palavras simples, com imagem que explique; 4) o que isso causa de concreto; 5) fecho com pergunta ou comparação com o cotidiano, nunca resumo. Cada cena pede UMA imagem diferente; se duas pediriam a mesma, uma está repetindo."
+            "GANCHO INICIAL (VARIAÇÃO): Comece com uma CONTRADIÇÃO IMPOSSÍVEL que desafie a expectativa, direto ao choque. NUNCA abra com data ou ano; abra com a coisa concreta que o espectador vê ou não acredita. ESTRUTURA DE LUGAR OU FENÔMENO: 1) gancho com o fato mais surpreendente, com número ou comparação que o espectador entende; 2) onde e o que existe lá hoje (quem vive, o que se faz, o que se vê); 3) o COMO ou PORQUÊ, em palavras simples, com imagem que explique; 4) o que isso causa de concreto; 5) fecho com comparação com o cotidiano ou pergunta direta ao espectador; nunca resumo. Cada cena pede UMA imagem diferente; se duas pediriam a mesma, uma está repetindo."
         ),
         "botafogo": (
             "GANCHO INICIAL (VARIAÇÃO): Comece com um PLACAR ou NÚMERO DO JOGO "
@@ -556,7 +556,26 @@ _TEASER_ENDING = re.compile(
     r"|s[óo] o tempo|ser[áa] que|o que vem (a seguir|depois)|fica a pergunta)", re.I)
 
 
-def _teaser_sentence(f: str) -> bool:
+# pergunta dirigida a quem assiste ("Você teria coragem...?", "O que você acha?"):
+# engajamento no fim, não promessa. Só vale se não traz número/nome fora da narração.
+_VIEWER_QUESTION_RE = re.compile(r"\b(voc[êe]s?|seu|sua|seus|suas|acha|teria|pensa|concorda|opini[ãa]o)\b", re.I)
+
+
+def _viewer_question(f: str, narracao: set[str]) -> bool:
+    f = f.strip()
+    return f.endswith("?") and bool(_VIEWER_QUESTION_RE.search(f)) and not (_fact_tokens(f) - narracao)
+
+
+def _tokens_fora_da_frase(scenes: list, frase: str) -> set[str]:
+    """Números e nomes do roteiro SEM a própria frase: a pergunta de engajamento
+    não pode se apoiar nela mesma para "provar" um número que inventou."""
+    texto = " ".join(str(sc.get("narration", "")) for sc in scenes).replace(frase.strip(), " ")
+    return _fact_tokens(texto, every_capital=True)
+
+
+def _teaser_sentence(f: str, narracao: set[str] | None = None) -> bool:
+    if narracao is not None and _viewer_question(f, narracao):
+        return False
     return f.strip().endswith("?") or bool(_TEASER_ENDING.search(f)) or bool(_WEAK_ENDING.search(f))
 
 
@@ -571,11 +590,11 @@ def trim_teaser_ending(script: dict, n_scenes: int | None = None) -> dict:
         return script
     frases = [f for f in _SENTENCE_SPLIT.split(scenes[idx].get("narration", "")) if f.strip()]
     cut = len(frases)
-    while cut > 1 and _teaser_sentence(frases[cut - 1]):
+    while cut > 1 and _teaser_sentence(frases[cut - 1], _tokens_fora_da_frase(scenes, frases[cut - 1])):
         cut -= 1
     if cut == len(frases):
         return script
-    if cut == 1 and _teaser_sentence(frases[0]) and idx > 0:
+    if cut == 1 and _teaser_sentence(frases[0], _tokens_fora_da_frase(scenes, frases[0])) and idx > 0:
         # a cena inteira era pergunta: sai, o fim vira a cena anterior
         log.warning("cena final só de pergunta/promessa, removida: %r", scenes[idx].get("narration", "")[:80])
         return {**script, "scenes": scenes[:idx] + scenes[idx + 1:]}
@@ -592,7 +611,7 @@ def _ending_problem(script: dict) -> str | None:
     for f in last:
         if _WEAK_ENDING.search(f):
             return f"final sem desfecho (\"{f.strip()[:70]}\")"
-    if last and _teaser_sentence(last[-1]):
+    if last and _teaser_sentence(last[-1], _tokens_fora_da_frase(scenes, last[-1])):
         return f"final que pergunta/promete e não responde (\"{last[-1].strip()[:70]}\")"
     return None
 
@@ -1052,6 +1071,8 @@ def _finaliza(script: dict, fatos: list[str] | None) -> dict:
     script = _normalize_currency(script)
     if fatos:
         script = _normalize_currency(_corrige_numeros_fora_da_lista(script, fatos))
+        # os fatos confirmados seguem com o roteiro: a revisão e a checagem final os tratam como fonte
+        script = {**script, "_fatos_verificados": list(fatos)}
     return script
 
 
@@ -1084,7 +1105,6 @@ def generate_script(
         except RuntimeError as exc:
             raise ValueError(f"compilação: {exc}") from exc
     # etapa 1: o plano (estrutura e fatos escolhidos) antes de escrever a narração
-    plan = plan_story(topic, facts, web_facts)
     writer_sources = web_facts
     fatos_verificados: list[str] | None = None
     if web_facts and channel.name in FATOS_CANAIS:
@@ -1096,7 +1116,11 @@ def generate_script(
         fatos_verificados = fatos
         log.info("escritor recebe só a lista fechada: %d fatos verificados", len(fatos))
         writer_sources = [{"titulo": "FATOS VERIFICADOS (única base; cada cena usa um destes)", "url": "",
-                           "trecho": "\n".join(f"F{i + 1}: {f}" for i, f in enumerate(fatos))}]
+                           "trecho": "\n".join(f"F{i + 1}: {f}" for i, f in enumerate(fatos))
+                           + "\nNADA ALÉM DESTA LISTA: nenhuma causa, nome, data, número ou detalhe de contexto que não esteja nos F acima."}]
+    # 11/11: o plano também só lê a lista fechada nos canais de fatos. Com as fontes brutas,
+    # ele trazia detalhes fora da lista (causa de morte, Kuroshio II) e o escritor os copiava
+    plan = plan_story(topic, facts, writer_sources if fatos_verificados else web_facts)
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": (plan + "\n\n" if plan else "")
@@ -1168,7 +1192,7 @@ def generate_script(
             if ending:
                 issues.append((ending, f"terminou com {ending}. A última frase retoma o gancho do começo com uma virada "
                                "ou ironia — um fato, não uma dúvida. Ex.: 'Em 1948 o Norte cortou a luz do Sul. Agora não "
-                               "consegue manter as próprias acesas.' Pergunta, 'será que', 'a resposta está' no fim: proibido."))
+                               "consegue manter as próprias acesas.' 'Será que', 'a resposta está' e promessa no fim: proibido. Pergunta direta ao espectador sobre o tema, sem fato novo, pode."))
             formula = _formula_problem(script)
             if formula:
                 issues.append((formula, f"tinha {formula}. A voz não lê fórmula: em vez de ditar, mostre o pedido pra IA "
@@ -1292,6 +1316,18 @@ def _drop_new_facts(scenes: list[str], allowed: set[str]) -> tuple[list[str], se
     return out, novos
 
 
+def _corta_titulo(texto: str, limite: int = 60) -> str:
+    """Título de até `limite` caracteres sem cortar palavra no meio
+    (rodada 7: "túnel ferroviário sub" virou título e a revisão reprovou)."""
+    texto = texto.strip()
+    if len(texto) <= limite:
+        return texto
+    corte = texto[:limite]
+    if " " in corte:
+        corte = corte.rsplit(" ", 1)[0]
+    return corte.rstrip(" :,;-")
+
+
 def repair_script(
     script: dict, problems: list[dict], facts: dict | None = None, web_facts: list[dict] | None = None,
     topic: str = "",
@@ -1318,12 +1354,22 @@ pontos apontados, usando as FONTES. Para cada ponto:
   o detalhe e não o troque por outro. Se a frase ficar sem sentido, apague a frase.
 - "titulo_nao_confere": o título tem de dizer exatamente o número e o fato que a
   narração diz (mesmo valor, mesma unidade).
-Não acrescente número, medida, data, nome ou detalhe que não esteja nas
+- "Texto da miniatura" (termo que começa assim): devolva "thumbnail_text" novo, de
+  até 4 palavras, só com fatos que estão na NARRAÇÃO e nas FONTES; se não der,
+  devolva "" (vazio). Miniatura e título também não podem trazer número ou nome
+  fora da narração e das fontes.
+CLASSIFIQUE cada ponto antes de corrigir:
+- CONTRADITO: a FONTE dá outro valor ou outro sentido. Troque pelo que a fonte diz,
+  com o mesmo nível de precisão (ex.: "orçamento inicial de X" em vez de "custou X").
+- SEM EVIDÊNCIA: nenhuma fonte sustenta o detalhe. Apague o detalhe ou reescreva a
+  frase de modo geral, sem número nem causa específica.
+Nunca invente fonte, número ou nome para satisfazer a revisão. Não acrescente número, medida, data, nome ou detalhe que não esteja nas
 FONTES. Ao generalizar, não deixe frase vaga que não diz nada ("Ele
 participou das partidas", "teve papel importante") — apague a frase. Não mexa no que não foi apontado: mesmo tom, mesmo tamanho, mesmo
 número de cenas. Se o TÍTULO foi apontado, devolva um título novo, alinhado à narração.
 
 TÍTULO: {script.get("title", "")}
+TEXTO DA MINIATURA: {script.get("thumbnail_text") or ""}
 
 PONTOS APONTADOS:
 {apontados}
@@ -1334,7 +1380,7 @@ FONTES:
 CENAS (narração, na ordem):
 {json.dumps(narrations, ensure_ascii=False)}
 
-Responda só com JSON: {{"titulo": "título (o mesmo, se não foi apontado)", "cenas": ["narração da cena 1", "..."]}}
+Responda só com JSON: {{"titulo": "título (o mesmo, se não foi apontado)", "thumbnail_text": "texto da miniatura (o mesmo, se não foi apontado)", "cenas": ["narração da cena 1", "..."]}}
 — exatamente {len(narrations)} cenas, na mesma ordem."""
     from .topics import _SMALL_MODEL_RE  # import tardio: topics importa este módulo
 
@@ -1363,10 +1409,22 @@ Responda só com JSON: {{"titulo": "título (o mesmo, se não foi apontado)", "c
     scenes = [sc for sc in scenes if sc]
     if len(scenes) < 2:
         return None
-    title = str(data.get("titulo") or "").strip()
-    if not title or _fact_tokens(title) - allowed:
-        title = script.get("title")
-    return _normalize_currency({**script, "title": title, "scenes": scenes})
+    # título e miniatura: mesma lista fechada do roteiro FINAL (narração já
+    # consertada + fontes + tema). Sem o título antigo: número que só existia
+    # nele não pode voltar pela frase de conserto (job 829: "54 km escavados
+    # à mão" ficou na miniatura porque o conserto só mexia nas cenas).
+    narracao_final = " ".join(str(sc.get("narration", "")) for sc in scenes)
+    allowed_pack = _fact_tokens(narracao_final + " " + sources + " " + topic, every_capital=True)
+    title = str(data.get("titulo") or "").strip() or str(script.get("title") or "")
+    if _fact_tokens(title) - allowed_pack:
+        log.warning("conserto: título traz fato fora da narração/fontes — volta o tema")
+        title = _corta_titulo(topic or str(script.get("title") or ""))
+    thumb = data.get("thumbnail_text")
+    thumb = str(thumb).strip() if isinstance(thumb, str) and thumb.strip() else script.get("thumbnail_text")
+    if thumb and _fact_tokens(str(thumb)) - allowed_pack:
+        log.warning("conserto: miniatura traz fato fora da narração/fontes — texto da miniatura tirado")
+        thumb = None
+    return _normalize_currency({**script, "title": title, "thumbnail_text": thumb, "scenes": scenes})
 
 
 def refresh_description(script: dict) -> str:
@@ -1445,6 +1503,46 @@ def refresh_packaging(script: dict, channel: ChannelConfig, topic: str = "", ext
         log.warning("título/thumb: nenhum provedor respondeu (%s) — trocando só %s", exc, ", ".join(stale))
         fallback = {"title": (topic or script.get("title", ""))[:60], "thumbnail_text": None}
         return {**script, **{k: fallback[k] for k in stale}}
+
+
+def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", extra_rule: str = "") -> dict:
+    """Título, texto da miniatura e prompt da imagem saem SEMPRE do roteiro final
+    já validado (não do texto antigo, gerado antes da revisão). Só fatos que estão
+    na narração ou no tema. Se a IA falhar ou a checagem reprovar, mantém os
+    valores atuais e registra no log."""
+    narration = " ".join(sc.get("narration", "") for sc in script.get("scenes", []))
+    allowed = _fact_tokens(narration + " " + topic, every_capital=True)
+    rule = _TITLE_RULE_RE.search(channel.prompt_base or "")
+    prompt = (
+        "Crie o TÍTULO, o TEXTO DA MINIATURA e o PROMPT DA IMAGEM DA MINIATURA de um vídeo do YouTube, "
+        "em português. Use SÓ fatos, números e nomes que estão na NARRAÇÃO FINAL abaixo. "
+        "Título até 60 caracteres, com o fato mais forte. Miniatura até 4 palavras, manchete curta. "
+        "Prompt da imagem em inglês, cena visual concreta do assunto, sem texto, letras, logos ou rostos reais.\n"
+        + (f"Regra de título do canal:{rule.group(1).strip()}\n" if rule else "")
+        + (f"Regra deste vídeo (vale mais que a do canal): {extra_rule}\n" if extra_rule else "")
+        + f"\nTEMA: {topic}\nNARRAÇÃO FINAL: {narration}\n\n"
+        'Responda só com JSON: {"titulo": "...", "thumbnail_text": "...", "thumbnail_image_prompt": "..."}'
+    )
+    from .topics import _SMALL_MODEL_RE  # import tardio: topics importa este módulo
+
+    def _valido(raw: str) -> bool:
+        try:
+            data = _extract_json(raw)
+        except ValueError:
+            return False
+        return (_packaging_ok(data, allowed)
+                and bool(str(data.get("thumbnail_image_prompt") or "").strip()))
+
+    try:
+        raw = complete([{"role": "user", "content": prompt}], max_tokens=400, temperature=0.4,
+                       validate=_valido, model_filter=lambda m: not _SMALL_MODEL_RE.search(m))
+    except RuntimeError as exc:
+        log.warning("título/miniatura do roteiro final: nenhum provedor respondeu (%s) — mantém os atuais", exc)
+        return script
+    data = _extract_json(raw)
+    log.info("título/miniatura gerados do roteiro final: %r / %r", data["titulo"], data["thumbnail_text"])
+    return {**script, "title": data["titulo"].strip(), "thumbnail_text": data["thumbnail_text"].strip(),
+            "thumbnail_image_prompt": data["thumbnail_image_prompt"].strip()}
 
 
 def _repair_parse_packaging(raw: str, allowed: set[str]) -> dict | None:
