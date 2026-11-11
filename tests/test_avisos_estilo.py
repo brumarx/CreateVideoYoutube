@@ -319,15 +319,15 @@ def test_titulo_e_imagens_so_depois_da_ultima_mudanca_no_texto():
     src = _fonte_pipeline()
     ultima_mudanca = max(src.index("script = fix_dangling_hooks(script)"), src.index("script = vary_close_repeats(script, topic)"),
                          src.index("script = fix_script(script, channel.language)"), src.index("script = clean_stat_overlays(script)"))
-    assert src.index("empacotado = packaging_from_final(") > ultima_mudanca
+    assert src.index("packaging_from_final(\n            script, channel, topic") > ultima_mudanca
     assert src.index("com_imagens = image_prompts_from_final(") > ultima_mudanca
-    assert src.count("packaging_from_final(script") == 1  # não existe outra geração de título antes
+    assert src.count("packaging_from_final(") == 1  # uma única chamada (a importação não tem parêntese)
 
 
 def test_campos_antigos_sao_apagados_antes_de_gerar_no_fractal():
     src = _fonte_pipeline()
     apaga = src.index('script = {**script, "title": "", "thumbnail_text": None, "thumbnail_image_prompt": ""')
-    assert apaga < src.index("empacotado = packaging_from_final(")
+    assert apaga < src.index("packaging_from_final(\n            script, channel, topic")
 
 
 def test_prompts_das_imagens_vem_da_narracao_final(monkeypatch):
@@ -363,6 +363,6 @@ def test_falha_na_geracao_no_fractal_nao_reaproveita_o_antigo(monkeypatch):
 
 def test_regra_roda_antes_do_titulo_e_das_imagens():
     src = _fonte_pipeline()
-    assert src.index("script = _normalize_currency(ajustar_texto_final(script))") < src.index("empacotado = packaging_from_final(")
+    assert src.index("script = _normalize_currency(ajustar_texto_final(script))") < src.index("packaging_from_final(\n            script, channel, topic")
 
 

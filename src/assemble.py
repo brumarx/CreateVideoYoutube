@@ -939,9 +939,21 @@ MOOD_FALLBACK = {
     "melancolico": "calmo",
 }
 
+# faixas com risco de reivindicação no Content ID (11/11): as do Kevin MacLeod (o mesmo catálogo da
+# "Evening", reivindicada pela Audiam em 25/10) e as do Pixabay registradas no Content ID. Canal com
+# musica_sem_risco não usa nenhuma destas; sem faixa segura, o vídeo sai sem música.
+CONTENT_ID_RISCO = {
+    "morning.mp3": "Kevin MacLeod (catálogo reivindicado pela Audiam)",
+    "deep_relaxation.mp3": "Kevin MacLeod (catálogo reivindicado pela Audiam)",
+    "study_and_relax.mp3": "Kevin MacLeod (catálogo reivindicado pela Audiam)",
+    "tense_suspense.mp3": "Pixabay, registrada no Content ID",
+    "animado_motivational.mp3": "Pixabay, registrada no Content ID",
+}
+
 
 def add_background_music(
     video_path: Path, output_path: Path, mood: str | None = None, music_dir: Path = MUSIC_DIR,
+    sem_risco: bool = False,
 ) -> tuple[Path, str | None]:
     """Mistura uma faixa de música de fundo (grátis, CC BY — ver
     assets/music/ATTRIBUTION.md) em volume bem baixo sob a narração já
@@ -957,6 +969,8 @@ def add_background_music(
     usou música nenhuma), pra quem chamar colocar na descrição do vídeo —
     a licença exige isso."""
     tracks = sorted(music_dir.glob("*.mp3"))
+    if sem_risco:
+        tracks = [t for t in tracks if t.name not in CONTENT_ID_RISCO]
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if not tracks:
         subprocess.run(

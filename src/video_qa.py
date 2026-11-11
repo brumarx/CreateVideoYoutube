@@ -293,6 +293,25 @@ def _fold(text: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFKD", text.lower()) if not unicodedata.combining(c))
 
 
+def _parte_ouvida(parte: str, ouvidas: list[str]) -> bool:
+    """Diferenças que não são erro de pronúncia: H inicial mudo do português ("Honshu" ouvido
+    "Onshu"), a transcrição cortar o fim do nome ("Tappi" → "TAP", ao menos 3 letras) ou juntar uma
+    letra da palavra seguinte ("Onshua" = Honshu + "a"). Letra A MAIS no começo ("Esvalbard") é erro."""
+    variantes = {parte, parte[1:] if parte.startswith("h") and len(parte) > 3 else parte}
+    for o in ouvidas:
+        for v in variantes:
+            if o == v or (len(o) >= 3 and v.startswith(o)) or (o.startswith(v) and len(o) - len(v) <= 1):
+                return True
+    return False
+
+
+def _nome_ouvido(nome: str, heard_f: str) -> bool:
+    """O nome aparece na transcrição parte por parte ("Tappi-Kaitei" vira "tappi" e "kaitei", que a
+    transcrição escreve separados), com as tolerâncias de _parte_ouvida."""
+    ouvidas = heard_f.split()
+    return all(_parte_ouvida(p, ouvidas) for p in re.split(r"[-']", _fold(nome)) if p)
+
+
 def name_problems(narrations: list[str], heard: str) -> list[str]:
     """Nome próprio do roteiro que a transcrição não tem (a voz falou outra
     coisa: "Textor" saiu "Tech Store", "Svalbard" saiu "Esvalbard"). Não reprova:
@@ -310,8 +329,7 @@ def name_problems(narrations: list[str], heard: str) -> list[str]:
                     continue
                 if not re.fullmatch(r"[A-Za-zÀ-ÿ'-]+", core):
                     continue
-                token = _fold(core)
-                if f" {token} " not in heard_f and core not in missing:
+                if not _nome_ouvido(core, heard_f) and core not in missing:
                     missing.append(core)
     if not missing:
         return []

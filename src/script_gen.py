@@ -1609,9 +1609,12 @@ def image_prompts_from_final(script: dict, topic: str = "") -> dict | None:
         "- image_prompt: a imagem que mostra SÓ o que a narração DAQUELA cena diz (lugar, objeto, ação). "
         "Não acrescente nada que a cena não diga: nenhum veículo, máquina, pessoa, data ou detalhe a mais. "
         "Sem texto, letras, números, logos, interface ou rosto de pessoa real.\n"
-        "- stock_query: 3 a 6 palavras em inglês para buscar essa imagem num banco de imagens.\n\n"
+        "- stock_query: 3 a 6 palavras em inglês para buscar essa imagem num banco de imagens.\n"
+        "- real_subject: o nome EM INGLÊS, como no título da Wikipédia em inglês, do lugar, obra ou objeto real "
+        "que a cena cita pelo nome (ex.: 'Seikan Tunnel', 'Tappi-Kaitei Station'), para buscar foto real; "
+        "null se a cena não cita nada real pelo nome.\n\n"
         f"CENAS (narração final):\n{listing}\n\n"
-        'Responda só com JSON: {"cenas": [{"image_prompt": "...", "stock_query": "..."}]} — '
+        'Responda só com JSON: {"cenas": [{"image_prompt": "...", "stock_query": "...", "real_subject": "... ou null"}]} — '
         f"exatamente {len(scenes)} itens, na mesma ordem."
     )
 
@@ -1631,7 +1634,10 @@ def image_prompts_from_final(script: dict, topic: str = "") -> dict | None:
         return None
     itens = _extract_json(raw)["cenas"]
     novo = {**script, "scenes": [{**sc, "image_prompt": str(x["image_prompt"]).strip(),
-                                  "stock_query": str(x["stock_query"]).strip()} for sc, x in zip(scenes, itens)]}
+                                  "stock_query": str(x["stock_query"]).strip(),
+                                  "real_subject": (str(x.get("real_subject")).strip()
+                                                   if x.get("real_subject") and str(x.get("real_subject")).lower() != "null" else "")}
+                                 for sc, x in zip(scenes, itens)]}
     log.info("prompts de imagem gerados do roteiro final: %d cenas", len(scenes))
     return _sanitize_club_crests(_sanitize_person_images(topic, novo))
 

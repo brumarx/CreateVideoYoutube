@@ -165,6 +165,8 @@ class ChannelConfig:
     # americano): sem modelo de visão disponível, clipe de banco e imagem de
     # IA não entram, e a revisão final só aprova com a parte visual feita.
     strict_visual: bool = False
+    # música só sem risco de Content ID (ver assemble.CONTENT_ID_RISCO); sem faixa segura, sem música
+    musica_sem_risco: bool = False
     # visual que não é do próprio assunto (banco, IA, foto de jogador com
     # camisa de outro clube) sai em preto e branco — futebol: nenhuma cor
     # de outro time na tela
@@ -275,6 +277,7 @@ class ChannelConfig:
             require_approval=data.get("require_approval", True),
             website=data.get("website", ""),
             strict_visual=bool(data.get("strict_visual", False)),
+            musica_sem_risco=bool(data.get("musica_sem_risco", False)),
             fallback_grayscale=bool(data.get("fallback_grayscale", False)),
             player_photos=bool(data.get("player_photos", False)),
             real_media=bool(data.get("real_media", True)),

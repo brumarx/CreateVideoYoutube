@@ -1049,15 +1049,20 @@ def run(
         # 11/11: o texto está final e validado. SÓ AGORA saem título, miniatura, prompt da
         # miniatura e os prompts das imagens de cada cena, todos a partir deste texto.
         is_compilation_final = isinstance(facts, dict) and facts.get("tipo") == "compilacao"
-        if channel_name in FATOS_CANAIS:
+        ja_empacotado = bool(approved and script_file and script.get("title") and all(
+            sc.get("image_prompt") for sc in script.get("scenes", [])))
+        if ja_empacotado:
+            log.info("[%s] roteiro aprovado com título e imagens do texto validado — mantidos", job_id)
+        elif channel_name in FATOS_CANAIS:
             # nada de antes da validação sobrevive: se a geração falhar, o job reprova
             script = {**script, "title": "", "thumbnail_text": None, "thumbnail_image_prompt": "",
-                      "scenes": [{**sc, "image_prompt": "", "stock_query": ""} for sc in script["scenes"]]}
-        empacotado = packaging_from_final(script, channel, topic, extra_rule=facts["aviso"] if is_compilation_final else "")
+                      "scenes": [{**sc, "image_prompt": "", "stock_query": "", "real_subject": ""} for sc in script["scenes"]]}
+        empacotado = script if ja_empacotado else packaging_from_final(
+            script, channel, topic, extra_rule=facts["aviso"] if is_compilation_final else "")
         if empacotado is None:
             raise ScriptRejected("título/miniatura não puderam ser gerados do texto validado")
         script = empacotado
-        if channel_name in FATOS_CANAIS:
+        if channel_name in FATOS_CANAIS and not ja_empacotado:
             com_imagens = image_prompts_from_final(script, topic)
             if com_imagens is None:
                 raise ScriptRejected("prompts das imagens não puderam ser gerados do texto validado")
@@ -1077,6 +1082,9 @@ def run(
             render = [
                 ".venv/bin/python", "scripts/run_pipeline.py", "--channel", channel_name,
                 "--topic", topic, "--script-file", str(work_dir / "script.json"), "--no-upload",
+                # 11/11: o roteiro já passou por todas as revisões; renderizar não refaz a revisão de fatos
+                # (gastava DeepSeek, podia reprovar o roteiro aprovado e refazia o título)
+                "--approved",
             ]
             if long_form != (channel.daily_format == "long"):
                 # só força quando foge do padrão do canal: forçado, o longo
@@ -1159,6 +1167,12 @@ def run(
             long_form = False
             width, height = SHORT_WIDTH, SHORT_HEIGHT
 
+        # 11/11: a voz é conferida logo depois da narração (e do ajuste de duração), ANTES das imagens e
+        # da montagem: voz errada para o job sem gastar a renderização inteira
+        from src.video_qa import review_audio_full
+        audio_problems, audio_names = review_audio_full([s["narration"] for s in script["scenes"]], [n[0] for n in narrations])
+        if audio_problems:
+            raise ScriptRejected("áudio reprovado antes da montagem: " + "; ".join(audio_problems))
         visual_context = f"Canal: {channel.channel_title} — {channel.niche}.\nTema do vídeo: {topic}."
         if channel.country:
             visual_context += (
@@ -1586,7 +1600,8 @@ def run(
             concat_scenes(
                 scene_videos, raw_video, crossfade=not long_form, sfx_path=SFX_DIR / "whoosh.mp3",
             )
-            _, music_attribution = add_background_music(raw_video, final_video, mood=script.get("mood"))
+            _, music_attribution = add_background_music(raw_video, final_video, mood=script.get("mood"),
+                                                        sem_risco=channel.musica_sem_risco)
             log.info("[%s] vídeo pronto: %s — revisando antes do upload", job_id, final_video)
             qa_problems = review_video(
                 [s["narration"] for s in script["scenes"]], scene_videos, visual_context,
@@ -1636,11 +1651,7 @@ def run(
                 log.warning("[%s] cena %d fora de contexto — imagem trocada, remontando o vídeo", job_id, i + 1)
         # voz falando besteira não passa nem na última tentativa do dia —
         # não publicar é melhor que "Fala a é acento circunflexo" (job 414)
-        from src.video_qa import review_audio_full
-
-        audio_problems, audio_names = review_audio_full([s["narration"] for s in script["scenes"]], [n[0] for n in narrations])
-        if audio_problems:
-            raise ScriptRejected("áudio reprovado antes do upload: " + "; ".join(audio_problems))
+        # (o áudio já foi conferido logo depois da narração; aqui só entram as ressalvas de nome)
         if audio_names:
             # nome pronunciado diferente: não reprova (o Whisper também erra nome), sobe privado pra aprovação
             log.warning("[%s] pronúncia de nome: %s", job_id, "; ".join(audio_names))

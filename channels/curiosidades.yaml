@@ -15,6 +15,7 @@ tts_voice_weights:
 # cenas de 1 frase o roteiro ficava raso e repetido (09/11)
 scenes_per_video: 12
 upload_privacy: "public"
+musica_sem_risco: true  # 11/11: só faixa sem risco de Content ID (ver src/assemble.py); sem faixa segura, sem música
 uploads_per_day: 1
 daily_format: "short"
 # 1 longo por semana no lugar do Short do dia: compilação dos Shorts da semana
