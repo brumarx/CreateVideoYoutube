@@ -554,7 +554,8 @@ def review_script_result(
     # 11/11: título e miniatura não são revisados aqui. Eles são gerados DEPOIS da validação, a
     # partir do roteiro final (ver script_gen.packaging_from_final); revisar o título antigo reprovava
     # roteiro certo por causa de um título que ainda ia ser trocado
-    problems = [p for p in problems if p.get("tipo") not in ("titulo_nao_confere", "titulo_enganoso")]
+    if script.get("_fatos_verificados"):
+        problems = [p for p in problems if p.get("tipo") not in ("titulo_nao_confere", "titulo_enganoso")]
     style = style
     return ReviewResult(problems, style)
 
@@ -596,6 +597,38 @@ def _conteudo(texto: str) -> set[str]:
     return {w for w in (_fold(x) for x in re.findall(r"[^\W\d_]{5,}", texto)) if w not in neutras}
 
 
+_PARADAS_ASSUNTO = {"que", "tem", "dos", "das", "com", "sob", "por", "uma", "num", "foi", "sao", "era", "nao",
+                    "mais", "para", "pelo", "pela", "como", "isso", "esse", "essa", "este", "esta", "ele", "ela",
+                    "the", "ate", "sua", "seu", "nos", "nas"}
+
+
+def _palavras_assunto(texto: str) -> set[str]:
+    return {w for w in (_fold(x) for x in re.findall(r"[^\W\d_]{3,}", texto)) if w not in _PARADAS_ASSUNTO}
+
+
+def _casa(a: str, b: str) -> bool:
+    """Mesma palavra ou mesma família: "morreram"/"morrido", "mar"/"marinho"."""
+    if len(a) >= 4 and len(b) >= 4:
+        return a[:4] == b[:4]
+    return a.startswith(b) or b.startswith(a)
+
+
+def _mesmo_assunto(frase: str, fato: str, lista: list[str]) -> bool:
+    """Frase e fato falam da mesma coisa: pelo menos uma palavra (ou família) em comum,
+    sem contar o vocabulário que aparece em metade ou mais da lista (é o tema do vídeo,
+    "túnel", "Seikan"). Com menos de 4 fatos não dá para saber o tema: nada é descartado."""
+    tema: set[str] = set()
+    if len(lista) >= 4:
+        contagem: dict[str, int] = {}
+        for f in lista:
+            for r in {w[:4] for w in _palavras_assunto(f)}:
+                contagem[r] = contagem.get(r, 0) + 1
+        tema = {r for r, n in contagem.items() if n * 2 >= len(lista)}
+    a = {w for w in _palavras_assunto(frase) if w[:4] not in tema}
+    b = {w for w in _palavras_assunto(fato) if w[:4] not in tema}
+    return any(_casa(x, y) for x in a for y in b)
+
+
 def substituir_pela_lista(script: dict, problems: list[dict]) -> tuple[dict, list[dict]]:
     """Troca o NÚMERO de uma frase reprovada pelo valor da lista de fatos verificados,
     quando há correspondência segura: mesma unidade e mesmo assunto (pelo menos 2
@@ -623,9 +656,17 @@ def substituir_pela_lista(script: dict, problems: list[dict]) -> tuple[dict, lis
                     continue
                 novo = frase
                 ok = True
+                casou = False  # algum número da frase bateu com a lista (mesma unidade e mesmo assunto)
                 for numero, unidade in _pares_numero_unidade(frase):
-                    if not unidade or any(n == numero and u == unidade for n, u, _ in fatos_pares):
+                    if not unidade:
                         continue
+                    if any(n == numero and u == unidade and _mesmo_assunto(frase, fato, lista)
+                           for n, u, fato in fatos_pares):
+                        casou = True
+                        continue
+                    if any(n == numero and u == unidade for n, u, _ in fatos_pares):
+                        ok = False  # número da lista com outro assunto ("23,3 km de extensão total")
+                        break
                     candidatos = {n for n, u, fato in fatos_pares
                                   if u == unidade and len(_conteudo(frase) & _conteudo(fato)) >= 2}
                     if len(candidatos) != 1:
@@ -636,12 +677,14 @@ def substituir_pela_lista(script: dict, problems: list[dict]) -> tuple[dict, lis
                     original = next(m.group(1) for m in _NUM_UNIDADE.finditer(novo)
                                     if m.group(1).replace(".", "").replace(",", ".") == numero)
                     novo = novo.replace(original, alvo.replace(".", ","), 1)
-                if ok and novo != frase:
+                    casou = True
+                if ok and casou and novo != frase:
                     sc["narration"] = sc.get("narration", "").replace(frase, novo, 1)
                     achou = True
-                elif ok:
-                    # todos os números da frase já estão na lista (mesma unidade): resolvido, sem trocar nada
+                elif ok and casou:
+                    # os números da frase já estão na lista, com o mesmo assunto: resolvido, sem trocar
                     achou = True
+                # frase sem número da lista (ex.: "Elas serviam de refúgio"): não é resolvida aqui
                 break
             if achou:
                 break
@@ -656,7 +699,23 @@ MIN_FATOS_USADOS = 8  # abaixo disso o roteiro não tem base: reprova
 
 
 def _fato_usado(fato: str, narracao: str) -> bool:
-    return _fold(fato)[:40] in _fold(narracao)
+    if _fold(fato)[:40] in _fold(narracao):
+        return True
+    pares = [(n, u) for n, u in _pares_numero_unidade(fato) if u]
+    return bool(pares) and set(pares) <= set(_pares_numero_unidade(narracao))
+
+
+_CJK = re.compile(r"[\u3000-\u9fff\uff00-\uffef]")
+
+
+def _frase_narravel(fato: str) -> str | None:
+    """Fato pronto para a voz ler: sem parênteses (japonês, notas de fonte) e sem
+    caracteres que a voz em português não lê. None se não dá para narrar."""
+    texto = re.sub(r"\s*\([^)]*\)", "", fato).strip()
+    texto = re.sub(r"\s+", " ", texto)
+    if not texto or _CJK.search(texto) or re.search(r"\bfonte\b|\busar com\b", texto, re.I):
+        return None
+    return texto if texto[-1] in ".!?" else texto + "."
 
 
 def cortar_e_trocar_por_fato(script: dict, problems: list[dict]) -> tuple[dict, int] | None:
@@ -668,7 +727,7 @@ def cortar_e_trocar_por_fato(script: dict, problems: list[dict]) -> tuple[dict, 
         return None
     scenes = [dict(sc) for sc in script.get("scenes", [])]
     narracao = " ".join(sc.get("narration", "") for sc in scenes)
-    disponiveis = [f for f in lista if not _fato_usado(f, narracao)]
+    disponiveis = [t for t in (_frase_narravel(f) for f in lista if not _fato_usado(f, narracao)) if t]
     trocadas = 0
     for prob in problems:
         if prob.get("tipo") not in ("fato_nao_confirmado", "fora_da_fonte"):

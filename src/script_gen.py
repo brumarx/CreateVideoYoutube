@@ -1505,7 +1505,8 @@ def refresh_packaging(script: dict, channel: ChannelConfig, topic: str = "", ext
         return {**script, **{k: fallback[k] for k in stale}}
 
 
-def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", extra_rule: str = "") -> dict:
+def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", extra_rule: str = "",
+                         _retry: bool = False) -> dict:
     """Título, texto da miniatura e prompt da imagem saem SEMPRE do roteiro final
     já validado (não do texto antigo, gerado antes da revisão). Só fatos que estão
     na narração ou no tema. Se a IA falhar ou a checagem reprovar, mantém os
@@ -1542,9 +1543,24 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
         log.warning("título/miniatura do roteiro final: nenhum provedor respondeu (%s) — mantém os atuais", exc)
         return script
     data = _extract_json(raw)
-    log.info("título/miniatura gerados do roteiro final: %r / %r", data["titulo"], data["thumbnail_text"])
-    return {**script, "title": data["titulo"].strip(), "thumbnail_text": data["thumbnail_text"].strip(),
+    novo = {**script, "title": data["titulo"].strip(), "thumbnail_text": data["thumbnail_text"].strip(),
             "thumbnail_image_prompt": data["thumbnail_image_prompt"].strip()}
+    if script.get("_fatos_verificados") and not _retry:
+        # canal de fatos: o título e a miniatura novos são conferidos contra a narração final
+        from .fact_check import _title_problems
+        problemas = _title_problems(novo)
+        if problemas:
+            motivo = "; ".join(str(p.get("motivo", "")) for p in problemas)[:300]
+            log.warning("título/miniatura do roteiro final não conferem (%s) — refazendo uma vez", motivo)
+            refeito = packaging_from_final(script, channel, topic,
+                                           extra_rule=(extra_rule + " " if extra_rule else "") + f"O anterior errou: {motivo}",
+                                           _retry=True)
+            if refeito is not script and not _title_problems(refeito):
+                return refeito
+            log.warning("título/miniatura ainda não conferem — título vira o tema, miniatura sem texto")
+            return {**novo, "title": _corta_titulo(topic or str(script.get("title") or "")), "thumbnail_text": None}
+    log.info("título/miniatura gerados do roteiro final: %r / %r", novo["title"], novo["thumbnail_text"])
+    return novo
 
 
 def _repair_parse_packaging(raw: str, allowed: set[str]) -> dict | None:

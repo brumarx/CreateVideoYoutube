@@ -246,3 +246,39 @@ def test_titulo_nao_e_revisado_antes_da_validacao(revisor):
     roteiro = _roteiro("O túnel tem 53,85 km de extensão, com 23,3 km sob o mar.", title="53,85 km sob o mar")
     res = fc.review_script_result(roteiro, "Túnel Seikan", None, None)
     assert not any(p.get("tipo") in ("titulo_nao_confere", "titulo_enganoso") for p in res.blocking)
+
+
+def test_numero_da_lista_com_outro_assunto_nao_resolve():
+    lista = ["Túnel Seikan: extensão total de 53,85 km", "Trecho submarino de 23,3 km sob o leito marinho"]
+    roteiro = {"title": "t", "thumbnail_text": "", "_fatos_verificados": lista,
+               "scenes": [{"narration": "O túnel tem 23,3 km de extensão total."}]}
+    problema = [{"tipo": "fato_nao_confirmado", "termo": "23,3 km de extensão total", "motivo": "x"}]
+    _, restantes = fc.substituir_pela_lista(roteiro, problema)
+    assert restantes == problema  # o número existe na lista, mas é o trecho submarino, não a extensão
+
+
+def test_frase_sem_numero_nunca_e_resolvida_pela_substituicao():
+    lista = ["Túnel Seikan: extensão total de 53,85 km"]
+    roteiro = {"title": "t", "thumbnail_text": "", "_fatos_verificados": lista,
+               "scenes": [{"narration": "Elas serviam de refúgio."}]}
+    problema = [{"tipo": "fora_da_fonte", "termo": "Elas serviam de refúgio", "motivo": "x"}]
+    _, restantes = fc.substituir_pela_lista(roteiro, problema)
+    assert restantes == problema
+
+
+def test_fato_com_japones_ou_nota_de_fonte_nao_entra_na_narracao():
+    assert fc._frase_narravel("Custo total de 690 bilhões de ienes (約6,900億円)") == "Custo total de 690 bilhões de ienes."
+    assert fc._frase_narravel("Estima-se que 34 operários morreram (fonte secundária; usar com estima-se)") == \
+        "Estima-se que 34 operários morreram."
+    assert fc._frase_narravel("Custo de 約6,900億円") is None
+
+
+def test_fato_reescrito_conta_como_usado_pelos_numeros():
+    assert fc._fato_usado("Trecho submarino de 23,3 km sob o leito marinho", "Sob o mar ficam 23,3 km do túnel.")
+
+
+def test_titulo_continua_revisado_nos_outros_canais(revisor, monkeypatch):
+    monkeypatch.setattr(fc, "_title_problems", lambda s: [{"tipo": "titulo_nao_confere", "termo": "t", "motivo": "m"}])
+    roteiro = _roteiro("Texto normal sem problema.", title="Título que não confere")  # sem _fatos_verificados
+    res = fc.review_script_result(roteiro, "Tema", None, None)
+    assert any(p["tipo"] == "titulo_nao_confere" for p in res.blocking)
