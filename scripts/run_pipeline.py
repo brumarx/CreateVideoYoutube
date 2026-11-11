@@ -49,7 +49,7 @@ from src.script_gen import (
     art_direction,
     trim_teaser_ending,
     chapter_titles, clean_stat_overlays, engagement_question, fix_dangling_hooks, generate_script, refresh_packaging,
-    repair_script, vary_close_repeats, packaging_from_final,
+    repair_script, vary_close_repeats, packaging_from_final, image_prompts_from_final, refresh_description,
 )
 from src.spellcheck import fix_script, fix_text
 from src.stock_media import search_stock_clip, search_stock_photo
@@ -1010,9 +1010,6 @@ def run(
         if trimmed is not script:
             script = {**trimmed, "_edited": True}
         ressalvas.extend(script.pop("_ressalvas", None) or [])
-        # 11/11: título, miniatura e prompt da imagem SEMPRE saem do roteiro final validado
-        is_compilation_final = isinstance(facts, dict) and facts.get("tipo") == "compilacao"
-        script = packaging_from_final(script, channel, topic, extra_rule=facts["aviso"] if is_compilation_final else "")
         if script.pop("_edited", False):
             # conserto/corte mudou o que o vídeo narra: a descrição gerada
             # junto com o roteiro prometia o que saiu (job 558)
@@ -1030,6 +1027,22 @@ def run(
         script = fix_script(script, channel.language)
         # barra comparativa só com valor falado na cena, sem ranking (22/10)
         script = clean_stat_overlays(script)
+        # 11/11: o texto está final e validado. SÓ AGORA saem título, miniatura, prompt da
+        # miniatura e os prompts das imagens de cada cena, todos a partir deste texto.
+        is_compilation_final = isinstance(facts, dict) and facts.get("tipo") == "compilacao"
+        if channel_name in FATOS_CANAIS:
+            # nada de antes da validação sobrevive: se a geração falhar, o job reprova
+            script = {**script, "title": "", "thumbnail_text": None, "thumbnail_image_prompt": "",
+                      "scenes": [{**sc, "image_prompt": "", "stock_query": ""} for sc in script["scenes"]]}
+        empacotado = packaging_from_final(script, channel, topic, extra_rule=facts["aviso"] if is_compilation_final else "")
+        if empacotado is None:
+            raise ScriptRejected("título/miniatura não puderam ser gerados do texto validado")
+        script = empacotado
+        if channel_name in FATOS_CANAIS:
+            com_imagens = image_prompts_from_final(script, topic)
+            if com_imagens is None:
+                raise ScriptRejected("prompts das imagens não puderam ser gerados do texto validado")
+            script = {**com_imagens, "description": refresh_description(com_imagens)}
         # visual de cada cena escolhido numa chamada só pra isso, no roteiro
         # FINAL (o LLM quase não pedia gráfico junto com o roteiro)
         script = art_direction(script, channel)

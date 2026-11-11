@@ -1542,6 +1542,9 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
         raw = complete([{"role": "user", "content": prompt}], max_tokens=400, temperature=0.4,
                        validate=_valido, model_filter=lambda m: not _SMALL_MODEL_RE.search(m))
     except RuntimeError as exc:
+        if script.get("_fatos_verificados"):
+            log.warning("título/miniatura do roteiro final: nenhum provedor respondeu (%s)", exc)
+            return None
         log.warning("título/miniatura do roteiro final: nenhum provedor respondeu (%s) — mantém os atuais", exc)
         return script
     data = _extract_json(raw)
@@ -1557,12 +1560,52 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
             refeito = packaging_from_final(script, channel, topic,
                                            extra_rule=(extra_rule + " " if extra_rule else "") + f"O anterior errou: {motivo}",
                                            _retry=True)
-            if refeito is not script and not _title_problems(refeito):
+            if refeito is not None and refeito is not script and not _title_problems(refeito):
                 return refeito
-            log.warning("título/miniatura ainda não conferem — título vira o tema, miniatura sem texto")
-            return {**novo, "title": _corta_titulo(topic or str(script.get("title") or "")), "thumbnail_text": None}
+            log.warning("título/miniatura ainda não conferem com o texto validado")
+            return None
     log.info("título/miniatura gerados do roteiro final: %r / %r", novo["title"], novo["thumbnail_text"])
     return novo
+
+
+def image_prompts_from_final(script: dict, topic: str = "") -> dict | None:
+    """Prompts das imagens de cada cena (image_prompt e stock_query) gerados SÓ a partir da
+    narração final validada, cena por cena: só o que a cena diz (lugar, objeto, ação), nada
+    inventado. Passa pelas travas de rosto e escudo. None se a IA falhar."""
+    scenes = script.get("scenes") or []
+    if not scenes:
+        return None
+    listing = "\n".join(f"{i + 1}) {sc.get('narration', '')}" for i, sc in enumerate(scenes))
+    prompt = (
+        "Para cada cena numerada abaixo, escreva em INGLÊS:\n"
+        "- image_prompt: a imagem que mostra SÓ o que a narração DAQUELA cena diz (lugar, objeto, ação). "
+        "Não acrescente nada que a cena não diga: nenhum veículo, máquina, pessoa, data ou detalhe a mais. "
+        "Sem texto, letras, números, logos, interface ou rosto de pessoa real.\n"
+        "- stock_query: 3 a 6 palavras em inglês para buscar essa imagem num banco de imagens.\n\n"
+        f"CENAS (narração final):\n{listing}\n\n"
+        'Responda só com JSON: {"cenas": [{"image_prompt": "...", "stock_query": "..."}]} — '
+        f"exatamente {len(scenes)} itens, na mesma ordem."
+    )
+
+    def _valido(raw: str) -> bool:
+        try:
+            itens = _extract_json(raw).get("cenas")
+        except ValueError:
+            return False
+        return (isinstance(itens, list) and len(itens) == len(scenes)
+                and all(isinstance(x, dict) and str(x.get("image_prompt") or "").strip()
+                        and str(x.get("stock_query") or "").strip() for x in itens))
+
+    try:
+        raw = complete([{"role": "user", "content": prompt}], max_tokens=3000, temperature=0.3, validate=_valido)
+    except RuntimeError as exc:
+        log.warning("prompts de imagem do roteiro final: nenhum provedor respondeu (%s)", exc)
+        return None
+    itens = _extract_json(raw)["cenas"]
+    novo = {**script, "scenes": [{**sc, "image_prompt": str(x["image_prompt"]).strip(),
+                                  "stock_query": str(x["stock_query"]).strip()} for sc, x in zip(scenes, itens)]}
+    log.info("prompts de imagem gerados do roteiro final: %d cenas", len(scenes))
+    return _sanitize_club_crests(_sanitize_person_images(topic, novo))
 
 
 def _repair_parse_packaging(raw: str, allowed: set[str]) -> dict | None:

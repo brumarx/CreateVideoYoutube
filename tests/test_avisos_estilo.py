@@ -308,3 +308,53 @@ def test_miniatura_nao_pode_usar_numero_do_tema_que_nao_esta_na_narracao(monkeyp
     out = sg.packaging_from_final(roteiro, ChannelConfig.load("curiosidades"),
                                   "Túnel Seikan: túnel submarino de 53,85 km")
     assert "53,85" not in out["title"] and "53,85" not in (out["thumbnail_text"] or "")
+
+
+def _fonte_pipeline():
+    return (Path(__file__).resolve().parent.parent / "scripts" / "run_pipeline.py").read_text(encoding="utf-8")
+
+
+def test_titulo_e_imagens_so_depois_da_ultima_mudanca_no_texto():
+    src = _fonte_pipeline()
+    ultima_mudanca = max(src.index("script = fix_dangling_hooks(script)"), src.index("script = vary_close_repeats(script, topic)"),
+                         src.index("script = fix_script(script, channel.language)"), src.index("script = clean_stat_overlays(script)"))
+    assert src.index("empacotado = packaging_from_final(") > ultima_mudanca
+    assert src.index("com_imagens = image_prompts_from_final(") > ultima_mudanca
+    assert src.count("packaging_from_final(script") == 1  # não existe outra geração de título antes
+
+
+def test_campos_antigos_sao_apagados_antes_de_gerar_no_fractal():
+    src = _fonte_pipeline()
+    apaga = src.index('script = {**script, "title": "", "thumbnail_text": None, "thumbnail_image_prompt": ""')
+    assert apaga < src.index("empacotado = packaging_from_final(")
+
+
+def test_prompts_das_imagens_vem_da_narracao_final(monkeypatch):
+    from src import script_gen as sg
+    recebido = {}
+
+    def fake(messages, **kw):
+        recebido["prompt"] = messages[0]["content"]
+        return json.dumps({"cenas": [{"image_prompt": "Undersea rail tunnel carved in rock", "stock_query": "undersea rail tunnel"},
+                                     {"image_prompt": "Train inside a long tunnel", "stock_query": "train tunnel"}]})
+
+    monkeypatch.setattr(sg, "complete", fake)
+    roteiro = {"title": "", "scenes": [{"narration": "O túnel passa sob o mar.", "image_prompt": "VELHO", "stock_query": "VELHO"},
+                                       {"narration": "Trens cruzam o túnel.", "image_prompt": "VELHO", "stock_query": "VELHO"}]}
+    out = sg.image_prompts_from_final(roteiro, "Túnel Seikan")
+    assert "O túnel passa sob o mar." in recebido["prompt"] and "VELHO" not in recebido["prompt"]
+    assert [sc["image_prompt"] for sc in out["scenes"]] == ["Undersea rail tunnel carved in rock", "Train inside a long tunnel"]
+
+
+def test_falha_na_geracao_no_fractal_nao_reaproveita_o_antigo(monkeypatch):
+    from src import script_gen as sg
+    from src.config import ChannelConfig
+
+    def falha(messages, **kw):
+        raise RuntimeError("sem provedor")
+
+    monkeypatch.setattr(sg, "complete", falha)
+    roteiro = {"title": "ANTIGO", "thumbnail_text": "ANTIGO", "_fatos_verificados": ["f"],
+               "scenes": [{"narration": "Texto validado.", "image_prompt": "ANTIGO"}]}
+    assert sg.packaging_from_final(roteiro, ChannelConfig.load("curiosidades"), "Tema") is None
+    assert sg.image_prompts_from_final(roteiro, "Tema") is None
