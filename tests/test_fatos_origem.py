@@ -249,7 +249,7 @@ WIKI_CUSTO = {"titulo": "Wiki", "url": "https://pt.wikipedia.org/x", "trecho": "
 def test_planejamento_vem_de_qualquer_fonte_mesmo_se_o_fato_diz_custo_total():
     fatos = ft.atribuir([{"texto": "O túnel teve custo total de ¥538,4 bilhões (US$ 3,6 bilhões).", "fontes": ["S2"]}],
                         [MLIT_PLAN, WIKI_CUSTO])
-    assert fatos[0]["status"] == "secundario" and fatos[0]["planejamento"] == [ft.canon("538,4")]
+    assert fatos[0]["status"] == "secundario" and ft.canon("538,4") in fatos[0]["planejamento"]
     out = ft.ajustar_texto_final({"scenes": [{"narration": "E o custo total chegou a 538,4 bilhões de ienes, o equivalente a 3,6 bilhões de dólares."}],
                                   "_fatos": fatos})
     texto = out["scenes"][0]["narration"]
@@ -323,7 +323,7 @@ def test_gerador_inteiro_com_ia_simulada(monkeypatch, tmp_path):
     assert "[F" not in texto                      # as marcas saíram
     assert "65,23" not in texto                   # número sem fato saiu
     assert "53,85 km" in texto and "23,3 km" in texto
-    assert "estima-se que o museu fechou em 2006" in texto  # secundário (blog) ganhou estima-se
+    assert "cerca de 34 operários" in texto and "calcula-se que o museu fechou em 2006" in texto  # secundários, palavras alternadas
     assert out["_fatos"] and out["_fatos_verificados"]
 
 
@@ -395,4 +395,128 @@ def test_titulos_da_wikipedia_ficam_em_cache(monkeypatch, tmp_path):
     monkeypatch.setattr(providers, "complete", lambda *a, **k: chamadas.append(1) or '{"pt": ["Túnel Seikan"], "en": ["Seikan Tunnel"]}')
     a = web_search._article_titles("Túnel Seikan")
     b = web_search._article_titles("Túnel Seikan")
-    assert a == b == {"pt": ["Túnel Seikan"], "en": ["Seikan Tunnel"]} and len(chamadas) == 1
+    assert a == b == {"pt": ["Túnel Seikan"], "en": ["Seikan Tunnel"], "local": []} and len(chamadas) == 1
+
+
+# ---------- confirmação de afirmação sem número (busca + citação) e prioridade no escritor
+def _roteiro_com_afirmacao():
+    return {"scenes": [{"narration": "O túnel tem 53,85 km. Hoje as estações são atração para visitantes."}]}
+
+
+def test_afirmacao_provada_por_citacao_deixa_de_ser_problema(monkeypatch):
+    from src import fact_check as fc
+    evid = [{"titulo": "JR", "url": "https://jr.example/a", "trecho": "As estações são atração para visitantes."}]
+    monkeypatch.setattr(fc, "evidence_for_problems", lambda probs, topic: evid)
+    monkeypatch.setattr(fc, "ungrounded_sentences", lambda s, f, w: [])  # tudo sustentado
+    problema = [{"tipo": "fora_da_fonte", "termo": "Hoje as estações são atração para visitantes", "motivo": "x"}]
+    restantes, fontes = fc.confirmar_afirmacoes(_roteiro_com_afirmacao(), problema, "Seikan", [])
+    assert restantes == [] and fontes == evid
+
+
+def test_afirmacao_sem_prova_continua_problema(monkeypatch):
+    from src import fact_check as fc
+    monkeypatch.setattr(fc, "evidence_for_problems", lambda probs, topic: [])
+    monkeypatch.setattr(fc, "ungrounded_sentences",
+                        lambda s, f, w: [{"tipo": "sem_fonte", "termo": "Hoje as estações são atração para visitantes."}])
+    problema = [{"tipo": "fora_da_fonte", "termo": "Hoje as estações são atração para visitantes", "motivo": "x"}]
+    restantes, _ = fc.confirmar_afirmacoes(_roteiro_com_afirmacao(), problema, "Seikan", [])
+    assert restantes == problema
+
+
+def test_afirmacao_com_numero_nao_passa_pela_confirmacao(monkeypatch):
+    from src import fact_check as fc
+    chamou = []
+    monkeypatch.setattr(fc, "evidence_for_problems", lambda probs, topic: chamou.append(1) or [])
+    problema = [{"tipo": "fora_da_fonte", "termo": "O túnel tem 53,85 km", "motivo": "x"}]
+    restantes, _ = fc.confirmar_afirmacoes(_roteiro_com_afirmacao(), problema, "Seikan", [])
+    assert restantes == problema and chamou == []  # número é com a conferência por fato
+
+
+def test_checagem_fora_do_ar_nao_muda_nada(monkeypatch):
+    from src import fact_check as fc
+    monkeypatch.setattr(fc, "evidence_for_problems", lambda probs, topic: [])
+    monkeypatch.setattr(fc, "ungrounded_sentences", lambda s, f, w: None)
+    problema = [{"tipo": "fora_da_fonte", "termo": "Hoje as estações são atração para visitantes", "motivo": "x"}]
+    assert fc.confirmar_afirmacoes(_roteiro_com_afirmacao(), problema, "Seikan", [])[0] == problema
+
+
+def test_pipeline_confirma_antes_de_trocar_ou_cortar():
+    src = (Path(__file__).resolve().parent.parent / "scripts" / "run_pipeline.py").read_text(encoding="utf-8")
+    assert src.index("confirmar_afirmacoes(script, problems, topic, web_facts)") < src.index("substituir_pela_lista(script, problems)")
+    assert src.index("confirmar_afirmacoes(script, problems, topic, web_facts)") < src.index("cortar_e_trocar_por_fato(script, problems)")
+
+
+def test_escritor_recebe_secundarios_so_para_completar_oito(monkeypatch):
+    from src import script_gen as sg
+    from src.config import ChannelConfig
+    fatos = ([{"id": f"F{i}", "texto": f"Fato oficial {i}.", "status": "oficial", "fontes": []} for i in range(1, 7)]
+             + [{"id": f"F{i}", "texto": f"Fato secundário {i}.", "status": "secundario", "fontes": []} for i in range(7, 13)])
+    recebido = {}
+    monkeypatch.setattr(sg, "extract_facts", lambda t, w: fatos)
+
+    def fake_plan(topic, facts, fontes):
+        recebido["lista"] = fontes[0]["trecho"]
+        raise RuntimeError("parar aqui")
+
+    monkeypatch.setattr(sg, "plan_story", fake_plan)
+    try:
+        sg.generate_script(ChannelConfig.load("curiosidades"), "Tema", None, web_facts=[{"titulo": "x", "url": "u", "trecho": "y"}])
+    except RuntimeError:
+        pass
+    lista = recebido["lista"]
+    assert all(f"Fato oficial {i}." in lista for i in range(1, 7))
+    assert "Fato secundário 7." in lista and "Fato secundário 8." in lista   # 6 + 2 = 8
+    assert "Fato secundário 9." not in lista
+
+
+# ---------- variação do "estima-se" (cerca de, aproximadamente, calcula-se...)
+@pytest.mark.parametrize("frase,nums,vez,esperado", [
+    ("Hoje, 50 trens de carga cruzam o túnel.", {"50"}, 0, "Hoje, cerca de 50 trens de carga cruzam o túnel."),
+    ("O preço humano foi alto: 34 operários morreram.", {"34"}, 1, "O preço humano foi alto: aproximadamente 34 operários morreram."),
+    ("34 operários morreram.", {"34"}, 2, "Em torno de 34 operários morreram."),
+    ("Cerca de 50 trens de carga cruzam o túnel.", {"50"}, 0, "Cerca de 50 trens de carga cruzam o túnel."),
+    ("Elas serviam de abrigo, e o museu fechou em 2006.", {"2006"}, 1, "Elas serviam de abrigo, e calcula-se que o museu fechou em 2006."),
+    ("Em setembro de 1971, as escavadeiras começaram.", {"1971"}, 0, "Estima-se que em setembro de 1971, as escavadeiras começaram."),
+    ("E o museu fechou em 16 de março de 2006.", {"16", "2006"}, 2, "E aponta-se que o museu fechou em 16 de março de 2006."),
+    ("Calcula-se que o museu fechou em 2006.", {"2006"}, 0, "Calcula-se que o museu fechou em 2006."),
+])
+def test_aproximacao_varia_pelo_contexto(frase, nums, vez, esperado):
+    assert ft.estima_antes(frase, {ft.canon(n) for n in nums}, vez) == esperado
+
+
+def test_roteiro_inteiro_nao_repete_a_mesma_palavra():
+    fatos = ft.atribuir([{"texto": f"Cerca de {n} trens por dia.", "fontes": ["S1"]} for n in (50, 30, 20)],
+                        [{"titulo": "Blog", "url": "https://b.com", "trecho": "50 trens, 30 trens, 20 trens"}])
+    out = ft.conferir_frases(_rot("Passam 50 trens [F1]. Passam 30 trens [F2]. Passam 20 trens [F3]."), fatos)
+    texto = out["scenes"][0]["narration"]
+    assert texto == "Passam cerca de 50 trens. Passam aproximadamente 30 trens. Passam em torno de 20 trens."
+
+
+# ---------- título: número com o contexto da narração (job 847 e rodada 22: "53,85 km sob o mar")
+NARR = "O túnel tem 53,85 km de extensão. Sob o mar ficam 23,3 km sob o leito marinho. Foi aberto em 13 de março de 1988."
+
+
+@pytest.mark.parametrize("titulo", ["Túnel Seikan: 53,85 km sob o mar", "53,85 km submersos", "23,3 km de extensão"])
+def test_numero_do_titulo_com_contexto_errado(titulo):
+    assert ft.numero_fora_de_contexto(titulo, NARR)
+
+
+@pytest.mark.parametrize("titulo", ["Túnel Seikan: 23,3 km sob o mar", "Túnel Seikan: 53,85 km de extensão",
+                                    "Aberto em 1988", "53,85 km", "Túnel Seikan: 23,3 km sob o leito marinho"])
+def test_numero_do_titulo_com_contexto_certo(titulo):
+    assert ft.numero_fora_de_contexto(titulo, NARR) == []
+
+
+def test_titulo_com_contexto_errado_e_refeito(monkeypatch):
+    from src import script_gen as sg
+    from src.config import ChannelConfig
+    respostas = iter([
+        json.dumps({"titulo": "Túnel Seikan: 53,85 km sob o mar", "thumbnail_text": "53,85 KM SOB O MAR", "thumbnail_image_prompt": "p"}),
+        json.dumps({"titulo": "Túnel Seikan: 23,3 km sob o mar", "thumbnail_text": "23,3 KM SOB O MAR", "thumbnail_image_prompt": "p"}),
+    ])
+    monkeypatch.setattr(sg, "complete", lambda *a, **k: next(respostas))
+    import src.fact_check as fcm
+    monkeypatch.setattr(fcm, "_title_problems", lambda s: [])
+    roteiro = {"title": "", "_fatos_verificados": ["f"], "scenes": [{"narration": NARR}]}
+    out = sg.packaging_from_final(roteiro, ChannelConfig.load("curiosidades"), "Túnel Seikan")
+    assert out["title"] == "Túnel Seikan: 23,3 km sob o mar"

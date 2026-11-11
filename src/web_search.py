@@ -26,6 +26,9 @@ from .providers import _rotator_for
 log = logging.getLogger("web_search")
 
 SEARCH_URL = "https://api.tavily.com/search"
+# versão da lógica de busca na chave do cache: mudou a busca, o cache antigo não é mais usado
+# (11/11: a busca em outros idiomas não rodava porque o cache devolvia o resultado da versão anterior)
+BUSCA_VERSAO = 5
 # rede social e vídeo não são fonte: tema vago ("cidade engolida pelo mar")
 # só trazia reels e vídeos do YouTube
 EXCLUDED_DOMAINS = [
@@ -44,12 +47,12 @@ def search_topic_facts(query: str, max_results: int = 5, oficiais: bool = False)
     if not query:
         return None
     from . import disk_cache
-    guardado = disk_cache.get("busca_web", [query, max_results, oficiais])
+    guardado = disk_cache.get("busca_web", [BUSCA_VERSAO, query, max_results, oficiais])
     if guardado:
         log.info("busca em cache: %r (%d fontes)", query[:60], len(guardado))
         return guardado
     facts = _tavily(query, max_results) or _duckduckgo(query, max_results)
-    facts = _enrich(facts, query) if facts else []
+    facts = _enrich(facts, query, TRECHO_FATOS if oficiais else ENRICHED_CHARS) if facts else []
     wiki = wikipedia_facts(query)
     if wiki:
         # Wikipédia primeiro (o artigo inteiro do assunto, pt + en) e só 2
@@ -62,11 +65,24 @@ def search_topic_facts(query: str, max_results: int = 5, oficiais: bool = False)
     have = {f["url"] for f in facts}
     facts = facts + [f for f in extras if f["url"] not in have]
     if oficiais:
-        # 11/11: fonte oficial buscada automaticamente (domínio de governo, instituição pública ou de
-        # ensino), para qualquer tema; sem ela, os fatos de uma fonte só viram "estima-se"
-        have = {f["url"] for f in facts}
-        facts = facts + [f for f in official_facts(query) if f["url"] not in have]
-    disk_cache.put("busca_web", [query, max_results, oficiais], facts)
+        # 11/11: fontes em QUALQUER idioma, além da Wikipédia: busca pelo nome do assunto em inglês e no
+        # idioma do país (青函トンネル), e fontes oficiais. Mais publicadores independentes confirmam o
+        # fato (sem "estima-se"); o número vale em qualquer idioma (ver fatos.numeros)
+        titulos = _article_titles(query)
+        outros_idiomas: list[dict] = []
+        for nome in ((titulos.get("en") or [""])[0], (titulos.get("local") or [""])[0]):
+            if nome:
+                achados = _tavily(nome, max_results) or _duckduckgo(nome, max_results) or []
+                outros_idiomas += _enrich(achados, nome, TRECHO_FATOS) if achados else []
+        oficiais_achadas = official_facts(query)
+        vistos: set[str] = set()
+        ordenadas = []
+        for f in oficiais_achadas + outros_idiomas + facts:  # oficiais primeiro: não são cortadas no bloco
+            if f["url"] not in vistos:
+                vistos.add(f["url"])
+                ordenadas.append(f)
+        facts = ordenadas
+    disk_cache.put("busca_web", [BUSCA_VERSAO, query, max_results, oficiais], facts)
     return facts or None
 
 
@@ -144,7 +160,7 @@ def _article_titles(query: str) -> dict[str, list[str]]:
     import json
 
     from . import disk_cache
-    guardado = disk_cache.get("titulos_wiki", query)
+    guardado = disk_cache.get("titulos_wiki_v2", query)
     if guardado:
         return guardado
 
@@ -155,8 +171,10 @@ def _article_titles(query: str) -> dict[str, list[str]]:
         "tema por dentro: o evento, a causa, o tratado, a obra, o fenômeno — nunca só o artigo genérico do "
         "país ou da cidade, a não ser que não exista outro. Até 3 em PORTUGUÊS e até 2 em INGLÊS (a "
         "Wikipédia em inglês costuma ter o artigo específico que falta na portuguesa, ex.: 'Energy in North "
-        "Korea'). Do mais específico pro mais geral. Responda SÓ com JSON: "
-        "{\"pt\": [\"Título\"], \"en\": [\"Title\"]}"
+        "Korea'). Do mais específico pro mais geral. E o título do artigo principal no IDIOMA DO PAÍS "
+        "onde fica o assunto, se não for português nem inglês (ex.: Túnel Seikan → ja, 青函トンネル). "
+        "Responda SÓ com JSON: "
+        "{\"pt\": [\"Título\"], \"en\": [\"Title\"], \"local\": [\"título no idioma do país\"]}"
     )
     try:
         raw = complete([{"role": "user", "content": prompt}], max_tokens=300, validate=lambda r: '"en"' in r)
@@ -165,9 +183,9 @@ def _article_titles(query: str) -> dict[str, list[str]]:
     except Exception as exc:  # noqa: BLE001 — sem LLM: busca pelo texto do tema
         log.info("títulos de artigo via LLM falharam: %s", exc)
         data = {}
-    titulos = {lang: [str(t).strip() for t in data.get(lang) or [] if str(t).strip()][:3] for lang in ("pt", "en")}
+    titulos = {lang: [str(t).strip() for t in data.get(lang) or [] if str(t).strip()][:3] for lang in ("pt", "en", "local")}
     if titulos["pt"] or titulos["en"]:
-        disk_cache.put("titulos_wiki", query, titulos)
+        disk_cache.put("titulos_wiki_v2", query, titulos)
     return titulos
 
 
@@ -250,6 +268,7 @@ def wikipedia_facts(query: str) -> list[dict]:
 # 4 x 800 caracteres cabem no limite por minuto do Groq (prompt ~7 mil tokens)
 ENRICHED_SOURCES = 4
 ENRICHED_CHARS = 800
+TRECHO_FATOS = 3000  # busca do tema no canal de fatos: o trecho alimenta a extração, precisa dos números
 _STOPWORDS = {
     "como", "para", "pela", "pelo", "com", "sem", "que", "uma", "dos", "das", "nos", "nas", "por",
     "mais", "seu", "sua", "the", "and", "how", "from", "with", "este", "esta", "isso", "toda", "todo",
@@ -263,6 +282,29 @@ def _keywords(text: str) -> set[str]:
     return {w[:6] for w in re.findall(r"\w+", text) if len(w) > 3 and w not in _STOPWORDS}
 
 
+PDF_PAGINAS = 15
+
+
+def _pdf_text(conteudo: bytes) -> str:
+    """Texto de PDF pelo pdftotext do sistema (poppler), sem biblioteca a mais. Fontes oficiais
+    costumam ser PDF (folheto da JRTT sobre o Seikan). Falha devolve vazio."""
+    import subprocess
+    import tempfile
+
+    if not conteudo.startswith(b"%PDF"):
+        return ""
+    with tempfile.NamedTemporaryFile(suffix=".pdf") as tmp:
+        tmp.write(conteudo)
+        tmp.flush()
+        try:
+            out = subprocess.run(["pdftotext", "-l", str(PDF_PAGINAS), "-enc", "UTF-8", tmp.name, "-"],
+                                 capture_output=True, timeout=30, check=False)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            log.info("pdf ilegível: %s", exc)
+            return ""
+    return out.stdout.decode("utf-8", "ignore").strip()
+
+
 def _page_text(url: str) -> str:
     try:
         import trafilatura
@@ -271,36 +313,50 @@ def _page_text(url: str) -> str:
             "User-Agent": "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128 Safari/537.36",
         })
         resp.raise_for_status()
+        if "pdf" in resp.headers.get("content-type", "").lower() or url.lower().split("?")[0].endswith(".pdf"):
+            return _pdf_text(resp.content)
         return trafilatura.extract(resp.text) or ""
     except Exception as exc:  # noqa: BLE001 — página fora/bloqueando: fica o resumo da busca
         log.info("página da fonte indisponível (%s): %s", url, exc)
         return ""
 
 
-def _best_passage(text: str, keys: set[str], limit: int = ENRICHED_CHARS) -> str:
-    """Frases da página que mais falam do tema, na ordem original, até `limit`."""
-    sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+|\n+", text) if len(x.strip()) > 30]
-    ranked = sorted(range(len(sentences)), key=lambda i: -len(keys & _keywords(sentences[i])))
+def _best_passage(text: str, keys: set[str], limit: int = ENRICHED_CHARS, com_numeros: bool = False) -> str:
+    """Frases da página que mais falam do tema, na ordem original, até `limit`. Com `com_numeros`
+    (extração de fatos), frase com número entra mesmo sem palavra-chave em comum e tem prioridade:
+    numa página em japonês nenhuma palavra latina bate, mas "53.85km" e "1988年" estão lá."""
+    # japonês e chinês dizem mais com menos caracteres: frase a partir de 10
+    sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+|(?<=[。！？])|\n+", text)
+                 if len(x.strip()) > 30 or (len(x.strip()) >= 10 and re.search(r"[\u3040-\u9fff]", x))]
+
+    def peso(i: int) -> int:
+        return len(keys & _keywords(sentences[i])) + (3 if com_numeros and re.search(r"\d", sentences[i]) else 0)
+
+    ranked = sorted(range(len(sentences)), key=lambda i: -peso(i))
     chosen, size = set(), 0
     for i in ranked:
-        if not keys & _keywords(sentences[i]) or size + len(sentences[i]) > limit:
+        if not peso(i) or size + len(sentences[i]) > limit:
             continue
         chosen.add(i)
         size += len(sentences[i]) + 1
     return " ".join(sentences[i] for i in sorted(chosen))
 
 
-def _enrich(facts: list[dict], query: str) -> list[dict]:
-    """Troca o resumo da busca pelo trecho da página que mais fala do tema."""
+def _enrich(facts: list[dict], query: str, limite: int = ENRICHED_CHARS) -> list[dict]:
+    """Troca o resumo da busca pelo trecho da página que mais fala do tema. Com limite maior que o
+    padrão (busca do canal de fatos), abre todas as fontes e prioriza as frases com número."""
     from concurrent.futures import ThreadPoolExecutor
 
-    facts = facts[:ENRICHED_SOURCES]
+    para_fatos = limite > ENRICHED_CHARS
+    facts = facts if para_fatos else facts[:ENRICHED_SOURCES]
+    if not facts:
+        return facts
     keys = _keywords(query)
     with ThreadPoolExecutor(max_workers=len(facts)) as pool:
         pages = list(pool.map(lambda f: _page_text(f["url"]), facts))
     out = []
     for f, page in zip(facts, pages):
-        passage = _best_passage(page, keys | _keywords(f["trecho"])) if page else ""
+        passage = _best_passage(page, keys | _keywords(f["trecho"]), limite, para_fatos) if page else ""
         out.append({**f, "trecho": passage} if len(passage) > len(f["trecho"]) else f)
     log.info("fontes abertas: %d de %d com trecho da página", sum(a is not b for a, b in zip(out, facts)), len(facts))
     return out
@@ -381,8 +437,11 @@ def official_facts(query: str, max_results: int = 5) -> list[dict]:
     titulos = _article_titles(query)
     assunto_en = (titulos.get("en") or [""])[0]
     assunto_pt = (titulos.get("pt") or [""])[0] or query.split(":")[0].strip()
+    assunto_local = (titulos.get("local") or [""])[0]
+    # no idioma do país as fontes oficiais aparecem pelo nome do assunto (青函トンネル → jrtt.go.jp, sangiin.go.jp)
     consultas = [c for c in (f"{assunto_en} official" if assunto_en else "",
                              f"{assunto_en} government report" if assunto_en else "",
+                             assunto_local,
                              f"{assunto_pt} site oficial governo") if c]
     for consulta in consultas:
         resultados = _tavily(consulta, max_results) or _duckduckgo(consulta, max_results) or []
@@ -393,7 +452,7 @@ def official_facts(query: str, max_results: int = 5) -> list[dict]:
             vistos.add(url)
             achados.append({**r, "oficial": True})
     if achados:
-        achados = _enrich(achados, query)
+        achados = _enrich(achados, query, TRECHO_FATOS)
         log.info("fontes oficiais achadas para %r: %d", query[:60], len(achados))
     else:
         log.info("nenhuma fonte oficial achada para %r", query[:60])

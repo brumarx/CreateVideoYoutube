@@ -41,7 +41,7 @@ from src.infographic import CREDIT as INFOGRAPHIC_CREDIT, Renderer as Infographi
 from src.infographic import compose_presenter, presenter_pose
 from src.news_card import headline_card
 from src.fatos import ajustar_texto_final
-from src.fact_check import BLOCKING_TYPES, cortar_e_trocar_por_fato, feedback_for_rewrite, review_script, substituir_pela_lista
+from src.fact_check import BLOCKING_TYPES, confirmar_afirmacoes, cortar_e_trocar_por_fato, feedback_for_rewrite, review_script, substituir_pela_lista
 from src.orchestrator import enqueue, update
 from src.people_photos import names_in, person_photo
 from src.real_media import real_clip, real_photos
@@ -888,6 +888,11 @@ def run(
                     log.warning("[%s] título reprovado — será refeito do roteiro final", job_id)
                     if not problems:
                         break
+                # 11/11: afirmação sem número apontada pode ser verdade: busca e prova por citação antes de cortar
+                problems, web_facts = confirmar_afirmacoes(script, problems, topic, web_facts)
+                if not problems:
+                    log.warning("[%s] afirmações apontadas confirmadas na busca — sem reprovar", job_id)
+                    break
                 # 11/11: número errado com correspondência segura na lista de fatos verificados
                 # é trocado na hora (default, sem reprovar); o que não tem correspondência segura
                 # segue como bloqueio

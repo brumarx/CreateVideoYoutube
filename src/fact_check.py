@@ -766,6 +766,38 @@ def cortar_e_trocar_por_fato(script: dict, problems: list[dict]) -> tuple[dict, 
     return {**script, "scenes": [sc for sc in scenes if sc.get("narration", "").strip()], "_edited": True}, trocadas
 
 
+def confirmar_afirmacoes(script: dict, problems: list[dict], topic: str,
+                         web_facts: list[dict] | None) -> tuple[list[dict], list[dict] | None]:
+    """Afirmação SEM número apontada como fora da fonte ("atração para visitantes"): antes de cortar,
+    busca fonte para ela e tenta provar por citação (o trecho tem de existir na fonte, conferido em
+    código). Provada, deixa de ser problema e a fonte entra na lista. Devolve (problemas que
+    sobraram, fontes). Checagem fora do ar: nada muda."""
+    alvo = [p for p in problems if p.get("tipo") in ("fora_da_fonte", "fato_nao_confirmado")
+            and not re.search(r"\d", str(p.get("termo", "")))]
+    frase_de: dict[int, str] = {}
+    for p in alvo:
+        termo = _fold(str(p.get("termo", "")))[:40]
+        for sc in script.get("scenes", []):
+            frase = next((f.strip() for f in re.split(r"(?<=[.!?])\s+", sc.get("narration", ""))
+                          if termo and termo in _fold(f)), None)
+            if frase and len(frase) > 15:
+                frase_de[id(p)] = frase
+                break
+    if not frase_de:
+        return problems, web_facts
+    evidencia = evidence_for_problems([p for p in alvo if id(p) in frase_de], topic) or []
+    fontes = merge_web_facts(web_facts, evidencia) or web_facts
+    sem_prova = ungrounded_sentences({"scenes": [{"narration": " ".join(frase_de.values())}]}, None, fontes)
+    if sem_prova is None:
+        return problems, web_facts
+    nao_provadas = {_fold(str(x.get("termo", "")))[:60] for x in sem_prova}
+    restantes = [p for p in problems if id(p) not in frase_de or _fold(frase_de[id(p)])[:60] in nao_provadas]
+    provadas = len(problems) - len(restantes)
+    if provadas:
+        log.warning("afirmações sem número confirmadas por citação na busca: %d de %d", provadas, len(frase_de))
+    return restantes, fontes
+
+
 def _only_in_reviewed(problems: list[dict], script: dict) -> list[dict]:
     """Compilação: o revisor lê as narrações dos Shorts como fonte e apontava
     fato DELAS ("Neymar 10 mil reais aos 15") que nem estava no texto novo

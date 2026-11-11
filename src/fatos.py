@@ -21,7 +21,8 @@ _DOMINIO_OFICIAL = re.compile(
     r"(^|\.)((gov|gob|gouv|govt|gv|mil|edu)(\.[a-z]{2})?|(go|ac)\.[a-z]{2}|int|europa\.eu|un\.org)$")
 _ID = re.compile(r"\s*\[\s*(F\d+(?:\s*[,;]\s*F\d+)*)\s*\]")
 _FRASES = re.compile(r"(?<=[.!?])\s+")
-LIMITE_BLOCO = 9000
+LIMITE_BLOCO = 16000
+LIMITE_POR_FONTE = 3000  # uma Wikipédia de 5 mil caracteres não empurra as outras fontes para fora do bloco
 STATUS_ORDEM = {"oficial": 0, "confirmado": 1, "secundario": 2}
 # valor de planejamento/orçamento escrito como custo final (linguagem do português, não do tema)
 _PLANEJAMENTO = re.compile(r"planejament|orçament|orcament|previst|estimad|projetad", re.I)
@@ -61,13 +62,35 @@ def canon(numero: str) -> str:
         return numero
 
 
+_ESCALAS = {"trilhão": 1e12, "trilhões": 1e12, "trillion": 1e12, "bilhão": 1e9, "bilhões": 1e9, "billion": 1e9,
+            "milhão": 1e6, "milhões": 1e6, "million": 1e6, "mil": 1e3, "thousand": 1e3,
+            "兆": 1e12, "億": 1e8, "万": 1e4}
+_ESCALA = re.compile(r"(\d+(?:[.,]\d+)*)\s*(trilhões|trilhão|trillion|bilhões|bilhão|billion|milhões|milhão|million|"
+                     r"thousand|mil|兆|億|万)", re.I)
+
+
 def numeros(texto: str) -> set[str]:
-    return {canon(m) for m in re.findall(r"\d+(?:[.,]\d+)*", texto or "")}
+    """Números do texto, iguais em qualquer formato e idioma: além do número escrito, o valor
+    absoluto quando há escala ("538,4 bilhões" e "5.384億" valem os dois 538400000000)."""
+    texto = texto or ""
+    out = {canon(m) for m in re.findall(r"\d+(?:[.,]\d+)*", texto)}
+    for m in _ESCALA.finditer(texto):
+        bruto = m.group(1)
+        leituras = {canon(bruto)}
+        if re.fullmatch(r"\d{1,3}(,\d{3})+", bruto):
+            leituras.add(bruto.replace(",", ""))  # vírgula de milhar (en, ja): "5,384億"
+        escala = _ESCALAS.get(m.group(2).lower() if m.group(2).isascii() else m.group(2))
+        for leitura in leituras:
+            try:
+                out.add(format(round(float(leitura) * escala), "d"))
+            except (TypeError, ValueError):
+                continue
+    return out
 
 
 def bloco_numerado(web_facts: list[dict] | None) -> str:
     """Fontes numeradas [S1], [S2]... para a extração citar de onde tirou cada fato."""
-    linhas = [f"[S{i + 1}] {f.get('titulo', '')} ({dominio(f.get('url', ''))}): {f.get('trecho', '')}"
+    linhas = [f"[S{i + 1}] {f.get('titulo', '')} ({dominio(f.get('url', ''))}): {str(f.get('trecho', ''))[:LIMITE_POR_FONTE]}"
               for i, f in enumerate(web_facts or [])]
     return "\n".join(linhas)[:LIMITE_BLOCO]
 
@@ -175,24 +198,49 @@ def lista_para_escritor(fatos: list[dict]) -> str:
 
 
 _FRONTEIRAS = (": ", "; ", ", e ", ", mas ", ", enquanto ")
+# aproximação já escrita antes do número: nada a acrescentar
+_JA_APROXIMADO = re.compile(r"(cerca de|aproximadamente|em torno de|por volta de|quase|mais de|menos de|estima|calcula|aponta)\s*$",
+                            re.I)
+_MESES = r"janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro"
+# variar para não repetir: quantidade ganha a aproximação antes do número; data e outros casos, a oração
+_APROXIMACOES = ("cerca de", "aproximadamente", "em torno de")
+_ORACOES = ("estima-se que", "calcula-se que", "aponta-se que")
 
 
-def estima_antes(frase: str, nums_alvo: set[str]) -> str:
-    """'Estima-se que' no começo da ORAÇÃO que tem o número (ou da frase, sem número)."""
-    if re.search(r"estima", frase, re.I):
+def _eh_data(frase: str, inicio: int, numero: str) -> bool:
+    antes = frase[max(0, inicio - 14):inicio].lower()
+    depois = frase[inicio + len(numero):inicio + len(numero) + 16].lower()
+    valor = numero.replace(".", "").replace(",", "")
+    return (bool(re.search(rf"({_MESES})\s+de\s*$", antes)) or bool(re.match(rf"\s*de\s+({_MESES})\b", depois))
+            or (valor.isdigit() and len(valor) == 4 and 1500 <= int(valor) <= 2100))
+
+
+def estima_antes(frase: str, nums_alvo: set[str], vez: int = 0) -> str:
+    """Marca o número de fonte secundária como aproximado, variando a palavra (`vez` alterna):
+    quantidade → "cerca de 50 trens", "aproximadamente 34 operários"; data ou outro caso →
+    "calcula-se que o museu fechou em 2006", no começo da oração do número."""
+    if re.search(r"estima|calcula-se|aponta-se", frase, re.I):
         return frase
-    posicoes = [m.start() for m in re.finditer(r"\d+(?:[.,]\d+)*", frase) if canon(m.group()) in nums_alvo]
-    posicao = min(posicoes) if posicoes else 0
+    alvo = next((m for m in re.finditer(r"\d+(?:[.,]\d+)*", frase) if canon(m.group()) in nums_alvo), None)
+    if alvo is not None and not _eh_data(frase, alvo.start(), alvo.group()):
+        if _JA_APROXIMADO.search(frase[:alvo.start()]):
+            return frase
+        palavra = _APROXIMACOES[vez % len(_APROXIMACOES)]
+        if alvo.start() == 0:
+            palavra = palavra[0].upper() + palavra[1:]
+        return frase[:alvo.start()] + palavra + " " + frase[alvo.start():]
+    oracao = _ORACOES[vez % len(_ORACOES)]
+    posicao = alvo.start() if alvo is not None else 0
     corte = max((frase.rfind(f, 0, posicao) + len(f) for f in _FRONTEIRAS if frase.rfind(f, 0, posicao) >= 0),
                 default=0) if posicao else 0
     if corte == 0:
-        m = re.match(r"(E|Mas|Então|Porém|Já|Hoje|Ainda)(,)?\s+", frase)
-        if m and m.group(1) in ("E", "Mas", "Então", "Porém"):
+        m = re.match(r"(E|Mas|Então|Porém)\s+", frase)
+        if m:
             resto = frase[m.end():]
-            return frase[:m.end()] + "estima-se que " + resto[0].lower() + resto[1:]
-        return "Estima-se que " + frase[0].lower() + frase[1:]
+            return frase[:m.end()] + oracao + " " + resto[0].lower() + resto[1:]
+        return oracao[0].upper() + oracao[1:] + " " + frase[0].lower() + frase[1:]
     resto = frase[corte:]
-    return frase[:corte] + "estima-se que " + resto[0].lower() + resto[1:]
+    return frase[:corte] + oracao + " " + resto[0].lower() + resto[1:]
 
 
 def _melhor_por_numero(n: str, fatos: list[dict]) -> dict | None:
@@ -247,7 +295,7 @@ def conferir_frases(script: dict, fatos: list[dict]) -> dict:
             secundarios = [f for f in citados if f["status"] == "secundario"]
             alvo = set().union(*(numeros(f["texto"]) for f in secundarios), set()) & nums
             if alvo:
-                novo = estima_antes(limpa, alvo)
+                novo = estima_antes(limpa, alvo, estimadas)
                 estimadas += novo != limpa
                 limpa = novo
             usados += [f["id"] for f in citados]
@@ -291,3 +339,41 @@ def ajustar_texto_final(script: dict) -> dict:
             frases.append(frase)
         cenas.append({**sc, "narration": " ".join(f for f in frases if f.strip())})
     return conferir_frases({**script, "scenes": cenas}, fatos)
+
+
+def _raiz(palavra: str) -> str:
+    import unicodedata
+    return unicodedata.normalize("NFKD", palavra.lower()).encode("ascii", "ignore").decode()
+
+
+_LIGACAO = {"de", "do", "da", "dos", "das", "e", "o", "a", "os", "as", "em", "no", "na", "um", "uma", "que", "com",
+            "por", "para", "ao", "à", "se"}
+
+
+def numero_fora_de_contexto(texto: str, narracao: str) -> list[str]:
+    """Números do título/miniatura cujo CONTEXTO (as palavras logo depois do número) não aparece ao
+    lado do mesmo número na narração. "53,85 km sob o mar" com a narração dizendo "53,85 km de
+    extensão" e "23,3 km sob o leito marinho" volta ["53,85 km sob o mar"]. Lista vazia = ok."""
+    erros = []
+    # a janela de contexto fica DENTRO da frase: "53,85 km de extensão. Sob o mar..." não vale para 53,85
+    frases_narr = [re.findall(r"\d+(?:[.,]\d+)*|[^\W\d_]+", fr) for fr in _FRASES.split(narracao)]
+    for m in re.finditer(r"(\d+(?:[.,]\d+)*)\s*([^\W\d_]+(?:\s+[^\W\d_]+){0,4})?", texto):
+        numero, resto = m.group(1), (m.group(2) or "")
+        palavras = [w for w in resto.split() if _raiz(w) not in _LIGACAO][1:3]  # a 1ª é a unidade ("km")
+        if not palavras:
+            continue
+        ok = False
+        for tokens_narr in frases_narr:
+            for i, tok in enumerate(tokens_narr):
+                if not tok[0].isdigit() or canon(tok) != canon(numero):
+                    continue
+                vizinhas = [_raiz(w) for w in tokens_narr[i + 1:i + 7]]
+                if all(any(v.startswith(_raiz(p)[:3]) or _raiz(p).startswith(v[:3]) for v in vizinhas if len(v) >= 3)
+                       for p in palavras):
+                    ok = True
+                    break
+            if ok:
+                break
+        if not ok:
+            erros.append(m.group(0).strip())
+    return erros

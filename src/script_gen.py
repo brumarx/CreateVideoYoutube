@@ -1123,9 +1123,14 @@ def generate_script(
         if not fatos_origem:
             raise ValueError("fatos verificados indisponíveis (extração das fontes falhou)")
         fatos_verificados = [f["texto"] for f in fatos_origem]
-        log.info("escritor recebe só a lista fechada: %d fatos verificados", len(fatos_origem))
+        # oficiais e confirmados primeiro; secundário só para chegar a 8 (cada um vira "estima-se")
+        principais = [f for f in fatos_origem if f["status"] != "secundario"]
+        secundarios = [f for f in fatos_origem if f["status"] == "secundario"]
+        para_escrever = principais + secundarios[:max(0, 8 - len(principais))]
+        log.info("escritor recebe só a lista fechada: %d fatos (%d oficiais/confirmados, %d secundários)",
+                 len(para_escrever), len(principais), len(para_escrever) - len(principais))
         writer_sources = [{"titulo": "FATOS VERIFICADOS (única base; cada cena usa um destes)", "url": "",
-                           "trecho": lista_para_escritor(fatos_origem)
+                           "trecho": lista_para_escritor(para_escrever)
                            + "\nNADA ALÉM DESTA LISTA: nenhuma causa, nome, data, número ou detalhe que não esteja nos F acima. "
                            "No FIM de cada frase que afirma algo, escreva entre colchetes os IDs dos fatos usados, "
                            "ex.: 'O túnel tem 53,85 km [F1].' Pergunta, saudação e convite aos comentários não levam ID."}]
@@ -1562,16 +1567,23 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
     novo = {**script, "title": data["titulo"].strip(), "thumbnail_text": data["thumbnail_text"].strip(),
             "thumbnail_image_prompt": data["thumbnail_image_prompt"].strip()}
     if script.get("_fatos_verificados") and not _retry:
-        # canal de fatos: o título e a miniatura novos são conferidos contra a narração final
+        # canal de fatos: o título e a miniatura novos são conferidos contra a narração final —
+        # primeiro em código (número com o mesmo contexto da narração), depois pela IA
         from .fact_check import _title_problems
-        problemas = _title_problems(novo)
+        from .fatos import numero_fora_de_contexto
+        fora = numero_fora_de_contexto(f"{novo['title']}. {novo.get('thumbnail_text') or ''}", narration)
+        problemas = ([{"tipo": "titulo_nao_confere", "termo": x,
+                       "motivo": f"'{x}' não é o que a narração diz junto desse número"} for x in fora]
+                     or _title_problems(novo))
         if problemas:
             motivo = "; ".join(str(p.get("motivo", "")) for p in problemas)[:300]
             log.warning("título/miniatura do roteiro final não conferem (%s) — refazendo uma vez", motivo)
             refeito = packaging_from_final(script, channel, topic,
                                            extra_rule=(extra_rule + " " if extra_rule else "") + f"O anterior errou: {motivo}",
                                            _retry=True)
-            if refeito is not None and refeito is not script and not _title_problems(refeito):
+            if (refeito is not None and refeito is not script
+                    and not numero_fora_de_contexto(f"{refeito['title']}. {refeito.get('thumbnail_text') or ''}", narration)
+                    and not _title_problems(refeito)):
                 return refeito
             log.warning("título/miniatura ainda não conferem com o texto validado")
             return None
@@ -2057,6 +2069,10 @@ def fatos_com_numeros_da_fonte(fatos: list[str], fontes: str) -> list[str]:
     return [f for f in fatos if _numeros(f) <= na_fonte]
 
 
+# versão da extração na chave do cache (mudou a regra de atribuição, o cache antigo não serve)
+EXTRACAO_VERSAO = 2
+
+
 def extract_facts(topic: str, web_facts: list[dict] | None) -> list[dict] | None:
     """Passo A: lista fechada de fatos com ORIGEM (ver src/fatos.py). As fontes vão numeradas;
     o modelo diz de qual fonte tirou cada fato e o código confere: o fato fica só se seus números
@@ -2067,7 +2083,7 @@ def extract_facts(topic: str, web_facts: list[dict] | None) -> list[dict] | None
     fontes = bloco_numerado(web_facts)
     if not fontes.strip():
         return None
-    guardado = disk_cache.get("fatos_com_origem", [topic, fontes])
+    guardado = disk_cache.get("fatos_com_origem", [EXTRACAO_VERSAO, topic, fontes])
     if guardado:
         log.info("extração de fatos em cache: %d fatos (mesmo tema e mesmas fontes)", len(guardado))
         return guardado
@@ -2096,7 +2112,7 @@ def extract_facts(topic: str, web_facts: list[dict] | None) -> list[dict] | None
     log.info("extração de fatos: %d propostos, %d com números confirmados nas fontes (%s)",
              len(brutos), len(fatos), ", ".join(f"{k} {v}" for k, v in contagem.items()))
     if len(fatos) >= 8:
-        disk_cache.put("fatos_com_origem", [topic, fontes], fatos)
+        disk_cache.put("fatos_com_origem", [EXTRACAO_VERSAO, topic, fontes], fatos)
         return fatos
     return None
 
