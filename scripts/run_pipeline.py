@@ -40,7 +40,7 @@ from src.goal_card import goal_card
 from src.infographic import CREDIT as INFOGRAPHIC_CREDIT, Renderer as InfographicRenderer, sanitize as sanitize_grafico
 from src.infographic import compose_presenter, presenter_pose
 from src.news_card import headline_card
-from src.fact_check import BLOCKING_TYPES, cortar_e_trocar_por_fato, feedback_for_rewrite, review_script, substituir_pela_lista
+from src.fact_check import BLOCKING_TYPES, ajustar_origem_dos_numeros, cortar_e_trocar_por_fato, feedback_for_rewrite, review_script, substituir_pela_lista
 from src.orchestrator import enqueue, update
 from src.people_photos import names_in, person_photo
 from src.real_media import real_clip, real_photos
@@ -815,10 +815,12 @@ def run(
 
                     news = [f for f in web_facts if "wikipedia.org" not in f.get("url", "")]
                     web_facts = (wikipedia_facts(topic) + news) or web_facts
+        fontes_oficiais: list[dict] = []
         if fontes_file:
             # 11/11: fontes oficiais escolhidas à mão (JSON: lista de {titulo, url, trecho}) entram
             # nas fontes do job: a extração e a revisão leem o mesmo bloco
             extra = json.loads(Path(fontes_file).read_text(encoding="utf-8"))
+            fontes_oficiais = [x for x in extra if x.get("oficial", True)]
             from src.fact_check import merge_web_facts as _merge_fontes
             web_facts = _merge_fontes(web_facts, extra) or web_facts
             log.info("[%s] fontes oficiais do arquivo: %d", job_id, len(extra))
@@ -1027,6 +1029,9 @@ def run(
         script = fix_script(script, channel.language)
         # barra comparativa só com valor falado na cena, sem ranking (22/10)
         script = clean_stat_overlays(script)
+        if channel_name in FATOS_CANAIS:
+            # orçamento, "estima-se" e número sem fonte: regra em código, sobre o texto validado
+            script = ajustar_origem_dos_numeros(script, fontes_oficiais)
         # 11/11: o texto está final e validado. SÓ AGORA saem título, miniatura, prompt da
         # miniatura e os prompts das imagens de cada cena, todos a partir deste texto.
         is_compilation_final = isinstance(facts, dict) and facts.get("tipo") == "compilacao"

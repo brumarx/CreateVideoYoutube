@@ -358,3 +358,50 @@ def test_falha_na_geracao_no_fractal_nao_reaproveita_o_antigo(monkeypatch):
                "scenes": [{"narration": "Texto validado.", "image_prompt": "ANTIGO"}]}
     assert sg.packaging_from_final(roteiro, ChannelConfig.load("curiosidades"), "Tema") is None
     assert sg.image_prompts_from_final(roteiro, "Tema") is None
+
+
+_OFICIAIS = [{"trecho": "Custo do próprio túnel em base de planejamento: 538,4 bilhões de ienes. Extensão de 53,85 km. "
+                        "Aberto em 13 de março de 1988."}]
+
+
+def _rot(*narr, lista=()):
+    return {"title": "", "_fatos_verificados": list(lista), "scenes": [{"narration": n} for n in narr]}
+
+
+def test_orcamento_oficial_escrito_como_custo_vira_orcamento_estimado():
+    out = fc.ajustar_origem_dos_numeros(_rot("E o custo total chegou a 538,4 bilhões de ienes."), _OFICIAIS)
+    assert out["scenes"][0]["narration"] == "E o orçamento estimado era de 538,4 bilhões de ienes."
+
+
+def test_dolar_sem_fonte_oficial_sai():
+    out = fc.ajustar_origem_dos_numeros(
+        _rot("O custo total chegou a 538,4 bilhões de ienes, o equivalente a 3,6 bilhões de dólares."), _OFICIAIS)
+    assert "dólares" not in out["scenes"][0]["narration"]
+    assert "orçamento estimado era de 538,4 bilhões de ienes" in out["scenes"][0]["narration"]
+
+
+def test_numero_so_de_fonte_secundaria_ganha_estima_se():
+    out = fc.ajustar_origem_dos_numeros(
+        _rot("Cerca de 50 trens de carga cruzam o túnel por dia.", lista=["Cerca de 50 trens de carga por dia"]), _OFICIAIS)
+    assert out["scenes"][0]["narration"].startswith("Estima-se que cerca de 50 trens")
+
+
+def test_numero_sem_fonte_nenhuma_sai():
+    out = fc.ajustar_origem_dos_numeros(_rot("O túnel tem 53,85 km.", "Desde 2014, locomotivas EH800 operam ali."), _OFICIAIS)
+    texto = " ".join(sc["narration"] for sc in out["scenes"])
+    assert "2014" not in texto and "53,85 km" in texto
+
+
+def test_numero_oficial_nao_muda():
+    roteiro = _rot("O túnel foi aberto em 13 de março de 1988 e tem 53,85 km.")
+    assert fc.ajustar_origem_dos_numeros(roteiro, _OFICIAIS) == roteiro
+
+
+def test_sem_fontes_oficiais_nao_mexe():
+    roteiro = _rot("Desde 2014, locomotivas EH800 operam ali.")
+    assert fc.ajustar_origem_dos_numeros(roteiro, []) == roteiro
+
+
+def test_regra_roda_antes_do_titulo_e_das_imagens():
+    src = _fonte_pipeline()
+    assert src.index("script = ajustar_origem_dos_numeros(script, fontes_oficiais)") < src.index("empacotado = packaging_from_final(")

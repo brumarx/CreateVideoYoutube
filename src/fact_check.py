@@ -753,6 +753,75 @@ def cortar_e_trocar_por_fato(script: dict, problems: list[dict]) -> tuple[dict, 
     return {**script, "scenes": [sc for sc in scenes if sc.get("narration", "").strip()], "_edited": True}, trocadas
 
 
+_PLANEJAMENTO = re.compile(r"planejament|orçament|orcament|previst|estimad|projetad", re.I)
+_CUSTO_FINAL = [
+    (re.compile(r"^O custo total (chegou a|foi de|ficou em|era de|de)\b"), "O orçamento estimado era de"),
+    (re.compile(r"\bo custo total (chegou a|foi de|ficou em|era de|de)\b"), "o orçamento estimado era de"),
+    (re.compile(r"\b(custou|consumiu)\b"), "teve orçamento estimado de"),
+]
+_DOLAR = re.compile(r",?\s*(o )?(equivalente|cerca) a (US\$\s*)?[\d.,]+\s*(mil|milhões|milhão|bilhões|bilhão)?\s*(de )?d[óo]lares", re.I)
+
+
+def _canon(numero: str) -> str:
+    try:
+        return format(float(numero.replace(".", "").replace(",", ".")), "g")
+    except ValueError:
+        return numero
+
+
+def _numeros(texto: str) -> set[str]:
+    return {_canon(n) for n in re.findall(r"\d+(?:[.,]\d+)*", texto)}
+
+
+def ajustar_origem_dos_numeros(script: dict, fontes_oficiais: list[dict]) -> dict:
+    """Regra em CÓDIGO (não no prompt), depois da validação, para o canal de fatos com fontes oficiais:
+    - valor de orçamento/planejamento oficial escrito como custo final vira "orçamento estimado";
+    - conversão para dólar que não está na fonte oficial sai da frase;
+    - número que só existe em fonte secundária (está na lista verificada, não na oficial): a frase
+      ganha "Estima-se que", sem citar a fonte;
+    - número que não está em fonte nenhuma: a frase sai.
+    Sem fontes oficiais, não mexe (não há referência)."""
+    if not fontes_oficiais:
+        return script
+    textos_oficiais = [str(f.get("trecho", "")) for f in fontes_oficiais]
+    oficiais = set().union(*(_numeros(t) for t in textos_oficiais))
+    planejamento = set().union(*(_numeros(t) for t in re.split(r"(?<=[.!?])\s+", " ".join(textos_oficiais))
+                                 if _PLANEJAMENTO.search(t)))
+    lista = set().union(*(_numeros(f) for f in (script.get("_fatos_verificados") or [])), set())
+    mudou = False
+    cenas = []
+    for sc in script.get("scenes", []):
+        frases = re.split(r"(?<=[.!?])\s+", sc.get("narration", ""))
+        saida = []
+        for frase in frases:
+            if not frase.strip():
+                continue
+            nova = frase
+            nums = _numeros(nova)
+            if nums & planejamento:
+                for padrao, troca in _CUSTO_FINAL:
+                    nova = padrao.sub(troca, nova)
+            m = _DOLAR.search(nova)
+            if m and not (_numeros(m.group(0)) <= oficiais):
+                nova = (nova[:m.start()] + nova[m.end():]).replace(" .", ".")
+            nums = _numeros(nova)
+            fora = nums - oficiais
+            if fora and not (fora <= lista):
+                log.warning("número sem fonte (%s) — frase removida: %r", ", ".join(sorted(fora - lista)), nova[:80])
+                mudou = True
+                continue
+            if fora and not re.search(r"estima", nova, re.I):
+                nova = "Estima-se que " + nova[0].lower() + nova[1:]
+            if nova != frase:
+                mudou = True
+            saida.append(nova)
+        cenas.append({**sc, "narration": " ".join(saida)})
+    if not mudou:
+        return script
+    log.info("origem dos números ajustada no código (orçamento, estima-se, sem fonte)")
+    return {**script, "scenes": [sc for sc in cenas if sc["narration"].strip()]}
+
+
 def _only_in_reviewed(problems: list[dict], script: dict) -> list[dict]:
     """Compilação: o revisor lê as narrações dos Shorts como fonte e apontava
     fato DELAS ("Neymar 10 mil reais aos 15") que nem estava no texto novo
