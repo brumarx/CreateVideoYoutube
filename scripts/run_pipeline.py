@@ -880,6 +880,13 @@ def run(
             if not problems:
                 break
             if channel_name in FATOS_CANAIS:
+                # 11/11: título reprovado não reprova o roteiro: o título é refeito do roteiro final, depois da validação
+                if any(p.get("tipo") == "titulo_nao_confere" for p in problems):
+                    problems = [p for p in problems if p.get("tipo") != "titulo_nao_confere"]
+                    script = {**script, "_edited": True}
+                    log.warning("[%s] título reprovado — será refeito do roteiro final", job_id)
+                    if not problems:
+                        break
                 # 11/11: número errado com correspondência segura na lista de fatos verificados
                 # é trocado na hora (default, sem reprovar); o que não tem correspondência segura
                 # segue como bloqueio
