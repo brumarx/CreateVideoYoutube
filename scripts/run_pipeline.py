@@ -86,6 +86,11 @@ MAX_TOPIC_CHECKS = 3
 MAX_SPEEDUP = 1.2
 
 
+def _assunto_tema(topic: str) -> str:
+    from src.script_gen import _assunto_do_tema
+    return _assunto_do_tema(topic)
+
+
 def _comentario_do_texto(script: dict, n_cenas: int) -> str:
     """Canal de fatos: o comentário fixado é a última pergunta da própria narração aprovada (nada fora
     do texto validado — job 858: a pergunta gerada citava o ferry, que o roteiro não diz)."""
@@ -1069,7 +1074,7 @@ def run(
         ja_empacotado = bool(approved and script_file and script.get("title") and all(
             sc.get("image_prompt") for sc in script.get("scenes", []))
             and (channel_name not in FATOS_CANAIS or (
-                titulo_copiado(script["title"], _narr_final) and not termina_solto(script["title"])
+                titulo_copiado(script["title"], _narr_final, _assunto_tema(topic)) and not termina_solto(script["title"])
                 and (not script.get("thumbnail_text") or (copiado_do_texto(str(script["thumbnail_text"]), _narr_final)
                                                           and not termina_solto(str(script["thumbnail_text"]))
                                                           and termina_em_fronteira(str(script["thumbnail_text"]), _narr_final))))))

@@ -1526,6 +1526,18 @@ def refresh_packaging(script: dict, channel: ChannelConfig, topic: str = "", ext
         return {**script, **{k: fallback[k] for k in stale}}
 
 
+def _assunto_do_tema(topic: str) -> str:
+    """Nome do assunto do tema validado: o título do artigo da Wikipédia em português (em cache)."""
+    if not topic:
+        return ""
+    try:
+        from .web_search import _article_titles
+        titulos = _article_titles(topic)
+    except Exception:  # noqa: BLE001 — sem o nome, o título usa só o texto
+        return ""
+    return (titulos.get("pt") or titulos.get("en") or [""])[0]
+
+
 def _frases_com_numero(narracao: str) -> list[str]:
     from .fatos import frases_com_numero
     return frases_com_numero(narracao)
@@ -1552,7 +1564,8 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
         + (f"Regra de título do canal:{rule.group(1).strip()}\n" if rule else "")
         + (f"Regra deste vídeo (vale mais que a do canal): {extra_rule}\n" if extra_rule else "")
         + (("REGRA DO CANAL DE FATOS: o título e o texto da miniatura são COPIADOS da NARRAÇÃO FINAL — palavras "
-            "seguidas, iguais e na mesma ordem (pode mudar maiúscula). Título no formato 'Assunto: trecho copiado'. "
+            "seguidas, iguais e na mesma ordem (pode mudar maiúscula). Título no formato "
+            f"'{_assunto_do_tema(topic) or 'Assunto'}: trecho copiado', sem repetir no trecho as palavras do assunto. "
             "Nada que não esteja escrito assim na narração. Trechos com número que podem ser copiados: "
             + "; ".join(f'"{x}"' for x in _frases_com_numero(narration)) + "\n")
            if script.get("_fatos_verificados") else "")
@@ -1591,7 +1604,7 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
             return (copiado_do_texto(txt, narration) and not termina_solto(txt)
                     and termina_em_fronteira(txt, narration))
 
-        fora = [x for x, ok in ((novo["title"], titulo_copiado(novo["title"], narration) and not termina_solto(novo["title"])),
+        fora = [x for x, ok in ((novo["title"], titulo_copiado(novo["title"], narration, _assunto_do_tema(topic)) and not termina_solto(novo["title"])),
                                 (str(novo.get("thumbnail_text") or ""), not novo.get("thumbnail_text")
                                  or _mini_ok(str(novo.get("thumbnail_text"))))) if not ok]
         problemas = ([{"tipo": "titulo_nao_confere", "termo": x,
@@ -1603,18 +1616,18 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
             refeito = packaging_from_final(script, channel, topic,
                                            extra_rule=(extra_rule + " " if extra_rule else "") + f"O anterior errou: {motivo}",
                                            _retry=True)
-            if (refeito is not None and refeito is not script and titulo_copiado(refeito["title"], narration)
+            if (refeito is not None and refeito is not script and titulo_copiado(refeito["title"], narration, _assunto_do_tema(topic))
                     and not termina_solto(refeito["title"])
                     and (not refeito.get("thumbnail_text") or _mini_ok(str(refeito["thumbnail_text"])))
                     and not _title_problems(refeito)):
                 return refeito
             # saída sem reprovar o roteiro já validado: o que não confere sai sem número
             final = refeito if refeito is not None and refeito is not script else novo
-            titulo_ok = titulo_copiado(final["title"], narration) and not termina_solto(final["title"])
+            titulo_ok = titulo_copiado(final["title"], narration, _assunto_do_tema(topic)) and not termina_solto(final["title"])
             miniatura_ok = not final.get("thumbnail_text") or _mini_ok(str(final["thumbnail_text"]))
             # o assunto também tem de estar escrito na narração; senão, o primeiro trecho com número dela
-            assunto = _corta_titulo((topic or str(final.get("title") or "")).split(":")[0].strip())
-            if not copiado_do_texto(assunto, narration):
+            assunto = _assunto_do_tema(topic) or _corta_titulo((topic or str(final.get("title") or "")).split(":")[0].strip())
+            if not copiado_do_texto(assunto, narration) and not _assunto_do_tema(topic):
                 assunto = _corta_titulo((_frases_com_numero(narration) or [assunto])[0])
             log.warning("título/miniatura não conferem após refazer — %s%s", "" if titulo_ok else "título vira o assunto; ",
                         "" if miniatura_ok else "miniatura sem texto")

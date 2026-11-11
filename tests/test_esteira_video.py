@@ -334,3 +334,24 @@ def test_comentario_do_fractal_e_a_pergunta_final_da_narracao():
                           {"narration": "Você teria coragem de atravessar esse túnel? Deixe nos comentários."}]}
     assert rp._comentario_do_texto(roteiro, 2) == "Você teria coragem de atravessar esse túnel?"
     assert "_comentario_do_texto(script, original_scene_count) if channel_name in FATOS_CANAIS" in PIPELINE
+
+
+# ---------- job 860: título com o nome do assunto validado, sem repetir palavras
+NARR_PONTE = "Uma ponte estica dois metros. O vão central mede 1991 metros, maior que qualquer outro na época da inauguração."
+
+
+@pytest.mark.parametrize("titulo,ok", [
+    ("Vão central: O vão central mede 1991 metros", False),                  # repete o assunto
+    ("Ponte Akashi Kaikyō: O vão central mede 1991 metros", True),          # nome do assunto validado
+    ("Ponte Inventada: O vão central mede 1991 metros", False),             # nome que não é o assunto
+    ("Ponte Akashi Kaikyō: o maior do mundo", False),                       # trecho que não está no texto
+])
+def test_titulo_com_nome_do_assunto(titulo, ok):
+    from src.fatos import titulo_copiado
+    assert titulo_copiado(titulo, NARR_PONTE, "Ponte Akashi Kaikyō") is ok
+
+
+def test_pedido_do_titulo_traz_o_nome_do_assunto(monkeypatch):
+    bom = json.dumps({"titulo": "Túnel Seikan: 53,85 km de extensão", "thumbnail_text": "53,85 KM DE EXTENSÃO", "thumbnail_image_prompt": "p"})
+    _, pedidos = _pacote(monkeypatch, [bom])
+    assert "'Túnel Seikan: trecho copiado'" in pedidos[0]

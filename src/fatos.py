@@ -440,10 +440,23 @@ def copiado_do_texto(trecho: str, narracao: str) -> bool:
     return any(texto[i:i + n] == alvo for i in range(len(texto) - n + 1))
 
 
-def titulo_copiado(titulo: str, narracao: str) -> bool:
-    """Título "Assunto: trecho" — cada parte separada por dois-pontos tem de ser cópia da narração."""
+def titulo_copiado(titulo: str, narracao: str, assunto: str = "") -> bool:
+    """Título "Assunto: trecho" — cada parte tem de ser cópia da narração; a primeira também pode ser o
+    nome do assunto do tema validado (título da Wikipédia), mesmo que a narração não o escreva. O
+    trecho não pode repetir as palavras do assunto ("Vão central: O vão central mede...")."""
     partes = [p.strip() for p in re.split(r"[:—–|]", titulo or "") if p.strip()]
-    return bool(partes) and all(copiado_do_texto(p, narracao) for p in partes)
+    if not partes:
+        return False
+    nome = _palavras_seguidas(assunto)
+    primeira_ok = copiado_do_texto(partes[0], narracao) or (bool(nome) and _palavras_seguidas(partes[0]) == nome)
+    if not primeira_ok or not all(copiado_do_texto(p, narracao) for p in partes[1:]):
+        return False
+    if len(partes) >= 2:
+        a = {w for w in _palavras_seguidas(partes[0]) if len(w) > 3}
+        b = set(_palavras_seguidas(partes[1]))
+        if a and len(a & b) / len(a) >= 0.5:
+            return False
+    return True
 
 
 # proporção dita em palavras precisa bater com a conta parte/total da mesma unidade
