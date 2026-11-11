@@ -1363,7 +1363,7 @@ CLASSIFIQUE cada ponto antes de corrigir:
   com o mesmo nível de precisão (ex.: "orçamento inicial de X" em vez de "custou X").
 - SEM EVIDÊNCIA: nenhuma fonte sustenta o detalhe. Apague o detalhe ou reescreva a
   frase de modo geral, sem número nem causa específica.
-Nunca invente fonte, número ou nome para satisfazer a revisão. Não acrescente número, medida, data, nome ou detalhe que não esteja nas
+Nunca invente fonte, número ou nome para satisfazer a revisão. Número de orçamento, custo previsto ou estimativa NÃO é custo final: escreva 'orçamento estimado de X' ou 'estimava-se X', nunca 'custou X' ou 'custo total de X'. Não acrescente número, medida, data, nome ou detalhe que não esteja nas
 FONTES. Ao generalizar, não deixe frase vaga que não diz nada ("Ele
 participou das partidas", "teve papel importante") — apague a frase. Não mexa no que não foi apontado: mesmo tom, mesmo tamanho, mesmo
 número de cenas. Se o TÍTULO foi apontado, devolva um título novo, alinhado à narração.
