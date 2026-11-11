@@ -182,3 +182,19 @@ def test_sem_modo_fatos_a_selecao_continua_por_palavra_chave():
     pagina = "O túnel Seikan liga duas ilhas japonesas pelo fundo do mar. Em 1988 houve outra coisa sem relação nenhuma aqui."
     trecho = web_search._best_passage(pagina, {"seikan"}, 800)
     assert "Seikan" in trecho and "1988" not in trecho
+
+
+def test_mudanca_no_codigo_invalida_o_cache_sozinha(monkeypatch, tmp_path):
+    chamadas = _sem_internet(monkeypatch, tmp_path, lambda q: [{"titulo": "t", "url": "https://a.com", "trecho": "x"}])
+    web_search.search_topic_facts("Tema")
+    monkeypatch.setattr(disk_cache, "versao_do_codigo", lambda *a: "outro-codigo")
+    web_search.search_topic_facts("Tema")
+    assert chamadas.count("Tema") == 2
+
+
+def test_impressao_digital_muda_com_o_arquivo(tmp_path, monkeypatch):
+    import src.disk_cache as dc
+    a = dc.versao_do_codigo("fatos.py")
+    b = dc.versao_do_codigo("fatos.py")
+    c = dc.versao_do_codigo("web_search.py")
+    assert a == b and a != c

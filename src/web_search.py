@@ -47,7 +47,8 @@ def search_topic_facts(query: str, max_results: int = 5, oficiais: bool = False)
     if not query:
         return None
     from . import disk_cache
-    guardado = disk_cache.get("busca_web", [BUSCA_VERSAO, query, max_results, oficiais])
+    versao = disk_cache.versao_do_codigo("web_search.py", "fatos.py")
+    guardado = disk_cache.get("busca_web", [BUSCA_VERSAO, versao, query, max_results, oficiais])
     if guardado:
         log.info("busca em cache: %r (%d fontes)", query[:60], len(guardado))
         return guardado
@@ -82,7 +83,7 @@ def search_topic_facts(query: str, max_results: int = 5, oficiais: bool = False)
                 vistos.add(f["url"])
                 ordenadas.append(f)
         facts = ordenadas
-    disk_cache.put("busca_web", [BUSCA_VERSAO, query, max_results, oficiais], facts)
+    disk_cache.put("busca_web", [BUSCA_VERSAO, versao, query, max_results, oficiais], facts)
     return facts or None
 
 

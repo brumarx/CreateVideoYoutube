@@ -16,6 +16,20 @@ BASE = Path(__file__).resolve().parent.parent / "data" / "cache"
 TTL_DAYS = 7
 
 
+def versao_do_codigo(*arquivos: str) -> str:
+    """Impressão digital dos arquivos de código que produzem o valor guardado: mudou o código, a
+    chave muda e o cache antigo deixa de valer sozinho (11/11: duas vezes o cache devolveu o
+    resultado da versão anterior porque a versão manual não foi trocada)."""
+    base = Path(__file__).resolve().parent
+    h = hashlib.sha1()
+    for nome in arquivos:
+        try:
+            h.update((base / nome).read_bytes())
+        except OSError:
+            h.update(nome.encode())
+    return h.hexdigest()[:12]
+
+
 def _path(namespace: str, chave) -> Path:
     raw = json.dumps(chave, ensure_ascii=False, sort_keys=True)
     return BASE / namespace / f"{hashlib.sha1(raw.encode()).hexdigest()}.json"

@@ -2082,6 +2082,7 @@ def fatos_com_numeros_da_fonte(fatos: list[str], fontes: str) -> list[str]:
 
 # versão da extração na chave do cache (mudou a regra de atribuição, o cache antigo não serve)
 EXTRACAO_VERSAO = 3
+EXTRACAO_PROMPT_ID = "fatos-com-fontes-numeradas-v1"  # trocar quando o texto do pedido mudar
 
 
 def extract_facts_e_outliers(topic: str, web_facts: list[dict] | None) -> tuple[list[dict], list[str]] | None:
@@ -2094,7 +2095,8 @@ def extract_facts_e_outliers(topic: str, web_facts: list[dict] | None) -> tuple[
     fontes = bloco_numerado(web_facts)
     if not fontes.strip():
         return None
-    guardado = disk_cache.get("fatos_com_origem", [EXTRACAO_VERSAO, topic, fontes])
+    versao = disk_cache.versao_do_codigo("fatos.py") + EXTRACAO_PROMPT_ID
+    guardado = disk_cache.get("fatos_com_origem", [EXTRACAO_VERSAO, versao, topic, fontes])
     if guardado:
         log.info("extração de fatos em cache: %d fatos (mesmo tema e mesmas fontes)", len(guardado["fatos"]))
         return guardado["fatos"], guardado["outliers"]
@@ -2124,7 +2126,7 @@ def extract_facts_e_outliers(topic: str, web_facts: list[dict] | None) -> tuple[
     log.info("extração de fatos: %d propostos, %d com números confirmados nas fontes (%s)",
              len(brutos), len(fatos), ", ".join(f"{k} {v}" for k, v in contagem.items()))
     if len(fatos) >= 8:
-        disk_cache.put("fatos_com_origem", [EXTRACAO_VERSAO, topic, fontes], {"fatos": fatos, "outliers": outliers})
+        disk_cache.put("fatos_com_origem", [EXTRACAO_VERSAO, versao, topic, fontes], {"fatos": fatos, "outliers": outliers})
         return fatos, outliers
     return None
 
