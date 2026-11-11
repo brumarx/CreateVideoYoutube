@@ -298,6 +298,11 @@ def _parte_ouvida(parte: str, ouvidas: list[str]) -> bool:
     "Onshu"), a transcrição cortar o fim do nome ("Tappi" → "TAP", ao menos 3 letras) ou juntar uma
     letra da palavra seguinte ("Onshua" = Honshu + "a"). Letra A MAIS no começo ("Esvalbard") é erro."""
     variantes = {parte, parte[1:] if parte.startswith("h") and len(parte) > 3 else parte}
+    for o in list(ouvidas):
+        # sotaque brasileiro: "te"/"de" no fim viram "tchi"/"dji" ("Hakodate" ouvido "Hakodachi")
+        for fala, escrita in (("tchi", "te"), ("chi", "te"), ("dji", "de"), ("ji", "de")):
+            if o.endswith(fala) and len(o) > len(fala) + 2:
+                ouvidas = [*ouvidas, o[: -len(fala)] + escrita]
     for o in ouvidas:
         for v in variantes:
             if o == v or (len(o) >= 3 and v.startswith(o)) or (o.startswith(v) and len(o) - len(v) <= 1):

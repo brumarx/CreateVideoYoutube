@@ -1397,7 +1397,7 @@ def run(
             grafico_path = None
             grafico = sanitize_grafico(scene.get("grafico"), scene["narration"]) if i < original_scene_count else None
             real_subject = (scene.get("real_subject") or "").strip() if channel.real_media else ""
-            if channel.real_media and not real_subject:
+            if channel.real_media and not real_subject and not script.get("_imagens_do_texto_final"):
                 # o roteiro deixou null numa cena que cita pessoa pelo nome: a busca
                 # usa o nome da narração (foto do verbete, checada na visão)
                 from src.real_media import person_in_narration

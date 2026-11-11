@@ -1665,6 +1665,9 @@ def image_prompts_from_final(script: dict, topic: str = "") -> dict | None:
                                                    if x.get("real_subject") and str(x.get("real_subject")).lower() != "null" else "")}
                                  for sc, x in zip(scenes, itens)]}
     log.info("prompts de imagem gerados do roteiro final: %d cenas", len(scenes))
+    # assunto da foto real vazio aqui é decisão (a cena não cita nada real pelo nome): o pipeline não
+    # procura nome na narração para preencher (job 856: "Estreito" virou foto do Maranhão)
+    novo = {**novo, "_imagens_do_texto_final": True}
     return sem_escrita_na_imagem(_sanitize_club_crests(_sanitize_person_images(topic, novo)))
 
 

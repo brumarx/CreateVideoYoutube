@@ -268,3 +268,40 @@ def test_pipeline_encurta_antes_do_titulo_e_da_voz():
     encurta = PIPELINE.index("script = encurtar_roteiro(script, int(SHORTS_MAX_SECONDS * PALAVRAS_POR_MINUTO_VOZ / 60))")
     assert encurta < PIPELINE.index("packaging_from_final(\n            script, channel, topic")
     assert encurta < PIPELINE.index("audio_problems, audio_names = review_audio_full(")
+
+
+# ---------- job 856: sotaque brasileiro ("te" → "tchi") não é erro de pronúncia; gráfico com vírgula; foto por palavra solta
+def test_sotaque_brasileiro_no_nome_japones_passa():
+    from src.video_qa import name_problems
+    texto = "Em março de 2016, a linha ligou Shin-Aomori e Shin-Hakodate-Hokuto."
+    ouvido = "Em março de 2016, a linha ligou Shin Aomori e Shin Hakodachi Okuto."
+    assert name_problems([texto], ouvido) == []
+
+
+def test_troca_de_verdade_no_fim_continua_marcada():
+    from src.video_qa import name_problems
+    assert name_problems(["O porto de Hakodate fica no norte."], "O porto de Hakomachi fica no norte.")
+
+
+@pytest.mark.parametrize("valor,esperado", [("53.85", "53,85"), ("6.900", "6.900"), ("1988", "1988"), ("3.6 bi", "3,6 bi"), ("90%", "90%")])
+def test_numero_do_grafico_em_portugues(valor, esperado):
+    from src.infographic import numero_pt
+    assert numero_pt(valor) == esperado
+
+
+def test_assunto_vazio_do_texto_final_nao_vira_busca_por_nome():
+    assert 'if channel.real_media and not real_subject and not script.get("_imagens_do_texto_final"):' in PIPELINE
+    from src import script_gen as sg
+    import json as _j
+
+    def fake(messages, **kw):
+        return _j.dumps({"cenas": [{"image_prompt": "calm sea", "stock_query": "calm sea", "real_subject": None}]})
+
+    import pytest as _p
+    mp = _p.MonkeyPatch()
+    mp.setattr(sg, "complete", fake)
+    try:
+        out = sg.image_prompts_from_final({"scenes": [{"narration": "Hoje, atravessar o Estreito de Tsugaru virou algo banal."}]}, "T")
+    finally:
+        mp.undo()
+    assert out["_imagens_do_texto_final"] is True and out["scenes"][0]["real_subject"] == ""

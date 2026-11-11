@@ -754,8 +754,14 @@ def _comparison_scene(spec: dict, w: int, h: int, background: Image.Image | None
     return img.convert("RGB")
 
 
+def numero_pt(valor: str) -> str:
+    """Número no formato do português: decimal com vírgula ("53.85" → "53,85"). Milhar com ponto
+    ("6.900") fica como está."""
+    return re.sub(r"(\d)\.(\d{1,2})(?!\d)", r"\1,\2", valor)
+
+
 def _number_scene(spec: dict, w: int, h: int, background: Image.Image | None) -> Image.Image | None:
-    value = str(spec.get("valor") or "").strip()
+    value = numero_pt(str(spec.get("valor") or "").strip())
     if not value or len(value) > 12:
         return None
     img = _backdrop(background, w, h)
