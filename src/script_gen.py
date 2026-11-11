@@ -1585,10 +1585,11 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
         # canal de fatos: o título e a miniatura novos são conferidos contra a narração final —
         # primeiro em código (número com o mesmo contexto da narração), depois pela IA
         from .fact_check import _title_problems
-        from .fatos import copiado_do_texto, titulo_copiado
-        fora = [x for x, ok in ((novo["title"], titulo_copiado(novo["title"], narration)),
+        from .fatos import copiado_do_texto, termina_solto, titulo_copiado
+        fora = [x for x, ok in ((novo["title"], titulo_copiado(novo["title"], narration) and not termina_solto(novo["title"])),
                                 (str(novo.get("thumbnail_text") or ""), not novo.get("thumbnail_text")
-                                 or copiado_do_texto(str(novo.get("thumbnail_text")), narration))) if not ok]
+                                 or (copiado_do_texto(str(novo.get("thumbnail_text")), narration)
+                                     and not termina_solto(str(novo.get("thumbnail_text")))))) if not ok]
         problemas = ([{"tipo": "titulo_nao_confere", "termo": x,
                        "motivo": f"'{x}' não está escrito assim na narração aprovada"} for x in fora]
                      or _title_problems(novo))
@@ -1599,13 +1600,16 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
                                            extra_rule=(extra_rule + " " if extra_rule else "") + f"O anterior errou: {motivo}",
                                            _retry=True)
             if (refeito is not None and refeito is not script and titulo_copiado(refeito["title"], narration)
-                    and (not refeito.get("thumbnail_text") or copiado_do_texto(str(refeito["thumbnail_text"]), narration))
+                    and not termina_solto(refeito["title"])
+                    and (not refeito.get("thumbnail_text") or (copiado_do_texto(str(refeito["thumbnail_text"]), narration)
+                                                                and not termina_solto(str(refeito["thumbnail_text"]))))
                     and not _title_problems(refeito)):
                 return refeito
             # saída sem reprovar o roteiro já validado: o que não confere sai sem número
             final = refeito if refeito is not None and refeito is not script else novo
-            titulo_ok = titulo_copiado(final["title"], narration)
-            miniatura_ok = not final.get("thumbnail_text") or copiado_do_texto(str(final["thumbnail_text"]), narration)
+            titulo_ok = titulo_copiado(final["title"], narration) and not termina_solto(final["title"])
+            miniatura_ok = not final.get("thumbnail_text") or (copiado_do_texto(str(final["thumbnail_text"]), narration)
+                                                               and not termina_solto(str(final["thumbnail_text"])))
             # o assunto também tem de estar escrito na narração; senão, o primeiro trecho com número dela
             assunto = _corta_titulo((topic or str(final.get("title") or "")).split(":")[0].strip())
             if not copiado_do_texto(assunto, narration):
@@ -1661,7 +1665,41 @@ def image_prompts_from_final(script: dict, topic: str = "") -> dict | None:
                                                    if x.get("real_subject") and str(x.get("real_subject")).lower() != "null" else "")}
                                  for sc, x in zip(scenes, itens)]}
     log.info("prompts de imagem gerados do roteiro final: %d cenas", len(scenes))
-    return _sanitize_club_crests(_sanitize_person_images(topic, novo))
+    return sem_escrita_na_imagem(_sanitize_club_crests(_sanitize_person_images(topic, novo)))
+
+
+_PEDE_ESCRITA = re.compile(r"\b(sign|signs|signage|displaying|display|written|writing|text|label|caption|banner|plaque|"
+                           r"letters?|numbers?|reading|says|indicating|logo)\b", re.I)
+
+
+def _sem_escrita(texto: str) -> str:
+    """Tira do pedido de imagem o que vira letra na imagem: palavras de escrita, números com
+    unidade e siglas em maiúsculas ("JRCC tunnel construction sign" → "tunnel construction")."""
+    palavras = []
+    for w in texto.replace(",", " ").split():
+        limpa = w.strip(".:;!?\"'()")
+        if (not limpa or _PEDE_ESCRITA.fullmatch(limpa) or any(ch.isdigit() for ch in limpa)
+                or limpa.lower() in {"km", "m", "kg", "t", "%"} or (len(limpa) >= 2 and limpa.isupper())):
+            continue
+        palavras.append(limpa)
+    return " ".join(palavras).strip()
+
+
+def sem_escrita_na_imagem(script: dict) -> dict:
+    """Prompt que pede placa/letreiro/texto/número na imagem gerada (a IA erra as letras) vira a
+    busca de imagem da própria cena (stock_query, também do texto final)."""
+    cenas = []
+    trocadas = 0
+    for sc in script.get("scenes", []):
+        prompt = str(sc.get("image_prompt") or "")
+        if prompt and _PEDE_ESCRITA.search(prompt):
+            base = _sem_escrita(str(sc.get("stock_query") or "")) or _sem_escrita(prompt)
+            sc = {**sc, "image_prompt": f"{base}, realistic photo, cinematic light, no text"}
+            trocadas += 1
+        cenas.append(sc)
+    if trocadas:
+        log.warning("prompt de imagem pedia escrita em %d cena(s) — trocado pela busca da cena", trocadas)
+    return {**script, "scenes": cenas}
 
 
 def _repair_parse_packaging(raw: str, allowed: set[str]) -> dict | None:

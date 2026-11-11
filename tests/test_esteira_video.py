@@ -167,3 +167,64 @@ def test_pedido_manda_copiar_da_narracao(monkeypatch):
     out, pedidos = _pacote(monkeypatch, [bom])
     assert "COPIADOS da NARRAÇÃO FINAL" in pedidos[0]
     assert out["title"] == "Túnel Seikan: 53,85 km de extensão" and out["thumbnail_text"] == "53,85 KM DE EXTENSÃO"
+
+
+# ---------- rodada 26: proporção errada, miniatura cortada, imagem com escrita
+def _rot(*narr):
+    return {"scenes": [{"narration": n} for n in narr]}
+
+
+def test_maior_parte_que_nao_bate_com_a_conta_sai():
+    from src.fatos import ajustar_texto_final, proporcao_errada
+    r = _rot("Existe um caminho de 53,85 km que atravessa o mar.",
+             "Do total, 23,3 km ficam sob o leito. Ou seja: a maior parte da viagem acontece debaixo da água.")
+    assert proporcao_errada(r) == ["Ou seja: a maior parte da viagem acontece debaixo da água."]
+    out = ajustar_texto_final(r)
+    assert "maior parte" not in out["scenes"][1]["narration"]
+
+
+@pytest.mark.parametrize("frase", ["Ou seja: menos da metade do caminho fica debaixo da água.",
+                                   "Cerca de metade do caminho, 23,3 km, fica debaixo da água."])
+def test_proporcao_que_bate_com_a_conta_fica(frase):
+    from src.fatos import proporcao_errada
+    assert proporcao_errada(_rot("O caminho tem 53,85 km.", f"Sob o mar ficam 23,3 km. {frase}")) == []
+
+
+def test_maioria_certa_fica():
+    from src.fatos import proporcao_errada
+    assert proporcao_errada(_rot("O túnel tem 53,85 km.", "Desses, 40 km ficam em terra: a maior parte.")) == []
+
+
+@pytest.mark.parametrize("texto,solto", [("23,3 km ficam sob", True), ("53,85 KM DE", True), ("TÚNEL SEIKAN", False),
+                                         ("23,3 KM SOB O LEITO MARINHO", False), ("Túnel Seikan: 53,85 km que atravessa o mar", False)])
+def test_texto_curto_cortado_no_meio(texto, solto):
+    from src.fatos import termina_solto
+    assert termina_solto(texto) is solto
+
+
+def test_miniatura_cortada_e_refeita_ou_sai_sem_texto(monkeypatch):
+    cortada = json.dumps({"titulo": "Túnel Seikan: 53,85 km de extensão", "thumbnail_text": "23,3 km sob o", "thumbnail_image_prompt": "p"})
+    out, _ = _pacote(monkeypatch, [cortada, cortada])
+    assert out["thumbnail_text"] is None and out["title"] == "Túnel Seikan: 53,85 km de extensão"
+
+
+@pytest.mark.parametrize("prompt,busca,esperado", [
+    ("construction site sign displaying \"JRCC\" at the entrance", "JRCC tunnel construction sign", "tunnel construction"),
+    ("sign at tunnel entrance indicating 53.85 km length", "53.85 km underwater tunnel sign", "underwater tunnel"),
+])
+def test_imagem_que_pede_escrita_vira_busca_limpa(prompt, busca, esperado):
+    from src.script_gen import sem_escrita_na_imagem
+    out = sem_escrita_na_imagem({"scenes": [{"narration": "x", "image_prompt": prompt, "stock_query": busca}]})
+    novo = out["scenes"][0]["image_prompt"]
+    assert novo.startswith(esperado) and "sign" not in novo and "JRCC" not in novo and "53" not in novo
+
+
+def test_imagem_sem_escrita_nao_muda():
+    from src.script_gen import sem_escrita_na_imagem
+    r = {"scenes": [{"narration": "x", "image_prompt": "stormy sea above a railway tunnel", "stock_query": "stormy sea"}]}
+    assert sem_escrita_na_imagem(r) == r
+
+
+def test_render_reempacota_quando_a_miniatura_aprovada_esta_cortada():
+    assert "and not termina_solto(str(script[\"thumbnail_text\"]))" in PIPELINE
+    assert PIPELINE.index("script = sem_escrita_na_imagem(script)") < PIPELINE.index("script = art_direction(script, channel)")

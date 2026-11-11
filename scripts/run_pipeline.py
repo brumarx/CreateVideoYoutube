@@ -51,6 +51,7 @@ from src.script_gen import (
     trim_teaser_ending,
     chapter_titles, clean_stat_overlays, engagement_question, fix_dangling_hooks, generate_script, refresh_packaging,
     repair_script, vary_close_repeats, packaging_from_final, _normalize_currency, image_prompts_from_final, refresh_description,
+    sem_escrita_na_imagem,
 )
 from src.spellcheck import fix_script, fix_text
 from src.stock_media import search_stock_clip, search_stock_photo
@@ -1049,8 +1050,14 @@ def run(
         # 11/11: o texto está final e validado. SÓ AGORA saem título, miniatura, prompt da
         # miniatura e os prompts das imagens de cada cena, todos a partir deste texto.
         is_compilation_final = isinstance(facts, dict) and facts.get("tipo") == "compilacao"
+        from src.fatos import copiado_do_texto, termina_solto, titulo_copiado
+        _narr_final = " ".join(sc.get("narration", "") for sc in script.get("scenes", []))
         ja_empacotado = bool(approved and script_file and script.get("title") and all(
-            sc.get("image_prompt") for sc in script.get("scenes", [])))
+            sc.get("image_prompt") for sc in script.get("scenes", []))
+            and (channel_name not in FATOS_CANAIS or (
+                titulo_copiado(script["title"], _narr_final) and not termina_solto(script["title"])
+                and (not script.get("thumbnail_text") or (copiado_do_texto(str(script["thumbnail_text"]), _narr_final)
+                                                          and not termina_solto(str(script["thumbnail_text"])))))))
         if ja_empacotado:
             log.info("[%s] roteiro aprovado com título e imagens do texto validado — mantidos", job_id)
         elif channel_name in FATOS_CANAIS:
@@ -1067,6 +1074,8 @@ def run(
             if com_imagens is None:
                 raise ScriptRejected("prompts das imagens não puderam ser gerados do texto validado")
             script = {**com_imagens, "description": refresh_description(com_imagens)}
+        # imagem gerada nunca com escrita (vale também para o roteiro aprovado vindo de arquivo)
+        script = sem_escrita_na_imagem(script)
         # visual de cada cena escolhido numa chamada só pra isso, no roteiro
         # FINAL (o LLM quase não pedia gráfico junto com o roteiro)
         script = art_direction(script, channel)

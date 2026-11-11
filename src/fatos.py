@@ -346,6 +346,13 @@ def ajustar_texto_final(script: dict) -> dict:
     conversão de moeda sem fato sai da frase; valor que só existe como planejamento/orçamento vira
     "orçamento estimado"; e a mesma conferência por número de conferir_frases (número sem fato tira
     a frase, fato secundário põe "estima-se")."""
+    # proporção em palavras que contradiz a conta sai (vale mesmo sem lista de fatos)
+    erradas = set(proporcao_errada(script))
+    if erradas:
+        log.warning("proporção que não bate com a conta — frase(s) removida(s): %s", " | ".join(x[:70] for x in erradas))
+        script = {**script, "scenes": [{**sc, "narration": " ".join(
+            fr for fr in _FRASES.split(sc.get("narration", "")) if fr.strip() and fr.strip() not in erradas)}
+            for sc in script.get("scenes", [])]}
     fatos = script.get("_fatos") or []
     if not fatos:
         return script
@@ -437,3 +444,48 @@ def titulo_copiado(titulo: str, narracao: str) -> bool:
     """Título "Assunto: trecho" — cada parte separada por dois-pontos tem de ser cópia da narração."""
     partes = [p.strip() for p in re.split(r"[:—–|]", titulo or "") if p.strip()]
     return bool(partes) and all(copiado_do_texto(p, narracao) for p in partes)
+
+
+# proporção dita em palavras precisa bater com a conta parte/total da mesma unidade
+_PROPORCOES = [
+    (re.compile(r"\b(a\s+)?maior\s+parte\b|\bmaioria\b", re.I), lambda r: r > 0.5),
+    (re.compile(r"\bquase\s+tod[oa]s?\b", re.I), lambda r: r >= 0.8),
+    (re.compile(r"\bmenos\s+da\s+metade\b|\bminoria\b", re.I), lambda r: r < 0.5),
+    (re.compile(r"\b(cerca\s+de\s+|quase\s+)?(a\s+)?metade\b", re.I), lambda r: 0.4 <= r <= 0.6),
+]
+
+
+def proporcao_errada(script: dict) -> list[str]:
+    """Frases com proporção em palavras ("a maior parte", "a maioria", "metade", "quase todo",
+    "menos da metade") que contradizem a conta entre o número da cena (a parte) e o maior número
+    da mesma unidade no roteiro (o total). Ex.: 23,3 de 53,85 km é 43%, não "a maior parte"."""
+    todos: dict[str, float] = {}
+    for sc in script.get("scenes", []):
+        for n, u in _pares(sc.get("narration", "")):
+            todos[u] = max(todos.get(u, 0.0), float(n))
+    erradas = []
+    for sc in script.get("scenes", []):
+        pares_cena = [(float(n), u) for n, u in _pares(sc.get("narration", ""))]
+        for frase in _FRASES.split(sc.get("narration", "")):
+            regra = next((teste for padrao, teste in _PROPORCOES if padrao.search(frase)), None)
+            if regra is None:
+                continue
+            pares = [(n, u) for n, u in _pares(frase)] and [(float(n), u) for n, u in _pares(frase)] or pares_cena
+            for parte, unidade in pares:
+                total = todos.get(unidade, 0.0)
+                if 0 < parte < total and not regra(parte / total):
+                    erradas.append(frase.strip())
+                    break
+    return erradas
+
+
+
+_CONECTIVOS_FINAIS = {"de", "do", "da", "dos", "das", "e", "o", "a", "os", "as", "em", "no", "na", "um", "uma", "que",
+                      "com", "por", "para", "ao", "sob", "sobre", "entre", "se", "mas", "ou", "ficam", "fica"}
+
+
+def termina_solto(texto: str) -> bool:
+    """Texto curto (miniatura, título) que termina em preposição/artigo/conjunção ou verbo de
+    ligação está cortado no meio: "23,3 km ficam sob"."""
+    palavras = _palavras_seguidas(texto)
+    return bool(palavras) and palavras[-1] in _CONECTIVOS_FINAIS
