@@ -325,3 +325,13 @@ def test_gerador_inteiro_com_ia_simulada(monkeypatch, tmp_path):
     assert "53,85 km" in texto and "23,3 km" in texto
     assert "estima-se que o museu fechou em 2006" in texto  # secundário (blog) ganhou estima-se
     assert out["_fatos"] and out["_fatos_verificados"]
+
+
+def test_fato_inserido_com_um_custo_total_e_iene_vira_orcamento_por_extenso():
+    from src.script_gen import _normalize_currency
+    fatos = ft.atribuir([{"texto": "O túnel teve um custo total de ¥ 538,4 bilhões.", "fontes": ["S2"]}], [MLIT_PLAN, WIKI_CUSTO])
+    out = _normalize_currency(ft.ajustar_texto_final(
+        {"scenes": [{"narration": "O túnel teve um custo total de ¥ 538,4 bilhões."}], "_fatos": fatos}))
+    texto = out["scenes"][0]["narration"]
+    assert "custo total" not in texto and "orçamento estimado de" in texto
+    assert "¥" not in texto and "ienes" in texto

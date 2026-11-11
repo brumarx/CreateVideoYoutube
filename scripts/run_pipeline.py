@@ -50,7 +50,7 @@ from src.script_gen import (
     art_direction,
     trim_teaser_ending,
     chapter_titles, clean_stat_overlays, engagement_question, fix_dangling_hooks, generate_script, refresh_packaging,
-    repair_script, vary_close_repeats, packaging_from_final, image_prompts_from_final, refresh_description,
+    repair_script, vary_close_repeats, packaging_from_final, _normalize_currency, image_prompts_from_final, refresh_description,
 )
 from src.spellcheck import fix_script, fix_text
 from src.stock_media import search_stock_clip, search_stock_photo
@@ -1030,7 +1030,8 @@ def run(
         script = clean_stat_overlays(script)
         if channel_name in FATOS_CANAIS:
             # orçamento, "estima-se" e número sem fato: pelos fatos com origem (src/fatos.py)
-            script = ajustar_texto_final(script)
+            # moeda por extenso de novo: a troca por fato pode ter trazido "¥" ou "US$" para a narração
+            script = _normalize_currency(ajustar_texto_final(script))
         # 11/11: o texto está final e validado. SÓ AGORA saem título, miniatura, prompt da
         # miniatura e os prompts das imagens de cada cena, todos a partir deste texto.
         is_compilation_final = isinstance(facts, dict) and facts.get("tipo") == "compilacao"

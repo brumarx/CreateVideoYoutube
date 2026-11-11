@@ -363,6 +363,6 @@ def test_falha_na_geracao_no_fractal_nao_reaproveita_o_antigo(monkeypatch):
 
 def test_regra_roda_antes_do_titulo_e_das_imagens():
     src = _fonte_pipeline()
-    assert src.index("script = ajustar_texto_final(script)") < src.index("empacotado = packaging_from_final(")
+    assert src.index("script = _normalize_currency(ajustar_texto_final(script))") < src.index("empacotado = packaging_from_final(")
 
 

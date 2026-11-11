@@ -244,6 +244,7 @@ def conferir_frases(script: dict, fatos: list[dict]) -> dict:
 _CUSTO_FINAL = [
     (re.compile(r"^O custo total (chegou a|foi de|ficou em|era de|de)\b"), "O orçamento estimado era de"),
     (re.compile(r"\bo custo total (chegou a|foi de|ficou em|era de|de)\b"), "o orçamento estimado era de"),
+    (re.compile(r"\b(um|seu) custo total de\b"), r"\1 orçamento estimado de"),
     (re.compile(r"\b(custou|consumiu)\b"), "teve orçamento estimado de"),
 ]
 _CONVERSAO = re.compile(r",?\s*(o )?(equivalente|cerca) a (US\$\s*)?[\d.,]+\s*(mil|milhões|milhão|bilhões|bilhão)?"
