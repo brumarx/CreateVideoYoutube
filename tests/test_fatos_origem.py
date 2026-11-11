@@ -632,3 +632,27 @@ def test_pipeline_verifica_sem_fato_depois_de_tirar_outliers():
     src = (Path(__file__).resolve().parent.parent / "scripts" / "run_pipeline.py").read_text(encoding="utf-8")
     assert src.index('web_facts = [f for f in web_facts if f.get("url") not in set(script["_fontes_outlier"])]') \
         < src.index("script = verificar_sem_fato(script, web_facts)")
+
+
+# ---------- rodada 24: falsos positivos de "mesma medida" (uma palavra em comum não basta)
+@pytest.mark.parametrize("a,b", [
+    ("O Túnel Seikan tem 53,85 km de extensão total.", "A seção submarina do túnel tem 23,3 km de extensão."),
+    ("34 trabalhadores morreram durante a construção.", "O acidente do navio Toya Maru em 1954, com 1.175 mortos, impulsionou a construção."),
+    ("A seção submarina do túnel tem 23,3 km de extensão.", "A Taisei Construction foi responsável pela seção Yoshioka, com 13 km."),
+])
+def test_medidas_diferentes_com_palavra_em_comum_nao_conflitam(a, b):
+    fontes = [_fonte("x.go.jp", a), _fonte("y.com", b)]
+    outliers = []
+    fatos = ft.atribuir([{"texto": a, "fontes": ["S1"]}, {"texto": b, "fontes": ["S2"]}], fontes, outliers)
+    assert len(fatos) == 2 and outliers == []
+
+
+@pytest.mark.parametrize("a,b", [
+    ("Extensão de 53,85 km.", "O túnel tem 65,23 km de extensão."),
+    ("O túnel tem 53,85 km de extensão total.", "A extensão total do túnel é de 65,23 km."),
+])
+def test_mesma_medida_com_valor_diferente_continua_conflitando(a, b):
+    fontes = [_fonte("x.go.jp", a), _fonte("pt.wikipedia.org", b)]
+    outliers = []
+    fatos = ft.atribuir([{"texto": a, "fontes": ["S1"]}, {"texto": b, "fontes": ["S2"]}], fontes, outliers)
+    assert [f["texto"] for f in fatos] == [a] and outliers == ["https://pt.wikipedia.org/x"]

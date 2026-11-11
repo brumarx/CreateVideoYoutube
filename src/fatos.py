@@ -163,6 +163,15 @@ def _palavras(texto: str) -> set[str]:
     return {w[:5] for w in re.findall(r"[a-z]{4,}", fold)} - {w[:5] for w in _PARADAS}
 
 
+def _mesma_coisa(a: str, b: str, tema: set[str]) -> bool:
+    """Os dois fatos medem a MESMA coisa: quase todas as palavras de conteúdo do mais curto (fora o
+    vocabulário do tema) estão no outro. Uma palavra em comum não basta: "seção submarina... 23,3 km
+    de extensão" e "53,85 km de extensão total" dividem "extensão", mas são medidas diferentes."""
+    pa, pb = _palavras(a) - tema, _palavras(b) - tema
+    menor, maior = (pa, pb) if len(pa) <= len(pb) else (pb, pa)
+    return bool(menor) and len(menor & maior) / len(menor) >= 0.7
+
+
 def _forca(fato: dict) -> tuple[int, int]:
     """Quem vence um conflito: status melhor; depois, mais publicadores independentes."""
     return (-STATUS_ORDEM[fato["status"]], len({dominio_raiz(u) for u in fato.get("fontes", [])}))
@@ -188,7 +197,7 @@ def remover_conflitos(fatos: list[dict], outliers: list[str] | None = None) -> l
                 continue
             pa, pb = _pares(a["texto"]), _pares(b["texto"])
             mesma_medida = {u for _, u in pa} & {u for _, u in pb}
-            if not mesma_medida or not ((_palavras(a["texto"]) & _palavras(b["texto"])) - tema):
+            if not mesma_medida or not _mesma_coisa(a["texto"], b["texto"], tema):
                 continue
             if not ({n for n, u in pb if u in mesma_medida} & {n for n, u in pa if u in mesma_medida}):
                 fora.add(b["id"])
