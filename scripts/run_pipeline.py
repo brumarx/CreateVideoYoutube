@@ -41,7 +41,7 @@ from src.infographic import CREDIT as INFOGRAPHIC_CREDIT, Renderer as Infographi
 from src.infographic import compose_presenter, presenter_pose
 from src.news_card import headline_card
 from src.fatos import ajustar_texto_final
-from src.fact_check import BLOCKING_TYPES, confirmar_afirmacoes, cortar_e_trocar_por_fato, feedback_for_rewrite, review_script, substituir_pela_lista
+from src.fact_check import BLOCKING_TYPES, confirmar_afirmacoes, cortar_e_trocar_por_fato, verificar_sem_fato, feedback_for_rewrite, review_script, substituir_pela_lista
 from src.orchestrator import enqueue, update
 from src.people_photos import names_in, person_photo
 from src.real_media import real_clip, real_photos
@@ -853,6 +853,9 @@ def run(
             antes = len(web_facts)
             web_facts = [f for f in web_facts if f.get("url") not in set(script["_fontes_outlier"])]
             log.warning("[%s] fontes fora da curva retiradas: %d", job_id, antes - len(web_facts))
+        if channel_name in FATOS_CANAIS:
+            # afirmação que o escritor não marcou com fato: verificada por citação, não apagada às cegas
+            script = verificar_sem_fato(script, web_facts)
         if channel.claim_sources:
             # canal com claim_sources (motivacional, curiosidades): cada frase com número/data
             # busca fonte, MESMO quando o tema já tem fonte (junto, sem repetir URL)

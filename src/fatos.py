@@ -278,6 +278,7 @@ def conferir_frases(script: dict, fatos: list[dict]) -> dict:
         return script
     por_id = {f["id"]: f for f in fatos}
     removidas = estimadas = 0
+    pendentes: list[str] = []
     # o escritor usou as marcas? sem nenhuma marca no roteiro, a regra de "frase sem marca sai"
     # apagaria tudo: aí só os números são conferidos
     com_marcas = any(_ID.search(sc.get("narration", "")) for sc in script.get("scenes", []))
@@ -292,9 +293,9 @@ def conferir_frases(script: dict, fatos: list[dict]) -> dict:
             nums = numeros(limpa)
             citados = [por_id[i] for i in ids if i in por_id]
             if com_marcas and not citados and not nums and not _frase_livre(limpa):
-                removidas += 1
-                log.warning("afirmação sem fato citado — removida: %r", limpa[:90])
-                continue
+                # afirmação sem fato citado: não sai direto — vai para a verificação por citação nas
+                # fontes (fact_check.verificar_sem_fato); verdade que o escritor não marcou fica
+                pendentes.append(limpa)
             if nums:
                 if not nums <= set().union(*(numeros(f["texto"]) for f in citados), set()):
                     # a marca não cobre o número: vale o fato que tem o número (mais oficial primeiro)
@@ -313,8 +314,12 @@ def conferir_frases(script: dict, fatos: list[dict]) -> dict:
             usados += [f["id"] for f in citados]
             saida.append(limpa)
         cenas.append({**sc, "narration": " ".join(saida), "fatos": list(dict.fromkeys(usados))})
-    log.info("conferência por fato: %d frase(s) removida(s), %d com 'estima-se'", removidas, estimadas)
-    return {**script, "scenes": [sc for sc in cenas if sc["narration"].strip()]}
+    log.info("conferência por fato: %d frase(s) removida(s), %d aproximada(s), %d sem marca para verificar",
+             removidas, estimadas, len(pendentes))
+    out = {**script, "scenes": [sc for sc in cenas if sc["narration"].strip()]}
+    if pendentes:
+        out["_sem_fato"] = pendentes
+    return out
 
 
 _CUSTO_FINAL = [

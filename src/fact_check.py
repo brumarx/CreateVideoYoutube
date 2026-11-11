@@ -718,6 +718,50 @@ def _frase_narravel(fato: str) -> str | None:
     return texto if texto[-1] in ".!?" else texto + "."
 
 
+def achar_frase(termo: str, frases: list[str]) -> int | None:
+    """Índice da frase que o revisor apontou: o trecho exato primeiro; senão a frase com mais
+    palavras em comum (pelo menos metade das palavras do trecho), porque o revisor parafraseia
+    ("recorde de profundidade para túnel ferroviário")."""
+    alvo = _fold(termo)[:40]
+    exato = next((i for i, f in enumerate(frases) if alvo and alvo in _fold(f)), None)
+    if exato is not None:
+        return exato
+    palavras = {w for w in re.findall(r"[a-z]{4,}", _fold(termo))}
+    if not palavras:
+        return None
+    melhor, nota = None, 0.0
+    for i, f in enumerate(frases):
+        comum = len(palavras & {w for w in re.findall(r"[a-z]{4,}", _fold(f))}) / len(palavras)
+        if comum > nota:
+            melhor, nota = i, comum
+    return melhor if nota >= 0.5 else None
+
+
+def verificar_sem_fato(script: dict, web_facts: list[dict] | None) -> dict:
+    """Afirmações que o escritor não marcou com fato ([F#]): uma checagem por citação nas fontes
+    (o trecho tem de existir na fonte). Sustentada fica; sem sustentação sai. Checagem fora do ar:
+    saem todas (sem prova, não vai ao ar)."""
+    pendentes = script.get("_sem_fato") or []
+    script = {k: v for k, v in script.items() if k != "_sem_fato"}
+    if not pendentes:
+        return script
+    sem_prova = ungrounded_sentences({"scenes": [{"narration": " ".join(pendentes)}]}, None, web_facts)
+    if sem_prova is None:
+        tirar = set(pendentes)
+    else:
+        nao = {_fold(str(p.get("termo", "")))[:60] for p in sem_prova}
+        tirar = {f for f in pendentes if _fold(f)[:60] in nao}
+    log.warning("afirmações sem marca: %d verificadas, %d sustentadas pelas fontes, %d removidas",
+                len(pendentes), len(pendentes) - len(tirar), len(tirar))
+    if not tirar:
+        return script
+    cenas = []
+    for sc in script.get("scenes", []):
+        frases = [f for f in re.split(r"(?<=[.!?])\s+", sc.get("narration", "")) if f.strip() and f.strip() not in tirar]
+        cenas.append({**sc, "narration": " ".join(frases)})
+    return {**script, "scenes": [sc for sc in cenas if sc["narration"].strip()]}
+
+
 def cortar_e_trocar_por_fato(script: dict, problems: list[dict]) -> tuple[dict, int] | None:
     """Saída sem correspondência segura: a frase reprovada sai e, no lugar dela, entra
     um fato VERIFICADO que o roteiro ainda não usou (já validado, sem reescrita).
@@ -739,12 +783,11 @@ def cortar_e_trocar_por_fato(script: dict, problems: list[dict]) -> tuple[dict, 
         disponiveis = [(f, t) for f in lista if f not in usados for t in [_frase_narravel(f)] if t]
     trocadas = 0
     for prob in problems:
-        if prob.get("tipo") not in ("fato_nao_confirmado", "fora_da_fonte"):
+        if prob.get("tipo") not in ("fato_nao_confirmado", "fora_da_fonte", "frase_quebrada"):
             continue
-        termo = _fold(str(prob.get("termo", "")))[:40]
         for sc in scenes:
             frases = re.split(r"(?<=[.!?])\s+", sc.get("narration", ""))
-            idx = next((i for i, f in enumerate(frases) if termo and termo in _fold(f)), None)
+            idx = achar_frase(str(prob.get("termo", "")), frases)
             if idx is None:
                 continue
             if disponiveis:
@@ -776,10 +819,10 @@ def confirmar_afirmacoes(script: dict, problems: list[dict], topic: str,
             and not re.search(r"\d", str(p.get("termo", "")))]
     frase_de: dict[int, str] = {}
     for p in alvo:
-        termo = _fold(str(p.get("termo", "")))[:40]
         for sc in script.get("scenes", []):
-            frase = next((f.strip() for f in re.split(r"(?<=[.!?])\s+", sc.get("narration", ""))
-                          if termo and termo in _fold(f)), None)
+            frases = re.split(r"(?<=[.!?])\s+", sc.get("narration", ""))
+            idx = achar_frase(str(p.get("termo", "")), frases)
+            frase = frases[idx].strip() if idx is not None else None
             if frase and len(frase) > 15:
                 frase_de[id(p)] = frase
                 break

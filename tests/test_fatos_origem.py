@@ -338,9 +338,9 @@ def test_fato_inserido_com_um_custo_total_e_iene_vira_orcamento_por_extenso():
 
 
 # ---------- rodada 21: frase sem marca, troca por fato pelas marcas, busca oficial pelo nome em inglês
-def test_afirmacao_sem_marca_sai_quando_o_escritor_usa_marcas():
+def test_afirmacao_sem_marca_fica_pendente_quando_o_escritor_usa_marcas():
     out = ft.conferir_frases(_rot("O túnel tem 53,85 km [F1]. Hoje é atração para visitantes. Você teria coragem?"), FATOS)
-    assert out["scenes"][0]["narration"] == "O túnel tem 53,85 km. Você teria coragem?"
+    assert out["_sem_fato"] == ["Hoje é atração para visitantes."]  # a verificação por citação decide
 
 
 def test_sem_nenhuma_marca_no_roteiro_so_os_numeros_sao_conferidos():
@@ -576,3 +576,59 @@ def test_pipeline_tira_fontes_fora_da_curva_antes_da_revisao():
     # a revisão do laço principal vem depois do filtro (e só existe uma depois dele, no mesmo bloco)
     revisao = src.find("problems = review_script(script, topic, facts, web_facts)", tira)
     assert revisao != -1 and src.find("def ", tira, revisao) == -1
+
+
+# ---------- rodada 23: afirmação sem marca verificada, frase quebrada trocada, trecho parafraseado
+def test_afirmacao_sem_marca_vai_para_verificacao_e_nao_some():
+    out = ft.conferir_frases(_rot("O túnel tem 53,85 km [F1]. A escavação exigiu três galerias: piloto, serviço e principal."), FATOS)
+    assert "três galerias" in out["scenes"][0]["narration"]
+    assert out["_sem_fato"] == ["A escavação exigiu três galerias: piloto, serviço e principal."]
+
+
+def test_verificacao_mantem_a_sustentada_e_tira_a_sem_prova(monkeypatch):
+    from src import fact_check as fc
+    monkeypatch.setattr(fc, "ungrounded_sentences",
+                        lambda s, f, w: [{"tipo": "sem_fonte", "termo": "Mesmo com os acidentes, a obra continuou."}])
+    roteiro = {"scenes": [{"narration": "A escavação exigiu três galerias. Mesmo com os acidentes, a obra continuou. Você teria coragem?"}],
+               "_sem_fato": ["A escavação exigiu três galerias.", "Mesmo com os acidentes, a obra continuou."]}
+    out = fc.verificar_sem_fato(roteiro, [{"titulo": "x", "url": "u", "trecho": "três galerias"}])
+    assert out["scenes"][0]["narration"] == "A escavação exigiu três galerias. Você teria coragem?"
+    assert "_sem_fato" not in out
+
+
+def test_verificacao_fora_do_ar_tira_as_pendentes(monkeypatch):
+    from src import fact_check as fc
+    monkeypatch.setattr(fc, "ungrounded_sentences", lambda s, f, w: None)
+    roteiro = {"scenes": [{"narration": "O túnel tem 53,85 km. A obra continuou."}], "_sem_fato": ["A obra continuou."]}
+    assert fc.verificar_sem_fato(roteiro, [])["scenes"][0]["narration"] == "O túnel tem 53,85 km."
+
+
+def test_sem_pendentes_nao_chama_a_verificacao(monkeypatch):
+    from src import fact_check as fc
+    monkeypatch.setattr(fc, "ungrounded_sentences", lambda *a: (_ for _ in ()).throw(AssertionError("não devia chamar")))
+    roteiro = {"scenes": [{"narration": "Texto."}]}
+    assert fc.verificar_sem_fato(roteiro, []) == roteiro
+
+
+def test_trecho_parafraseado_pelo_revisor_acha_a_frase():
+    from src import fact_check as fc
+    frases = ["O túnel tem 53,85 km.", "Ele detém o recorde de túnel ferroviário mais profundo.", "Você teria coragem?"]
+    assert fc.achar_frase("recorde de profundidade para túnel ferroviário", frases) == 1
+    assert fc.achar_frase("algo que não está em lugar nenhum", frases) is None
+
+
+def test_frase_quebrada_tambem_e_trocada_por_fato():
+    from src import fact_check as fc
+    fatos = [{"id": f"F{i}", "texto": f"Fato verificado número {i} sobre a obra.", "status": "oficial", "fontes": []}
+             for i in range(1, 10)]
+    cenas = [{"narration": f"Algo da cena {i}.", "fatos": [f"F{i}"]} for i in range(1, 9)]
+    cenas[0]["narration"] += " A piloto foi concluída em 1983."
+    out, n = fc.cortar_e_trocar_por_fato({"_fatos": fatos, "scenes": cenas},
+                                         [{"tipo": "frase_quebrada", "termo": "A piloto foi concluída em 1983", "motivo": "x"}])
+    assert n == 1 and "piloto" not in out["scenes"][0]["narration"]
+
+
+def test_pipeline_verifica_sem_fato_depois_de_tirar_outliers():
+    src = (Path(__file__).resolve().parent.parent / "scripts" / "run_pipeline.py").read_text(encoding="utf-8")
+    assert src.index('web_facts = [f for f in web_facts if f.get("url") not in set(script["_fontes_outlier"])]') \
+        < src.index("script = verificar_sem_fato(script, web_facts)")
