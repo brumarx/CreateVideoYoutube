@@ -403,3 +403,37 @@ def numero_fora_de_contexto(texto: str, narracao: str) -> list[str]:
         if not ok:
             erros.append(m.group(0).strip())
     return erros
+
+
+def frases_com_numero(narracao: str, limite: int = 12) -> list[str]:
+    """Cada número da narração com as palavras que vêm logo depois DENTRO da mesma frase
+    ("53,85 km de extensão", "23,3 km sob o leito marinho"): o que o título pode citar."""
+    out: list[str] = []
+    for frase in _FRASES.split(narracao):
+        for m in re.finditer(r"\d+(?:[.,]\d+)*(?:\s+[^\W\d_]+){0,5}", frase):
+            trecho = m.group(0).strip().rstrip(",;:")
+            if trecho not in out:
+                out.append(trecho)
+    return out[:limite]
+
+
+def _palavras_seguidas(texto: str) -> list[str]:
+    import unicodedata
+    fold = unicodedata.normalize("NFKD", (texto or "").lower()).encode("ascii", "ignore").decode()
+    return re.findall(r"\d+(?:[.,]\d+)*|[a-z]+", fold)
+
+
+def copiado_do_texto(trecho: str, narracao: str) -> bool:
+    """O trecho é cópia da narração: as mesmas palavras, na mesma ordem e seguidas (maiúsculas e
+    pontuação não contam). "23,3 KM SOB O MAR" com a narração "Sob o mar ficam 23,3 km" é falso."""
+    alvo, texto = _palavras_seguidas(trecho), _palavras_seguidas(narracao)
+    if not alvo:
+        return False
+    n = len(alvo)
+    return any(texto[i:i + n] == alvo for i in range(len(texto) - n + 1))
+
+
+def titulo_copiado(titulo: str, narracao: str) -> bool:
+    """Título "Assunto: trecho" — cada parte separada por dois-pontos tem de ser cópia da narração."""
+    partes = [p.strip() for p in re.split(r"[:—–|]", titulo or "") if p.strip()]
+    return bool(partes) and all(copiado_do_texto(p, narracao) for p in partes)

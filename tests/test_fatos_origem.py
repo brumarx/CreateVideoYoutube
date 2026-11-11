@@ -493,7 +493,7 @@ def test_roteiro_inteiro_nao_repete_a_mesma_palavra():
 
 
 # ---------- título: número com o contexto da narração (job 847 e rodada 22: "53,85 km sob o mar")
-NARR = "O túnel tem 53,85 km de extensão. Sob o mar ficam 23,3 km sob o leito marinho. Foi aberto em 13 de março de 1988."
+NARR = "O Túnel Seikan tem 53,85 km de extensão. Sob o mar ficam 23,3 km sob o leito marinho. Foi aberto em 13 de março de 1988."
 
 
 @pytest.mark.parametrize("titulo", ["Túnel Seikan: 53,85 km sob o mar", "53,85 km submersos", "23,3 km de extensão"])
@@ -512,14 +512,14 @@ def test_titulo_com_contexto_errado_e_refeito(monkeypatch):
     from src.config import ChannelConfig
     respostas = iter([
         json.dumps({"titulo": "Túnel Seikan: 53,85 km sob o mar", "thumbnail_text": "53,85 KM SOB O MAR", "thumbnail_image_prompt": "p"}),
-        json.dumps({"titulo": "Túnel Seikan: 23,3 km sob o mar", "thumbnail_text": "23,3 KM SOB O MAR", "thumbnail_image_prompt": "p"}),
+        json.dumps({"titulo": "Túnel Seikan: 23,3 km sob o leito marinho", "thumbnail_text": "53,85 KM DE EXTENSÃO", "thumbnail_image_prompt": "p"}),
     ])
     monkeypatch.setattr(sg, "complete", lambda *a, **k: next(respostas))
     import src.fact_check as fcm
     monkeypatch.setattr(fcm, "_title_problems", lambda s: [])
     roteiro = {"title": "", "_fatos_verificados": ["f"], "scenes": [{"narration": NARR}]}
     out = sg.packaging_from_final(roteiro, ChannelConfig.load("curiosidades"), "Túnel Seikan")
-    assert out["title"] == "Túnel Seikan: 23,3 km sob o mar"
+    assert out["title"] == "Túnel Seikan: 23,3 km sob o leito marinho"
 
 
 

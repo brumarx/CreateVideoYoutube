@@ -1526,6 +1526,11 @@ def refresh_packaging(script: dict, channel: ChannelConfig, topic: str = "", ext
         return {**script, **{k: fallback[k] for k in stale}}
 
 
+def _frases_com_numero(narracao: str) -> list[str]:
+    from .fatos import frases_com_numero
+    return frases_com_numero(narracao)
+
+
 def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", extra_rule: str = "",
                          _retry: bool = False) -> dict:
     """Título, texto da miniatura e prompt da imagem saem SEMPRE do roteiro final
@@ -1546,6 +1551,11 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
         "Prompt da imagem em inglês, cena visual concreta do assunto, sem texto, letras, logos ou rostos reais.\n"
         + (f"Regra de título do canal:{rule.group(1).strip()}\n" if rule else "")
         + (f"Regra deste vídeo (vale mais que a do canal): {extra_rule}\n" if extra_rule else "")
+        + (("REGRA DO CANAL DE FATOS: o título e o texto da miniatura são COPIADOS da NARRAÇÃO FINAL — palavras "
+            "seguidas, iguais e na mesma ordem (pode mudar maiúscula). Título no formato 'Assunto: trecho copiado'. "
+            "Nada que não esteja escrito assim na narração. Trechos com número que podem ser copiados: "
+            + "; ".join(f'"{x}"' for x in _frases_com_numero(narration)) + "\n")
+           if script.get("_fatos_verificados") else "")
         + f"\nTEMA: {topic}\nNARRAÇÃO FINAL: {narration}\n\n"
         'Responda só com JSON: {"titulo": "...", "thumbnail_text": "...", "thumbnail_image_prompt": "..."}'
     )
@@ -1575,10 +1585,12 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
         # canal de fatos: o título e a miniatura novos são conferidos contra a narração final —
         # primeiro em código (número com o mesmo contexto da narração), depois pela IA
         from .fact_check import _title_problems
-        from .fatos import numero_fora_de_contexto
-        fora = numero_fora_de_contexto(f"{novo['title']}. {novo.get('thumbnail_text') or ''}", narration)
+        from .fatos import copiado_do_texto, titulo_copiado
+        fora = [x for x, ok in ((novo["title"], titulo_copiado(novo["title"], narration)),
+                                (str(novo.get("thumbnail_text") or ""), not novo.get("thumbnail_text")
+                                 or copiado_do_texto(str(novo.get("thumbnail_text")), narration))) if not ok]
         problemas = ([{"tipo": "titulo_nao_confere", "termo": x,
-                       "motivo": f"'{x}' não é o que a narração diz junto desse número"} for x in fora]
+                       "motivo": f"'{x}' não está escrito assim na narração aprovada"} for x in fora]
                      or _title_problems(novo))
         if problemas:
             motivo = "; ".join(str(p.get("motivo", "")) for p in problemas)[:300]
@@ -1586,12 +1598,22 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
             refeito = packaging_from_final(script, channel, topic,
                                            extra_rule=(extra_rule + " " if extra_rule else "") + f"O anterior errou: {motivo}",
                                            _retry=True)
-            if (refeito is not None and refeito is not script
-                    and not numero_fora_de_contexto(f"{refeito['title']}. {refeito.get('thumbnail_text') or ''}", narration)
+            if (refeito is not None and refeito is not script and titulo_copiado(refeito["title"], narration)
+                    and (not refeito.get("thumbnail_text") or copiado_do_texto(str(refeito["thumbnail_text"]), narration))
                     and not _title_problems(refeito)):
                 return refeito
-            log.warning("título/miniatura ainda não conferem com o texto validado")
-            return None
+            # saída sem reprovar o roteiro já validado: o que não confere sai sem número
+            final = refeito if refeito is not None and refeito is not script else novo
+            titulo_ok = titulo_copiado(final["title"], narration)
+            miniatura_ok = not final.get("thumbnail_text") or copiado_do_texto(str(final["thumbnail_text"]), narration)
+            # o assunto também tem de estar escrito na narração; senão, o primeiro trecho com número dela
+            assunto = _corta_titulo((topic or str(final.get("title") or "")).split(":")[0].strip())
+            if not copiado_do_texto(assunto, narration):
+                assunto = _corta_titulo((_frases_com_numero(narration) or [assunto])[0])
+            log.warning("título/miniatura não conferem após refazer — %s%s", "" if titulo_ok else "título vira o assunto; ",
+                        "" if miniatura_ok else "miniatura sem texto")
+            return {**final, "title": final["title"] if titulo_ok else assunto,
+                    "thumbnail_text": final.get("thumbnail_text") if miniatura_ok else None}
     log.info("título/miniatura gerados do roteiro final: %r / %r", novo["title"], novo["thumbnail_text"])
     return novo
 

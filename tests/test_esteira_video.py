@@ -55,7 +55,7 @@ def test_audio_e_conferido_antes_das_imagens_e_da_montagem():
 def _video_curto(destino: Path) -> Path:
     subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=black:s=64x64:d=1", "-f", "lavfi",
                     "-i", "sine=frequency=440:duration=1", "-shortest", "-c:v", "libx264", "-c:a", "aac", str(destino)],
-                   check=True, capture_output=True)
+                   check=True, capture_output=True, stdin=subprocess.DEVNULL)  # ffmpeg sem ler o terminal
     return destino
 
 
@@ -105,3 +105,65 @@ def test_assunto_da_foto_real_vem_da_narracao_final(monkeypatch):
 
 def test_assunto_antigo_e_apagado_antes_de_gerar():
     assert '"real_subject": ""} for sc in script["scenes"]]' in PIPELINE
+
+
+# ---------- rodada 25: miniatura insistente com número fora de contexto não derruba o roteiro validado
+NARR = "O Túnel Seikan tem 53,85 km de extensão. Sob o mar ficam 23,3 km sob o leito marinho."
+
+
+def _pacote(monkeypatch, respostas):
+    from src import script_gen as sg
+    import src.fact_check as fcm
+    pedidos = []
+    seq = iter(respostas)
+    monkeypatch.setattr(sg, "complete", lambda messages, **k: pedidos.append(messages[0]["content"]) or next(seq))
+    monkeypatch.setattr(fcm, "_title_problems", lambda s: [])
+    from src.config import ChannelConfig
+    roteiro = {"title": "", "_fatos_verificados": ["f"], "scenes": [{"narration": NARR}]}
+    return sg.packaging_from_final(roteiro, ChannelConfig.load("curiosidades"), "Túnel Seikan: como o Japão fez"), pedidos
+
+
+def test_pedido_traz_os_numeros_com_o_contexto_da_narracao(monkeypatch):
+    bom = json.dumps({"titulo": "Túnel Seikan: 53,85 km de extensão", "thumbnail_text": "53,85 KM DE EXTENSÃO", "thumbnail_image_prompt": "p"})
+    _, pedidos = _pacote(monkeypatch, [bom])
+    assert '"53,85 km de extensão"' in pedidos[0] and '"23,3 km sob o leito marinho"' in pedidos[0]
+
+
+def test_miniatura_errada_duas_vezes_sai_sem_texto_e_o_titulo_certo_fica(monkeypatch):
+    ruim = json.dumps({"titulo": "Túnel Seikan: 53,85 km de extensão", "thumbnail_text": "53,85 KM SOB O MAR", "thumbnail_image_prompt": "p"})
+    out, _ = _pacote(monkeypatch, [ruim, ruim])
+    assert out is not None
+    assert out["title"] == "Túnel Seikan: 53,85 km de extensão" and out["thumbnail_text"] is None
+
+
+def test_titulo_errado_duas_vezes_vira_o_assunto(monkeypatch):
+    ruim = json.dumps({"titulo": "53,85 km sob o mar", "thumbnail_text": "TÚNEL SEIKAN", "thumbnail_image_prompt": "p"})
+    out, _ = _pacote(monkeypatch, [ruim, ruim])
+    assert out["title"] == "Túnel Seikan" and out["thumbnail_text"] == "TÚNEL SEIKAN"
+
+
+
+# ---------- título e miniatura são CÓPIA do texto aprovado (palavras seguidas), conferido em código
+@pytest.mark.parametrize("trecho,ok", [
+    ("53,85 KM SOB O MAR", False), ("23,3 KM SOB O MAR", False), ("53,85 km submersos", False),
+    ("23,3 km sob o leito marinho", True), ("53,85 KM DE EXTENSÃO", True), ("Túnel Seikan", True),
+])
+def test_copiado_do_texto(trecho, ok):
+    from src.fatos import copiado_do_texto
+    assert copiado_do_texto(trecho, NARR) is ok
+
+
+@pytest.mark.parametrize("titulo,ok", [
+    ("Túnel Seikan: 53,85 km de extensão", True), ("Túnel Seikan: 53,85 km sob o mar", False),
+    ("Túnel Seikan", True), ("Túnel Seikan: o maior do mundo", False),
+])
+def test_titulo_copiado(titulo, ok):
+    from src.fatos import titulo_copiado
+    assert titulo_copiado(titulo, NARR) is ok
+
+
+def test_pedido_manda_copiar_da_narracao(monkeypatch):
+    bom = json.dumps({"titulo": "Túnel Seikan: 53,85 km de extensão", "thumbnail_text": "53,85 KM DE EXTENSÃO", "thumbnail_image_prompt": "p"})
+    out, pedidos = _pacote(monkeypatch, [bom])
+    assert "COPIADOS da NARRAÇÃO FINAL" in pedidos[0]
+    assert out["title"] == "Túnel Seikan: 53,85 km de extensão" and out["thumbnail_text"] == "53,85 KM DE EXTENSÃO"
