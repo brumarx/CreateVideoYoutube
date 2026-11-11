@@ -212,3 +212,23 @@ def test_tipos_fora_dos_numeros_nao_sao_substituidos():
     problema = [{"tipo": "frase_quebrada", "termo": "O túnel tem 65,23 km de extensão", "motivo": "x"}]
     _, restantes = fc.substituir_pela_lista(roteiro, problema)
     assert restantes == problema
+
+
+def test_frase_sem_correspondencia_sai_e_entra_fato_nao_usado():
+    lista = [f"Fato verificado número {i} sobre a obra do túnel" for i in range(1, 10)]
+    usados = " ".join(f"Fato verificado número {i} sobre a obra do túnel." for i in range(1, 9))
+    roteiro = {"title": "t", "thumbnail_text": "", "_fatos_verificados": lista,
+               "scenes": [{"narration": usados + " A obra durou 40 anos."}]}
+    problemas = [{"tipo": "fora_da_fonte", "termo": "A obra durou 40 anos", "motivo": "x"}]
+    out, n = fc.cortar_e_trocar_por_fato(roteiro, problemas)
+    assert n == 1
+    texto = " ".join(sc["narration"] for sc in out["scenes"])
+    assert "40 anos" not in texto
+    assert "Fato verificado número 9" in texto  # o único fato verificado não usado entrou no lugar
+
+
+def test_sem_fatos_suficientes_nao_troca():
+    lista = ["Fato verificado número 1 sobre a obra do túnel"]
+    roteiro = {"title": "t", "thumbnail_text": "", "_fatos_verificados": lista,
+               "scenes": [{"narration": "A obra durou 40 anos. Fato verificado número 1 sobre a obra do túnel."}]}
+    assert fc.cortar_e_trocar_por_fato(roteiro, [{"tipo": "fora_da_fonte", "termo": "A obra durou 40 anos", "motivo": "x"}]) is None

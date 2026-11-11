@@ -40,7 +40,7 @@ from src.goal_card import goal_card
 from src.infographic import CREDIT as INFOGRAPHIC_CREDIT, Renderer as InfographicRenderer, sanitize as sanitize_grafico
 from src.infographic import compose_presenter, presenter_pose
 from src.news_card import headline_card
-from src.fact_check import BLOCKING_TYPES, feedback_for_rewrite, review_script, substituir_pela_lista
+from src.fact_check import BLOCKING_TYPES, cortar_e_trocar_por_fato, feedback_for_rewrite, review_script, substituir_pela_lista
 from src.orchestrator import enqueue, update
 from src.people_photos import names_in, person_photo
 from src.real_media import real_clip, real_photos
@@ -886,6 +886,20 @@ def run(
                 script, problems = substituir_pela_lista(script, problems)
                 if not problems:
                     log.warning("[%s] números trocados pelo valor da lista de fatos verificados — sem reprovar", job_id)
+                    break
+                if problems:
+                    # sem correspondência segura: a frase reprovada sai e entra um fato verificado não usado
+                    troca = cortar_e_trocar_por_fato(script, problems)
+                    if troca is None:
+                        raise ScriptRejected("sem correspondência segura e sem fato verificado para trocar: "
+                                             + "; ".join(f"{p.get('tipo')}: {p.get('termo')}" for p in problems)[:400])
+                    script, n_trocas = troca
+                    problems = review_script(script, topic, facts, web_facts)
+                    log.warning("[%s] %d frase(s) trocadas por fato verificado não usado — revisão: %s", job_id,
+                                n_trocas, "aprovada" if problems == [] else "reprovada")
+                    if problems is None or problems:
+                        raise ScriptRejected("bloqueio factual depois da troca por fato verificado: "
+                                             + "; ".join(f"{p.get('tipo')}: {p.get('termo')}" for p in (problems or []))[:400])
                     break
             log.warning(
                 "[%s] revisão de fatos reprovou (tentativa %d): %s", job_id, attempt + 1,

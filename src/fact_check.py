@@ -644,6 +644,48 @@ def substituir_pela_lista(script: dict, problems: list[dict]) -> tuple[dict, lis
     return {**script, "scenes": scenes, "_edited": True}, restantes
 
 
+MIN_FATOS_USADOS = 8  # abaixo disso o roteiro não tem base: reprova
+
+
+def _fato_usado(fato: str, narracao: str) -> bool:
+    return _fold(fato)[:40] in _fold(narracao)
+
+
+def cortar_e_trocar_por_fato(script: dict, problems: list[dict]) -> tuple[dict, int] | None:
+    """Saída sem correspondência segura: a frase reprovada sai e, no lugar dela, entra
+    um fato VERIFICADO da lista que ainda não foi usado (já validado, sem reescrita).
+    Devolve (roteiro, frases trocadas), ou None se não há fato disponível."""
+    lista = [f for f in (script.get("_fatos_verificados") or []) if 20 <= len(f) <= 220]
+    if not lista:
+        return None
+    scenes = [dict(sc) for sc in script.get("scenes", [])]
+    narracao = " ".join(sc.get("narration", "") for sc in scenes)
+    disponiveis = [f for f in lista if not _fato_usado(f, narracao)]
+    trocadas = 0
+    for prob in problems:
+        if prob.get("tipo") not in ("fato_nao_confirmado", "fora_da_fonte"):
+            continue
+        termo = _fold(str(prob.get("termo", "")))[:40]
+        for sc in scenes:
+            frases = re.split(r"(?<=[.!?])\s+", sc.get("narration", ""))
+            idx = next((i for i, f in enumerate(frases) if termo and termo in _fold(f)), None)
+            if idx is None:
+                continue
+            if disponiveis:
+                frases[idx] = disponiveis.pop(0)
+            else:
+                frases[idx] = ""
+            sc["narration"] = " ".join(f for f in frases if f.strip())
+            trocadas += 1
+            break
+    if not trocadas:
+        return None
+    usados = sum(1 for f in lista if _fato_usado(f, " ".join(sc.get("narration", "") for sc in scenes)))
+    if usados < MIN_FATOS_USADOS:
+        return None
+    return {**script, "scenes": [sc for sc in scenes if sc.get("narration", "").strip()], "_edited": True}, trocadas
+
+
 def _only_in_reviewed(problems: list[dict], script: dict) -> list[dict]:
     """Compilação: o revisor lê as narrações dos Shorts como fonte e apontava
     fato DELAS ("Neymar 10 mil reais aos 15") que nem estava no texto novo
