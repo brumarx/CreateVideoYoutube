@@ -34,7 +34,7 @@ EXCLUDED_DOMAINS = [
 ]
 
 
-def search_topic_facts(query: str, max_results: int = 5) -> list[dict] | None:
+def search_topic_facts(query: str, max_results: int = 5, oficiais: bool = False) -> list[dict] | None:
     """Busca `query` na internet e devolve uma lista de
     {"titulo", "url", "trecho"} com fatos/trechos reais e a fonte de cada
     um — ou None (sem chave configurada, sem resultado, ou erro de rede).
@@ -44,7 +44,7 @@ def search_topic_facts(query: str, max_results: int = 5) -> list[dict] | None:
     if not query:
         return None
     from . import disk_cache
-    guardado = disk_cache.get("busca_web", [query, max_results])
+    guardado = disk_cache.get("busca_web", [query, max_results, oficiais])
     if guardado:
         log.info("busca em cache: %r (%d fontes)", query[:60], len(guardado))
         return guardado
@@ -61,7 +61,12 @@ def search_topic_facts(query: str, max_results: int = 5) -> list[dict] | None:
     extras = wikidata_facts(query) + openalex_facts(query)
     have = {f["url"] for f in facts}
     facts = facts + [f for f in extras if f["url"] not in have]
-    disk_cache.put("busca_web", [query, max_results], facts)
+    if oficiais:
+        # 11/11: fonte oficial buscada automaticamente (domínio de governo, instituição pública ou de
+        # ensino), para qualquer tema; sem ela, os fatos de uma fonte só viram "estima-se"
+        have = {f["url"] for f in facts}
+        facts = facts + [f for f in official_facts(query) if f["url"] not in have]
+    disk_cache.put("busca_web", [query, max_results, oficiais], facts)
     return facts or None
 
 
@@ -355,6 +360,28 @@ def _tavily(query: str, max_results: int) -> list[dict] | None:
         return facts
 
     return None
+
+
+def official_facts(query: str, max_results: int = 5) -> list[dict]:
+    """Só resultados de domínio oficial (ver fatos.classificar_fonte), já marcados com
+    oficial=True e com o texto da página. Duas consultas: em inglês e em português."""
+    from .fatos import classificar_fonte
+    vistos: set[str] = set()
+    achados: list[dict] = []
+    for consulta in (f"{query} official", f"{query} site oficial governo"):
+        resultados = _tavily(consulta, max_results) or _duckduckgo(consulta, max_results) or []
+        for r in resultados:
+            url = r.get("url", "")
+            if url in vistos or classificar_fonte({"url": url}) != "oficial":
+                continue
+            vistos.add(url)
+            achados.append({**r, "oficial": True})
+    if achados:
+        achados = _enrich(achados, query)
+        log.info("fontes oficiais achadas para %r: %d", query[:60], len(achados))
+    else:
+        log.info("nenhuma fonte oficial achada para %r", query[:60])
+    return [{**f, "oficial": True} for f in achados]
 
 
 # ---------------------------------------------------------------- Wikidata e OpenAlex

@@ -1066,11 +1066,17 @@ def _corrige_numeros_fora_da_lista(script: dict, fatos: list[str]) -> dict:
     return out
 
 
-def _finaliza(script: dict, fatos: list[str] | None) -> dict:
-    """Pós-escrita: moeda por extenso (código) e, no canal de fatos verificados, a checagem de números."""
+def _finaliza(script: dict, fatos: list[str] | None, fatos_origem: list[dict] | None = None) -> dict:
+    """Pós-escrita: moeda por extenso (código) e, no canal de fatos verificados, a conferência de
+    cada frase pelos fatos citados (src/fatos.py) e a checagem de números."""
+    if fatos_origem:
+        from .fatos import conferir_frases
+        script = {**conferir_frases(script, fatos_origem), "_fatos": fatos_origem}
     script = _normalize_currency(script)
-    if fatos:
+    if fatos and not fatos_origem:
+        # sem origem (caminho antigo): a correção de números por IA; com origem, conferir_frases já fez
         script = _normalize_currency(_corrige_numeros_fora_da_lista(script, fatos))
+    if fatos:
         # os fatos confirmados seguem com o roteiro: a revisão e a checagem final os tratam como fonte
         script = {**script, "_fatos_verificados": list(fatos)}
     return script
@@ -1107,17 +1113,22 @@ def generate_script(
     # etapa 1: o plano (estrutura e fatos escolhidos) antes de escrever a narração
     writer_sources = web_facts
     fatos_verificados: list[str] | None = None
+    fatos_origem: list[dict] | None = None
     if web_facts and channel.name in FATOS_CANAIS:
         # 10/11: o escritor não lê o texto bruto das fontes (misturava números e completava de
-        # memória, job 824); recebe só a lista de fatos literais extraída e checada
-        fatos = extract_verified_facts(topic, web_facts)
-        if not fatos:
+        # memória, job 824); recebe só a lista de fatos com ID. 11/11: cada frase marca os IDs
+        # usados e o código confere número por número (src/fatos.py)
+        from .fatos import lista_para_escritor
+        fatos_origem = extract_facts(topic, web_facts)
+        if not fatos_origem:
             raise ValueError("fatos verificados indisponíveis (extração das fontes falhou)")
-        fatos_verificados = fatos
-        log.info("escritor recebe só a lista fechada: %d fatos verificados", len(fatos))
+        fatos_verificados = [f["texto"] for f in fatos_origem]
+        log.info("escritor recebe só a lista fechada: %d fatos verificados", len(fatos_origem))
         writer_sources = [{"titulo": "FATOS VERIFICADOS (única base; cada cena usa um destes)", "url": "",
-                           "trecho": "\n".join(f"F{i + 1}: {f}" for i, f in enumerate(fatos))
-                           + "\nNADA ALÉM DESTA LISTA: nenhuma causa, nome, data, número ou detalhe de contexto que não esteja nos F acima. ""Se um F veio de fonte secundária (não oficial), escreva com 'estima-se' ou 'segundo estimativas', sem citar a fonte. ""Número de orçamento ou custo previsto é ESTIMATIVA: 'orçamento estimado de X', nunca 'custou X'."}]
+                           "trecho": lista_para_escritor(fatos_origem)
+                           + "\nNADA ALÉM DESTA LISTA: nenhuma causa, nome, data, número ou detalhe que não esteja nos F acima. "
+                           "No FIM de cada frase que afirma algo, escreva entre colchetes os IDs dos fatos usados, "
+                           "ex.: 'O túnel tem 53,85 km [F1].' Pergunta, saudação e convite aos comentários não levam ID."}]
     # 11/11: o plano também só lê a lista fechada nos canais de fatos. Com as fontes brutas,
     # ele trazia detalhes fora da lista (causa de morte, Kuroshio II) e o escritor os copiava
     plan = plan_story(topic, facts, writer_sources if fatos_verificados else web_facts)
@@ -1221,7 +1232,7 @@ def generate_script(
                 continue
             word_count = sum(len(s.get("narration", "").split()) for s in script["scenes"])
             if min_total_words <= word_count <= max_words_ceiling:
-                return _finaliza(_sanitize_club_crests(_sanitize_person_images(topic, script)), fatos_verificados)
+                return _finaliza(_sanitize_club_crests(_sanitize_person_images(topic, script)), fatos_verificados, fatos_origem)
 
             distance = (
                 min_total_words - word_count if word_count < min_total_words
@@ -1247,10 +1258,10 @@ def generate_script(
             "usando o melhor roteiro obtido mesmo fora da faixa de %d-%d palavras",
             min_total_words, max_words_ceiling,
         )
-        return _finaliza(_sanitize_club_crests(_sanitize_person_images(topic, best_script)), fatos_verificados)
+        return _finaliza(_sanitize_club_crests(_sanitize_person_images(topic, best_script)), fatos_verificados, fatos_origem)
     if filler_fallback is not None:
         log.warning("3 tentativas com bordão repetido — usando a última mesmo assim")
-        return _finaliza(_sanitize_club_crests(_sanitize_person_images(topic, filler_fallback)), fatos_verificados)
+        return _finaliza(_sanitize_club_crests(_sanitize_person_images(topic, filler_fallback)), fatos_verificados, fatos_origem)
 
     raise ValueError(f"LLM não devolveu roteiro válido após 3 tentativas: {last_error}")
 
@@ -2046,24 +2057,26 @@ def fatos_com_numeros_da_fonte(fatos: list[str], fontes: str) -> list[str]:
     return [f for f in fatos if _numeros(f) <= na_fonte]
 
 
-def extract_verified_facts(topic: str, web_facts: list[dict] | None) -> list[str] | None:
-    """Passo A: lista fechada de fatos literais das FONTES (Wikipédia primeiro). Cada número
-    tem de constar nas fontes (checado em código). None se sobrarem menos de 8 fatos."""
-    from .fontes import bloco_fontes
-    fontes = bloco_fontes(None, web_facts)
+def extract_facts(topic: str, web_facts: list[dict] | None) -> list[dict] | None:
+    """Passo A: lista fechada de fatos com ORIGEM (ver src/fatos.py). As fontes vão numeradas;
+    o modelo diz de qual fonte tirou cada fato e o código confere: o fato fica só se seus números
+    estão em alguma fonte, e o status (oficial, confirmado, secundário) sai das fontes que o
+    sustentam. None se sobrarem menos de 8 fatos."""
+    from . import disk_cache
+    from .fatos import atribuir, bloco_numerado
+    fontes = bloco_numerado(web_facts)
     if not fontes.strip():
         return None
-    from . import disk_cache
-    guardado = disk_cache.get("fatos_verificados", [topic, fontes])
+    guardado = disk_cache.get("fatos_com_origem", [topic, fontes])
     if guardado:
         log.info("extração de fatos em cache: %d fatos (mesmo tema e mesmas fontes)", len(guardado))
         return guardado
     prompt = (
-        f"Tema: {topic}\n\nFONTES:\n{fontes}\n\n"
+        f"Tema: {topic}\n\nFONTES (numeradas):\n{fontes}\n\n"
         "Extraia de 10 a 12 FATOS que estão LITERALMENTE nas FONTES, com o mesmo número, data, "
-        "nome e unidade. Prefira o que a Wikipédia diz. Cada fato numa frase curta. Não acrescente "
-        "nada que não esteja nas fontes e não junte fontes diferentes num número novo. "
-        "Responda SÓ JSON: {\"fatos\": [\"fato 1\", \"fato 2\", \"...\"]}"
+        "nome e unidade. Cada fato numa frase curta, e para cada um as fontes de onde saiu ([S1], [S2]...). "
+        "Não acrescente nada que não esteja nas fontes e não junte fontes diferentes num número novo. "
+        'Responda SÓ JSON: {"fatos": [{"texto": "fato 1", "fontes": ["S1"]}, ...]}'
     )
     from .providers import is_strong_model
     try:
@@ -2073,19 +2086,25 @@ def extract_verified_facts(topic: str, web_facts: list[dict] | None) -> list[str
         log.warning("extração de fatos indisponível: %s", exc)
         return None
     try:
-        fatos = [str(x).strip() for x in _extract_json(raw).get("fatos", []) if str(x).strip()]
+        brutos = _extract_json(raw).get("fatos", [])
     except (ValueError, json.JSONDecodeError):
         log.warning("extração de fatos: resposta sem JSON válido (%d caracteres)", len(raw))
         return None
-    ok = fatos_com_numeros_da_fonte(fatos, fontes)
-    log.info("extração de fatos: %d propostos, %d com números confirmados nas fontes, %d descartados",
-             len(fatos), len(ok), len(fatos) - len(ok))
-    if len(fatos) != len(ok):
-        log.warning("extração de fatos: números fora das fontes em %d fato(s)", len(fatos) - len(ok))
-    if len(ok) >= 8:
-        disk_cache.put("fatos_verificados", [topic, fontes], ok)
-        return ok
+    brutos = [b if isinstance(b, dict) else {"texto": str(b), "fontes": []} for b in brutos]
+    fatos = atribuir(brutos, web_facts or [])
+    contagem = {s: sum(1 for f in fatos if f["status"] == s) for s in ("oficial", "confirmado", "secundario")}
+    log.info("extração de fatos: %d propostos, %d com números confirmados nas fontes (%s)",
+             len(brutos), len(fatos), ", ".join(f"{k} {v}" for k, v in contagem.items()))
+    if len(fatos) >= 8:
+        disk_cache.put("fatos_com_origem", [topic, fontes], fatos)
+        return fatos
     return None
+
+
+def extract_verified_facts(topic: str, web_facts: list[dict] | None) -> list[str] | None:
+    """Só os textos dos fatos (quem não precisa da origem)."""
+    fatos = extract_facts(topic, web_facts)
+    return [f["texto"] for f in fatos] if fatos else None
 
 
 def plan_story(topic: str, facts: dict | None, web_facts: list[dict] | None) -> str | None:
