@@ -335,3 +335,64 @@ def test_fato_inserido_com_um_custo_total_e_iene_vira_orcamento_por_extenso():
     texto = out["scenes"][0]["narration"]
     assert "custo total" not in texto and "orçamento estimado de" in texto
     assert "¥" not in texto and "ienes" in texto
+
+
+# ---------- rodada 21: frase sem marca, troca por fato pelas marcas, busca oficial pelo nome em inglês
+def test_afirmacao_sem_marca_sai_quando_o_escritor_usa_marcas():
+    out = ft.conferir_frases(_rot("O túnel tem 53,85 km [F1]. Hoje é atração para visitantes. Você teria coragem?"), FATOS)
+    assert out["scenes"][0]["narration"] == "O túnel tem 53,85 km. Você teria coragem?"
+
+
+def test_sem_nenhuma_marca_no_roteiro_so_os_numeros_sao_conferidos():
+    out = ft.conferir_frases(_rot("O túnel tem 53,85 km. Hoje é atração para visitantes."), FATOS)
+    assert out["scenes"][0]["narration"] == "O túnel tem 53,85 km. Hoje é atração para visitantes."
+
+
+@pytest.mark.parametrize("frase", ["E aí, mente curiosa!", "Você teria coragem de atravessar?",
+                                   "Deixe sua resposta nos comentários e compartilhe com quem ama engenharia.",
+                                   "Se inscreva no canal para mais histórias."])
+def test_frases_livres_ficam_mesmo_sem_marca(frase):
+    out = ft.conferir_frases(_rot(f"O túnel tem 53,85 km [F1]. {frase}"), FATOS)
+    assert frase in out["scenes"][0]["narration"]
+
+
+def test_troca_por_fato_usa_as_marcas_da_conferencia():
+    from src import fact_check as fc
+    fatos = [{"id": f"F{i}", "texto": f"Fato verificado número {i} sobre a obra.", "status": "oficial", "fontes": []}
+             for i in range(1, 10)]
+    cenas = [{"narration": f"Estima-se que algo da cena {i}.", "fatos": [f"F{i}"]} for i in range(1, 9)]
+    cenas[0]["narration"] += " Hoje é atração para visitantes."
+    roteiro = {"title": "t", "_fatos": fatos, "scenes": cenas}
+    out, n = fc.cortar_e_trocar_por_fato(roteiro, [{"tipo": "fora_da_fonte", "termo": "Hoje é atração para visitantes", "motivo": "x"}])
+    assert n == 1
+    assert "Fato verificado número 9 sobre a obra." in out["scenes"][0]["narration"]
+    assert "atração" not in out["scenes"][0]["narration"]
+
+
+def test_troca_por_fato_reprova_abaixo_do_minimo():
+    from src import fact_check as fc
+    fatos = [{"id": f"F{i}", "texto": f"Fato verificado número {i} sobre a obra.", "status": "oficial", "fontes": []}
+             for i in range(1, 4)]
+    roteiro = {"title": "t", "_fatos": fatos, "scenes": [{"narration": "Algo. Hoje é atração.", "fatos": ["F1"]}]}
+    assert fc.cortar_e_trocar_por_fato(roteiro, [{"tipo": "fora_da_fonte", "termo": "Hoje é atração", "motivo": "x"}]) is None
+
+
+def test_busca_oficial_usa_o_nome_em_ingles(monkeypatch, tmp_path):
+    from src import disk_cache, web_search
+    monkeypatch.setattr(disk_cache, "BASE", tmp_path)
+    consultas = []
+    monkeypatch.setattr(web_search, "_article_titles", lambda q: {"pt": ["Túnel Seikan"], "en": ["Seikan Tunnel"]})
+    monkeypatch.setattr(web_search, "_tavily", lambda q, n: consultas.append(q) or [])
+    monkeypatch.setattr(web_search, "_duckduckgo", lambda q, n: None)
+    web_search.official_facts("Túnel Seikan: como o Japão construiu o túnel")
+    assert consultas == ["Seikan Tunnel official", "Seikan Tunnel government report", "Túnel Seikan site oficial governo"]
+
+
+def test_titulos_da_wikipedia_ficam_em_cache(monkeypatch, tmp_path):
+    from src import disk_cache, providers, web_search
+    monkeypatch.setattr(disk_cache, "BASE", tmp_path)
+    chamadas = []
+    monkeypatch.setattr(providers, "complete", lambda *a, **k: chamadas.append(1) or '{"pt": ["Túnel Seikan"], "en": ["Seikan Tunnel"]}')
+    a = web_search._article_titles("Túnel Seikan")
+    b = web_search._article_titles("Túnel Seikan")
+    assert a == b == {"pt": ["Túnel Seikan"], "en": ["Seikan Tunnel"]} and len(chamadas) == 1

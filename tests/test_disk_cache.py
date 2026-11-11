@@ -64,6 +64,7 @@ def _sem_internet(monkeypatch, tmp_path, resultados):
     monkeypatch.setattr(web_search, "wikipedia_facts", lambda q: [])
     monkeypatch.setattr(web_search, "wikidata_facts", lambda q: [])
     monkeypatch.setattr(web_search, "openalex_facts", lambda q: [])
+    monkeypatch.setattr(web_search, "_article_titles", lambda q: {"pt": ["Túnel Seikan"], "en": ["Seikan Tunnel"]})
     return chamadas
 
 

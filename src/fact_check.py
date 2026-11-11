@@ -720,14 +720,23 @@ def _frase_narravel(fato: str) -> str | None:
 
 def cortar_e_trocar_por_fato(script: dict, problems: list[dict]) -> tuple[dict, int] | None:
     """Saída sem correspondência segura: a frase reprovada sai e, no lugar dela, entra
-    um fato VERIFICADO da lista que ainda não foi usado (já validado, sem reescrita).
-    Devolve (roteiro, frases trocadas), ou None se não há fato disponível."""
-    lista = [f for f in (script.get("_fatos_verificados") or []) if 20 <= len(f) <= 220]
-    if not lista:
-        return None
+    um fato VERIFICADO que o roteiro ainda não usou (já validado, sem reescrita).
+    Com fatos com origem (_fatos), "usado" é o que a conferência marcou em cada cena;
+    sem eles, a comparação pelo texto. None se o roteiro ficar com menos de
+    MIN_FATOS_USADOS fatos ou se nada foi trocado."""
+    fatos = script.get("_fatos") or []
     scenes = [dict(sc) for sc in script.get("scenes", [])]
     narracao = " ".join(sc.get("narration", "") for sc in scenes)
-    disponiveis = [t for t in (_frase_narravel(f) for f in lista if not _fato_usado(f, narracao)) if t]
+    if fatos:
+        usados = {i for sc in scenes for i in sc.get("fatos", [])}
+        disponiveis = [(f["id"], t) for f in fatos if f["id"] not in usados
+                       for t in [_frase_narravel(f["texto"])] if t and 20 <= len(t) <= 220]
+    else:
+        lista = [f for f in (script.get("_fatos_verificados") or []) if 20 <= len(f) <= 220]
+        if not lista:
+            return None
+        usados = {f for f in lista if _fato_usado(f, narracao)}
+        disponiveis = [(f, t) for f in lista if f not in usados for t in [_frase_narravel(f)] if t]
     trocadas = 0
     for prob in problems:
         if prob.get("tipo") not in ("fato_nao_confirmado", "fora_da_fonte"):
@@ -739,7 +748,11 @@ def cortar_e_trocar_por_fato(script: dict, problems: list[dict]) -> tuple[dict, 
             if idx is None:
                 continue
             if disponiveis:
-                frases[idx] = disponiveis.pop(0)
+                chave, texto = disponiveis.pop(0)
+                frases[idx] = texto
+                usados.add(chave)
+                if fatos:
+                    sc["fatos"] = list(sc.get("fatos", [])) + [chave]
             else:
                 frases[idx] = ""
             sc["narration"] = " ".join(f for f in frases if f.strip())
@@ -747,8 +760,8 @@ def cortar_e_trocar_por_fato(script: dict, problems: list[dict]) -> tuple[dict, 
             break
     if not trocadas:
         return None
-    usados = sum(1 for f in lista if _fato_usado(f, " ".join(sc.get("narration", "") for sc in scenes)))
-    if usados < MIN_FATOS_USADOS:
+    if len(usados) < MIN_FATOS_USADOS:
+        log.warning("troca por fato: roteiro ficaria com %d fatos (mínimo %d)", len(usados), MIN_FATOS_USADOS)
         return None
     return {**script, "scenes": [sc for sc in scenes if sc.get("narration", "").strip()], "_edited": True}, trocadas
 

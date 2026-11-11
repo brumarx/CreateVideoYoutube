@@ -200,6 +200,15 @@ def _melhor_por_numero(n: str, fatos: list[dict]) -> dict | None:
     return min(candidatos, key=lambda f: STATUS_ORDEM[f["status"]]) if candidatos else None
 
 
+_LIVRE = re.compile(r"coment[áa]rio|inscrev|compartilh|curt[ai]|deixe (sua|seu|um)|me conta|mente curiosa", re.I)
+
+
+def _frase_livre(frase: str) -> bool:
+    """Frase que não afirma fato: pergunta, exclamação curta (saudação) ou convite ao público."""
+    f = frase.strip()
+    return f.endswith("?") or (f.endswith("!") and len(f.split()) <= 6) or bool(_LIVRE.search(f))
+
+
 def conferir_frases(script: dict, fatos: list[dict]) -> dict:
     """Depois do escritor: lê as marcas [F#] de cada frase, confere os números contra os fatos
     citados (ou, sem marca certa, contra o fato que tem aquele número), tira a frase cujo número
@@ -209,6 +218,9 @@ def conferir_frases(script: dict, fatos: list[dict]) -> dict:
         return script
     por_id = {f["id"]: f for f in fatos}
     removidas = estimadas = 0
+    # o escritor usou as marcas? sem nenhuma marca no roteiro, a regra de "frase sem marca sai"
+    # apagaria tudo: aí só os números são conferidos
+    com_marcas = any(_ID.search(sc.get("narration", "")) for sc in script.get("scenes", []))
     cenas = []
     for sc in script.get("scenes", []):
         saida, usados = [], []
@@ -219,6 +231,10 @@ def conferir_frases(script: dict, fatos: list[dict]) -> dict:
             limpa = re.sub(r"\s+([.!?,;:])", r"\1", _ID.sub("", frase)).strip()
             nums = numeros(limpa)
             citados = [por_id[i] for i in ids if i in por_id]
+            if com_marcas and not citados and not nums and not _frase_livre(limpa):
+                removidas += 1
+                log.warning("afirmação sem fato citado — removida: %r", limpa[:90])
+                continue
             if nums:
                 if not nums <= set().union(*(numeros(f["texto"]) for f in citados), set()):
                     # a marca não cobre o número: vale o fato que tem o número (mais oficial primeiro)

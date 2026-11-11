@@ -140,8 +140,13 @@ def _dense_passage(text: str, keys: set[str], limit: int) -> str:
 def _article_titles(query: str) -> dict[str, list[str]]:
     """Títulos de artigos da Wikipédia (pt e en) que explicam o tema — a
     pergunta do tema não serve de busca ("se apaga à noite" achou um mangá;
-    "Bolívia não tem mar" achou o artigo genérico do país)."""
+    "Bolívia não tem mar" achou o artigo genérico do país). Guardado em disco."""
     import json
+
+    from . import disk_cache
+    guardado = disk_cache.get("titulos_wiki", query)
+    if guardado:
+        return guardado
 
     from .providers import complete
 
@@ -160,7 +165,10 @@ def _article_titles(query: str) -> dict[str, list[str]]:
     except Exception as exc:  # noqa: BLE001 — sem LLM: busca pelo texto do tema
         log.info("títulos de artigo via LLM falharam: %s", exc)
         data = {}
-    return {lang: [str(t).strip() for t in data.get(lang) or [] if str(t).strip()][:3] for lang in ("pt", "en")}
+    titulos = {lang: [str(t).strip() for t in data.get(lang) or [] if str(t).strip()][:3] for lang in ("pt", "en")}
+    if titulos["pt"] or titulos["en"]:
+        disk_cache.put("titulos_wiki", query, titulos)
+    return titulos
 
 
 def _proper_keys(text: str) -> set[str]:
@@ -368,7 +376,15 @@ def official_facts(query: str, max_results: int = 5) -> list[dict]:
     from .fatos import classificar_fonte
     vistos: set[str] = set()
     achados: list[dict] = []
-    for consulta in (f"{query} official", f"{query} site oficial governo"):
+    # o nome em inglês do assunto acha a fonte oficial ("Seikan Tunnel official" → jrtt.go.jp);
+    # o tema inteiro em português não acha (rodada 21)
+    titulos = _article_titles(query)
+    assunto_en = (titulos.get("en") or [""])[0]
+    assunto_pt = (titulos.get("pt") or [""])[0] or query.split(":")[0].strip()
+    consultas = [c for c in (f"{assunto_en} official" if assunto_en else "",
+                             f"{assunto_en} government report" if assunto_en else "",
+                             f"{assunto_pt} site oficial governo") if c]
+    for consulta in consultas:
         resultados = _tavily(consulta, max_results) or _duckduckgo(consulta, max_results) or []
         for r in resultados:
             url = r.get("url", "")
