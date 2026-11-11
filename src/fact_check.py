@@ -566,7 +566,7 @@ def review_script(
 
 _NUM_UNIDADE = re.compile(
     r"(\d+(?:[.,]\d+)*)\s*(km|quilômetros?|quilometros?|metros?|bilhões|bilhão|bilhoes|milhões|milhão|milhoes|"
-    r"mil|toneladas?|anos?|dias?|pessoas?|mortos?|mortes?|%|por cento|ienes|dólares?|dolares|graus)?",
+    r"mil|toneladas?|anos?|dias?|pessoas?|operários?|operario|trabalhadores?|mortos?|mortes?|%|por cento|ienes|dólares?|dolares|graus)?",
     re.IGNORECASE)
 _UNIDADE_NORMAL = {"quilômetros": "km", "quilometros": "km", "quilômetro": "km", "metros": "m", "metro": "m",
                    "bilhões": "bi", "bilhão": "bi", "bilhoes": "bi", "milhões": "mi", "milhão": "mi", "milhoes": "mi",
