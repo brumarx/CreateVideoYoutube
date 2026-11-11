@@ -452,7 +452,7 @@ def test_escritor_recebe_secundarios_so_para_completar_oito(monkeypatch):
     fatos = ([{"id": f"F{i}", "texto": f"Fato oficial {i}.", "status": "oficial", "fontes": []} for i in range(1, 7)]
              + [{"id": f"F{i}", "texto": f"Fato secundário {i}.", "status": "secundario", "fontes": []} for i in range(7, 13)])
     recebido = {}
-    monkeypatch.setattr(sg, "extract_facts", lambda t, w: fatos)
+    monkeypatch.setattr(sg, "extract_facts_e_outliers", lambda t, w: (fatos, []))
 
     def fake_plan(topic, facts, fontes):
         recebido["lista"] = fontes[0]["trecho"]
@@ -520,3 +520,59 @@ def test_titulo_com_contexto_errado_e_refeito(monkeypatch):
     roteiro = {"title": "", "_fatos_verificados": ["f"], "scenes": [{"narration": NARR}]}
     out = sg.packaging_from_final(roteiro, ChannelConfig.load("curiosidades"), "Túnel Seikan")
     assert out["title"] == "Túnel Seikan: 23,3 km sob o mar"
+
+
+
+# ---------- fonte fora da curva (contradiz as outras na mesma medida) sai
+def _fonte(dom, trecho):
+    return {"titulo": dom, "url": f"https://{dom}/x", "trecho": trecho}
+
+
+def test_valor_isolado_perde_para_o_valor_de_mais_publicadores():
+    fontes = [_fonte("a.com", "Extensão de 53,85 km."), _fonte("b.com", "Extensão de 53,85 km."),
+              _fonte("c.com", "Extensão de 53,85 km."), _fonte("pt.wikipedia.org", "O túnel tem 65,23 km de extensão."),
+              _fonte("d.com", "O túnel tem 65,23 km de extensão.")]
+    outliers = []
+    fatos = ft.atribuir([{"texto": "Extensão de 53,85 km.", "fontes": []},
+                         {"texto": "O túnel tem 65,23 km de extensão.", "fontes": []}], fontes, outliers)
+    assert [f["texto"] for f in fatos] == ["Extensão de 53,85 km."]          # 3 publicadores × 2
+    assert set(outliers) == {"https://pt.wikipedia.org/x", "https://d.com/x"}  # só sustentavam o 65,23
+
+
+def test_empate_mantem_os_dois_e_nao_tira_fonte():
+    fontes = [_fonte("a.com", "Extensão de 53,85 km."), _fonte("b.com", "O túnel tem 65,23 km de extensão.")]
+    outliers = []
+    fatos = ft.atribuir([{"texto": "Extensão de 53,85 km.", "fontes": []},
+                         {"texto": "O túnel tem 65,23 km de extensão.", "fontes": []}], fontes, outliers)
+    assert len(fatos) == 2 and outliers == []
+
+
+def test_fonte_que_tambem_sustenta_o_valor_vencedor_nao_e_outlier():
+    fontes = [_fonte("a.go.jp", "Extensão de 53,85 km."),
+              _fonte("misto.com", "Extensão de 53,85 km. Outro texto diz 65,23 km de extensão.")]
+    outliers = []
+    ft.atribuir([{"texto": "Extensão de 53,85 km.", "fontes": []},
+                 {"texto": "O túnel tem 65,23 km de extensão.", "fontes": []}], fontes, outliers)
+    assert outliers == []
+
+
+def test_extracao_devolve_outliers_e_guarda_em_cache(monkeypatch, tmp_path):
+    from src import disk_cache, script_gen as sg
+    monkeypatch.setattr(disk_cache, "BASE", tmp_path)
+    fontes = [_fonte("a.go.jp", "Extensão de 53,85 km. Trecho submarino de 23,3 km. Inaugurado em 1988."),
+              _fonte("pt.wikipedia.org", "O túnel tem 65,23 km de extensão.")]
+    brutos = ([{"texto": "Extensão de 53,85 km.", "fontes": ["S1"]}, {"texto": "O túnel tem 65,23 km de extensão.", "fontes": ["S2"]}]
+              + [{"texto": f"Fato {letra} sem número.", "fontes": ["S1"]} for letra in "abcdefg"])
+    chamadas = []
+    monkeypatch.setattr(sg, "complete", lambda *a, **k: chamadas.append(1) or json.dumps({"fatos": brutos}))
+    a = sg.extract_facts_e_outliers("Seikan", fontes)
+    b = sg.extract_facts_e_outliers("Seikan", fontes)
+    assert a == b and a[1] == ["https://pt.wikipedia.org/x"] and len(chamadas) == 1
+
+
+def test_pipeline_tira_fontes_fora_da_curva_antes_da_revisao():
+    src = (Path(__file__).resolve().parent.parent / "scripts" / "run_pipeline.py").read_text(encoding="utf-8")
+    tira = src.index('web_facts = [f for f in web_facts if f.get("url") not in set(script["_fontes_outlier"])]')
+    # a revisão do laço principal vem depois do filtro (e só existe uma depois dele, no mesmo bloco)
+    revisao = src.find("problems = review_script(script, topic, facts, web_facts)", tira)
+    assert revisao != -1 and src.find("def ", tira, revisao) == -1

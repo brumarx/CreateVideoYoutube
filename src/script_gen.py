@@ -1066,12 +1066,15 @@ def _corrige_numeros_fora_da_lista(script: dict, fatos: list[str]) -> dict:
     return out
 
 
-def _finaliza(script: dict, fatos: list[str] | None, fatos_origem: list[dict] | None = None) -> dict:
+def _finaliza(script: dict, fatos: list[str] | None, fatos_origem: list[dict] | None = None,
+              fontes_outlier: list[str] | None = None) -> dict:
     """Pós-escrita: moeda por extenso (código) e, no canal de fatos verificados, a conferência de
     cada frase pelos fatos citados (src/fatos.py) e a checagem de números."""
     if fatos_origem:
         from .fatos import conferir_frases
         script = {**conferir_frases(script, fatos_origem), "_fatos": fatos_origem}
+        if fontes_outlier:
+            script["_fontes_outlier"] = list(fontes_outlier)
     script = _normalize_currency(script)
     if fatos and not fatos_origem:
         # sem origem (caminho antigo): a correção de números por IA; com origem, conferir_frases já fez
@@ -1114,14 +1117,16 @@ def generate_script(
     writer_sources = web_facts
     fatos_verificados: list[str] | None = None
     fatos_origem: list[dict] | None = None
+    fontes_outlier: list[str] = []
     if web_facts and channel.name in FATOS_CANAIS:
         # 10/11: o escritor não lê o texto bruto das fontes (misturava números e completava de
         # memória, job 824); recebe só a lista de fatos com ID. 11/11: cada frase marca os IDs
         # usados e o código confere número por número (src/fatos.py)
         from .fatos import lista_para_escritor
-        fatos_origem = extract_facts(topic, web_facts)
-        if not fatos_origem:
+        extraido = extract_facts_e_outliers(topic, web_facts)
+        if not extraido:
             raise ValueError("fatos verificados indisponíveis (extração das fontes falhou)")
+        fatos_origem, fontes_outlier = extraido
         fatos_verificados = [f["texto"] for f in fatos_origem]
         # oficiais e confirmados primeiro; secundário só para chegar a 8 (cada um vira "estima-se")
         principais = [f for f in fatos_origem if f["status"] != "secundario"]
@@ -1237,7 +1242,7 @@ def generate_script(
                 continue
             word_count = sum(len(s.get("narration", "").split()) for s in script["scenes"])
             if min_total_words <= word_count <= max_words_ceiling:
-                return _finaliza(_sanitize_club_crests(_sanitize_person_images(topic, script)), fatos_verificados, fatos_origem)
+                return _finaliza(_sanitize_club_crests(_sanitize_person_images(topic, script)), fatos_verificados, fatos_origem, fontes_outlier)
 
             distance = (
                 min_total_words - word_count if word_count < min_total_words
@@ -1263,10 +1268,10 @@ def generate_script(
             "usando o melhor roteiro obtido mesmo fora da faixa de %d-%d palavras",
             min_total_words, max_words_ceiling,
         )
-        return _finaliza(_sanitize_club_crests(_sanitize_person_images(topic, best_script)), fatos_verificados, fatos_origem)
+        return _finaliza(_sanitize_club_crests(_sanitize_person_images(topic, best_script)), fatos_verificados, fatos_origem, fontes_outlier)
     if filler_fallback is not None:
         log.warning("3 tentativas com bordão repetido — usando a última mesmo assim")
-        return _finaliza(_sanitize_club_crests(_sanitize_person_images(topic, filler_fallback)), fatos_verificados, fatos_origem)
+        return _finaliza(_sanitize_club_crests(_sanitize_person_images(topic, filler_fallback)), fatos_verificados, fatos_origem, fontes_outlier)
 
     raise ValueError(f"LLM não devolveu roteiro válido após 3 tentativas: {last_error}")
 
@@ -2070,10 +2075,10 @@ def fatos_com_numeros_da_fonte(fatos: list[str], fontes: str) -> list[str]:
 
 
 # versão da extração na chave do cache (mudou a regra de atribuição, o cache antigo não serve)
-EXTRACAO_VERSAO = 2
+EXTRACAO_VERSAO = 3
 
 
-def extract_facts(topic: str, web_facts: list[dict] | None) -> list[dict] | None:
+def extract_facts_e_outliers(topic: str, web_facts: list[dict] | None) -> tuple[list[dict], list[str]] | None:
     """Passo A: lista fechada de fatos com ORIGEM (ver src/fatos.py). As fontes vão numeradas;
     o modelo diz de qual fonte tirou cada fato e o código confere: o fato fica só se seus números
     estão em alguma fonte, e o status (oficial, confirmado, secundário) sai das fontes que o
@@ -2085,8 +2090,8 @@ def extract_facts(topic: str, web_facts: list[dict] | None) -> list[dict] | None
         return None
     guardado = disk_cache.get("fatos_com_origem", [EXTRACAO_VERSAO, topic, fontes])
     if guardado:
-        log.info("extração de fatos em cache: %d fatos (mesmo tema e mesmas fontes)", len(guardado))
-        return guardado
+        log.info("extração de fatos em cache: %d fatos (mesmo tema e mesmas fontes)", len(guardado["fatos"]))
+        return guardado["fatos"], guardado["outliers"]
     prompt = (
         f"Tema: {topic}\n\nFONTES (numeradas):\n{fontes}\n\n"
         "Extraia de 10 a 12 FATOS que estão LITERALMENTE nas FONTES, com o mesmo número, data, "
@@ -2107,14 +2112,21 @@ def extract_facts(topic: str, web_facts: list[dict] | None) -> list[dict] | None
         log.warning("extração de fatos: resposta sem JSON válido (%d caracteres)", len(raw))
         return None
     brutos = [b if isinstance(b, dict) else {"texto": str(b), "fontes": []} for b in brutos]
-    fatos = atribuir(brutos, web_facts or [])
+    outliers: list[str] = []
+    fatos = atribuir(brutos, web_facts or [], outliers)
     contagem = {s: sum(1 for f in fatos if f["status"] == s) for s in ("oficial", "confirmado", "secundario")}
     log.info("extração de fatos: %d propostos, %d com números confirmados nas fontes (%s)",
              len(brutos), len(fatos), ", ".join(f"{k} {v}" for k, v in contagem.items()))
     if len(fatos) >= 8:
-        disk_cache.put("fatos_com_origem", [EXTRACAO_VERSAO, topic, fontes], fatos)
-        return fatos
+        disk_cache.put("fatos_com_origem", [EXTRACAO_VERSAO, topic, fontes], {"fatos": fatos, "outliers": outliers})
+        return fatos, outliers
     return None
+
+
+def extract_facts(topic: str, web_facts: list[dict] | None) -> list[dict] | None:
+    """Só os fatos com origem (sem a lista de fontes fora da curva)."""
+    r = extract_facts_e_outliers(topic, web_facts)
+    return r[0] if r else None
 
 
 def extract_verified_facts(topic: str, web_facts: list[dict] | None) -> list[str] | None:

@@ -133,8 +133,8 @@ def test_nos_canais_de_fatos_o_plano_so_le_a_lista_fechada(monkeypatch):
         raise RuntimeError("parar aqui: só queremos ver o que o plano recebeu")
 
     monkeypatch.setattr(sg, "plan_story", fake_plan)
-    monkeypatch.setattr(sg, "extract_facts", lambda topic, web: [
-        {"id": f"F{i + 1}", "texto": f"Fato {i} verificado", "status": "oficial", "fontes": []} for i in range(8)])
+    monkeypatch.setattr(sg, "extract_facts_e_outliers", lambda topic, web: ([
+        {"id": f"F{i + 1}", "texto": f"Fato {i} verificado", "status": "oficial", "fontes": []} for i in range(8)], []))
     fontes = [{"titulo": "Fonte bruta", "url": "https://x", "trecho": "causa de morte dos operários não listada"}]
     canal = ChannelConfig.load("curiosidades")
     try:

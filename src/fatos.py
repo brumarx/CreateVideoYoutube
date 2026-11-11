@@ -95,7 +95,7 @@ def bloco_numerado(web_facts: list[dict] | None) -> str:
     return "\n".join(linhas)[:LIMITE_BLOCO]
 
 
-def atribuir(fatos_brutos: list[dict], web_facts: list[dict]) -> list[dict]:
+def atribuir(fatos_brutos: list[dict], web_facts: list[dict], outliers: list[str] | None = None) -> list[dict]:
     """Fatos da extração → fatos com ID, fontes que de fato contêm seus números e status.
     Fato cujo número não está em fonte nenhuma é descartado."""
     fontes = list(web_facts or [])
@@ -132,7 +132,7 @@ def atribuir(fatos_brutos: list[dict], web_facts: list[dict]) -> list[dict]:
         saida.append({"id": f"F{len(saida) + 1}", "texto": texto, "status": status,
                       "fontes": [fontes[i].get("url", "") for i in apoio],
                       "planejamento": sorted(nums & planejamento)})
-    return remover_conflitos(saida)
+    return remover_conflitos(saida, outliers)
 
 
 # unidades de medida (vocabulário do português, não de um tema)
@@ -163,10 +163,17 @@ def _palavras(texto: str) -> set[str]:
     return {w[:5] for w in re.findall(r"[a-z]{4,}", fold)} - {w[:5] for w in _PARADAS}
 
 
-def remover_conflitos(fatos: list[dict]) -> list[dict]:
-    """Fonte primária manda: fato de status pior que dá OUTRO valor para a mesma medida (mesma
-    unidade e mesmo assunto) que um fato de status melhor é descartado. Ex.: "65,23 km de
-    extensão" (Wikipédia pt) sai quando há "extensão de 53,85 km" oficial."""
+def _forca(fato: dict) -> tuple[int, int]:
+    """Quem vence um conflito: status melhor; depois, mais publicadores independentes."""
+    return (-STATUS_ORDEM[fato["status"]], len({dominio_raiz(u) for u in fato.get("fontes", [])}))
+
+
+def remover_conflitos(fatos: list[dict], outliers: list[str] | None = None) -> list[dict]:
+    """Dois fatos que dão valores DIFERENTES para a mesma medida (mesma unidade e mesmo assunto):
+    fica o mais forte (status melhor; empate no status, mais publicadores independentes). Ex.:
+    "65,23 km de extensão" (só Wikipédia pt) sai quando há "53,85 km de extensão" oficial ou em
+    mais fontes. As fontes que só sustentavam o valor perdedor são fora da curva: vão para
+    `outliers` (URLs), para saírem da lista do job. Empate total: os dois ficam."""
     if not fatos:
         return fatos
     contagem: dict[str, int] = {}
@@ -174,10 +181,10 @@ def remover_conflitos(fatos: list[dict]) -> list[dict]:
         for w in _palavras(f["texto"]):
             contagem[w] = contagem.get(w, 0) + 1
     tema = {w for w, n in contagem.items() if len(fatos) >= 4 and n * 2 >= len(fatos)}
-    fora = set()
+    fora: set[str] = set()
     for a in fatos:
         for b in fatos:
-            if a is b or STATUS_ORDEM[a["status"]] >= STATUS_ORDEM[b["status"]]:
+            if a is b or _forca(a) <= _forca(b):
                 continue
             pa, pb = _pares(a["texto"]), _pares(b["texto"])
             mesma_medida = {u for _, u in pa} & {u for _, u in pb}
@@ -185,8 +192,13 @@ def remover_conflitos(fatos: list[dict]) -> list[dict]:
                 continue
             if not ({n for n, u in pb if u in mesma_medida} & {n for n, u in pa if u in mesma_medida}):
                 fora.add(b["id"])
-                log.warning("fato %s descartado: contradiz %s, de fonte melhor (%r × %r)", b["id"], a["id"],
+                log.warning("fato %s descartado: contradiz %s, mais bem sustentado (%r × %r)", b["id"], a["id"],
                             b["texto"][:60], a["texto"][:60])
+                if outliers is not None:
+                    for url in b.get("fontes", []):
+                        if url not in a.get("fontes", []) and url not in outliers:
+                            outliers.append(url)
+                            log.warning("fonte fora da curva, sai do job: %s", url)
     if not fora:
         return fatos
     restantes = [f for f in fatos if f["id"] not in fora]

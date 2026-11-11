@@ -847,6 +847,12 @@ def run(
         # tutorial de ferramenta inventada ou acusação sem dado no ar.
         # o bordão de entrada entra ANTES da revisão: o que é falado é o que é revisado
         script = channel.with_greeting(script)
+        if script.get("_fontes_outlier") and web_facts:
+            # 11/11: fonte fora da curva (contradiz as outras na mesma medida) sai da lista do job:
+            # a revisão não reprova o dado certo por causa dela
+            antes = len(web_facts)
+            web_facts = [f for f in web_facts if f.get("url") not in set(script["_fontes_outlier"])]
+            log.warning("[%s] fontes fora da curva retiradas: %d", job_id, antes - len(web_facts))
         if channel.claim_sources:
             # canal com claim_sources (motivacional, curiosidades): cada frase com número/data
             # busca fonte, MESMO quando o tema já tem fonte (junto, sem repetir URL)
