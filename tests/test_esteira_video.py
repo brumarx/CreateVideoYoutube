@@ -228,3 +228,43 @@ def test_imagem_sem_escrita_nao_muda():
 def test_render_reempacota_quando_a_miniatura_aprovada_esta_cortada():
     assert "and not termina_solto(str(script[\"thumbnail_text\"]))" in PIPELINE
     assert PIPELINE.index("script = sem_escrita_na_imagem(script)") < PIPELINE.index("script = art_direction(script, channel)")
+
+
+# ---------- job 855: Short longo demais é encurtado tirando frases, antes do título e da voz
+def _roteiro_longo():
+    cenas = [{"narration": "E aí, mente curiosa! O túnel tem 53,85 km. Isso mesmo, é muito longo e impressiona qualquer pessoa que pensa nisso."}]
+    cenas += [{"narration": f"Cena {i}: o trecho tem 23,3 km sob o mar. Pense no tamanho enorme do desafio que isso representava naquela época distante. Quer saber mais?"}
+              for i in range(1, 10)]
+    cenas.append({"narration": "Você teria coragem de atravessar? Deixe sua resposta nos comentários e compartilhe com quem ama engenharia."})
+    return {"scenes": cenas}
+
+
+def test_short_longo_tira_enchimento_e_cabe_no_limite():
+    from src.fatos import encurtar_roteiro
+    r = _roteiro_longo()
+    total = sum(len(sc["narration"].split()) for sc in r["scenes"])
+    out = encurtar_roteiro(r, total - 60)
+    texto = " ".join(sc["narration"] for sc in out["scenes"])
+    assert sum(len(sc["narration"].split()) for sc in out["scenes"]) <= total - 60
+    assert texto.count("23,3 km") == 9 and "53,85 km" in texto          # números ficam
+    assert out["scenes"][-1] == r["scenes"][-1]                           # fechamento intacto
+    assert all(sc["narration"].split(".")[0] == orig["narration"].split(".")[0] for sc, orig in zip(out["scenes"], r["scenes"]))
+
+
+def test_short_dentro_do_limite_nao_muda():
+    from src.fatos import encurtar_roteiro
+    r = _roteiro_longo()
+    assert encurtar_roteiro(r, 10_000) == r
+
+
+def test_perguntas_e_primeira_frase_nunca_saem():
+    from src.fatos import encurtar_roteiro
+    out = encurtar_roteiro(_roteiro_longo(), 50)
+    for sc in out["scenes"][1:-1]:
+        assert sc["narration"].startswith("Cena") and sc["narration"].endswith("Quer saber mais?")
+
+
+def test_pipeline_encurta_antes_do_titulo_e_da_voz():
+    encurta = PIPELINE.index("script = encurtar_roteiro(script, int(SHORTS_MAX_SECONDS * PALAVRAS_POR_MINUTO_VOZ / 60))")
+    assert encurta < PIPELINE.index("packaging_from_final(\n            script, channel, topic")
+    assert encurta < PIPELINE.index("audio_problems, audio_names = review_audio_full(")

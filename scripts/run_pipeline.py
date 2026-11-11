@@ -79,6 +79,7 @@ LONG_WIDTH, LONG_HEIGHT = 1920, 1080
 # comum, fora da aba Shorts (jobs 262/270/278 — 81-197s em 16:9). Folga
 # abaixo dos 180s do limite do Shorts.
 SHORTS_MAX_SECONDS = 170
+PALAVRAS_POR_MINUTO_VOZ = 130  # medido no job 855 (494 palavras em 219 s ≈ 135/min), com folga
 
 MAX_TOPIC_CHECKS = 3
 # acima disso a voz acelerada soa apressada: roteiro reprovado e refeito
@@ -1047,6 +1048,11 @@ def run(
             # orçamento, "estima-se" e número sem fato: pelos fatos com origem (src/fatos.py)
             # moeda por extenso de novo: a troca por fato pode ter trazido "¥" ou "US$" para a narração
             script = _normalize_currency(ajustar_texto_final(script))
+            if not long_form:
+                # Short tem teto de tempo: confere o tamanho AGORA (antes do título e da voz), tirando
+                # frases de enchimento — a voz real fala ~135 palavras/min (job 855: 494 palavras = 219 s)
+                from src.fatos import encurtar_roteiro
+                script = encurtar_roteiro(script, int(SHORTS_MAX_SECONDS * PALAVRAS_POR_MINUTO_VOZ / 60))
         # 11/11: o texto está final e validado. SÓ AGORA saem título, miniatura, prompt da
         # miniatura e os prompts das imagens de cada cena, todos a partir deste texto.
         is_compilation_final = isinstance(facts, dict) and facts.get("tipo") == "compilacao"

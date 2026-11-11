@@ -489,3 +489,46 @@ def termina_solto(texto: str) -> bool:
     ligação está cortado no meio: "23,3 km ficam sob"."""
     palavras = _palavras_seguidas(texto)
     return bool(palavras) and palavras[-1] in _CONECTIVOS_FINAIS
+
+
+
+def _tem_conteudo(frase: str) -> bool:
+    """Frase que carrega fato: número ou nome próprio fora do começo da frase."""
+    if re.search(r"\d", frase):
+        return True
+    palavras = frase.split()
+    return any(p[:1].isupper() and len(p.strip(".,;:!?")) > 2 for p in palavras[1:])
+
+
+def encurtar_roteiro(script: dict, max_palavras: int) -> dict:
+    """Short longo demais: tira FRASES (nunca reescreve) até caber em `max_palavras`. Saem primeiro
+    as de enchimento (sem número e sem nome próprio), das mais longas para as mais curtas; nunca a
+    primeira frase de cada cena, pergunta, nem a última cena (fechamento e convite). Se só com
+    enchimento não couber, saem as de conteúdo das cenas do meio, da mais longa para a mais curta."""
+    cenas = [[f for f in _FRASES.split(sc.get("narration", "")) if f.strip()] for sc in script.get("scenes", [])]
+    total = sum(len(f.split()) for fr in cenas for f in fr)
+    if total <= max_palavras or len(cenas) < 3:
+        return script
+
+    def candidatas(com_conteudo: bool) -> list[tuple[int, int, int]]:
+        out = []
+        for i, frases in enumerate(cenas[:-1]):
+            for j, f in enumerate(frases):
+                if j == 0 or f.strip().endswith("?") or _tem_conteudo(f) != com_conteudo:
+                    continue
+                out.append((len(f.split()), i, j))
+        return sorted(out, reverse=True)
+
+    tirar: set[tuple[int, int]] = set()
+    for com_conteudo in (False, True):
+        for tamanho, i, j in candidatas(com_conteudo):
+            if total <= max_palavras:
+                break
+            tirar.add((i, j))
+            total -= tamanho
+        if total <= max_palavras:
+            break
+    log.warning("Short longo: %d frase(s) tirada(s), ficou com %d palavras (limite %d)", len(tirar), total, max_palavras)
+    novas = [{**sc, "narration": " ".join(f for j, f in enumerate(cenas[i]) if (i, j) not in tirar)}
+             for i, sc in enumerate(script.get("scenes", []))]
+    return {**script, "scenes": [sc for sc in novas if sc["narration"].strip()]}
