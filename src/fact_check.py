@@ -572,7 +572,7 @@ _UNIDADE_NORMAL = {"quilômetros": "km", "quilometros": "km", "quilômetro": "km
                    "bilhões": "bi", "bilhão": "bi", "bilhoes": "bi", "milhões": "mi", "milhão": "mi", "milhoes": "mi",
                    "toneladas": "t", "tonelada": "t", "anos": "ano", "ano": "ano", "dias": "dia", "dia": "dia",
                    "pessoas": "pessoa", "pessoa": "pessoa", "mortos": "morte", "morto": "morte", "mortes": "morte",
-                   "morte": "morte", "por cento": "%", "%": "%", "dólares": "dolar", "dólar": "dolar", "dolares": "dolar",
+                   "morte": "morte", "operários": "pessoa", "operário": "pessoa", "trabalhadores": "pessoa", "por cento": "%", "%": "%", "dólares": "dolar", "dólar": "dolar", "dolares": "dolar",
                    "ienes": "iene", "graus": "grau", "km": "km", "m": "m", "t": "t", "mil": "mil"}
 
 
@@ -633,6 +633,9 @@ def substituir_pela_lista(script: dict, problems: list[dict]) -> tuple[dict, lis
                     novo = novo.replace(original, alvo.replace(".", ","), 1)
                 if ok and novo != frase:
                     sc["narration"] = sc.get("narration", "").replace(frase, novo, 1)
+                    achou = True
+                elif ok:
+                    # todos os números da frase já estão na lista (mesma unidade): resolvido, sem trocar nada
                     achou = True
                 break
             if achou:

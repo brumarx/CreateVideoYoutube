@@ -232,3 +232,11 @@ def test_sem_fatos_suficientes_nao_troca():
     roteiro = {"title": "t", "thumbnail_text": "", "_fatos_verificados": lista,
                "scenes": [{"narration": "A obra durou 40 anos. Fato verificado número 1 sobre a obra do túnel."}]}
     assert fc.cortar_e_trocar_por_fato(roteiro, [{"tipo": "fora_da_fonte", "termo": "A obra durou 40 anos", "motivo": "x"}]) is None
+
+
+def test_numero_ja_na_lista_com_outro_substantivo_e_resolvido():
+    lista = ["Estima-se que 34 operários tenham morrido durante a construção do túnel"]
+    roteiro = {"title": "t", "thumbnail_text": "", "_fatos_verificados": lista,
+               "scenes": [{"narration": "Durante a obra, 34 pessoas morreram."}]}
+    out, restantes = fc.substituir_pela_lista(roteiro, [{"tipo": "fora_da_fonte", "termo": "34 pessoas morreram", "motivo": "x"}])
+    assert restantes == []
