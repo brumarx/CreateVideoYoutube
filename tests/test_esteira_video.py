@@ -355,3 +355,11 @@ def test_pedido_do_titulo_traz_o_nome_do_assunto(monkeypatch):
     bom = json.dumps({"titulo": "Túnel Seikan: 53,85 km de extensão", "thumbnail_text": "53,85 KM DE EXTENSÃO", "thumbnail_image_prompt": "p"})
     _, pedidos = _pacote(monkeypatch, [bom])
     assert "'Túnel Seikan: trecho copiado'" in pedidos[0]
+
+
+def test_leitura_brasileira_de_nome_estrangeiro_nao_vira_ressalva():
+    from src.video_qa import name_problems
+    texto = "A ponte liga Kobe à ilha de Awaji. Depois a Turquia inaugurou a Çanakkale 1915."
+    ouvido = "A ponte liga Colby à ilha de Avage. Depois a Turquia inaugurou a Sanakali 1915."
+    assert name_problems([texto], ouvido) == []
+    assert name_problems(["O arquipélago de Svalbard fica no Ártico."], "O arquipélago de Esvalbard fica no Ártico.")

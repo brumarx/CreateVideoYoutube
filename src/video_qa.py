@@ -294,6 +294,7 @@ def _fold(text: str) -> str:
 
 
 def _parte_ouvida(parte: str, ouvidas: list[str]) -> bool:
+    parte = _fold(parte)
     """Diferenças que não são erro de pronúncia: H inicial mudo do português ("Honshu" ouvido
     "Onshu"), a transcrição cortar o fim do nome ("Tappi" → "TAP", ao menos 3 letras) ou juntar uma
     letra da palavra seguinte ("Onshua" = Honshu + "a"). Letra A MAIS no começo ("Esvalbard") é erro."""
@@ -310,11 +311,23 @@ def _parte_ouvida(parte: str, ouvidas: list[str]) -> bool:
     return False
 
 
+def _som(palavra: str) -> str:
+    """Chave de som da leitura brasileira de um nome estrangeiro: w=v ("Awaji" lido "Avaji"),
+    ç=s ("Çanakkale" lido "Sanakali"), g/j antes de e/i iguais, letra dobrada simples, e/i finais iguais."""
+    s = _fold(palavra.lower().replace("ç", "s"))
+    s = s.replace("w", "v").replace("y", "i").replace("ph", "f").replace("k", "c").replace("q", "c")
+    s = re.sub(r"g(?=[ei])", "j", s)
+    s = re.sub(r"(.)\1", r"\1", s)
+    return re.sub(r"e$", "i", s)
+
+
 def _nome_ouvido(nome: str, heard_f: str) -> bool:
     """O nome aparece na transcrição parte por parte ("Tappi-Kaitei" vira "tappi" e "kaitei", que a
-    transcrição escreve separados), com as tolerâncias de _parte_ouvida."""
+    transcrição escreve separados), com as tolerâncias de _parte_ouvida e a mesma chave de som."""
     ouvidas = heard_f.split()
-    return all(_parte_ouvida(p, ouvidas) for p in re.split(r"[-']", _fold(nome)) if p)
+    sons = [_som(o) for o in ouvidas]
+    return all(_parte_ouvida(p, ouvidas) or _som(p) in sons
+               for p in re.split(r"[-']", nome) if p)
 
 
 def name_problems(narrations: list[str], heard: str) -> list[str]:
