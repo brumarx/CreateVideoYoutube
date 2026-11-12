@@ -442,8 +442,15 @@ def _trends_now() -> dict:
     """Tendências do cache de hoje (a mesma que a pipeline usa) e o tema que
     cada canal escolheria a partir delas."""
     try:
-        from src.trending_topics import filter_topics, topic_for_channel
+        from src.trending_topics import filter_topics, get_trending_topics, topic_for_channel
 
+        # automático: cache com mais de 1 h é renovado aqui mesmo (RSS do
+        # Google Trends, grátis, 10 s de limite) — o painel não fica parado
+        # na tendência da última rodada. Falhou: mostra o cache que tem.
+        try:
+            get_trending_topics("BR")
+        except Exception as exc:  # noqa: BLE001
+            log.warning("tendências não renovadas: %s", exc)
         cache = json.loads((ROOT / "data" / "trending_topics_cache.json").read_text())["BR"]
         trends = cache.get("trends", [])
         picks = {}
