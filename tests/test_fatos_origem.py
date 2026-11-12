@@ -822,3 +822,29 @@ def test_mesmo_fato_em_duas_frases_e_defeito():
     texto = "Cada câmara exigiu 1,8 milhão de m³ [F8]. Sobe 26 metros [F1]. O concreto somou 1,8 milhão de m³ [F8]."
     assert "F8" in fato_repetido({"scenes": [{"narration": texto}]})
     assert fato_repetido({"scenes": [{"narration": "Sobe 26 metros [F1]. Usou 1,8 milhão de m³ [F8]."}]}) is None
+
+
+def test_unidades_faladas_no_plural():
+    from src.tts import _for_speech
+    assert _for_speech("caminho de 53,85 km que")[0] == "caminho de 53,85 quilômetros que"
+    assert _for_speech("1 km de")[0] == "1 quilômetro de"
+    assert _for_speech("100 m abaixo")[0] == "100 metros abaixo"
+    assert _for_speech("1,8 milhão de m³")[0] == "1,8 milhão de metros cúbicos"
+
+
+def test_citacao_exige_afirmacao_sem_numero():
+    from src.fact_check import afirmacoes_sem_trecho
+    assert afirmacoes_sem_trecho("Um navio entra e, minutos depois, sai 26 metros mais alto.",
+                                 "The Gatun Locks lift ships 26 m") == ["minutos"]
+    assert afirmacoes_sem_trecho("Foram 17 anos e 3 horas por dia.", "x") == []
+    assert afirmacoes_sem_trecho("É a maior ponte do mundo.", "the longest suspension bridge") == []
+    assert afirmacoes_sem_trecho("Segundo a ACP, usa gravidade.", "gravity") == []
+
+
+def test_suspense_vazio_e_siglas():
+    from src.script_gen import _hype_problem, _siglas_problem
+    s = {"scenes": [{"narration": "A obra foi feita pela Japan Railway Construction Corporation, a JRCC, antecessora "
+                                  "da JRTT. Quer entender o truque?"}]}
+    assert _hype_problem(s) and _siglas_problem(s)
+    ok = {"scenes": [{"narration": "O túnel tem 53 km. Ele liga Honshu a Hokkaido pela JR."}]}
+    assert _hype_problem(ok) is None and _siglas_problem(ok) is None

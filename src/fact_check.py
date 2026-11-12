@@ -1419,6 +1419,39 @@ def _claim_matches_quote(sentence: str, quote: str) -> bool:
     return True
 
 
+# afirmação sem número que a checagem por número/nome deixava passar (Panamá,
+# job 875: "e, minutos depois, sai 26 metros mais alto" — o tempo não está em
+# fonte nenhuma). Raiz pt -> raízes aceitas no trecho (pt e en)
+_AFIRMACAO_SEM_NUMERO = {
+    "segundo": ("segund", "second"), "minuto": ("minut",), "hora": ("hora", "hour"),
+    "semana": ("seman", "week"), "mes": ("mes", "month"), "decada": ("decad",),
+    "seculo": ("secul", "centur"), "dezena": ("dezen", "dozen"), "centena": ("centen", "hundred"),
+    "milhar": ("milhar", "thousand"), "recorde": ("recorde", "record"),
+    "unico": ("unic", "only", "sole", "unique"), "primeiro": ("primeir", "first", "pione"),
+    "maior": ("maior", "larg", "bigg", "great", "long", "high", "tall"),
+    "menor": ("menor", "small", "short", "least"),
+}
+_AFIRMACAO_RE = re.compile(
+    r"\b(segundos|minutos?|horas?|semanas?|mes(es)?|decadas?|seculos?|dezenas|centenas|milhares|recordes?"
+    r"|unic[oa]s?|primeir[oa]s?|maior(es)?|menor(es)?)\b")
+
+
+def afirmacoes_sem_trecho(frase: str, trecho: str) -> list[str]:
+    """Palavras de afirmação (tempo, quantidade vaga, superlativo) da frase
+    que o trecho citado não traz. Quando seguem um número ("17 anos", "3
+    horas") o número já foi conferido; "segundo" como "de acordo com" fica."""
+    f, t = _fold_text(frase), _fold_text(trecho)
+    faltam = []
+    for m in _AFIRMACAO_RE.finditer(f):
+        antes = f[:m.start()].rstrip()
+        if re.search(r"\d[\d.,]*$", antes) or (m[0] == "segundo" and not re.search(r"\b(um|o|alguns|poucos)$", antes)):
+            continue
+        raiz = next(k for k in _AFIRMACAO_SEM_NUMERO if m[0].startswith(k[:4]))
+        if not any(re.search(r"\b" + r, t) for r in _AFIRMACAO_SEM_NUMERO[raiz]):
+            faltam.append(m[0])
+    return faltam
+
+
 def ungrounded_sentences(script: dict, facts: dict | None, web_facts: list[dict] | None,
                          estrito: bool = False) -> list[dict] | None:
     """Frases de fato sem trecho real da fonte que as sustente — viram
@@ -1486,10 +1519,12 @@ def ungrounded_sentences(script: dict, facts: dict | None, web_facts: list[dict]
         # (trecho + nome da fonte), não só o trecho: "2026" no nome "CNBC, 2º
         # tri de 2026" reprovava a frase certa (job 730, 05/11)
         chunk = next((pt for pt in parts if quote and _quote_in_source(str(quote), _fold_text(pt))), str(quote or ""))
-        if quote and _quote_in_source(str(quote), source_folded) and _claim_matches_quote(sentence, chunk):
+        faltam = afirmacoes_sem_trecho(sentence, chunk) if estrito and quote else []
+        if quote and _quote_in_source(str(quote), source_folded) and _claim_matches_quote(sentence, chunk) and not faltam:
             continue
         why = ("nenhum trecho da fonte sustenta" if not quote else
                "o trecho citado não existe na fonte" if not _quote_in_source(str(quote), source_folded) else
+               f"a fonte não diz {', '.join(faltam)}" if faltam and _claim_matches_quote(sentence, chunk) else
                "o trecho citado não traz o número/nome da frase")
         problems.append({"tipo": "sem_fonte", "termo": " ".join(sentence.split()[:14]),
                          "motivo": f"fato sem trecho da fonte que o sustente ({why}) — tire ou reescreva com o que a fonte diz"})

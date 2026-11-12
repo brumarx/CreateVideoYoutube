@@ -622,6 +622,46 @@ def _ending_problem(script: dict) -> str | None:
     return None
 
 
+# suspense vazio no meio (Seikan, job 858: "Guarde essa informação, porque ela
+# muda tudo", "E aqui vem a virada que poucos sabem", "Quer entender o
+# truque?" — e o truque nunca veio): promete e não entrega, o meio complica
+_HYPE_RE = re.compile(
+    r"\b(guarde (essa|esta|bem essa) informa[çc][ãa]o|(isso|ela|que|o que) muda tudo|vem a virada|poucos sabem"
+    r"|(voc[êe] )?n[ãa]o vai acreditar|prepare-se|o que fica [ée] a li[çc][ãa]o|segura essa|fique at[ée] o fim"
+    r"|quer (entender|saber|descobrir|conhecer) (o|a|como|qual|por que)\b[^?]*\?)",
+    re.I,
+)
+MAX_PERGUNTAS_MEIO = 1
+
+
+def _hype_problem(script: dict) -> str | None:
+    """Promessa/suspense vazio no meio do roteiro, ou perguntas demais no
+    meio (o gancho e a pergunta final ao espectador ficam de fora)."""
+    frases = [f.strip() for sc in script.get("scenes", []) for f in _SENTENCE_SPLIT.split(sc.get("narration", ""))
+              if f.strip()]
+    for f in frases:
+        if m := _HYPE_RE.search(f):
+            return f"suspense vazio (\"{m[0][:50]}\")"
+    meio = [f for f in frases[2:-2] if f.endswith("?")]
+    if len(meio) > MAX_PERGUNTAS_MEIO:
+        return f"{len(meio)} perguntas no meio (\"{meio[0][:50]}\")"
+    return None
+
+
+_SIGLA_RE = re.compile(r"\b(?![IVXLCDM]+\b)[A-ZÀ-Ý]{2,6}\b")
+
+
+def _siglas_problem(script: dict, limite: int = 2) -> str | None:
+    """Frase com várias siglas ("Japan Railway Construction Corporation, a
+    JRCC, antecessora da JRTT", Seikan): quem ouve se perde."""
+    for sc in script.get("scenes", []):
+        for f in _SENTENCE_SPLIT.split(sc.get("narration", "")):
+            siglas = set(_SIGLA_RE.findall(f))
+            if len(siglas) >= limite:
+                return f"siglas demais numa frase ({', '.join(sorted(siglas))})"
+    return None
+
+
 def _formula_problem(script: dict) -> str | None:
     for sc in script.get("scenes", []):
         if m := _FORMULA.search(sc.get("narration", "")):
@@ -1238,6 +1278,15 @@ def generate_script(
                 issues.append((ending, f"terminou com {ending}. A última frase retoma o gancho do começo com uma virada "
                                "ou ironia — um fato, não uma dúvida. Ex.: 'Em 1948 o Norte cortou a luz do Sul. Agora não "
                                "consegue manter as próprias acesas.' 'Será que', 'a resposta está' e promessa no fim: proibido. Pergunta direta ao espectador sobre o tema, sem fato novo, pode."))
+            hype = _hype_problem(script)
+            if hype:
+                issues.append((hype, f"tinha {hype}. Nada de suspense vazio ('guarde essa informação', 'muda tudo', "
+                               "'poucos sabem', 'quer entender o truque?'): cada frase entrega um fato; no meio, no "
+                               "máximo 1 pergunta, respondida na frase seguinte."))
+            siglas = _siglas_problem(script, 2 if channel.name in FATOS_CANAIS else 3)
+            if siglas:
+                issues.append((siglas, f"tinha {siglas}. Quem ouve se perde: no máximo 1 sigla por frase; nome de "
+                               "empresa/órgão só se for essencial à história."))
             formula = _formula_problem(script)
             if formula:
                 issues.append((formula, f"tinha {formula}. A voz não lê fórmula: em vez de ditar, mostre o pedido pra IA "
