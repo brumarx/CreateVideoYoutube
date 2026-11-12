@@ -1149,7 +1149,8 @@ def generate_script(
                            "ex.: 'O túnel tem 53,85 km [F1].' Pergunta, saudação e convite aos comentários não levam ID. "
                            "Cada número fica com o MESMO sujeito e a MESMA medida do fato: se o fato diz 'as eclusas "
                            "medem 300 pés de um lado ao outro', não escreva 'cada câmara tem 300 pés de largura'. "
-                           "A pergunta final não afirma nada novo (nada de 'sem cabos nem motores')."}]
+                           "A pergunta final não afirma nada novo (nada de 'sem cabos nem motores'). "
+                           "Números SEMPRE em algarismos, como no fato ('26 metros', '1,8 milhão'), nunca por extenso."}]
     # 11/11: o plano também só lê a lista fechada nos canais de fatos. Com as fontes brutas,
     # ele trazia detalhes fora da lista (causa de morte, Kuroshio II) e o escritor os copiava
     plan = plan_story(topic, facts, writer_sources if fatos_verificados else web_facts)
@@ -1213,9 +1214,15 @@ def generate_script(
                                f"errou: {news_problem}. Uma notícia por bloco, na ordem da lista, cada cena com o campo "
                                "\"noticia\"; título = a manchete mais forte, curta, sem \"notícias\"/\"hoje\" (em dia de "
                                "jogo, \"Botafogo x Adversário\" + gancho curto)."))
-            from .fatos import numero_repetido
+            from .fatos import numero_por_extenso, numero_repetido
             repeated = (_repetition_problem(script) or _word_cap_problem(script, channel.word_caps)
                         or numero_repetido(script))
+            if channel.name in FATOS_CANAIS:
+                extenso = numero_por_extenso(" ".join(sc.get("narration", "") for sc in script.get("scenes", [])))
+                if extenso:
+                    issues.append((f"número por extenso ({', '.join(extenso[:3])})",
+                                   "escreveu número por extenso: TODO número em algarismos, como no fato "
+                                   "('26 metros', '1,8 milhão'), senão não dá para conferir."))
             if repeated:
                 issues.append((f"repetição ({repeated})", f"se repetiu: {repeated}. Cada dado é dito uma vez (no máximo "
                                "citado de novo numa comparação); sem frase-muleta."))

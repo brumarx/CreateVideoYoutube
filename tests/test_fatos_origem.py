@@ -792,3 +792,13 @@ def test_troca_por_fato_nao_repete_medida_da_narracao():
     roteiro = {"title": "t", "_fatos": fatos, "scenes": [{"narration": "Os navios sobem 26 metros nas eclusas. Hoje é atração.", "fatos": ["F1"]}]}
     out, _ = fc.cortar_e_trocar_por_fato(roteiro, [{"tipo": "fora_da_fonte", "termo": "Hoje é atração", "motivo": "x"}])
     assert "85 pés" not in out["scenes"][0]["narration"] and "1,8 milhão" in out["scenes"][0]["narration"]
+
+
+def test_numero_por_extenso_nao_passa():
+    from src.fatos import conferir_frases, numero_por_extenso
+    assert numero_por_extenso("Os navios sobem vinte e seis metros.") == ["vinte"]
+    assert numero_por_extenso("Foram um milhão e oitocentos mil metros cúbicos.")
+    assert numero_por_extenso("Foram 1,8 milhão de metros cúbicos e três câmaras.") == []
+    fatos = [{"id": "F1", "texto": "Os navios sobem 26 metros.", "status": "oficial", "fontes": []}]
+    out = conferir_frases({"scenes": [{"narration": "Os navios sobem vinte e seis metros [F1]. Sobem 26 metros [F1]."}]}, fatos)
+    assert out["scenes"][0]["narration"] == "Sobem 26 metros."

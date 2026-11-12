@@ -350,6 +350,24 @@ def _alem_dos_fatos(frase: str, citados: list[dict]) -> bool:
     return len([w for w in re.findall(r"\w+", frase.lower()) if len(w) >= 5 and w[:5] not in base]) >= 3
 
 
+_EXTENSO = re.compile(
+    r"\b(vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|cem|cento|duzent[oa]s|trezent[oa]s|"
+    r"quatrocent[oa]s|quinhent[oa]s|seiscent[oa]s|setecent[oa]s|oitocent[oa]s|novecent[oa]s|mil|milhão|milhões|"
+    r"bilhão|bilhões)\b", re.I)
+
+
+def numero_por_extenso(texto: str) -> list[str]:
+    """Números grandes escritos por extenso ("vinte e seis metros", "um milhão e oitocentos mil"):
+    escapam da conferência por número (job 873: 367 palavras e nenhum algarismo). "Mil" depois de
+    algarismo ("1,8 mil") é escala, não extenso."""
+    achados = []
+    for m in _EXTENSO.finditer(texto or ""):
+        if m.group(1).lower() in ("mil", "milhão", "milhões", "bilhão", "bilhões") and re.search(r"\d\s*$", texto[:m.start()]):
+            continue
+        achados.append(m.group(0))
+    return achados
+
+
 NUMERO_MAX_FRASES = 2  # o mesmo número em mais frases que isso soa repetido ("26 metros" 5x, job 865)
 
 
@@ -417,6 +435,11 @@ def conferir_frases(script: dict, fatos: list[dict]) -> dict:
             limpa = re.sub(r"\s+([.!?,;:])", r"\1", _ID.sub("", frase)).strip()
             nums = numeros(limpa)
             citados = [por_id[i] for i in ids if i in por_id]
+            if numero_por_extenso(limpa):
+                # número por extenso não dá para conferir contra os fatos: a frase sai
+                removidas += 1
+                log.warning("frase com número por extenso (não conferível) — removida: %r", limpa[:90])
+                continue
             if com_marcas and citados and not _frase_livre(limpa) and _alem_dos_fatos(limpa, citados):
                 # frase marcada que diz mais do que o fato ("A gravidade enche cada câmara sem bombas", job
                 # 865; "1,8 milhão de m³ — daria uma muralha ao redor de uma cidade", job 867): o número
