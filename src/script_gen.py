@@ -1217,7 +1217,9 @@ def generate_script(
     best_distance = float("inf")
     filler_fallback: dict | None = None
     fallback_defeitos = 10**6
-    for attempt in range(3):
+    # canal de fatos: 5 tentativas (12/11: 3 não bastavam para o escritor marcar os fatos)
+    tentativas = 5 if channel.name in FATOS_CANAIS else 3
+    for attempt in range(tentativas):
         # 09/11: o plano e as outras chamadas gastaram a janela de 60 s do Groq; espera ela fechar
         # antes do roteiro, em vez de queimar as 3 tentativas em 429
         from .providers import _LAST_GROQ_CALL
@@ -1322,7 +1324,7 @@ def generate_script(
                 if len(issues) <= fallback_defeitos:
                     filler_fallback, fallback_defeitos = script, len(issues)
                 last_error = ValueError("; ".join(i[0] for i in issues))
-                log.warning("tentativa %d/3: %d defeito(s) — %s; tentando de novo", attempt + 1, len(issues),
+                log.warning("tentativa %d/%d: %d defeito(s) — %s; tentando de novo", attempt + 1, tentativas, len(issues),
                             "; ".join(i[0] for i in issues))
                 fix = "\n".join(f"- O roteiro anterior {i[1]}" for i in issues)
                 messages = [messages[0], {"role": "user", "content": messages[1]["content"]
@@ -1337,15 +1339,15 @@ def generate_script(
                 else word_count - max_words_ceiling
             )
             log.warning(
-                "tentativa %d/3: roteiro fora da meta (%d palavras, faixa %d-%d), tentando de novo",
-                attempt + 1, word_count, min_total_words, max_words_ceiling,
+                "tentativa %d/%d: roteiro fora da meta (%d palavras, faixa %d-%d), tentando de novo",
+                attempt + 1, tentativas, word_count, min_total_words, max_words_ceiling,
             )
             if distance < best_distance:
                 best_script, best_distance = script, distance
         except (ValueError, json.JSONDecodeError, RuntimeError) as exc:
             last_error = exc
-            log.warning("tentativa %d/3: roteiro malformado (%s), tentando de novo", attempt + 1, exc)
-            if "Nenhum provedor" in str(exc) and attempt < 2:
+            log.warning("tentativa %d/%d: roteiro malformado (%s), tentando de novo", attempt + 1, tentativas, exc)
+            if "Nenhum provedor" in str(exc) and attempt < tentativas - 1:
                 # 09/11: as 3 tentativas caíam em 2 s, dentro do descanso de 75 s das chaves (429).
                 # Espera o descanso acabar antes de tentar de novo.
                 log.info("esperando 80 s o descanso das chaves antes de tentar de novo")
@@ -1358,7 +1360,7 @@ def generate_script(
         )
         return _finaliza(_sanitize_club_crests(_sanitize_person_images(topic, best_script)), fatos_verificados, fatos_origem, fontes_outlier)
     if filler_fallback is not None:
-        log.warning("3 tentativas com bordão repetido — usando a última mesmo assim")
+        log.warning("nenhuma tentativa sem defeito — usando a com menos defeitos")
         return _finaliza(_sanitize_club_crests(_sanitize_person_images(topic, filler_fallback)), fatos_verificados, fatos_origem, fontes_outlier)
 
     raise ValueError(f"LLM não devolveu roteiro válido após 3 tentativas: {last_error}")

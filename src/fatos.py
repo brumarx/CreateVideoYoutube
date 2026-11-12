@@ -565,11 +565,6 @@ def conferir_frases(script: dict, fatos: list[dict]) -> dict:
                 removidas += 1
                 log.warning("frase com número por extenso (não conferível) — removida: %r", limpa[:90])
                 continue
-            if com_marcas and citados and not _frase_livre(limpa) and _alem_dos_fatos(limpa, citados):
-                # frase marcada que diz mais do que o fato ("A gravidade enche cada câmara sem bombas", job
-                # 865; "1,8 milhão de m³ — daria uma muralha ao redor de uma cidade", job 867): o número
-                # confere, o resto não — vai para a checagem por citação
-                pendentes.append(limpa)
             if com_marcas and not citados and not nums and not _frase_livre(
                     limpa, " ".join(x for x in frases_limpas if x != limpa)):
                 # afirmação sem fato citado: não sai direto — vai para a verificação por citação nas
@@ -584,6 +579,12 @@ def conferir_frases(script: dict, fatos: list[dict]) -> dict:
                         log.warning("frase sem fato para o número — removida: %r", limpa[:90])
                         continue
                     citados = list({c["id"]: c for c in achados if c is not None}.values())
+            if citados and not _frase_livre(limpa) and _alem_dos_fatos(limpa, citados):
+                # frase que diz mais do que o fato ("A gravidade enche cada câmara sem bombas", job 865;
+                # "1,8 milhão de m³ — daria uma muralha ao redor de uma cidade", job 867): o número
+                # confere, o resto não — vai para a checagem por citação. Vale também para a frase sem
+                # marca casada pelo número (12/11: antes só a marcada passava por aqui)
+                pendentes.append(limpa)
             secundarios = [f for f in citados if f["status"] == "secundario"]
             alvo = set().union(*(numeros(f["texto"]) for f in secundarios), set()) & nums
             if alvo:

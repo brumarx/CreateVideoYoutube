@@ -243,6 +243,17 @@ def _confirmed(text: str, candidates: list[tuple[int, int, str, str, str]]) -> l
     return kept
 
 
+_NUM_CONTEXTO = re.compile(r"(\w+\s+)?\d[\d.,]*\s*[^\s\d.,!?;:]*")
+
+
+def _numeros_intactos(antes: str, depois: str) -> bool:
+    """Revisão de português não mexe em número nem nas palavras coladas nele (12/11: "1,8 mi" virou
+    "1,8 mil", e "Navios 26m" virou "Navios de 26m", que é outro sentido)."""
+    def ctx(t: str) -> list[str]:
+        return [" ".join(m.group(0).lower().split()) for m in _NUM_CONTEXTO.finditer(t)]
+    return ctx(antes) == ctx(depois)
+
+
 def _proofread_short(text: str) -> str:
     """Título/thumbnail com palavra certa no lugar errado, que o LanguageTool
     não vê: "Tutorial Passa a Passa" (job 304), "quem quer lançam sua marca"
@@ -268,6 +279,9 @@ def _proofread_short(text: str) -> str:
     # texto longo: só aceita retoque (0,95), nunca reescrita
     limit = 0.85 if len(text) < 150 else 0.95
     if new != text and difflib.SequenceMatcher(None, text.lower(), new.lower()).ratio() >= limit:
+        if not _numeros_intactos(text, new):
+            log.info("revisão recusada (mexeu em número ou no que o cerca): %r -> %r", text, new)
+            return text
         if _introduces_typo(text, new):
             log.info("revisão recusada (criou palavra inexistente): %r -> %r", text, new)
             return text

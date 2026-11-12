@@ -878,3 +878,10 @@ def test_remover_redundantes():
     r = " ".join(sc["narration"] for sc in remover_redundantes(s)["scenes"])
     assert "Cada passagem sobe 26 metros." in r and r.count("1914") == 1
     assert "um deles" not in r and "De lá para cá" not in r and r.endswith("Você teria coragem?")
+
+
+def test_revisao_nao_mexe_em_numero():
+    from src.spellcheck import _numeros_intactos as n
+    assert not n("26 m, 1,8 mi de m³", "26 m, 1,8 mil m³")
+    assert not n("Navios 26m Sem Bombas", "Navios de 26m Sem Bombas")
+    assert n("Navio Sobe 26m Sem Bomba", "Navios Sobe 26m Sem Bomba")
