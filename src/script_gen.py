@@ -1635,6 +1635,32 @@ def _assunto_do_tema(topic: str) -> str:
     return (titulos.get("pt") or titulos.get("en") or [""])[0]
 
 
+def _frase_do_assunto(frase: str, assunto: str, topic: str) -> bool:
+    """A frase cita o nome próprio do assunto ("Gatún" de "Esclusas de Gatún") ou traz um número do tema."""
+    from .fatos import numeros
+    from .fact_check import _fold
+    nomes = [w for w in re.findall(r"\w+", assunto or "") if w[:1].isupper() and len(w) >= 4]
+    alvo = nomes[-1:] or [w for w in re.findall(r"\w+", assunto or "") if len(w) >= 4][-1:]
+    if any(_fold(n) in _fold(frase) for n in alvo) or numeros(frase) & numeros(topic):
+        return True
+    # sem o nome: vale se a frase não cita OUTRO nome próprio ("As eclusas de Miraflores têm 16 m" é
+    # de outro lugar; "Sob o mar ficam 23,3 km" é do próprio assunto)
+    proprios = set(re.findall(r"(?<!^)(?<![.!?]\s)\b[A-ZÀ-Ý][a-zà-ÿ]{3,}", frase.strip()))
+    do_assunto = {_fold(w) for w in re.findall(r"\w+", (assunto or "") + " " + (topic or ""))}
+    return not any(_fold(p) not in do_assunto for p in proprios)
+
+
+def _titulo_do_assunto(titulo: str, narracao: str, assunto: str, topic: str) -> bool:
+    """O número do título vem de frase que fala do assunto (job 888: "Esclusas de Gatún: 16 metros",
+    número de Miraflores). Título sem número passa."""
+    from .fatos import copiado_do_texto, numeros
+    parte = titulo.split(": ", 1)[1] if ": " in titulo else titulo
+    if not numeros(parte) or not assunto:
+        return True
+    frases = [f for f in re.split(r"(?<=[.!?])\s+", narracao) if numeros(parte) & numeros(f)]
+    return any(_frase_do_assunto(f, assunto, topic) for f in frases)
+
+
 def _frases_com_numero(narracao: str) -> list[str]:
     from .fatos import frases_com_numero
     return frases_com_numero(narracao)
@@ -1705,7 +1731,8 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
             return (copiado_do_texto(txt, narration) and not termina_solto(txt)
                     and termina_em_fronteira(txt, narration))
 
-        fora = [x for x, ok in ((novo["title"], titulo_copiado(novo["title"], narration, _assunto_do_tema(topic)) and not termina_solto(novo["title"])),
+        fora = [x for x, ok in ((novo["title"], titulo_copiado(novo["title"], narration, _assunto_do_tema(topic)) and not termina_solto(novo["title"])
+                                 and _titulo_do_assunto(novo["title"], narration, _assunto_do_tema(topic), topic)),
                                 (str(novo.get("thumbnail_text") or ""), not novo.get("thumbnail_text")
                                  or _mini_ok(str(novo.get("thumbnail_text"))))) if not ok]
         problemas = ([{"tipo": "titulo_nao_confere", "termo": x,
@@ -1718,13 +1745,15 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
                                            extra_rule=(extra_rule + " " if extra_rule else "") + f"O anterior errou: {motivo}",
                                            _retry=True)
             if (refeito is not None and refeito is not script and titulo_copiado(refeito["title"], narration, _assunto_do_tema(topic))
+                    and _titulo_do_assunto(refeito["title"], narration, _assunto_do_tema(topic), topic)
                     and not termina_solto(refeito["title"])
                     and (not refeito.get("thumbnail_text") or _mini_ok(str(refeito["thumbnail_text"])))
                     and not _title_problems(refeito)):
                 return refeito
             # saída sem reprovar o roteiro já validado: o que não confere sai sem número
             final = refeito if refeito is not None and refeito is not script else novo
-            titulo_ok = titulo_copiado(final["title"], narration, _assunto_do_tema(topic)) and not termina_solto(final["title"])
+            titulo_ok = (titulo_copiado(final["title"], narration, _assunto_do_tema(topic)) and not termina_solto(final["title"])
+                         and _titulo_do_assunto(final["title"], narration, _assunto_do_tema(topic), topic))
             miniatura_ok = not final.get("thumbnail_text") or _mini_ok(str(final["thumbnail_text"]))
             # o assunto também tem de estar escrito na narração; senão, o primeiro trecho com número dela
             assunto = _assunto_do_tema(topic) or _corta_titulo((topic or str(final.get("title") or "")).split(":")[0].strip())
@@ -1738,8 +1767,12 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
             if not titulo_ok and _assunto_do_tema(topic):
                 # "Esclusas de Gatún" sozinho não diz nada: o nome + o primeiro trecho com número da
                 # narração que passa nas mesmas regras de cópia, fronteira e tamanho
+                # 12/11 (job 888): só trecho de frase que fala DO assunto (cita o nome) ou traz o número
+                # do tema — "Esclusas de Gatún: 16 metros" pegou o número de Miraflores
+                trechos = [tr for fr in re.split(r"(?<=[.!?])\s+", narration) if _frase_do_assunto(fr, assunto, topic)
+                           for tr in _frases_com_numero(fr)]
                 titulo_reserva = next((t for t in (f"{assunto}: {trecho[:1].upper()}{trecho[1:]}"
-                                                   for trecho in _frases_com_numero(narration))
+                                                   for trecho in trechos)
                                        if len(t) <= 60 and titulo_copiado(t, narration, assunto)
                                        and not termina_solto(t)
                                        and termina_em_fronteira(t.split(": ", 1)[1], narration)), assunto)

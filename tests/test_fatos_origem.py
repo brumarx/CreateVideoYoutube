@@ -925,3 +925,11 @@ def test_milhar_com_espaco():
     assert milhar_com_espaco("exigiram 101 000 metros cúbicos") == "exigiram 101.000 metros cúbicos"
     assert milhar_com_espaco("em 1914 foram 26 metros") == "em 1914 foram 26 metros"
     assert numeros("101 000 m³") == numeros("101.000 m³")
+
+
+def test_titulo_do_assunto():
+    from src.script_gen import _titulo_do_assunto
+    narr = "Um navio sobe cerca de 26 metros nas eclusas de Gatún. As eclusas de Miraflores têm elevação de 16 metros."
+    t = "Como o Canal do Panamá sobe navios 26 metros nas Esclusas de Gatún?"
+    assert not _titulo_do_assunto("Esclusas de Gatún: 16 metros", narr, "Esclusas de Gatún", t)
+    assert _titulo_do_assunto("Esclusas de Gatún: Sobe cerca de 26 metros", narr, "Esclusas de Gatún", t)
