@@ -80,6 +80,7 @@ LONG_WIDTH, LONG_HEIGHT = 1920, 1080
 # comum, fora da aba Shorts (jobs 262/270/278 — 81-197s em 16:9). Folga
 # abaixo dos 180s do limite do Shorts.
 SHORTS_MAX_SECONDS = 170
+RODADAS_CORTE = 3  # rodadas de corte/troca por fato verificado (só tira frase ou põe fato validado)
 PALAVRAS_POR_MINUTO_VOZ = 130  # medido no job 855 (494 palavras em 219 s ≈ 135/min), com folga
 
 MAX_TOPIC_CHECKS = 3
@@ -949,20 +950,30 @@ def run(
                 if not problems:
                     log.warning("[%s] números trocados pelo valor da lista de fatos verificados — sem reprovar", job_id)
                     break
-                if problems:
-                    # sem correspondência segura: a frase reprovada sai e entra um fato verificado não usado
+                # sem correspondência segura: a frase reprovada sai e entra um fato verificado não usado.
+                # 12/11 (job 868): cortar/trocar por fato validado nunca acrescenta nada inventado, então
+                # repete enquanto a revisão apontar frase (até RODADAS_CORTE); o corpo do texto final é
+                # conferido depois (fatos.roteiro_magro)
+                for rodada in range(RODADAS_CORTE):
                     troca = cortar_e_trocar_por_fato(script, problems)
                     if troca is None:
                         raise ScriptRejected("sem correspondência segura e sem fato verificado para trocar: "
                                              + "; ".join(f"{p.get('tipo')}: {p.get('termo')}" for p in problems)[:400])
                     script, n_trocas = troca
                     problems = review_script(script, topic, facts, web_facts)
-                    log.warning("[%s] %d frase(s) trocadas por fato verificado não usado — revisão: %s", job_id,
-                                n_trocas, "aprovada" if problems == [] else "reprovada")
-                    if problems is None or problems:
-                        raise ScriptRejected("bloqueio factual depois da troca por fato verificado: "
-                                             + "; ".join(f"{p.get('tipo')}: {p.get('termo')}" for p in (problems or []))[:400])
-                    break
+                    log.warning("[%s] corte %d: %d frase(s) trocadas por fato verificado não usado — revisão: %s",
+                                job_id, rodada + 1, n_trocas, "aprovada" if problems == [] else "reprovada")
+                    if problems == []:
+                        break
+                    if problems is None:
+                        raise ScriptRejected("revisor de fatos indisponível depois da troca por fato verificado")
+                    script, problems = substituir_pela_lista(script, problems)
+                    if not problems:
+                        break
+                if problems:
+                    raise ScriptRejected("bloqueio factual depois da troca por fato verificado: "
+                                         + "; ".join(f"{p.get('tipo')}: {p.get('termo')}" for p in problems)[:400])
+                break
             log.warning(
                 "[%s] revisão de fatos reprovou (tentativa %d): %s", job_id, attempt + 1,
                 "; ".join(f"{p.get('tipo')}: {p.get('termo')}" for p in problems),

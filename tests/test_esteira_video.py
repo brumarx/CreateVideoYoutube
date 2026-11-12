@@ -388,3 +388,7 @@ def test_miniatura_usa_a_foto_real_do_assunto_principal():
     assert rp._foto_real_da_miniatura(fotos) == "u1"
     assert rp._foto_real_da_miniatura([]) is None
     assert "real_photo_url = _foto_real_da_miniatura(real_photo_urls)" in PIPELINE
+
+
+def test_corte_por_fato_repete_ate_tres_rodadas():
+    assert "RODADAS_CORTE = 3" in PIPELINE and "for rodada in range(RODADAS_CORTE):" in PIPELINE
