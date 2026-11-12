@@ -1592,7 +1592,11 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
         log.warning("título/miniatura do roteiro final: nenhum provedor respondeu (%s) — mantém os atuais", exc)
         return script
     data = _extract_json(raw)
-    novo = {**script, "title": data["titulo"].strip(), "thumbnail_text": data["thumbnail_text"].strip(),
+    titulo_gerado = data["titulo"].strip()
+    if script.get("_fatos_verificados"):
+        from .fatos import titulo_com_assunto
+        titulo_gerado = titulo_com_assunto(titulo_gerado, _assunto_do_tema(topic))
+    novo = {**script, "title": titulo_gerado, "thumbnail_text": data["thumbnail_text"].strip(),
             "thumbnail_image_prompt": data["thumbnail_image_prompt"].strip()}
     if script.get("_fatos_verificados") and not _retry:
         # canal de fatos: o título e a miniatura novos são conferidos contra a narração final —

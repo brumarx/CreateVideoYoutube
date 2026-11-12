@@ -448,6 +448,8 @@ def titulo_copiado(titulo: str, narracao: str, assunto: str = "") -> bool:
     if not partes:
         return False
     nome = _palavras_seguidas(assunto)
+    if nome and _palavras_seguidas(partes[0]) != nome:
+        return False  # assunto conhecido: o título abre com o nome dele ("Vão central mede 1991 metros" não diz qual ponte)
     primeira_ok = copiado_do_texto(partes[0], narracao) or (bool(nome) and _palavras_seguidas(partes[0]) == nome)
     if not primeira_ok or not all(copiado_do_texto(p, narracao) for p in partes[1:]):
         return False
@@ -457,6 +459,23 @@ def titulo_copiado(titulo: str, narracao: str, assunto: str = "") -> bool:
         if a and len(a & b) / len(a) >= 0.5:
             return False
     return True
+
+
+TITULO_MAX = 60  # título acima de 60 caracteres rende menos (views reais, 11/2026)
+
+
+def titulo_com_assunto(titulo: str, assunto: str) -> str:
+    """Título que não abre com o nome do assunto validado ganha o nome na frente ("Ponte Akashi
+    Kaikyō: Vão central mede 1991 metros"); se passar de TITULO_MAX, fica só o nome."""
+    titulo = (titulo or "").strip()
+    if not assunto or not titulo:
+        return titulo
+    partes = [p.strip() for p in re.split(r"[:—–|]", titulo) if p.strip()]
+    if partes and _palavras_seguidas(partes[0]) == _palavras_seguidas(assunto):
+        return titulo
+    trecho = " — ".join(partes) if partes else titulo
+    novo = f"{assunto}: {trecho[:1].upper()}{trecho[1:]}"
+    return novo if len(novo) <= TITULO_MAX else assunto
 
 
 # proporção dita em palavras precisa bater com a conta parte/total da mesma unidade

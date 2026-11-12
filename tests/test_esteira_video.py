@@ -363,3 +363,14 @@ def test_leitura_brasileira_de_nome_estrangeiro_nao_vira_ressalva():
     ouvido = "A ponte liga Colby à ilha de Avage. Depois a Turquia inaugurou a Sanakali 1915."
     assert name_problems([texto], ouvido) == []
     assert name_problems(["O arquipélago de Svalbard fica no Ártico."], "O arquipélago de Esvalbard fica no Ártico.")
+
+
+@pytest.mark.parametrize("titulo,esperado", [
+    ("Vão central mede 1991 metros", "Ponte Akashi Kaikyō: Vão central mede 1991 metros"),
+    ("Ponte Akashi Kaikyō: Vão central mede 1991 metros", "Ponte Akashi Kaikyō: Vão central mede 1991 metros"),
+    ("Vão central mede 1991 metros, maior que qualquer outro na época da inauguração", "Ponte Akashi Kaikyō"),
+])
+def test_titulo_abre_com_o_nome_do_assunto(titulo, esperado):
+    from src.fatos import titulo_com_assunto, titulo_copiado
+    assert titulo_com_assunto(titulo, "Ponte Akashi Kaikyō") == esperado
+    assert titulo_copiado("Vão central mede 1991 metros", NARR_PONTE, "Ponte Akashi Kaikyō") is False
