@@ -908,3 +908,13 @@ def test_completar_com_fatos():
     texto = " ".join(sc["narration"] for sc in out["scenes"])
     assert "1914" in texto and "1,8 milhão" in texto and texto.count("26 metros") == 1
     assert out["scenes"][-1]["narration"] == "Você teria coragem de atravessar esse canal?"
+
+
+def test_gancho_sem_referencia():
+    from src.fatos import gancho_sem_referencia
+    s = {"scenes": [{"narration": "E aí, mente curiosa! Isso acontece nas eclusas de Gatún, perto de Colón."},
+                    {"narration": "A obra começou em 1909."},
+                    {"narration": "O navio chega ao lago Gatún, 26 metros acima do mar. Você confiaria?"}]}
+    out = gancho_sem_referencia(s, "Como o Canal do Panamá sobe navios 26 metros?")
+    assert out["scenes"][0]["narration"].startswith("E aí, mente curiosa! O navio chega ao lago Gatún, 26 metros acima do mar. Isso acontece")
+    assert out["scenes"][-1]["narration"] == "Você confiaria?"

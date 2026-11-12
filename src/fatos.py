@@ -524,6 +524,35 @@ def remover_redundantes(script: dict) -> dict:
     return {**script, "scenes": [sc for sc in cenas if sc["narration"].strip()]}
 
 
+_ANAFORA = re.compile(r"^(isso|isto|esse|essa|esses|essas|este|esta|ele|ela|eles|elas|l[áa]|ali|a[íi])\b", re.I)
+_SAUDACAO = re.compile(r"^[^.!?]{0,40}!\s*")
+
+
+def gancho_sem_referencia(script: dict, topic: str = "") -> dict:
+    """Gancho que começa com pronome ("Isso acontece nas eclusas", job 886: a frase a que ele se
+    referia foi removida na validação) ganha antes dele a frase do texto que tem o número do tema
+    (ou o primeiro número). Só muda a ordem de frases já validadas."""
+    cenas = [dict(sc) for sc in script.get("scenes", [])]
+    if len(cenas) < 2:
+        return script
+    primeira = str(cenas[0].get("narration", ""))
+    saud = _SAUDACAO.match(primeira)
+    resto = primeira[saud.end():] if saud else primeira
+    if not _ANAFORA.match(resto.strip()):
+        return script
+    alvo_nums = numeros(topic)
+    candidatas = [(i, f) for i, sc in enumerate(cenas[1:], 1)
+                  for f in re.split(r"(?<=[.!?])\s+", str(sc.get("narration", ""))) if numeros(f) and not f.endswith("?")]
+    escolha = next(((i, f) for i, f in candidatas if numeros(f) & alvo_nums), candidatas[0] if candidatas else None)
+    if not escolha:
+        return script
+    i, frase = escolha
+    cenas[i]["narration"] = " ".join(x for x in re.split(r"(?<=[.!?])\s+", cenas[i]["narration"]) if x != frase)
+    cenas[0]["narration"] = ((saud.group(0) if saud else "") + frase + " " + resto.strip()).strip()
+    log.warning("gancho começava com pronome solto — a frase %r subiu para a abertura", frase[:60])
+    return {**script, "scenes": [sc for sc in cenas if sc["narration"].strip()]}
+
+
 def completar_com_fatos(script: dict, fatos: list[dict] | None) -> dict:
     """Texto final que as remoções esvaziaram (jobs 880-884: o escritor enfeitava, a validação
     cortava, sobravam 70-130 palavras e 1 número) é completado com fatos verificados ainda não

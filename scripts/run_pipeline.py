@@ -1096,8 +1096,8 @@ def run(
         script = fix_script(script, channel.language)
         if channel_name in FATOS_CANAIS:
             # 12/11 (job 879): as trocas por fato repetiam número e frase; sai o repetido
-            from src.fatos import remover_redundantes
-            script = remover_redundantes(script)
+            from src.fatos import gancho_sem_referencia, remover_redundantes
+            script = gancho_sem_referencia(remover_redundantes(script), topic)
         # barra comparativa só com valor falado na cena, sem ranking (22/10)
         script = clean_stat_overlays(script)
         if channel_name in FATOS_CANAIS:
