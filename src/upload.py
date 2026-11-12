@@ -73,8 +73,9 @@ def upload_video(
 ) -> str:
     """Sobe o vídeo e devolve o videoId. Cota: ~1600 unidades por upload
     (limite padrão diário: 10000 unidades ≈ 6 uploads/dia por projeto)."""
-    if len(description) > YOUTUBE_DESCRIPTION_LIMIT:
-        log.warning("descrição com %d caracteres (limite %d): cortando", len(description), YOUTUBE_DESCRIPTION_LIMIT)
+    if len(description.encode("utf-8")) > YOUTUBE_DESCRIPTION_LIMIT:
+        log.warning("descrição com %d bytes (limite %d): cortando a lista de fontes", len(description.encode("utf-8")),
+                    YOUTUBE_DESCRIPTION_LIMIT)
         description = fit_description(description)
     creds = _load_credentials(channel.token_file)
     youtube = build("youtube", "v3", credentials=creds)
