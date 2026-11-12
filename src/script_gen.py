@@ -455,6 +455,10 @@ _NUMBER_WORDS = {
 }
 
 
+_UNIDADES_MEDIDA = {"metro", "quilômetro", "quilometro", "centímetro", "milímetro", "tonelada", "quilo", "grama",
+                    "litro", "hectare", "grau", "segundo", "minuto", "hora", "porcento"}
+
+
 def _overused_word(script: dict, ignore: str = "") -> str | None:
     """Palavra de conteúdo repetida demais no roteiro todo (mais de ~2,2% das
     palavras, mínimo 9 vezes): "cidade" 16x e "Pavlopetri" 12x em 476
@@ -471,6 +475,8 @@ def _overused_word(script: dict, ignore: str = "") -> str | None:
     for w in words:
         if len(w) > 3 and not w.isdigit() and w not in skip and w not in _NUMBER_WORDS:
             w = w[:-1] if w.endswith("s") and len(w) > 4 else w
+            if w in _UNIDADES_MEDIDA:
+                continue  # "metro" depois de cada número é a unidade do dado, não muleta (job 863: 3 tentativas perdidas)
             counts[w] = counts.get(w, 0) + 1
     word, n = max(counts.items(), key=lambda kv: kv[1], default=("", 0))
     return f"{word} ({n}x)" if n > limit else None

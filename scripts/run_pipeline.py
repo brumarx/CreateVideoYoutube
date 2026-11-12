@@ -1076,6 +1076,10 @@ def run(
                 # frases de enchimento — a voz real fala ~135 palavras/min (job 855: 494 palavras = 219 s)
                 from src.fatos import encurtar_roteiro
                 script = encurtar_roteiro(script, int(SHORTS_MAX_SECONDS * PALAVRAS_POR_MINUTO_VOZ / 60))
+            from src.fatos import roteiro_magro
+            magro = roteiro_magro(script)
+            if magro:
+                raise ScriptRejected(magro)
         # 11/11: o texto está final e validado. SÓ AGORA saem título, miniatura, prompt da
         # miniatura e os prompts das imagens de cada cena, todos a partir deste texto.
         is_compilation_final = isinstance(facts, dict) and facts.get("tipo") == "compilacao"

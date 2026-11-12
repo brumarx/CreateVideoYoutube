@@ -656,3 +656,32 @@ def test_mesma_medida_com_valor_diferente_continua_conflitando(a, b):
     outliers = []
     fatos = ft.atribuir([{"texto": a, "fontes": ["S1"]}, {"texto": b, "fontes": ["S2"]}], fontes, outliers)
     assert [f["texto"] for f in fatos] == [a] and outliers == ["https://pt.wikipedia.org/x"]
+
+
+# ---------- job 863: pergunta com premissa, roteiro esvaziado, unidade repetida
+def test_pergunta_com_premissa_nova_vai_para_checagem():
+    from src.fatos import conferir_frases
+    fatos = [{"id": "F1", "texto": "As eclusas elevam navios 26 metros.", "status": "oficial", "fontes": []}]
+    roteiro = {"scenes": [
+        {"narration": "As eclusas elevam navios 26 metros [F1]."},
+        {"narration": "Você confiaria sua carga num elevador movido só por chuva e gravidade? Deixe nos comentários."},
+    ]}
+    out = conferir_frases(roteiro, fatos)
+    assert out.get("_sem_fato") == ["Você confiaria sua carga num elevador movido só por chuva e gravidade?"]
+    roteiro["scenes"][1]["narration"] = "Você teria coragem de subir nessas eclusas?"
+    assert not conferir_frases(roteiro, fatos).get("_sem_fato")
+
+
+def test_roteiro_magro_reprova():
+    from src.fatos import roteiro_magro
+    magro = {"scenes": [{"narration": "E aí, mente curiosa! Como isso é possível?"},
+                        {"narration": "As Esclusas de Gatún erguem embarcações até o Lago Gatún."}]}
+    assert "magro" in roteiro_magro(magro)
+    frase = "A ponte tem 1991 metros de vão, 3911 metros no total, 60 metros de fundação e foi aberta em 1998. "
+    assert roteiro_magro({"scenes": [{"narration": frase * 6}]}) is None
+
+
+def test_unidade_de_medida_nao_e_palavra_repetida():
+    from src.script_gen import _overused_word
+    texto = " ".join(f"A câmara {i} tem {i}0 metros e sobe outros metros." for i in range(1, 10))
+    assert not (_overused_word({"scenes": [{"narration": texto}]}) or "").startswith("metro")

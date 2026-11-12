@@ -272,10 +272,43 @@ def _melhor_por_numero(n: str, fatos: list[dict]) -> dict | None:
 _LIVRE = re.compile(r"coment[áa]rio|inscrev|compartilh|curt[ai]|deixe (sua|seu|um)|me conta|mente curiosa", re.I)
 
 
-def _frase_livre(frase: str) -> bool:
-    """Frase que não afirma fato: pergunta, exclamação curta (saudação) ou convite ao público."""
+_PERGUNTA_LIVRE = {"você", "voce", "vocês", "teria", "coragem", "acha", "pensa", "imagina", "imaginar", "confiaria",
+                   "atravessaria", "toparia", "faria", "conhece", "conhecia", "sabia", "deixe", "comentários", "comente",
+                   "isso", "disso", "nisso", "nessa", "nesse", "nessas", "nesses", "essa", "esse", "essas", "esses", "sabendo", "mesmo", "coisa", "possível"}
+
+
+def _premissa_nova(frase: str, resto: str) -> bool:
+    """Pergunta que traz três ou mais palavras de conteúdo que o resto da narração não diz: carrega uma
+    premissa ("Você confiaria num elevador movido só por chuva e gravidade?", job 863) e vai para a
+    checagem por citação; "Você teria coragem de atravessar esse túnel?" não."""
+    base = {w[:5] for w in re.findall(r"\w+", resto.lower()) if len(w) >= 5}
+    novas = [w for w in re.findall(r"\w+", frase.lower())
+             if len(w) >= 5 and w not in _PERGUNTA_LIVRE and w[:5] not in base]
+    return len(novas) >= 3
+
+
+def _frase_livre(frase: str, resto: str | None = None) -> bool:
+    """Frase que não afirma fato: pergunta (sem premissa nova, quando o resto da narração é dado),
+    exclamação curta (saudação) ou convite ao público."""
     f = frase.strip()
-    return f.endswith("?") or (f.endswith("!") and len(f.split()) <= 6) or bool(_LIVRE.search(f))
+    if f.endswith("?"):
+        return resto is None or not _premissa_nova(f, resto)
+    return (f.endswith("!") and len(f.split()) <= 6) or bool(_LIVRE.search(f))
+
+
+MIN_NUMEROS_FINAL = 4    # Fractal: dado concreto é o vídeo; com menos de 4 números distintos não tem base
+MIN_PALAVRAS_FINAL = 100  # ~46 s de voz; abaixo disso as remoções deixaram só o esqueleto
+
+
+def roteiro_magro(script: dict) -> str | None:
+    """Motivo para reprovar o texto final que as remoções esvaziaram (job 863: 9 de 11 afirmações sem
+    fonte saíram e sobraram 4 cenas, 63 palavras e nenhum número); None se tem corpo."""
+    texto = " ".join(str(sc.get("narration", "")) for sc in script.get("scenes", []))
+    n_num, n_pal = len(numeros(texto)), len(texto.split())
+    if n_num < MIN_NUMEROS_FINAL or n_pal < MIN_PALAVRAS_FINAL:
+        return (f"roteiro final ficou magro depois das remoções: {n_pal} palavras e {n_num} número(s) "
+                f"(mínimo {MIN_PALAVRAS_FINAL} e {MIN_NUMEROS_FINAL})")
+    return None
 
 
 def conferir_frases(script: dict, fatos: list[dict]) -> dict:
@@ -291,6 +324,8 @@ def conferir_frases(script: dict, fatos: list[dict]) -> dict:
     # o escritor usou as marcas? sem nenhuma marca no roteiro, a regra de "frase sem marca sai"
     # apagaria tudo: aí só os números são conferidos
     com_marcas = any(_ID.search(sc.get("narration", "")) for sc in script.get("scenes", []))
+    frases_limpas = [re.sub(r"\s+([.!?,;:])", r"\1", _ID.sub("", f)).strip()
+                     for sc in script.get("scenes", []) for f in _FRASES.split(sc.get("narration", "")) if f.strip()]
     cenas = []
     for sc in script.get("scenes", []):
         saida, usados = [], []
@@ -301,7 +336,8 @@ def conferir_frases(script: dict, fatos: list[dict]) -> dict:
             limpa = re.sub(r"\s+([.!?,;:])", r"\1", _ID.sub("", frase)).strip()
             nums = numeros(limpa)
             citados = [por_id[i] for i in ids if i in por_id]
-            if com_marcas and not citados and not nums and not _frase_livre(limpa):
+            if com_marcas and not citados and not nums and not _frase_livre(
+                    limpa, " ".join(x for x in frases_limpas if x != limpa)):
                 # afirmação sem fato citado: não sai direto — vai para a verificação por citação nas
                 # fontes (fact_check.verificar_sem_fato); verdade que o escritor não marcou fica
                 pendentes.append(limpa)
