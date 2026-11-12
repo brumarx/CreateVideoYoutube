@@ -144,14 +144,18 @@
   .facts .btn { justify-content: flex-start; text-align: left; height: auto; padding: 8px 12px; }
 
   /* barra de navegação */
-  nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(4, 1fr); padding-bottom: env(safe-area-inset-bottom); }
-  nav.tabs button { background: none; border: 0; font: inherit; color: var(--muted); padding: 10px 4px 12px; display: grid; justify-items: center; gap: 2px; font-size: 12px; cursor: pointer; position: relative; }
+  nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom);
+    /* 8 abas numa linha só (rola pro lado no celular): em 4 colunas virava
+       2 linhas (~130px) e escondia o fim da página atrás do menu */
+    display: flex; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+  nav.tabs::-webkit-scrollbar { display: none; }
+  nav.tabs button { flex: 1 0 68px; background: none; border: 0; font: inherit; color: var(--muted); padding: 8px 2px 10px; display: grid; justify-items: center; gap: 2px; font-size: 11px; cursor: pointer; position: relative; white-space: nowrap; }
   nav.tabs button svg { width: 22px; height: 22px; }
   nav.tabs button[aria-selected="true"] { color: var(--ink); font-weight: 700; }
   nav.tabs .badge { position: absolute; top: 6px; left: calc(50% + 6px); background: var(--off); color: #fff; font-size: 10px; font-weight: 700; border-radius: 999px; padding: 0 5px; min-width: 16px; line-height: 16px; }
   section.tab[hidden] { display: none; }
   @media (min-width: 900px) {
-    nav.tabs { top: 0; bottom: auto; left: 50%; right: auto; transform: translateX(-50%); width: 760px; border: 1px solid var(--line); border-top: 0; border-radius: 0 0 14px 14px; }
+    nav.tabs { top: 0; bottom: auto; left: 50%; right: auto; transform: translateX(-50%); width: 760px; border: 1px solid var(--line); border-top: 0; border-radius: 0 0 14px 14px; overflow: visible; }
     body { padding-top: 64px; padding-bottom: 32px; }
   }
 </style>
@@ -272,12 +276,12 @@
     </div>
     <div id="p-list">
       {% for p in problems %}
-      <div class="problem" data-ch="{{ p.channel }}" data-lost="{{ 1 if p.status != 'retried' else 0 }}" style="--c:{{ colors.get(p.channel, '#888') }}">
+      <div class="problem" data-ch="{{ p.channel }}" data-lost="{{ 1 if p.lost else 0 }}" style="--c:{{ colors.get(p.channel, '#888') }}">
         <div class="head"><span>{{ titles.get(p.channel, p.channel) }}, {{ p.date_label }}, job {{ p.id }}</span>
           <span class="tag {{ p.status }}">{{ {'failed': 'falhou', 'abandoned': 'abandonado', 'retried': 'refeito'}.get(p.status, p.status) }}</span></div>
         <div class="topic">{{ p.topic }}</div>
         <div class="why clip" title="toque pra ver tudo">{{ p.error or "sem mensagem de erro registrada" }}</div>
-        {% if p.status in ('failed', 'ready') %}
+        {% if p.retryable %}
         <form method="post" action="{{ url_for('retry_job', job_id=p.id) }}" style="margin-top:8px">
           <button type="submit">Reenviar</button>
         </form>
@@ -532,28 +536,28 @@
     <div class="problem" style="--c:var(--off)"><div class="head"><span>{{ canal }}</span></div><div class="topic">{{ tema }}</div></div>
     {% endfor %}
     {% if trending %}
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
-        <div style="background: #f3f4f6; padding: 16px; border-radius: 8px;">
-          <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Taxa de Sucesso</div>
-          <div style="font-size: 28px; font-weight: bold; color: #1f2937;">{{ trending.success_rate }}</div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-bottom: 24px;">
+        <div style="background: var(--panel); border: 1px solid var(--line); padding: 12px; border-radius: 10px;">
+          <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Taxa de Sucesso</div>
+          <div style="font-size: 28px; font-weight: bold; color: var(--ink);">{{ trending.success_rate }}</div>
         </div>
-        <div style="background: #f3f4f6; padding: 16px; border-radius: 8px;">
-          <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Total de Usos</div>
-          <div style="font-size: 28px; font-weight: bold; color: #1f2937;">{{ trending.total }}</div>
+        <div style="background: var(--panel); border: 1px solid var(--line); padding: 12px; border-radius: 10px;">
+          <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Total de Usos</div>
+          <div style="font-size: 28px; font-weight: bold; color: var(--ink);">{{ trending.total }}</div>
         </div>
-        <div style="background: #f3f4f6; padding: 16px; border-radius: 8px;">
-          <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Sucesso/Falha</div>
-          <div style="font-size: 14px; font-weight: bold; color: #1f2937;">{{ trending.total_success }}/{{ trending.total_failed }}</div>
+        <div style="background: var(--panel); border: 1px solid var(--line); padding: 12px; border-radius: 10px;">
+          <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Sucesso/Falha</div>
+          <div style="font-size: 14px; font-weight: bold; color: var(--ink);">{{ trending.total_success }}/{{ trending.total_failed }}</div>
         </div>
       </div>
 
       <h3>Fontes</h3>
-      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 24px;">
         {% for source, stats in trending.sources.items() %}
-          <div style="background: #f9fafb; padding: 12px; border-radius: 6px; border-left: 4px solid #3b82f6;">
+          <div style="background: var(--panel); padding: 12px; border-radius: 6px; border-left: 4px solid #3b82f6;">
             <div style="font-weight: 600; margin-bottom: 4px;">{{ source.replace('_', ' ')|title }}</div>
-            <div style="font-size: 12px; color: #6b7280;">✓ {{ stats.success or 0 }} | ✗ {{ stats.failed or 0 }}</div>
-            {% if stats.last_success %}<div style="font-size: 11px; color: #9ca3af; margin-top: 4px;">Último: {{ stats.last_success[:10] }}</div>{% endif %}
+            <div style="font-size: 12px; color: var(--muted);">✓ {{ stats.success or 0 }} | ✗ {{ stats.failed or 0 }}</div>
+            {% if stats.last_success %}<div style="font-size: 11px; color: var(--muted); margin-top: 4px;">Último: {{ stats.last_success[:10] }}</div>{% endif %}
           </div>
         {% endfor %}
       </div>
@@ -561,14 +565,14 @@
       <h3>Por Canal</h3>
       <div style="margin-bottom: 24px;">
         {% for channel, stats in trending.channels.items() %}
-          <div style="padding: 10px; background: #f3f4f6; border-radius: 4px; margin-bottom: 8px;">
+          <div style="padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; margin-bottom: 8px;">
             <div><strong>{{ channel }}</strong> • {{ stats.count }} vídeo{% if stats.count != 1 %}s{% endif %}</div>
-            <div style="font-size: 12px; color: #6b7280;">Via: {{ stats.source|default('—') }} • Último: "{{ stats.last_topic[:50] }}"</div>
+            <div style="font-size: 12px; color: var(--muted);">Via: {{ stats.source|default('—') }} • Último: "{{ stats.last_topic[:50] }}"</div>
           </div>
         {% endfor %}
       </div>
     {% else %}
-      <p style="color: #9ca3af;">Sistema ainda sem dados. Use o pipeline normalmente e os dados aparecerão aqui em 5s.</p>
+      <p style="color: var(--muted);">Sistema ainda sem dados. Use o pipeline normalmente e os dados aparecerão aqui em 5s.</p>
     {% endif %}
   </section>
 </main>
@@ -618,6 +622,9 @@ function showTab(name) {
   document.querySelectorAll("section.tab").forEach(s => s.hidden = s.id !== "tab-" + name);
   store.set("tab", name);
   history.replaceState(null, "", location.pathname + location.search + "#" + name);
+  // no celular o menu rola pro lado: deixa a aba atual visível nele
+  const nav = document.querySelector("nav.tabs"), sel = nav.querySelector('[aria-selected="true"]');
+  if (sel && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = sel.offsetLeft - (nav.clientWidth - sel.offsetWidth) / 2;
 }
 tabs.forEach(b => b.addEventListener("click", () => { showTab(b.dataset.tab); scrollTo(0, 0); }));
 showTab(location.hash.slice(1) || store.get("tab") || "hoje");

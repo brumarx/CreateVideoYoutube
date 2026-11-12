@@ -52,6 +52,12 @@ def archive(channel: str, job_id: int, work_dir: Path, video_id: str, long_form:
         ],
     }
     try:
+        # comentário do canal: vídeo privado (ressalvas) não aceita comentário
+        # (403) — o "Publicar" do painel posta daqui depois de abrir o vídeo
+        entry["comment"] = json.loads((work_dir / "upload.json").read_text()).get("comment") or ""
+    except (OSError, ValueError):
+        pass
+    try:
         folder = ARCHIVE_DIR / channel
         folder.mkdir(parents=True, exist_ok=True)
         (folder / f"{job_id}.json").write_text(json.dumps(entry, ensure_ascii=False, indent=2))

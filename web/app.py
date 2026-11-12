@@ -288,7 +288,21 @@ def _visible_color(hex_color: str) -> str:
 # motivo de falha por trecho da mensagem de erro (ordem importa: o 1º que
 # casar vence)
 FAILURE_CAUSES = (
-    ("Revisão de fatos reprovou o roteiro", ("revisão de fatos",)),
+    ("Revisor de fatos fora do ar (sem cota)", ("revisor de fatos indisponível", "revisão de fatos não rodou")),
+    ("Revisão de fatos reprovou o roteiro", (
+        "revisão de fatos", "sem correspondência segura", "bloqueio factual", "fora_da_fonte",
+        "fato_nao_confirmado", "sem fonte", "a fonte não diz",
+    )),
+    ("Fontes não deram fatos verificados", ("fatos verificados indisponíveis", "extração das fontes")),
+    ("Roteiro ficou curto demais depois dos cortes", ("roteiro final ficou magro", "roteiro esvaziado")),
+    ("Título/miniatura não saíram do texto validado", ("título/miniatura", "título com número")),
+    ("Erro de código (já corrigido ou a investigar)", (
+        "object has no attribute", "expected str instance", "segfault", "traceback", "corrigido no código",
+        "corrigido 12/11", "correções de 12/11", "could not convert", "exit 3",
+    )),
+    ("Teste ou descartado à mão", ("teste", "descartad", "parado pelo dono", "feito antes da validação", "não publicar")),
+    ("Travou (tempo esgotado ou processo sumiu)", ("tempo esgotado", "órfão")),
+    ("Já publicado por outra tentativa", ("já publicado", "roteiro publicado pelo job", "substituído")),
     ("Roteiro longo demais pro Short", ("longo demais pro short",)),
     ("Revisão do vídeo pronto reprovou", ("revisão antes do upload", "revisão do vídeo", "revisão de áudio")),
     ("Nenhuma IA respondeu (cota)", ("nenhum provedor", "llm respondeu")),
@@ -298,8 +312,19 @@ FAILURE_CAUSES = (
 )
 
 
+def _has_video_to_send(job) -> bool:
+    """Mesma regra do scripts/retry_uploads.py: vídeo montado + upload.json
+    (gravado só depois da revisão do vídeo pronto)."""
+    if job.status not in ("failed", "ready") or not job.video_path:
+        return False
+    video = Path(job.video_path)
+    return video.exists() and (video.parent / "upload.json").exists()
+
+
 def _failure_cause(error: str) -> str:
     low = error.lower()
+    if not low.strip():
+        return "Sem mensagem de erro"
     return next((label for label, keys in FAILURE_CAUSES if any(k in low for k in keys)), "Outros")
 
 
@@ -589,9 +614,16 @@ def index():
     summaries.sort(key=lambda c: {"fail": 0, "busy": 1, "none": 2, "ok": 3}[c["state"]])
     colors = {c["name"]: c["color"] for c in channels}
     titles = {c["name"]: c["title"] for c in channels}
+    # tema que acabou publicado por outra tentativa não ficou "sem vídeo"
+    # (Panamá: 876-889 falharam, 891 publicou o mesmo tema)
+    published_topics = {(j.channel, j.topic) for j in raw_jobs if j.status == "uploaded"}
     problems = [
         {"id": j.id, "channel": j.channel, "topic": j.topic, "status": j.status,
-         "error": (j.error or "").strip()[:1200], "date_label": _date_label(j.created_at)}
+         "error": (j.error or "").strip()[:1200], "date_label": _date_label(j.created_at),
+         "lost": j.status != "retried" and (j.channel, j.topic) not in published_topics,
+         # "Reenviar" só sobe vídeo já montado e aprovado pela revisão
+         # (final.mp4 + upload.json); falha de roteiro não tem o que reenviar
+         "retryable": _has_video_to_send(j)}
         for j in raw_jobs if j.status in FAILED + ("retried",)
     ][:150]
     system_problems = _system_problems({j.id: j.status for j in raw_jobs})
@@ -609,6 +641,7 @@ def index():
         "approved": "Vídeo publicado.", "busy": "Já tem um vídeo sendo gerado. Espere ele terminar pra rodar outro.",
         "started": "Vídeo começou a ser gerado. Leva uns 20 minutos.",
         "retry_ok": "Vídeo reenviado.",
+        "approved_script": "Roteiro aprovado. O vídeo está sendo montado (sem publicar) e aparece em Prontos.",
     }
     flash = next((msg for key, msg in flashes.items() if request.args.get(key) == "1"), None)
     if request.args.get("retry_error"):
@@ -1018,8 +1051,24 @@ def approve_job(job_id: int):
         publish_video(ChannelConfig.load(job.channel), job.youtube_video_id)
     except Exception as exc:  # noqa: BLE001 — token/cota: mostra no painel em vez de dar erro 500
         return redirect(url_for("index", approve_error=str(exc)[:200]))
-    update(job_id, status="uploaded")
+    update(job_id, status="uploaded", error=None)
+    _comment_after_publish(job)
     return redirect(url_for("index", approved=1))
+
+
+def _comment_after_publish(job) -> None:
+    """Comentário do canal guardado no arquivo do roteiro: no upload privado
+    o YouTube recusa comentário (403), então ele sai aqui, já público."""
+    from src.script_archive import archived
+    from src.upload import post_comment
+
+    text = ((archived(job.channel, job.id) or {}).get("comment") or "").strip()
+    if not text:
+        return
+    try:
+        post_comment(ChannelConfig.load(job.channel), job.youtube_video_id, text)
+    except Exception as exc:  # noqa: BLE001 — engajamento é bônus, a publicação já deu certo
+        log.warning("job %s publicado, mas o comentário falhou: %s", job.id, exc)
 
 
 @app.route("/reject/<int:job_id>", methods=["POST"])

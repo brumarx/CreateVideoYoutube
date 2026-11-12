@@ -1974,10 +1974,13 @@ def run(
         else:
             update(job_id, status=after_upload_status(channel), youtube_video_id=video_id)
             log.info("[%s] publicado: https://youtu.be/%s", job_id, video_id)
-        try:
-            post_comment(channel, video_id, upload_meta["comment"])
-        except Exception as exc:  # noqa: BLE001 — engajamento é bônus
-            log.warning("[%s] não consegui comentar no vídeo: %s", job_id, exc)
+        # vídeo privado não aceita comentário (403, job 891): o "Publicar" do
+        # painel posta o comentário guardado no arquivo do roteiro
+        if not ressalvas:
+            try:
+                post_comment(channel, video_id, upload_meta["comment"])
+            except Exception as exc:  # noqa: BLE001 — engajamento é bônus
+                log.warning("[%s] não consegui comentar no vídeo: %s", job_id, exc)
 
         # roteiro guardado pro longo semanal (compilação da semana)
         from src.script_archive import archive

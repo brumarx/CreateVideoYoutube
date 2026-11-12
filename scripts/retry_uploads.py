@@ -144,7 +144,7 @@ def upload_pending(channel_filter: str | None, status: str = "failed", limit: in
             update(job_id, status=after_upload_status(channel), youtube_video_id=video_id, error=None)
         log.info("[%s] publicado (%s): https://youtu.be/%s", job_id, status, video_id)
         uploaded += 1
-        if meta.get("comment"):
+        if meta.get("comment") and not meta.get("ressalvas"):  # privado não aceita comentário
             try:
                 post_comment(channel, video_id, meta["comment"])
             except Exception as exc:  # noqa: BLE001 — engajamento é bônus
