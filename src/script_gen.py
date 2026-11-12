@@ -1131,7 +1131,7 @@ def generate_script(
         from .fatos import lista_para_escritor
         extraido = extract_facts_e_outliers(topic, web_facts)
         if not extraido:
-            raise ValueError("fatos verificados indisponíveis (extração das fontes falhou)")
+            raise ValueError("fatos verificados indisponíveis (extração falhou ou menos de 8 fatos com número nas fontes)")
         fatos_origem, fontes_outlier = extraido
         fatos_verificados = [f["texto"] for f in fatos_origem]
         # oficiais e confirmados primeiro; secundário só para chegar a 8 (cada um vira "estima-se")
@@ -2218,6 +2218,7 @@ def extract_facts_e_outliers(topic: str, web_facts: list[dict] | None) -> tuple[
     if len(fatos) >= 8:
         disk_cache.put("fatos_com_origem", [EXTRACAO_VERSAO, versao, topic, fontes], {"fatos": fatos, "outliers": outliers})
         return fatos, outliers
+    log.warning("extração de fatos: só %d fato(s) com número confirmado (mínimo 8) — o tema não tem base", len(fatos))
     return None
 
 

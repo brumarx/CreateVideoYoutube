@@ -1615,6 +1615,18 @@ afirmação curta): {{"ok": false, "motivo": "1 frase", "tema": "tema corrigido"
 Responda SÓ com JSON."""
 
 
+def _nomes_proprios(texto: str) -> set[str]:
+    """Nomes próprios do tema (palavra com maiúscula fora do início): "Panamá", "Esclusas", "Gatún"."""
+    palavras = re.findall(r"[\wÀ-ÿ]+", texto or "")
+    return {_fold(w) for w in palavras[1:] if w[:1].isupper() and len(w) > 2}
+
+
+def mantem_assunto(original: str, corrigido: str) -> bool:
+    """A premissa corrigida mantém o ASSUNTO: todos os nomes próprios do tema original continuam
+    ("Esclusas de Gatún" não pode virar "expansão do Canal do Panamá", job 864)."""
+    return _nomes_proprios(original) <= _nomes_proprios(corrigido)
+
+
 def check_premise(topic: str, facts: dict | None, web_facts: list[dict] | None) -> tuple[bool, str, str] | None:
     """(ok, tema a usar, motivo). O tema vindo da manchete/tendência pode
     trazer premissa falsa ("Por que a SpaceX decidiu encerrar o Falcon 9",

@@ -685,3 +685,17 @@ def test_unidade_de_medida_nao_e_palavra_repetida():
     from src.script_gen import _overused_word
     texto = " ".join(f"A câmara {i} tem {i}0 metros e sobe outros metros." for i in range(1, 10))
     assert not (_overused_word({"scenes": [{"narration": texto}]}) or "").startswith("metro")
+
+
+def test_premissa_corrigida_nao_troca_o_assunto():
+    from src.fact_check import mantem_assunto
+    original = "Como o Canal do Panamá sobe navios 26 metros nas três câmaras das Esclusas de Gatún?"
+    assert not mantem_assunto(original, "Como o novo sistema de duas esclusas do Canal do Panamá economiza água?")
+    assert mantem_assunto(original, "Como o Canal do Panamá eleva navios nas Esclusas de Gatún?")
+    assert mantem_assunto("Por que a SpaceX decidiu encerrar o Falcon 9?", "Como a SpaceX reutiliza o Falcon 9?")
+
+
+def test_premissa_le_a_wikipedia_no_canal_de_fatos():
+    pipeline = (Path(__file__).parent.parent / "scripts" / "run_pipeline.py").read_text(encoding="utf-8")
+    assert "premise = check_premise(topic, facts, premise_fontes)" in pipeline
+    assert "_mantem_assunto(topic, premise[1])" in pipeline

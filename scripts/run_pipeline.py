@@ -41,6 +41,7 @@ from src.infographic import CREDIT as INFOGRAPHIC_CREDIT, Renderer as Infographi
 from src.infographic import compose_presenter, presenter_pose
 from src.news_card import headline_card
 from src.fatos import ajustar_texto_final
+from src.fact_check import mantem_assunto as _mantem_assunto
 from src.fact_check import BLOCKING_TYPES, confirmar_afirmacoes, cortar_e_trocar_por_fato, verificar_sem_fato, feedback_for_rewrite, review_script, substituir_pela_lista
 from src.orchestrator import enqueue, update
 from src.people_photos import names_in, person_photo
@@ -827,7 +828,21 @@ def run(
             # afirmação corrigida pelo que as fontes dizem
             from src.fact_check import check_premise
 
-            premise = check_premise(topic, facts, web_facts)
+            premise_fontes = web_facts
+            if channel_name in FATOS_CANAIS and web_facts:
+                # a premissa é julgada também com os artigos da Wikipédia do tema (job 864: sem eles,
+                # "26 metros nas três câmaras de Gatún" pareceu sem fonte e o tema virou outro assunto)
+                from src.fact_check import merge_web_facts as _merge_premissa
+                from src.web_search import wikipedia_facts as _wiki_premissa
+                premise_fontes = _merge_premissa(_wiki_premissa(topic), web_facts) or web_facts
+            premise = check_premise(topic, facts, premise_fontes)
+            if (premise is not None and not premise[0] and channel_name in FATOS_CANAIS
+                    and not _mantem_assunto(topic, premise[1])):
+                # canal de fatos: o escritor só usa a lista fechada de fatos e o título sai da narração;
+                # trocar de assunto aqui é trocar de tema (proibido) — fica o tema original
+                log.warning("[%s] premissa corrigida mudaria o assunto (%r -> %r) — mantém o tema",
+                            job_id, topic, premise[1])
+                premise = None
             if premise is not None and not premise[0]:
                 log.warning("[%s] premissa do tema não sustentada pelas fontes (%s): %r -> %r",
                             job_id, premise[2], topic, premise[1])
