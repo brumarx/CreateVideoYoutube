@@ -1939,10 +1939,12 @@ def run(
             "tags": script["tags"],
             "publish_at": publish_at,
             # comentário com pergunta postado pelo canal logo depois do upload
-            "comment": _comentario_do_texto(script, original_scene_count) if channel_name in FATOS_CANAIS
-            else fix_text(engagement_question(script["title"], script["scenes"][:original_scene_count]), channel.language)
-            + (f"\n\n{channel.website_cta}: {channel.website}" if channel.website else "")
-            + (f"\n{linha_comentario(channel.loja)}" if channel.loja else ""),
+            "comment": ((_comentario_do_texto(script, original_scene_count) if channel_name in FATOS_CANAIS
+                        else fix_text(engagement_question(script["title"], script["scenes"][:original_scene_count]), channel.language)
+                        + (f"\n\n{channel.website_cta}: {channel.website}" if channel.website else "")
+                        + (f"\n{linha_comentario(channel.loja)}" if channel.loja else ""))
+            # mesmo link da Amazon da descrição (canal sem loja própria)
+            + (f"\n\n{amazon}" if amazon else "")).strip(),
         }
         (work_dir / UPLOAD_META_FILE).write_text(json.dumps(upload_meta, ensure_ascii=False, indent=2))
 
