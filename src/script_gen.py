@@ -2305,7 +2305,7 @@ def fatos_com_numeros_da_fonte(fatos: list[str], fontes: str) -> list[str]:
 
 # versão da extração na chave do cache (mudou a regra de atribuição, o cache antigo não serve)
 EXTRACAO_VERSAO = 3
-EXTRACAO_PROMPT_ID = "fatos-com-fontes-numeradas-v2"  # trocar quando o texto do pedido mudar
+EXTRACAO_PROMPT_ID = "fatos-com-fontes-numeradas-v3"  # trocar quando o texto do pedido mudar
 
 
 def extract_facts_e_outliers(topic: str, web_facts: list[dict] | None) -> tuple[list[dict], list[str]] | None:
@@ -2330,7 +2330,8 @@ def extract_facts_e_outliers(topic: str, web_facts: list[dict] | None) -> tuple[
         "Não acrescente nada que não esteja nas fontes e não junte fontes diferentes num número novo. "
         "Cada fato em português do Brasil, sem palavra de outro idioma (job 865: \"O total lift\" foi "
         "parar na narração; escreva \"a elevação total\"); quando a fonte dá a medida em pés e em metros, "
-        "use só a métrica. "
+        "use só a métrica. Termo técnico traduzido pelo sentido, nunca ao pé da letra (\"flight of locks\" é "
+        "\"conjunto de eclusas\", não \"voo\"; \"lift\" é \"elevação\"). "
         'Responda SÓ JSON: {"fatos": [{"texto": "fato 1", "fontes": ["S1"]}, ...]}'
     )
     from .providers import is_strong_model

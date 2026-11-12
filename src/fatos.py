@@ -313,6 +313,8 @@ def estima_antes(frase: str, nums_alvo: set[str], vez: int = 0) -> str:
         depois = re.sub(r"^(\d+(?:[.,]\d+)*\s*\w*)\s+exat[oa]s\b", r"\1", frase[alvo.start():], flags=re.I)
         frase = antes + depois
         alvo = re.compile(r"\d+(?:[.,]\d+)*").search(frase, len(antes))
+        if re.search(r"\b(de|em|a|para|por|com|sobre)\s+$", frase[:alvo.start()], re.I) and palavra.endswith(" de"):
+            palavra = "aproximadamente"  # "elevação de em torno de 26 metros" (job 889)
         if alvo.start() == 0:
             palavra = palavra[0].upper() + palavra[1:]
         return frase[:alvo.start()] + palavra + " " + frase[alvo.start():]
