@@ -369,12 +369,14 @@ def test_troca_por_fato_usa_as_marcas_da_conferencia():
     assert "atração" not in out["scenes"][0]["narration"]
 
 
-def test_troca_por_fato_reprova_abaixo_do_minimo():
+def test_troca_por_fato_nao_exige_minimo_de_marcas_e_o_texto_final_decide():
     from src import fact_check as fc
+    from src.fatos import roteiro_magro
     fatos = [{"id": f"F{i}", "texto": f"Fato verificado número {i} sobre a obra.", "status": "oficial", "fontes": []}
              for i in range(1, 4)]
     roteiro = {"title": "t", "_fatos": fatos, "scenes": [{"narration": "Algo. Hoje é atração.", "fatos": ["F1"]}]}
-    assert fc.cortar_e_trocar_por_fato(roteiro, [{"tipo": "fora_da_fonte", "termo": "Hoje é atração", "motivo": "x"}]) is None
+    out, n = fc.cortar_e_trocar_por_fato(roteiro, [{"tipo": "fora_da_fonte", "termo": "Hoje é atração", "motivo": "x"}])
+    assert n == 1 and roteiro_magro(out)  # curto demais: a etapa do texto final reprova
 
 
 def test_busca_oficial_usa_o_nome_em_ingles(monkeypatch, tmp_path):
@@ -731,3 +733,9 @@ def test_numero_repetido_em_muitas_frases():
     texto = "Sobe 26 metros. São 26 metros no total. Os 26 metros vêm do lago. Em 1914 abriu. Em 1914 mesmo."
     assert "26" in numero_repetido({"scenes": [{"narration": texto}]})
     assert numero_repetido({"scenes": [{"narration": "Sobe 26 metros. São 26 metros no total. Abriu em 1914."}]}) is None
+
+
+def test_arredondamento_nao_e_contradicao():
+    from src.fatos import _algum_igual
+    assert _algum_igual({"25.9"}, {"26"})
+    assert not _algum_igual({"53.85"}, {"65.23"})

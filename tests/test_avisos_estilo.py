@@ -232,7 +232,9 @@ def test_sem_fatos_suficientes_nao_troca():
     lista = ["Fato verificado número 1 sobre a obra do túnel"]
     roteiro = {"title": "t", "thumbnail_text": "", "_fatos_verificados": lista,
                "scenes": [{"narration": "A obra durou 40 anos. Fato verificado número 1 sobre a obra do túnel."}]}
-    assert fc.cortar_e_trocar_por_fato(roteiro, [{"tipo": "fora_da_fonte", "termo": "A obra durou 40 anos", "motivo": "x"}]) is None
+    # 12/11: sem fato livre, a frase reprovada só sai (o corpo do texto final é conferido depois)
+    out, n = fc.cortar_e_trocar_por_fato(roteiro, [{"tipo": "fora_da_fonte", "termo": "A obra durou 40 anos", "motivo": "x"}])
+    assert n == 1 and "40 anos" not in out["scenes"][0]["narration"]
 
 
 def test_numero_ja_na_lista_com_outro_substantivo_e_resolvido():

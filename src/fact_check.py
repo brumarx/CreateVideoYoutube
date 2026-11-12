@@ -704,7 +704,6 @@ def substituir_pela_lista(script: dict, problems: list[dict]) -> tuple[dict, lis
     return {**script, "scenes": scenes, "_edited": True}, restantes
 
 
-MIN_FATOS_USADOS = 8  # abaixo disso o roteiro não tem base: reprova
 
 
 def _fato_usado(fato: str, narracao: str) -> bool:
@@ -775,8 +774,7 @@ def cortar_e_trocar_por_fato(script: dict, problems: list[dict]) -> tuple[dict, 
     """Saída sem correspondência segura: a frase reprovada sai e, no lugar dela, entra
     um fato VERIFICADO que o roteiro ainda não usou (já validado, sem reescrita).
     Com fatos com origem (_fatos), "usado" é o que a conferência marcou em cada cena;
-    sem eles, a comparação pelo texto. None se o roteiro ficar com menos de
-    MIN_FATOS_USADOS fatos ou se nada foi trocado."""
+    sem eles, a comparação pelo texto. None se nada foi trocado."""
     fatos = script.get("_fatos") or []
     scenes = [dict(sc) for sc in script.get("scenes", [])]
     narracao = " ".join(sc.get("narration", "") for sc in scenes)
@@ -812,10 +810,10 @@ def cortar_e_trocar_por_fato(script: dict, problems: list[dict]) -> tuple[dict, 
             break
     if not trocadas:
         return None
-    if len(usados) < MIN_FATOS_USADOS:
-        log.warning("troca por fato: roteiro ficaria com %d fatos (mínimo %d)", len(usados), MIN_FATOS_USADOS)
-        return None
-    return {**script, "scenes": [sc for sc in scenes if sc.get("narration", "").strip()], "_edited": True}, trocadas
+    novo = {**script, "scenes": [sc for sc in scenes if sc.get("narration", "").strip()], "_edited": True}
+    # 12/11: sem mínimo de fatos marcados aqui (o escritor recebe 8 e exigir 8 usados reprovava qualquer
+    # corte, job 866); o corpo do texto final é conferido depois, em fatos.roteiro_magro
+    return novo, trocadas
 
 
 def confirmar_afirmacoes(script: dict, problems: list[dict], topic: str,

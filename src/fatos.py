@@ -177,6 +177,24 @@ def _forca(fato: dict) -> tuple[int, int]:
     return (-STATUS_ORDEM[fato["status"]], len({dominio_raiz(u) for u in fato.get("fontes", [])}))
 
 
+def _algum_igual(xs: set[str], ys: set[str]) -> bool:
+    """Algum valor igual nos dois lados, aceitando arredondamento de até 2% ("25,9 m" e "26 metros"
+    são a mesma medida, job 866; "53,85 km" e "65,23 km" não)."""
+    def num(x: str) -> float | None:
+        try:
+            return float(x)
+        except ValueError:
+            return None
+    for x in xs:
+        for y in ys:
+            if x == y:
+                return True
+            a, b = num(x), num(y)
+            if a is not None and b is not None and max(abs(a), abs(b)) > 0 and abs(a - b) / max(abs(a), abs(b)) <= 0.02:
+                return True
+    return False
+
+
 def remover_conflitos(fatos: list[dict], outliers: list[str] | None = None) -> list[dict]:
     """Dois fatos que dão valores DIFERENTES para a mesma medida (mesma unidade e mesmo assunto):
     fica o mais forte (status melhor; empate no status, mais publicadores independentes). Ex.:
@@ -199,7 +217,7 @@ def remover_conflitos(fatos: list[dict], outliers: list[str] | None = None) -> l
             mesma_medida = {u for _, u in pa} & {u for _, u in pb}
             if not mesma_medida or not _mesma_coisa(a["texto"], b["texto"], tema):
                 continue
-            if not ({n for n, u in pb if u in mesma_medida} & {n for n, u in pa if u in mesma_medida}):
+            if not _algum_igual({n for n, u in pb if u in mesma_medida}, {n for n, u in pa if u in mesma_medida}):
                 fora.add(b["id"])
                 log.warning("fato %s descartado: contradiz %s, mais bem sustentado (%r × %r)", b["id"], a["id"],
                             b["texto"][:60], a["texto"][:60])
