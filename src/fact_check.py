@@ -646,8 +646,10 @@ def mesmo_sujeito(frase: str, fatos: list[str]) -> bool:
     """As 2 primeiras palavras de conteúdo da frase (o sujeito, quase sempre) estão em algum dos
     fatos? Compara pelas 4 primeiras letras sem acento ("eclusas"/"esclusas" ficam de fora disso,
     então qualquer uma das duas basta)."""
-    palavras = [w for w in re.findall(r"\w+", _fold(frase)) if len(w) >= 4 and w not in _NAO_SUJEITO
-                and not w.isdigit()][:2]
+    # o sujeito vem antes do número; abertura adverbial ("Durante a obra, 34 pessoas morreram") não conta
+    antes = re.split(r"\d", _fold(frase), maxsplit=1)[0]
+    antes = antes.split(",", 1)[1] if "," in antes else antes
+    palavras = [w for w in re.findall(r"\w+", antes) if len(w) >= 4 and w not in _NAO_SUJEITO][:2]
     if not palavras:
         return True
     raizes = {w[:4] for f in fatos for w in re.findall(r"\w+", _fold(f)) if len(w) >= 4}
