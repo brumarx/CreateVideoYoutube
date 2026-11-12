@@ -70,10 +70,13 @@ def _review_prompt(script: dict, topic: str, facts: dict | None, web_facts: list
     narration = "\n".join(f"[cena {i + 1}] {s.get('narration', '')}" for i, s in enumerate(script.get("scenes", [])))
     # título e miniatura também são conferidos contra a narração (09/11: título
     # "fixa 4.000 t" com o roteiro dizendo que 4.000 t/ano é só capacidade)
-    narration = (
-        f"TÍTULO DO VÍDEO: {script.get('title', '')}\n"
-        f"TEXTO DA MINIATURA: {script.get('thumbnail_text', '')}\n\nNARRAÇÃO:\n{narration}"
-    )
+    if script.get("title") or script.get("thumbnail_text"):
+        narration = (
+            f"TÍTULO DO VÍDEO: {script.get('title', '')}\n"
+            f"TEXTO DA MINIATURA: {script.get('thumbnail_text', '')}\n\nNARRAÇÃO:\n{narration}"
+        )
+    else:
+        narration = f"NARRAÇÃO:\n{narration}"
     from .fontes import bloco_fontes
     bloco = bloco_fontes(facts, web_facts)
     sources = ("FONTES (o mesmo bloco que o roteirista e o conserto leem):\n" + bloco) if bloco else \
@@ -452,6 +455,10 @@ def review_script_result(
     internet ([] = aprovado), ou None se o revisor não conseguiu responder
     (quem chama decide — o pipeline segue, já que a aprovação manual no
     painel é a segunda barreira)."""
+    if script.get("_fatos_verificados"):
+        # 12/11 (job 871): canal de fatos — título e miniatura são descartados e refeitos do texto
+        # validado (packaging_from_final); revisar os do escritor só reprovava o roteiro à toa
+        script = {**script, "title": "", "thumbnail_text": ""}
     if facts and facts.get("tipo") == "compilacao":
         # compilação: as histórias arquivadas já passaram na revisão; o texto novo
         # (abertura, início, perguntas, fechamento, título, miniatura) é conferido

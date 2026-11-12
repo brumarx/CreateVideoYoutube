@@ -763,3 +763,13 @@ def test_frase_com_numero_e_enfeite_vai_para_checagem():
 def test_numero_arredondado_conta_como_repetido():
     from src.fatos import numero_repetido
     assert numero_repetido({"scenes": [{"narration": "Sobe 26 metros. São 25,9 metros. Os 26 metros vêm do lago."}]})
+
+
+def test_revisao_do_canal_de_fatos_nao_julga_titulo_nem_miniatura_do_escritor(monkeypatch):
+    from src import fact_check as fc
+    pedidos = []
+    monkeypatch.setattr(fc, "complete", lambda msgs, **k: pedidos.append(msgs[0]["content"]) or '{"problemas": []}')
+    roteiro = {"title": "Navio Sobe 26m Sozinho", "thumbnail_text": "NAVIO SOBE SOZINHO", "_fatos_verificados": ["x"],
+               "scenes": [{"narration": "As eclusas elevam navios."}]}
+    fc.review_script_result(roteiro, "tema", None, [{"titulo": "t", "url": "u", "trecho": "As eclusas elevam navios."}])
+    assert pedidos and all("Sozinho" not in p and "SOZINHO" not in p for p in pedidos)
