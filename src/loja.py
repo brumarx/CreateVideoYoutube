@@ -18,7 +18,9 @@ import requests
 log = logging.getLogger("loja")
 
 DISCLOSURE = "Links da loja são de afiliado (Mercado Livre e Amazon): recebemos comissão por compras, sem custo extra pra você."
-_STOP = {"de", "da", "do", "das", "dos", "e", "a", "o", "as", "os", "em", "no", "na", "com", "para", "pra", "um", "uma"}
+_STOP = {"de", "da", "do", "das", "dos", "e", "a", "o", "as", "os", "em", "no", "na", "com", "para", "pra", "um", "uma",
+         # genéricas: "história"/"livro"/"oficial" no título não fazem um livro combinar
+         "livro", "livros", "guia", "historia", "história", "oficial", "grande", "como", "uma", "sobre", "que"}
 
 
 def _raiz(palavra: str) -> str:
@@ -26,8 +28,32 @@ def _raiz(palavra: str) -> str:
     return p[:5]
 
 
-def _palavras(texto: str) -> set[str]:
-    return {_raiz(w) for w in re.findall(r"[\wÀ-ÿ]{3,}", texto or "") if w.lower() not in _STOP}
+def _palavras(texto: str, inteiras: bool = False) -> set[str]:
+    """Raízes de 5 letras; `inteiras`: palavra inteira sem acento e sem plural,
+    sem números (raiz confundia "construção" com "Constituição")."""
+    palavras = [w for w in re.findall(r"[\wÀ-ÿ]{3,}", texto or "") if w.lower() not in _STOP]
+    if not inteiras:
+        return {_raiz(w) for w in palavras}
+    out = set()
+    for w in palavras:
+        if any(ch.isdigit() for ch in w) or len(w) < 4:
+            continue
+        w = unicodedata.normalize("NFKD", w.lower()).encode("ascii", "ignore").decode()
+        w = w[:-1] if w.endswith("s") and len(w) > 4 else w
+        if w not in _GENERICAS:
+            out.add(w)
+    return out
+
+
+# palavra solta que aparece em tema de qualquer canal ("governos brasileiros")
+_GENERICAS = {"brasileiro", "brasileira", "brasil", "mundo", "federal", "nacional", "pai", "paise"}
+# "Raízes do Brasil, Sérgio Buarque de Holanda" -> "Raízes do Brasil": autor,
+# editora e medida não contam (vídeo da Holanda não é do Sérgio Buarque)
+_SO_TITULO = re.compile(r"\s*(,|—|–|\(|\s-\s).*$")
+
+
+def _titulo_produto(nome: str) -> str:
+    return _SO_TITULO.sub("", nome) or nome
 
 
 def produtos(cfg: dict) -> list[dict]:
@@ -51,21 +77,26 @@ def produtos(cfg: dict) -> list[dict]:
     return out
 
 
-def escolher(itens: list[dict], texto: str, n: int, semente: int) -> list[dict]:
+def escolher(itens: list[dict], texto: str, n: int, semente: int, so_ligados: bool = False) -> list[dict]:
     """Os `n` produtos que mais combinam com o assunto do vídeo; sem nada em
-    comum, rodízio pela semente (job), sem repetir categoria quando dá."""
+    comum, rodízio pela semente (job), sem repetir categoria quando dá.
+    `so_ligados`: loja de outro canal (livros da Política no Fractal) — só
+    produto que combina, nunca rodízio."""
     if not itens or n <= 0:
         return []
     # palavra que está em boa parte da vitrine ("Botafogo" em todo produto,
     # "camisa") não diz nada sobre o vídeo: só conta a que distingue
+    nome = (lambda p: _titulo_produto(p["nome"])) if so_ligados else (lambda p: p["nome"])
     contagem: dict[str, int] = {}
     for p in itens:
-        for w in _palavras(p["nome"]):
+        for w in _palavras(nome(p), so_ligados):
             contagem[w] = contagem.get(w, 0) + 1
-    comum = {w for w, c in contagem.items() if c > max(2, len(itens) // 5)}
-    assunto = _palavras(texto) - comum
-    pontos = [(len(_palavras(p["nome"]) & assunto), i, p) for i, p in enumerate(itens)]
+    comum = set() if so_ligados else {w for w, c in contagem.items() if c > max(2, len(itens) // 5)}
+    assunto = _palavras(texto, so_ligados) - comum
+    pontos = [(len(_palavras(nome(p), so_ligados) & assunto), i, p) for i, p in enumerate(itens)]
     ligados = [p for s, _, p in sorted(pontos, key=lambda t: (-t[0], t[1])) if s > 0]
+    if so_ligados:
+        return ligados[:n]
     k = semente % len(itens)
     girados = itens[k:] + itens[:k]
     escolha: list[dict] = []
@@ -86,13 +117,20 @@ def escolher(itens: list[dict], texto: str, n: int, semente: int) -> list[dict]:
 
 
 def linhas_descricao(cfg: dict, script: dict, semente: int) -> list[str]:
-    """Linha da loja + produtos pro topo da descrição."""
+    """Linha da loja + produtos pro topo da descrição. `so_se_combinar` (loja
+    de outro canal): só título/tema contam, e sem produto que combine não sai
+    nada — o canal fica com a busca da Amazon."""
     if not cfg or not cfg.get("url"):
         return []
+    so = bool(cfg.get("so_se_combinar"))
+    partes = [script.get("title") or "", script.get("topic") or ""]
+    if not so:
+        partes += [sc.get("narration", "") for sc in script.get("scenes", [])]
+    escolha = escolher(produtos(cfg), " ".join(partes), int(cfg.get("produtos", 2)), semente, so_ligados=so)
+    if so and not escolha:
+        return []
     linhas = [f"{cfg.get('texto') or '🛒 Loja'}: {cfg['url']}"]
-    texto = " ".join([script.get("title") or "", script.get("topic") or ""]
-                     + [sc.get("narration", "") for sc in script.get("scenes", [])])
-    for p in escolher(produtos(cfg), texto, int(cfg.get("produtos", 2)), semente):
+    for p in escolha:
         linhas.append(f"▸ {p['nome']}: {cfg.get('compra', cfg['url'].rsplit('/loja', 1)[0] + '/compra')}/{p['id']}")
     return linhas
 

@@ -156,3 +156,15 @@ afiliado_amazon:
   texto: "📚 A história completa, na Amazon"
   busca: "livro biografia brasileiros"
   fixo: false
+
+# loja do politica-br.org (src/loja.py) quando um produto combina com o título
+# ou o tema do vídeo (Constituição, bandeira, mapa do Brasil, livros de
+# história do país); sem combinação fica a busca da Amazon. Sem campanha.
+loja:
+  texto: "🛒 Na loja Política BR"
+  url: "https://politica-br.org/loja"
+  api: "http://127.0.0.1:8140/loja"
+  compra: "https://politica-br.org/compra"
+  produtos: 1
+  so_se_combinar: true
+  excluir_categorias: ["Campanha: um de cada lado"]

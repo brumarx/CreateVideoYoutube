@@ -42,3 +42,26 @@ def test_categoria_excluida_fica_fora(monkeypatch):
     monkeypatch.setattr(loja.requests, "get", lambda *a, **k: R())
     itens = loja.produtos({"api": "x", "excluir_categorias": ["Campanha"]})
     assert [p["id"] for p in itens] == [1]
+
+
+POLITICA = [
+    {"id": 1, "nome": "Constituição Federal 2026 (Minicódigos, Edipro)", "categoria": "Livros"},
+    {"id": 4, "nome": "Raízes do Brasil, Sérgio Buarque de Holanda", "categoria": "Livros"},
+    {"id": 13, "nome": "Bandeira do Brasil oficial, 3 panos, 192×135 cm", "categoria": "Casa"},
+    {"id": 14, "nome": "Mapa do Brasil político e rodoviário, 120×90 cm", "categoria": "Casa"},
+]
+
+
+def test_loja_de_outro_canal_so_com_produto_que_combina():
+    assert loja.escolher(POLITICA, "Como a Constituição de 1988 mudou o Brasil", 1, 0, so_ligados=True)[0]["id"] == 1
+    assert loja.escolher(POLITICA, "A bandeira do Brasil e o céu de 15 de novembro", 1, 0, so_ligados=True)[0]["id"] == 13
+    # sem combinação: nada (o canal fica com a Amazon), nunca rodízio
+    assert loja.escolher(POLITICA, "Como o Canal do Panamá sobe navios 26 metros", 1, 0, so_ligados=True) == []
+
+
+def test_loja_de_outro_canal_sem_falso_positivo():
+    # raiz "const" (construção x Constituição), autor (Holanda), palavra genérica
+    for tema in ("Como Moscou construiu o metrô mais profundo do mundo",
+                 "Como a Holanda vive abaixo do nível do mar",
+                 "Será que os governos brasileiros caem no mundo rural?"):
+        assert loja.escolher(POLITICA, tema, 1, 0, so_ligados=True) == [], tema

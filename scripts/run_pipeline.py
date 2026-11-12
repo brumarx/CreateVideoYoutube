@@ -59,7 +59,6 @@ from src.stock_media import search_stock_clip, search_stock_photo
 from src.thumbnail import make_thumbnail, photo_scene_frame, title_card
 from src.topics import pick_topic, topic_problem
 from src.trending_topics import get_trending_topics, topic_for_channel, filter_topics, record_trend_use
-from src.loja import linha_comentario
 from src.tts import narrate
 from src.video_qa import review_audio, review_video
 from src.visual_check import matches_scene
@@ -1942,8 +1941,9 @@ def run(
             "comment": ((_comentario_do_texto(script, original_scene_count) if channel_name in FATOS_CANAIS
                         else fix_text(engagement_question(script["title"], script["scenes"][:original_scene_count]), channel.language)
                         + (f"\n\n{channel.website_cta}: {channel.website}" if channel.website else "")
-                        + (f"\n{linha_comentario(channel.loja)}" if channel.loja else ""))
-            # mesmo link da Amazon da descrição (canal sem loja própria)
+                        )
+            # mesma loja (1ª linha) ou o mesmo link da Amazon da descrição
+            + (f"\n\n{loja_linhas[0]}" if loja_linhas else "")
             + (f"\n\n{amazon}" if amazon else "")).strip(),
         }
         (work_dir / UPLOAD_META_FILE).write_text(json.dumps(upload_meta, ensure_ascii=False, indent=2))
