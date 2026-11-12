@@ -19,10 +19,14 @@ greeting:
   - "Fala, Fogão!"
   - "Olá, alvinegros de plantão!"
 website_cta: "📰 Notícias completas do Fogão, em tempo real"
-# links logo abaixo do site no topo da descrição
-links_descricao:
-  - texto: "🛒 Loja do torcedor"
-    url: "https://botafogo.win/loja"
+# loja do botafogo.win (src/loja.py): link + produtos ligados ao assunto na
+# descrição, link no comentário. Produtos lidos ao vivo da vitrine do site.
+loja:
+  texto: "🛒 Loja do torcedor"
+  url: "https://botafogo.win/loja"
+  api: "https://botafogo.win/api/shop"
+  compra: "https://botafogo.win/compra"
+  produtos: 2
 language: "pt-BR"
 tts_voice_weights:
   pt-BR-AntonioNeural: 33

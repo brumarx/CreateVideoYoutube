@@ -161,6 +161,9 @@ class ChannelConfig:
     # link de afiliado da Amazon na descrição (src/affiliate.py):
     # {"texto": "...", "busca": "termo padrão", "fixo": false}. Vazio = sem
     amazon_affiliate: dict = field(default_factory=dict)
+    # loja própria do site (src/loja.py): {"texto", "url", "api", "produtos",
+    # "excluir_categorias"} — link da loja + produtos na descrição e no comentário
+    loja: dict = field(default_factory=dict)
     # canal onde imagem errada é grave (futebol: outro clube, futebol
     # americano): sem modelo de visão disponível, clipe de banco e imagem de
     # IA não entram, e a revisão final só aprova com a parte visual feita.
@@ -289,6 +292,7 @@ class ChannelConfig:
             website_cta=data.get("website_cta", "🌐 Site"),
             extra_links=[l for l in data.get("links_descricao") or [] if isinstance(l, dict) and l.get("url")],
             amazon_affiliate=data.get("afiliado_amazon") or {},
+            loja=data.get("loja") or {},
             greetings=[str(g) for g in _as_list(data.get("greeting")) if g],
             claim_sources=bool(data.get("claim_sources", False)),
             website_speech=str(data.get("website_fala") or ""),

@@ -274,6 +274,17 @@ prioridade:
     - "Romário: senador famoso e a diferença de gastos entre celebridades e políticos comuns"
     - "Tabata Amaral: PDT, carreira meteórica e as despesas de um novo mandato no Senado"
 
+# loja do politica-br.org (src/loja.py): link + produtos ligados ao assunto na
+# descrição, link no comentário. Fora a categoria de campanha (bonés/camisetas
+# de candidato): o canal não anuncia produto partidário.
+loja:
+  texto: "🛒 Loja Política BR"
+  url: "https://politica-br.org/loja"
+  api: "http://127.0.0.1:8140/loja"
+  compra: "https://politica-br.org/compra"
+  produtos: 2
+  excluir_categorias: ["Campanha: um de cada lado"]
+
 # link de afiliado da Amazon no topo da descrição (src/affiliate.py); fixo: false = busca
 # ligada ao assunto de cada vídeo, com esta como reserva
 afiliado_amazon:

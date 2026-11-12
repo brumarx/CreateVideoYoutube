@@ -59,6 +59,7 @@ from src.stock_media import search_stock_clip, search_stock_photo
 from src.thumbnail import make_thumbnail, photo_scene_frame, title_card
 from src.topics import pick_topic, topic_problem
 from src.trending_topics import get_trending_topics, topic_for_channel, filter_topics, record_trend_use
+from src.loja import linha_comentario
 from src.tts import narrate
 from src.video_qa import review_audio, review_video
 from src.visual_check import matches_scene
@@ -1824,8 +1825,14 @@ def run(
             description = f"{channel.website_cta}: {(facts or {}).get('pagina') or channel.website}\n\n{description}"
         from src.affiliate import AMAZON_DISCLOSURE, amazon_line
 
-        amazon = amazon_line(script, channel)
-        top_links = [f"{l.get('texto', '🔗')}: {l['url']}" for l in channel.extra_links] + ([amazon] if amazon else [])
+        from src.loja import DISCLOSURE as LOJA_DISCLOSURE, linhas_descricao
+
+        # loja própria do site (com produtos ligados ao assunto) no lugar da
+        # busca genérica da Amazon — a vitrine já tem os itens da Amazon
+        loja_linhas = linhas_descricao(channel.loja, {**script, "topic": topic}, job_id)
+        amazon = None if loja_linhas else amazon_line(script, channel)
+        top_links = ([f"{l.get('texto', '🔗')}: {l['url']}" for l in channel.extra_links] + loja_linhas
+                     + ([amazon] if amazon else []))
         if top_links:
             # logo abaixo do site, ainda antes do "...mais" (ex.: loja do
             # botafogo.win, afiliado da Amazon)
@@ -1853,6 +1860,8 @@ def run(
             description += f"\n\nFonte dos dados: {(facts or {}).get('pagina') or SITE_URL + '/'}"
         if amazon:
             description += f"\n\n{AMAZON_DISCLOSURE}"
+        elif len(loja_linhas) > 1:  # há produto com link de afiliado
+            description += f"\n\n{LOJA_DISCLOSURE}"
 
         if web_facts:
             # transparência: tema ancorado em busca real — lista as fontes
@@ -1932,7 +1941,8 @@ def run(
             # comentário com pergunta postado pelo canal logo depois do upload
             "comment": _comentario_do_texto(script, original_scene_count) if channel_name in FATOS_CANAIS
             else fix_text(engagement_question(script["title"], script["scenes"][:original_scene_count]), channel.language)
-            + (f"\n\n{channel.website_cta}: {channel.website}" if channel.website else ""),
+            + (f"\n\n{channel.website_cta}: {channel.website}" if channel.website else "")
+            + (f"\n{linha_comentario(channel.loja)}" if channel.loja else ""),
         }
         (work_dir / UPLOAD_META_FILE).write_text(json.dumps(upload_meta, ensure_ascii=False, indent=2))
 
