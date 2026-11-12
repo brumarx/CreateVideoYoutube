@@ -148,13 +148,30 @@ _PARADAS = {"para", "pelo", "pela", "como", "mais", "este", "esta", "isso", "seu
             "teve", "tinha", "foram", "durante", "total", "aproximadamente"}
 
 
+_PES = {"pé", "pés", "pes", "ft", "feet", "foot"}
+
+
 def _pares(texto: str) -> set[tuple[str, str]]:
     out = set()
     for m in _NUM_UNIDADE.finditer(texto):
-        unidade = _UNIDADES.get((m.group(2) or "").lower())
+        bruta = (m.group(2) or "").lower()
+        if bruta in _PES:
+            # pés viram metros para comparar: "85 pés" e "26 metros" são a mesma medida (job 872)
+            try:
+                out.add((str(round(float(canon(m.group(1))) * 0.3048, 1)), "m"))
+            except ValueError:
+                pass
+            continue
+        unidade = _UNIDADES.get(bruta)
         if unidade:
             out.add((canon(m.group(1)), unidade))
     return out
+
+
+def mede_o_que_ja_foi_dito(fato: str, narracao: str) -> bool:
+    """O fato traz uma medida (valor e unidade, com arredondamento) que a narração já diz."""
+    ditos = _pares(narracao)
+    return any(any(u == u2 and _algum_igual({n}, {n2}) for n2, u2 in ditos) for n, u in _pares(fato))
 
 
 def _palavras(texto: str) -> set[str]:

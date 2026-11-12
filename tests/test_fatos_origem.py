@@ -773,3 +773,22 @@ def test_revisao_do_canal_de_fatos_nao_julga_titulo_nem_miniatura_do_escritor(mo
                "scenes": [{"narration": "As eclusas elevam navios."}]}
     fc.review_script_result(roteiro, "tema", None, [{"titulo": "t", "url": "u", "trecho": "As eclusas elevam navios."}])
     assert pedidos and all("Sozinho" not in p and "SOZINHO" not in p for p in pedidos)
+
+
+def test_pes_e_metros_sao_a_mesma_medida():
+    from src.fatos import mede_o_que_ja_foi_dito, sem_medida_repetida
+    assert mede_o_que_ja_foi_dito("Uma embarcação é elevada em 85 pés.", "Os navios sobem 26 metros.")
+    assert not mede_o_que_ja_foi_dito("As eclusas medem 300 pés.", "Os navios sobem 26 metros.")
+    fatos = [{"id": "F1", "texto": "Os navios sobem 26 metros.", "status": "oficial", "fontes": ["a"]},
+             {"id": "F2", "texto": "Uma embarcação é elevada em 85 pés.", "status": "oficial", "fontes": ["a"]}]
+    assert [f["id"] for f in sem_medida_repetida(fatos)] == ["F1"]
+
+
+def test_troca_por_fato_nao_repete_medida_da_narracao():
+    from src import fact_check as fc
+    fatos = [{"id": "F1", "texto": "Os navios sobem 26 metros nas eclusas.", "status": "oficial", "fontes": []},
+             {"id": "F2", "texto": "Uma embarcação é elevada em 85 pés ao passar pelas três eclusas.", "status": "oficial", "fontes": []},
+             {"id": "F3", "texto": "A construção exigiu mais de 1,8 milhão de metros cúbicos de concreto.", "status": "oficial", "fontes": []}]
+    roteiro = {"title": "t", "_fatos": fatos, "scenes": [{"narration": "Os navios sobem 26 metros nas eclusas. Hoje é atração.", "fatos": ["F1"]}]}
+    out, _ = fc.cortar_e_trocar_por_fato(roteiro, [{"tipo": "fora_da_fonte", "termo": "Hoje é atração", "motivo": "x"}])
+    assert "85 pés" not in out["scenes"][0]["narration"] and "1,8 milhão" in out["scenes"][0]["narration"]

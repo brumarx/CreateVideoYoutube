@@ -785,9 +785,12 @@ def cortar_e_trocar_por_fato(script: dict, problems: list[dict]) -> tuple[dict, 
     fatos = script.get("_fatos") or []
     scenes = [dict(sc) for sc in script.get("scenes", [])]
     narracao = " ".join(sc.get("narration", "") for sc in scenes)
+    from .fatos import mede_o_que_ja_foi_dito
     if fatos:
         usados = {i for sc in scenes for i in sc.get("fatos", [])}
+        # fato com medida que a narração já diz não entra (job 872: "85 pés" ao lado de "26 metros")
         disponiveis = [(f["id"], t) for f in fatos if f["id"] not in usados
+                       and not mede_o_que_ja_foi_dito(f["texto"], narracao)
                        for t in [_frase_narravel(f["texto"])] if t and 20 <= len(t) <= 220]
     else:
         lista = [f for f in (script.get("_fatos_verificados") or []) if 20 <= len(f) <= 220]
