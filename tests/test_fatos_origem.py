@@ -918,3 +918,10 @@ def test_gancho_sem_referencia():
     out = gancho_sem_referencia(s, "Como o Canal do Panamá sobe navios 26 metros?")
     assert out["scenes"][0]["narration"].startswith("E aí, mente curiosa! O navio chega ao lago Gatún, 26 metros acima do mar. Isso acontece")
     assert out["scenes"][-1]["narration"] == "Você confiaria?"
+
+
+def test_milhar_com_espaco():
+    from src.fatos import milhar_com_espaco, numeros
+    assert milhar_com_espaco("exigiram 101 000 metros cúbicos") == "exigiram 101.000 metros cúbicos"
+    assert milhar_com_espaco("em 1914 foram 26 metros") == "em 1914 foram 26 metros"
+    assert numeros("101 000 m³") == numeros("101.000 m³")

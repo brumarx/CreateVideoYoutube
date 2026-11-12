@@ -72,7 +72,7 @@ _ESCALA = re.compile(r"(\d+(?:[.,]\d+)*)\s*(trilhões|trilhão|trillion|bilhões
 def numeros(texto: str) -> set[str]:
     """Números do texto, iguais em qualquer formato e idioma: além do número escrito, o valor
     absoluto quando há escala ("538,4 bilhões" e "5.384億" valem os dois 538400000000)."""
-    texto = texto or ""
+    texto = milhar_com_espaco(texto or "")
     out = {canon(m) for m in re.findall(r"\d+(?:[.,]\d+)*", texto)}
     for m in _ESCALA.finditer(texto):
         bruto = m.group(1)
@@ -95,6 +95,15 @@ def bloco_numerado(web_facts: list[dict] | None) -> str:
     return "\n".join(linhas)[:LIMITE_BLOCO]
 
 
+_MILHAR_ESPACO = re.compile(r"(?<![\d.,])(\d{1,3})((?:[ \u00a0\u202f]\d{3})+)(?![\d.,]|\s*\d)")
+
+
+def milhar_com_espaco(texto: str) -> str:
+    """"101 000 m³" (milhar separado por espaço, padrão francês/ISO) vira "101.000 m³": senão vira
+    dois números, "101" e "000" (job 887)."""
+    return _MILHAR_ESPACO.sub(lambda m: m.group(1) + re.sub(r"[ \u00a0\u202f]", ".", m.group(2)), texto or "")
+
+
 def atribuir(fatos_brutos: list[dict], web_facts: list[dict], outliers: list[str] | None = None) -> list[dict]:
     """Fatos da extração → fatos com ID, fontes que de fato contêm seus números e status.
     Fato cujo número não está em fonte nenhuma é descartado."""
@@ -109,7 +118,7 @@ def atribuir(fatos_brutos: list[dict], web_facts: list[dict], outliers: list[str
                 planejamento |= numeros(frase)
     saida: list[dict] = []
     for bruto in fatos_brutos:
-        texto = str(bruto.get("texto", "")).strip()
+        texto = milhar_com_espaco(str(bruto.get("texto", "")).strip())
         if not texto:
             continue
         citadas = []
@@ -419,7 +428,7 @@ def extenso_para_algarismos(texto: str) -> str:
         if novo.endswith(("ão", "ões")) and not re.match(r"\s+de\b", texto[m.end():]):
             novo += " de"  # "um milhão e oitocentos mil metros" -> "1,8 milhão de metros"
         return novo
-    return _SEQ_NUM.sub(troca, texto or "")
+    return milhar_com_espaco(_SEQ_NUM.sub(troca, texto or ""))
 
 
 def fato_repetido(script: dict) -> str | None:
