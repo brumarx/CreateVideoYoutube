@@ -933,3 +933,10 @@ def test_titulo_do_assunto():
     t = "Como o Canal do Panamá sobe navios 26 metros nas Esclusas de Gatún?"
     assert not _titulo_do_assunto("Esclusas de Gatún: 16 metros", narr, "Esclusas de Gatún", t)
     assert _titulo_do_assunto("Esclusas de Gatún: Sobe cerca de 26 metros", narr, "Esclusas de Gatún", t)
+
+
+def test_hype_sai_do_texto_final():
+    from src.fatos import remover_redundantes
+    s = {"scenes": [{"narration": "E aí! Um navio sobe 26 metros."},
+                    {"narration": "O que poucos sabem é que esse sistema é dividido em degraus. Guarde essa informação, porque ela muda tudo."}]}
+    assert remover_redundantes(s)["scenes"][1]["narration"] == "Esse sistema é dividido em degraus."

@@ -493,6 +493,13 @@ def _raizes(frase: str) -> set[str]:
     return {w[:5] for w in re.findall(r"\w+", frase.lower()) if len(w) >= 5}
 
 
+# suspense vazio no começo da frase sai, o fato fica ("O que poucos sabem é que o sistema...", job 889)
+_PREFIXO_HYPE = re.compile(r"^(e\s+)?(o que (pouca gente|poucos) sab(e|em)( [ée])? que|aqui vem a virada:?|guarde (essa|esta) "
+                           r"informa[çc][ãa]o:?|acredite( se quiser)?:?|prepare-se:?)\s*", re.I)
+_SO_HYPE = re.compile(r"^(e\s+)?(guarde (essa|esta) informa[çc][ãa]o|isso muda tudo|e aqui vem a virada|prepare-se)[^.!?]*[.!]$",
+                      re.I)
+
+
 _SOLTA = re.compile(r"\b(é|foi|era) (um|uma) (deles|delas)\b", re.I)
 
 
@@ -511,6 +518,12 @@ def remover_redundantes(script: dict) -> dict:
         for f in re.split(r"(?<=[.!?])\s+", str(sc.get("narration", "")).strip()):
             if not f.strip():
                 continue
+            if _SO_HYPE.match(f.strip()):
+                removidas.append(f)
+                continue
+            if _PREFIXO_HYPE.match(f) and len(_PREFIXO_HYPE.sub("", f).split()) >= 4:
+                f = _PREFIXO_HYPE.sub("", f)
+                f = f[:1].upper() + f[1:]
             nums, raizes = numeros(f), _raizes(f)
             if i > 0 and not _frase_livre(f):
                 if nums and nums <= ditos:
