@@ -195,6 +195,23 @@ def _algum_igual(xs: set[str], ys: set[str]) -> bool:
     return False
 
 
+def sem_medida_repetida(fatos: list[dict]) -> list[dict]:
+    """Para o escritor: um fato por medida. Fatos com o mesmo valor (arredondamento de até 2%) na
+    mesma unidade dizem a mesma coisa ("26 metros", "25,9 metros", "26 metros em três etapas", job
+    867: três cenas repetindo o desnível); fica o mais forte, na ordem original."""
+    ordem = sorted(fatos, key=_forca, reverse=True)
+    vistos: list[set[tuple[str, str]]] = []
+    ficam: set[str] = set()
+    for f in ordem:
+        pares = {(n, u) for n, u in _pares(f["texto"]) if u}
+        repetido = pares and any(
+            all(any(u == u2 and _algum_igual({n}, {n2}) for n2, u2 in v) for n, u in pares) for v in vistos)
+        if not repetido:
+            ficam.add(f["id"])
+            vistos.append(pares)
+    return [f for f in fatos if f["id"] in ficam]
+
+
 def remover_conflitos(fatos: list[dict], outliers: list[str] | None = None) -> list[dict]:
     """Dois fatos que dão valores DIFERENTES para a mesma medida (mesma unidade e mesmo assunto):
     fica o mais forte (status melhor; empate no status, mais publicadores independentes). Ex.:
@@ -327,7 +344,9 @@ def numero_repetido(script: dict) -> str | None:
             for m in re.finditer(r"\d+(?:[.,]\d+)*", frase):
                 if _eh_data(frase, m.start(), m.group()):
                     continue
-                contagem[canon(m.group())] = contagem.get(canon(m.group()), 0) + 1
+                chave = canon(m.group())
+                chave = next((k for k in contagem if _algum_igual({k}, {chave})), chave)
+                contagem[chave] = contagem.get(chave, 0) + 1
     pior = max(contagem.items(), key=lambda kv: kv[1], default=("", 0))
     return f"o número {pior[0]} aparece em {pior[1]} frases" if pior[1] > NUMERO_MAX_FRASES else None
 
@@ -381,9 +400,10 @@ def conferir_frases(script: dict, fatos: list[dict]) -> dict:
             limpa = re.sub(r"\s+([.!?,;:])", r"\1", _ID.sub("", frase)).strip()
             nums = numeros(limpa)
             citados = [por_id[i] for i in ids if i in por_id]
-            if com_marcas and citados and not nums and not _frase_livre(limpa) and _alem_dos_fatos(limpa, citados):
-                # marca de fato numa frase sem número que diz mais do que o fato ("A gravidade enche cada
-                # câmara sem bombas" marcada com o fato das câmaras, job 865): vai para a checagem por citação
+            if com_marcas and citados and not _frase_livre(limpa) and _alem_dos_fatos(limpa, citados):
+                # frase marcada que diz mais do que o fato ("A gravidade enche cada câmara sem bombas", job
+                # 865; "1,8 milhão de m³ — daria uma muralha ao redor de uma cidade", job 867): o número
+                # confere, o resto não — vai para a checagem por citação
                 pendentes.append(limpa)
             if com_marcas and not citados and not nums and not _frase_livre(
                     limpa, " ".join(x for x in frases_limpas if x != limpa)):

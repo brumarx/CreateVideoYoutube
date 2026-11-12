@@ -1135,8 +1135,10 @@ def generate_script(
         fatos_origem, fontes_outlier = extraido
         fatos_verificados = [f["texto"] for f in fatos_origem]
         # oficiais e confirmados primeiro; secundário só para chegar a 8 (cada um vira "estima-se")
-        principais = [f for f in fatos_origem if f["status"] != "secundario"]
-        secundarios = [f for f in fatos_origem if f["status"] == "secundario"]
+        from .fatos import sem_medida_repetida
+        distintos = sem_medida_repetida(fatos_origem)
+        principais = [f for f in distintos if f["status"] != "secundario"]
+        secundarios = [f for f in distintos if f["status"] == "secundario"]
         para_escrever = principais + secundarios[:max(0, 8 - len(principais))]
         log.info("escritor recebe só a lista fechada: %d fatos (%d oficiais/confirmados, %d secundários)",
                  len(para_escrever), len(principais), len(para_escrever) - len(principais))
@@ -1645,7 +1647,16 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
                         "" if miniatura_ok else "miniatura sem texto")
             # miniatura sem trecho bom: o nome do assunto (texto completo, escrito na narração)
             assunto_mini = assunto.upper() if copiado_do_texto(assunto, narration) and len(assunto.split()) <= 4 else None
-            return {**final, "title": final["title"] if titulo_ok else assunto,
+            titulo_reserva = assunto
+            if not titulo_ok and _assunto_do_tema(topic):
+                # "Esclusas de Gatún" sozinho não diz nada: o nome + o primeiro trecho com número da
+                # narração que passa nas mesmas regras de cópia, fronteira e tamanho
+                titulo_reserva = next((t for t in (f"{assunto}: {trecho[:1].upper()}{trecho[1:]}"
+                                                   for trecho in _frases_com_numero(narration))
+                                       if len(t) <= 60 and titulo_copiado(t, narration, assunto)
+                                       and not termina_solto(t)
+                                       and termina_em_fronteira(t.split(": ", 1)[1], narration)), assunto)
+            return {**final, "title": final["title"] if titulo_ok else titulo_reserva,
                     "thumbnail_text": final.get("thumbnail_text") if miniatura_ok else assunto_mini}
     log.info("título/miniatura gerados do roteiro final: %r / %r", novo["title"], novo["thumbnail_text"])
     return novo

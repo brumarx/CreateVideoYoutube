@@ -136,10 +136,14 @@ def test_miniatura_errada_duas_vezes_sai_sem_texto_e_o_titulo_certo_fica(monkeyp
     assert out["title"] == "Túnel Seikan: 53,85 km de extensão" and out["thumbnail_text"] == "TÚNEL SEIKAN"
 
 
-def test_titulo_errado_duas_vezes_vira_o_assunto(monkeypatch):
+def test_titulo_errado_duas_vezes_vira_o_assunto_com_trecho_da_narracao(monkeypatch):
+    from src.fatos import titulo_copiado
     ruim = json.dumps({"titulo": "53,85 km sob o mar", "thumbnail_text": "TÚNEL SEIKAN", "thumbnail_image_prompt": "p"})
     out, _ = _pacote(monkeypatch, [ruim, ruim])
-    assert out["title"] == "Túnel Seikan" and out["thumbnail_text"] == "TÚNEL SEIKAN"
+    # 12/11 (job 867): o nome sozinho não diz nada; nome + trecho com número copiado da narração
+    assert out["title"].startswith("Túnel Seikan: ") and len(out["title"]) <= 60 and out["thumbnail_text"] == "TÚNEL SEIKAN"
+    assert "sob o mar" not in out["title"]
+    print(out["title"])
 
 
 

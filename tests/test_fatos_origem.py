@@ -739,3 +739,27 @@ def test_arredondamento_nao_e_contradicao():
     from src.fatos import _algum_igual
     assert _algum_igual({"25.9"}, {"26"})
     assert not _algum_igual({"53.85"}, {"65.23"})
+
+
+# ---------- job 867: medida repetida, frase com número e enfeite, título de reserva
+def test_escritor_recebe_um_fato_por_medida():
+    from src.fatos import sem_medida_repetida
+    fatos = [{"id": "F1", "texto": "As eclusas elevam navios em cerca de 26 metros.", "status": "oficial", "fontes": ["a"]},
+             {"id": "F2", "texto": "A elevação total nas três etapas é de 25,9 metros.", "status": "secundario", "fontes": ["b"]},
+             {"id": "F3", "texto": "As câmaras exigiram 1,8 milhão de metros cúbicos de concreto.", "status": "secundario", "fontes": ["b"]}]
+    assert [f["id"] for f in sem_medida_repetida(fatos)] == ["F1", "F3"]
+
+
+def test_frase_com_numero_e_enfeite_vai_para_checagem():
+    from src.fatos import conferir_frases
+    fatos = [{"id": "F1", "texto": "As três câmaras exigiram mais de 1,8 milhão de metros cúbicos de concreto.", "status": "oficial", "fontes": []}]
+    frase = "Três câmaras exigiram 1,8 milhão de metros cúbicos de concreto, volume que daria uma muralha ao redor de uma cidade média [F1]."
+    out = conferir_frases({"scenes": [{"narration": frase}]}, fatos)
+    assert out["_sem_fato"] and "muralha" in out["_sem_fato"][0]
+    simples = conferir_frases({"scenes": [{"narration": "As três câmaras exigiram 1,8 milhão de metros cúbicos de concreto [F1]."}]}, fatos)
+    assert not simples.get("_sem_fato")
+
+
+def test_numero_arredondado_conta_como_repetido():
+    from src.fatos import numero_repetido
+    assert numero_repetido({"scenes": [{"narration": "Sobe 26 metros. São 25,9 metros. Os 26 metros vêm do lago."}]})
