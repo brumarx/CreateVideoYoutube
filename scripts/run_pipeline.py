@@ -91,6 +91,16 @@ def _assunto_tema(topic: str) -> str:
     return _assunto_do_tema(topic)
 
 
+def _foto_real_da_miniatura(fotos: list[tuple[str, str]]) -> str | None:
+    """Foto real do assunto que mais apareceu no vídeo (a primeira usada dele); None sem foto real."""
+    if not fotos:
+        return None
+    from collections import Counter
+
+    principal = Counter(assunto for assunto, _ in fotos).most_common(1)[0][0]
+    return next(url for assunto, url in fotos if assunto == principal)
+
+
 def _comentario_do_texto(script: dict, n_cenas: int) -> str:
     """Canal de fatos: o comentário fixado é a última pergunta da própria narração aprovada (nada fora
     do texto validado — job 858: a pergunta gerada citava o ferry, que o roteiro não diz)."""
@@ -1239,6 +1249,7 @@ def run(
         infographics = InfographicRenderer(width, height)
         real_used: set[str] = set()  # arquivo do Commons não repete no vídeo
         real_found: list[str] = []  # assuntos que já deram foto (reserva de cena sem foto própria)
+        real_photo_urls: list[tuple[str, str]] = []  # (assunto, url) das fotos reais usadas — a miniatura usa a do assunto principal
         gols = [g for g in ((facts or {}).get("gols") or []) if isinstance(g, dict)]
         gols_usados: set[int] = set()
         # fotos REAIS do jogo (pós-jogo, ver botafogo_data.match_photos): em
@@ -1475,6 +1486,7 @@ def run(
                                 real_used.add(cand["title"])
                                 real_credits.append(cand["credit"])
                                 real_found.append(subject)
+                                real_photo_urls.append((subject, cand["url"]))
                                 real_frame = frame
                                 log.info("[%s] cena %d: foto real de %r (%s)", job_id, i + 1, subject, cand["title"])
                                 break
@@ -1734,6 +1746,12 @@ def run(
             real_photo_url = foto_pessoa_conhecida(topic)
             if real_photo_url:
                 log.info("[%s] foto oficial encontrada no banco pra pessoa citada no tema", job_id)
+        if not real_photo_url:
+            # o vídeo tem foto real (Commons) do assunto: a miniatura usa a de verdade em vez de a IA
+            # desenhar o assunto (Akashi Kaikyō, job 862: saiu uma ponte estaiada, que não é a ponte)
+            real_photo_url = _foto_real_da_miniatura(real_photo_urls)
+            if real_photo_url:
+                log.info("[%s] miniatura com a foto real do assunto: %s", job_id, real_photo_url)
         # frame do próprio vídeo como reserva se a IA de imagem estiver fora
         # (cena de impacto, senão a do meio do gancho)
         frame_scene = next((k for k, sc in enumerate(script["scenes"]) if sc.get("impact_beat")), 0)

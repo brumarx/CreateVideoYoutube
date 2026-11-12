@@ -374,3 +374,13 @@ def test_titulo_abre_com_o_nome_do_assunto(titulo, esperado):
     from src.fatos import titulo_com_assunto, titulo_copiado
     assert titulo_com_assunto(titulo, "Ponte Akashi Kaikyō") == esperado
     assert titulo_copiado("Vão central mede 1991 metros", NARR_PONTE, "Ponte Akashi Kaikyō") is False
+
+
+def test_miniatura_usa_a_foto_real_do_assunto_principal():
+    import importlib.util, pathlib
+    spec = importlib.util.spec_from_file_location("rp_m", pathlib.Path(__file__).parent.parent / "scripts" / "run_pipeline.py")
+    rp = importlib.util.module_from_spec(spec); spec.loader.exec_module(rp)
+    fotos = [("Great Belt Bridge", "u0"), ("Akashi Kaikyo Bridge", "u1"), ("Akashi Kaikyo Bridge", "u2")]
+    assert rp._foto_real_da_miniatura(fotos) == "u1"
+    assert rp._foto_real_da_miniatura([]) is None
+    assert "real_photo_url = _foto_real_da_miniatura(real_photo_urls)" in PIPELINE
