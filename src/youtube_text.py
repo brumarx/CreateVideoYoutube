@@ -17,14 +17,18 @@ def fit_description(description: str, limit: int = YOUTUBE_DESCRIPTION_LIMIT) ->
         return description
     head, sep, resto = description.partition(_SOURCES_HEAD)
     if sep:
-        fontes, sep2, cauda = resto.partition("\n\n")  # a lista de fontes termina na primeira linha em branco
-        linhas = fontes.split("\n")
-        while linhas and _tamanho(head + sep + "\n".join(linhas) + sep2 + cauda) > limit:
-            linhas.pop()
-        if linhas:
-            description = head + sep + "\n".join(linhas) + sep2 + cauda
+        linhas = resto.split("\n")
+        # só as linhas "- fonte" saem, da última para a primeira; créditos das imagens (logo depois,
+        # sem linha em branco), relacionados e hashtags ficam
+        while _tamanho(head + sep + "\n".join(linhas)) > limit:
+            k = next((j for j in range(len(linhas) - 1, -1, -1) if linhas[j].startswith("- ")), None)
+            if k is None:
+                break
+            del linhas[k]
+        if any(x.startswith("- ") for x in linhas):
+            description = head + sep + "\n".join(linhas)
         else:
-            description = head + ("\n\n" + cauda if cauda else "")
+            description = head + "\n\n" + "\n".join(linhas).lstrip("\n")
     if _tamanho(description) > limit:
         cut = description.encode("utf-8")[:limit].decode("utf-8", "ignore")
         description = cut[:cut.rfind("\n")] if "\n" in cut else cut

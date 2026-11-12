@@ -951,9 +951,9 @@ def test_description_corta_so_fontes_e_mantem_creditos_e_hashtags():
 
     head = "Texto do vídeo.\n" * 20
     fontes = "\n\nFontes consultadas:\n" + "\n".join(f"- 明石海峡大橋 fonte {i}: https://exemplo.jp/" + "x" * 100 for i in range(60))
-    cauda = "\n\nFotos: Fulano (CC BY-SA 3.0, Wikimedia Commons: Ponte.jpg)\n\n#Shorts #Curiosidades"
+    cauda = "\nImagens de arquivo: Fulano (CC BY 3.0, Wikimedia Commons: Foto.jpg)\n\nFotos: Fulano (CC BY-SA 3.0, Wikimedia Commons: Ponte.jpg)\n\n#Shorts #Curiosidades"
     out = fit_description(head + fontes + cauda)
     assert len(out.encode("utf-8")) <= YOUTUBE_DESCRIPTION_LIMIT
     assert out.startswith("Texto do vídeo.") and "- 明石海峡大橋 fonte 0:" in out
-    assert out.endswith(cauda.strip("\n").split("\n")[-1]) and "Wikimedia Commons: Ponte.jpg" in out
+    assert out.endswith(cauda.strip("\n").split("\n")[-1]) and "Wikimedia Commons: Ponte.jpg" in out and "Commons: Foto.jpg" in out
     assert "fonte 59:" not in out
