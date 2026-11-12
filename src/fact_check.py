@@ -572,7 +572,8 @@ def review_script(
 
 _NUM_UNIDADE = re.compile(
     r"(\d+(?:[.,]\d+)*)\s*(km|quilômetros?|quilometros?|metros?|bilhões|bilhão|bilhoes|milhões|milhão|milhoes|"
-    r"mil|toneladas?|anos?|dias?|pessoas?|operários?|operario|trabalhadores?|mortos?|mortes?|%|por cento|ienes|dólares?|dolares|graus)?",
+    r"mil|toneladas?|anos?|dias?|pessoas?|operários?|operario|trabalhadores?|mortos?|mortes?|%|por cento|ienes|dólares?|dolares|graus|"
+    r"m(?![\wÀ-ÿ])|km(?![\wÀ-ÿ]))?",
     re.IGNORECASE)
 _UNIDADE_NORMAL = {"quilômetros": "km", "quilometros": "km", "quilômetro": "km", "metros": "m", "metro": "m",
                    "bilhões": "bi", "bilhão": "bi", "bilhoes": "bi", "milhões": "mi", "milhão": "mi", "milhoes": "mi",
@@ -642,6 +643,7 @@ def substituir_pela_lista(script: dict, problems: list[dict]) -> tuple[dict, lis
                    if unidade]
     if not fatos_pares:
         return script, problems
+    todos_pares = [(numero, unidade, fato) for fato in lista for numero, unidade in _pares_numero_unidade(fato)]
     scenes = [dict(sc) for sc in script.get("scenes", [])]
     restantes = []
     for p in problems:
@@ -657,15 +659,20 @@ def substituir_pela_lista(script: dict, problems: list[dict]) -> tuple[dict, lis
                 novo = frase
                 ok = True
                 casou = False  # algum número da frase bateu com a lista (mesma unidade e mesmo assunto)
+                casados: list[str] = []
                 for numero, unidade in _pares_numero_unidade(frase):
                     if not unidade:
                         continue
-                    if any(n == numero and u == unidade and _mesmo_assunto(frase, fato, lista)
-                           for n, u, fato in fatos_pares):
+                    iguais = [fato for n, u, fato in fatos_pares
+                              if n == numero and u == unidade and _mesmo_assunto(frase, fato, lista)]
+                    if iguais:
                         casou = True
+                        casados += iguais
                         continue
-                    if any(n == numero and u == unidade for n, u, _ in fatos_pares):
-                        ok = False  # número da lista com outro assunto ("23,3 km de extensão total")
+                    if any(n == numero for n, _, _ in todos_pares):
+                        # número que já está na lista (com outro assunto ou outra grafia da unidade): o
+                        # problema não é o número — trocar punha o valor de Gatún em Miraflores (job 865)
+                        ok = False
                         break
                     candidatos = {n for n, u, fato in fatos_pares
                                   if u == unidade and len(_conteudo(frase) & _conteudo(fato)) >= 2}
@@ -682,8 +689,10 @@ def substituir_pela_lista(script: dict, problems: list[dict]) -> tuple[dict, lis
                     sc["narration"] = sc.get("narration", "").replace(frase, novo, 1)
                     achou = True
                 elif ok and casou:
-                    # os números da frase já estão na lista, com o mesmo assunto: resolvido, sem trocar
-                    achou = True
+                    # os números da frase já estão na lista, com o mesmo assunto: resolvido, sem trocar —
+                    # se a frase não disser mais que esses fatos ("quase a metade do total de Gatún", job 865)
+                    from .fatos import _alem_dos_fatos
+                    achou = not _alem_dos_fatos(frase, [{"texto": f} for f in casados])
                 # frase sem número da lista (ex.: "Elas serviam de refúgio"): não é resolvida aqui
                 break
             if achou:

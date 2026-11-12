@@ -1208,7 +1208,9 @@ def generate_script(
                                f"errou: {news_problem}. Uma notícia por bloco, na ordem da lista, cada cena com o campo "
                                "\"noticia\"; título = a manchete mais forte, curta, sem \"notícias\"/\"hoje\" (em dia de "
                                "jogo, \"Botafogo x Adversário\" + gancho curto)."))
-            repeated = _repetition_problem(script) or _word_cap_problem(script, channel.word_caps)
+            from .fatos import numero_repetido
+            repeated = (_repetition_problem(script) or _word_cap_problem(script, channel.word_caps)
+                        or numero_repetido(script))
             if repeated:
                 issues.append((f"repetição ({repeated})", f"se repetiu: {repeated}. Cada dado é dito uma vez (no máximo "
                                "citado de novo numa comparação); sem frase-muleta."))
@@ -2172,7 +2174,7 @@ def fatos_com_numeros_da_fonte(fatos: list[str], fontes: str) -> list[str]:
 
 # versão da extração na chave do cache (mudou a regra de atribuição, o cache antigo não serve)
 EXTRACAO_VERSAO = 3
-EXTRACAO_PROMPT_ID = "fatos-com-fontes-numeradas-v1"  # trocar quando o texto do pedido mudar
+EXTRACAO_PROMPT_ID = "fatos-com-fontes-numeradas-v2"  # trocar quando o texto do pedido mudar
 
 
 def extract_facts_e_outliers(topic: str, web_facts: list[dict] | None) -> tuple[list[dict], list[str]] | None:
@@ -2195,6 +2197,9 @@ def extract_facts_e_outliers(topic: str, web_facts: list[dict] | None) -> tuple[
         "Extraia de 10 a 12 FATOS que estão LITERALMENTE nas FONTES, com o mesmo número, data, "
         "nome e unidade. Cada fato numa frase curta, e para cada um as fontes de onde saiu ([S1], [S2]...). "
         "Não acrescente nada que não esteja nas fontes e não junte fontes diferentes num número novo. "
+        "Cada fato em português do Brasil, sem palavra de outro idioma (job 865: \"O total lift\" foi "
+        "parar na narração; escreva \"a elevação total\"); quando a fonte dá a medida em pés e em metros, "
+        "use só a métrica. "
         'Responda SÓ JSON: {"fatos": [{"texto": "fato 1", "fontes": ["S1"]}, ...]}'
     )
     from .providers import is_strong_model

@@ -247,6 +247,11 @@ def estima_antes(frase: str, nums_alvo: set[str], vez: int = 0) -> str:
         if _JA_APROXIMADO.search(frase[:alvo.start()]):
             return frase
         palavra = _APROXIMACOES[vez % len(_APROXIMACOES)]
+        # "exatamente cerca de 85 pés" (job 865): número aproximado não é exato
+        antes = re.sub(r"\b(exatamente|precisamente|justamente|exatos|exatas)\s+$", "", frase[:alvo.start()], flags=re.I)
+        depois = re.sub(r"^(\d+(?:[.,]\d+)*\s*\w*)\s+exat[oa]s\b", r"\1", frase[alvo.start():], flags=re.I)
+        frase = antes + depois
+        alvo = re.compile(r"\d+(?:[.,]\d+)*").search(frase, len(antes))
         if alvo.start() == 0:
             palavra = palavra[0].upper() + palavra[1:]
         return frase[:alvo.start()] + palavra + " " + frase[alvo.start():]
@@ -285,6 +290,28 @@ def _premissa_nova(frase: str, resto: str) -> bool:
     novas = [w for w in re.findall(r"\w+", frase.lower())
              if len(w) >= 5 and w not in _PERGUNTA_LIVRE and w[:5] not in base]
     return len(novas) >= 3
+
+
+def _alem_dos_fatos(frase: str, citados: list[dict]) -> bool:
+    """Frase com três ou mais palavras de conteúdo que nenhum fato citado tem."""
+    base = {w[:5] for f in citados for w in re.findall(r"\w+", f["texto"].lower()) if len(w) >= 5}
+    return len([w for w in re.findall(r"\w+", frase.lower()) if len(w) >= 5 and w[:5] not in base]) >= 3
+
+
+NUMERO_MAX_FRASES = 2  # o mesmo número em mais frases que isso soa repetido ("26 metros" 5x, job 865)
+
+
+def numero_repetido(script: dict) -> str | None:
+    """Número (fora ano) dito em mais de NUMERO_MAX_FRASES frases do roteiro."""
+    contagem: dict[str, int] = {}
+    for sc in script.get("scenes", []):
+        for frase in _FRASES.split(_ID.sub("", sc.get("narration", ""))):
+            for m in re.finditer(r"\d+(?:[.,]\d+)*", frase):
+                if _eh_data(frase, m.start(), m.group()):
+                    continue
+                contagem[canon(m.group())] = contagem.get(canon(m.group()), 0) + 1
+    pior = max(contagem.items(), key=lambda kv: kv[1], default=("", 0))
+    return f"o número {pior[0]} aparece em {pior[1]} frases" if pior[1] > NUMERO_MAX_FRASES else None
 
 
 def _frase_livre(frase: str, resto: str | None = None) -> bool:
@@ -336,6 +363,10 @@ def conferir_frases(script: dict, fatos: list[dict]) -> dict:
             limpa = re.sub(r"\s+([.!?,;:])", r"\1", _ID.sub("", frase)).strip()
             nums = numeros(limpa)
             citados = [por_id[i] for i in ids if i in por_id]
+            if com_marcas and citados and not nums and not _frase_livre(limpa) and _alem_dos_fatos(limpa, citados):
+                # marca de fato numa frase sem número que diz mais do que o fato ("A gravidade enche cada
+                # câmara sem bombas" marcada com o fato das câmaras, job 865): vai para a checagem por citação
+                pendentes.append(limpa)
             if com_marcas and not citados and not nums and not _frase_livre(
                     limpa, " ".join(x for x in frases_limpas if x != limpa)):
                 # afirmação sem fato citado: não sai direto — vai para a verificação por citação nas

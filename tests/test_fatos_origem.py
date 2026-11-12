@@ -699,3 +699,35 @@ def test_premissa_le_a_wikipedia_no_canal_de_fatos():
     pipeline = (Path(__file__).parent.parent / "scripts" / "run_pipeline.py").read_text(encoding="utf-8")
     assert "premise = check_premise(topic, facts, premise_fontes)" in pipeline
     assert "_mantem_assunto(topic, premise[1])" in pipeline
+
+
+# ---------- job 865: troca de número entre assuntos, "exatamente cerca de", marca sem número, número repetido
+def test_troca_nao_poe_numero_de_outro_assunto():
+    from src.fact_check import substituir_pela_lista
+    lista = ["As Esclusas de Gatún erguem navios em cerca de 26 metros (85 pés).",
+             "O lift das Esclusas de Miraflores, de dois degraus, é de 54 ft (16 m)."]
+    frase = "Miraflores eleva 16 metros em dois degraus, quase a metade do total de Gatún."
+    roteiro = {"scenes": [{"narration": frase}], "_fatos_verificados": lista}
+    problema = {"tipo": "fato_nao_confirmado", "termo": frase}
+    novo, restantes = substituir_pela_lista(roteiro, [problema])
+    assert "16 metros" in novo["scenes"][0]["narration"] and restantes == [problema]
+
+
+def test_aproximado_nao_fica_exato():
+    from src.fatos import estima_antes
+    out = estima_antes("O desnível total nos três degraus é de exatamente 85 pés.", {"85"}, 0)
+    assert "exatamente" not in out and "85" in out
+
+
+def test_frase_marcada_sem_numero_que_diz_mais_que_o_fato_vai_para_checagem():
+    from src.fatos import conferir_frases
+    fatos = [{"id": "F1", "texto": "As Esclusas de Gatún têm três câmaras que erguem navios 26 metros.", "status": "oficial", "fontes": []}]
+    roteiro = {"scenes": [{"narration": "As câmaras erguem navios 26 metros [F1]. A gravidade move a água dos lagos superiores para encher cada câmara sem bombas [F1]."}]}
+    assert conferir_frases(roteiro, fatos)["_sem_fato"] == ["A gravidade move a água dos lagos superiores para encher cada câmara sem bombas."]
+
+
+def test_numero_repetido_em_muitas_frases():
+    from src.fatos import numero_repetido
+    texto = "Sobe 26 metros. São 26 metros no total. Os 26 metros vêm do lago. Em 1914 abriu. Em 1914 mesmo."
+    assert "26" in numero_repetido({"scenes": [{"narration": texto}]})
+    assert numero_repetido({"scenes": [{"narration": "Sobe 26 metros. São 26 metros no total. Abriu em 1914."}]}) is None
