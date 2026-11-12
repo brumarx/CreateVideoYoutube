@@ -1190,7 +1190,12 @@ def generate_script(
                            "Cada número fica com o MESMO sujeito e a MESMA medida do fato: se o fato diz 'as eclusas "
                            "medem 300 pés de um lado ao outro', não escreva 'cada câmara tem 300 pés de largura'. "
                            "A pergunta final não afirma nada novo (nada de 'sem cabos nem motores'). "
-                           "Números SEMPRE em algarismos, como no fato ('26 metros', '1,8 milhão'), nunca por extenso."}]
+                           "Números SEMPRE em algarismos, como no fato ('26 metros', '1,8 milhão'), nunca por extenso. "
+                           "Use TODOS os fatos da lista, cada um em UMA frase. As regras gerais de estilo (comparação "
+                           "do cotidiano, detalhe humano, número que dá pra imaginar, consequência com número) só valem "
+                           "com fato da lista: se a lista não tem, PULE essa parte — comparação inventada ('altura de "
+                           "um prédio de 8 andares', '100 mil toneladas', '12 horas de viagem') é cortada e esvazia "
+                           "o vídeo."}]
     # 11/11: o plano também só lê a lista fechada nos canais de fatos. Com as fontes brutas,
     # ele trazia detalhes fora da lista (causa de morte, Kuroshio II) e o escritor os copiava
     plan = plan_story(topic, facts, writer_sources if fatos_verificados else web_facts)
