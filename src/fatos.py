@@ -524,6 +524,37 @@ def remover_redundantes(script: dict) -> dict:
     return {**script, "scenes": [sc for sc in cenas if sc["narration"].strip()]}
 
 
+def completar_com_fatos(script: dict, fatos: list[dict] | None) -> dict:
+    """Texto final que as remoções esvaziaram (jobs 880-884: o escritor enfeitava, a validação
+    cortava, sobravam 70-130 palavras e 1 número) é completado com fatos verificados ainda não
+    ditos, cada um com o próprio texto do fato (já validado: nada novo entra). Oficial/confirmado
+    primeiro, com número primeiro; fato cuja medida a narração já diz fica de fora. Entram antes
+    da última cena (a da pergunta final) até o texto deixar de ser magro."""
+    if not fatos or not roteiro_magro(script):
+        return script
+    cenas = [dict(sc) for sc in script.get("scenes", [])]
+    narr = " ".join(str(sc.get("narration", "")) for sc in cenas)
+    usados = {i for sc in cenas for i in sc.get("fatos") or []}
+    ordem = sorted(sem_medida_repetida(fatos), key=lambda f: (f.get("status") == "secundario", not numeros(f["texto"])))
+    novos = []
+    for f in ordem:
+        if f["id"] in usados or mede_o_que_ja_foi_dito(f["texto"], narr) or (numeros(f["texto"]) and numeros(f["texto"]) <= numeros(narr)):
+            continue
+        if _raizes(f["texto"]) and any(len(_raizes(f["texto"]) & _raizes(x)) >= 0.8 * len(_raizes(f["texto"]))
+                                       for x in re.split(r"(?<=[.!?])\s+", narr)):
+            continue  # já dito com outras palavras
+        novos.append({"narration": f["texto"].strip(), "fatos": [f["id"]]})
+        narr += " " + f["texto"]
+        teste = {**script, "scenes": cenas[:-1] + novos + cenas[-1:]}
+        if not roteiro_magro(teste):
+            break
+    if not novos:
+        return script
+    log.warning("texto final magro completado com %d fato(s) verificado(s): %s", len(novos),
+                "; ".join(n["narration"][:50] for n in novos))
+    return {**script, "scenes": cenas[:-1] + novos + cenas[-1:] if len(cenas) > 1 else cenas + novos}
+
+
 def roteiro_magro(script: dict) -> str | None:
     """Motivo para reprovar o texto final que as remoções esvaziaram (job 863: 9 de 11 afirmações sem
     fonte saíram e sobraram 4 cenas, 63 palavras e nenhum número); None se tem corpo."""

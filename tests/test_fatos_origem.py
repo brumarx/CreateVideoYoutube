@@ -892,3 +892,19 @@ def test_mesmo_sujeito():
     fato = ["O complexo das Esclusas de Gatún tem cerca de 1,5 km de comprimento."]
     assert not mesmo_sujeito("Cada câmara tem cerca de 1,5 quilômetro de comprimento.", fato)
     assert mesmo_sujeito("As eclusas de Gatún medem 1,5 km.", fato)
+
+
+def test_completar_com_fatos():
+    from src.fatos import completar_com_fatos, roteiro_magro
+    fatos = [{"id": "F1", "texto": "As Esclusas de Gatún elevam navios em cerca de 26 metros.", "status": "confirmado"},
+             {"id": "F2", "texto": "As três câmaras exigiram mais de 1,8 milhão de metros cúbicos de concreto.", "status": "confirmado"},
+             {"id": "F3", "texto": "As Esclusas de Gatún foram concluídas em 1914.", "status": "confirmado"},
+             {"id": "F4", "texto": "Existem 5 conjuntos de esclusas no Canal: Pedro Miguel, Agua Clara, Miraflores, Gatún e Cocolí.", "status": "confirmado"},
+             {"id": "F5", "texto": "A elevação das duas etapas de Miraflores é 16,5 metros.", "status": "secundario"},
+             {"id": "F6", "texto": "O canal tem 82 km de extensão entre o Atlântico e o Pacífico.", "status": "confirmado"}]
+    s = {"scenes": [{"narration": "E aí, mente curiosa! Um navio sobe 26 metros nas eclusas de Gatún, no lado atlântico do canal.", "fatos": ["F1"]},
+                    {"narration": "Você teria coragem de atravessar esse canal?"}]}
+    out = completar_com_fatos(s, fatos)
+    texto = " ".join(sc["narration"] for sc in out["scenes"])
+    assert "1914" in texto and "1,8 milhão" in texto and texto.count("26 metros") == 1
+    assert out["scenes"][-1]["narration"] == "Você teria coragem de atravessar esse canal?"

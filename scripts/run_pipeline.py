@@ -1103,6 +1103,10 @@ def run(
         if channel_name in FATOS_CANAIS:
             # orçamento, "estima-se" e número sem fato: pelos fatos com origem (src/fatos.py)
             # moeda por extenso de novo: a troca por fato pode ter trazido "¥" ou "US$" para a narração
+            # 12/11 (jobs 880-884): texto esvaziado pelas remoções é completado com fatos verificados
+            # não usados (texto do próprio fato), antes do "estima-se" dos secundários
+            from src.fatos import completar_com_fatos
+            script = completar_com_fatos(script, script.get("_fatos"))
             script = _normalize_currency(ajustar_texto_final(script))
             if not long_form:
                 # Short tem teto de tempo: confere o tamanho AGORA (antes do título e da voz), tirando
