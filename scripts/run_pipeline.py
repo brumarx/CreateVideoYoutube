@@ -1088,7 +1088,10 @@ def run(
         # pergunta de transição que a cena seguinte não responde (job 363)
         script = fix_dangling_hooks(script)
         # palavra repetida em frases vizinhas ("partidas", "futuro" — 22/10)
-        script = vary_close_repeats(script, topic)
+        if channel_name not in FATOS_CANAIS:
+            # 12/11 (job 869): nos canais de fatos o texto validado não é reescrito por IA — a troca por
+            # "sinônimo" pôs "extensão" no lugar de "largura" e criou "sem cabos nem motores"
+            script = vary_close_repeats(script, topic)
         # português revisado antes de narrar: a narração vira legenda na tela
         script = fix_script(script, channel.language)
         # barra comparativa só com valor falado na cena, sem ranking (22/10)

@@ -392,3 +392,8 @@ def test_miniatura_usa_a_foto_real_do_assunto_principal():
 
 def test_corte_por_fato_repete_ate_tres_rodadas():
     assert "RODADAS_CORTE = 3" in PIPELINE and "for rodada in range(RODADAS_CORTE):" in PIPELINE
+
+
+def test_texto_validado_do_canal_de_fatos_nao_e_reescrito_por_ia():
+    assert '''if channel_name not in FATOS_CANAIS:
+            # 12/11 (job 869)''' in PIPELINE

@@ -1146,7 +1146,10 @@ def generate_script(
                            "trecho": lista_para_escritor(para_escrever)
                            + "\nNADA ALÉM DESTA LISTA: nenhuma causa, nome, data, número ou detalhe que não esteja nos F acima. "
                            "No FIM de cada frase que afirma algo, escreva entre colchetes os IDs dos fatos usados, "
-                           "ex.: 'O túnel tem 53,85 km [F1].' Pergunta, saudação e convite aos comentários não levam ID."}]
+                           "ex.: 'O túnel tem 53,85 km [F1].' Pergunta, saudação e convite aos comentários não levam ID. "
+                           "Cada número fica com o MESMO sujeito e a MESMA medida do fato: se o fato diz 'as eclusas "
+                           "medem 300 pés de um lado ao outro', não escreva 'cada câmara tem 300 pés de largura'. "
+                           "A pergunta final não afirma nada novo (nada de 'sem cabos nem motores')."}]
     # 11/11: o plano também só lê a lista fechada nos canais de fatos. Com as fontes brutas,
     # ele trazia detalhes fora da lista (causa de morte, Kuroshio II) e o escritor os copiava
     plan = plan_story(topic, facts, writer_sources if fatos_verificados else web_facts)
