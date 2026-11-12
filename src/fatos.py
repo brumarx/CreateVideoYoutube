@@ -409,7 +409,18 @@ def _frase_livre(frase: str, resto: str | None = None) -> bool:
     return (f.endswith("!") and len(f.split()) <= 6) or bool(_LIVRE.search(f))
 
 
-MIN_NUMEROS_FINAL = 4    # Fractal: dado concreto é o vídeo; com menos de 4 números distintos não tem base
+def frases_sem_marca(script: dict) -> list[str]:
+    """Frases que afirmam algo e não trazem a marca [F#] do escritor (job 876: 10 frases sem marca,
+    9 sem fonte, o roteiro esvaziou). Pergunta, saudação e convite não precisam de marca."""
+    texto = " ".join(str(sc.get("narration", "")) for sc in script.get("scenes", []))
+    return [f.strip() for f in re.split(r"(?<=[.!?])\s+", texto)
+            if f.strip() and not _ID.search(f) and not _frase_livre(_ID.sub("", f))]
+
+
+MAX_SEM_MARCA = 1
+
+
+MIN_NUMEROS_FINAL = 4   # Fractal: dado concreto é o vídeo; com menos de 4 números distintos não tem base
 MIN_PALAVRAS_FINAL = 100  # ~46 s de voz; abaixo disso as remoções deixaram só o esqueleto
 
 

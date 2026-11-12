@@ -848,3 +848,10 @@ def test_suspense_vazio_e_siglas():
     assert _hype_problem(s) and _siglas_problem(s)
     ok = {"scenes": [{"narration": "O túnel tem 53 km. Ele liga Honshu a Hokkaido pela JR."}]}
     assert _hype_problem(ok) is None and _siglas_problem(ok) is None
+
+
+def test_frases_sem_marca():
+    from src.fatos import frases_sem_marca
+    s = {"scenes": [{"narration": "E aí, mente curiosa! O túnel tem 53,85 km [F1]. Ele foi aberto em 1988. "
+                                  "Você teria coragem?"}]}
+    assert frases_sem_marca(s) == ["Ele foi aberto em 1988."]
