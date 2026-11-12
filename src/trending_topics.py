@@ -141,12 +141,8 @@ def record_trend_use(channel: str, topic: str, source: str, success: bool = True
 
         # Inicializa estruturas
         if "sources" not in data:
-            data["sources"] = {
-                "x_twitter": {"success": 0, "failed": 0, "last_success": None},
-                "google_trends": {"success": 0, "failed": 0, "last_success": None},
-                "youtube_trends": {"success": 0, "failed": 0, "last_success": None},
-                "config_fallback": {"success": 0, "failed": 0, "last_success": None},
-            }
+            # única fonte real (RSS do Google Trends, ver _fetch_trends)
+            data["sources"] = {"google_trends": {"success": 0, "failed": 0, "last_success": None}}
         if "channels" not in data:
             data["channels"] = {}
         if "history" not in data:

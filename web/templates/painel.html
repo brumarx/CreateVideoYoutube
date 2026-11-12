@@ -535,7 +535,7 @@
     {% for canal, tema in (trending.picks or {}).items() %}
     <div class="problem" style="--c:var(--off)"><div class="head"><span>{{ canal }}</span></div><div class="topic">{{ tema }}</div></div>
     {% endfor %}
-    {% if trending %}
+    {% if trending.sources %}
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-bottom: 24px;">
         <div style="background: var(--panel); border: 1px solid var(--line); padding: 12px; border-radius: 10px;">
           <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Taxa de Sucesso</div>
@@ -566,13 +566,13 @@
       <div style="margin-bottom: 24px;">
         {% for channel, stats in trending.channels.items() %}
           <div style="padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; margin-bottom: 8px;">
-            <div><strong>{{ channel }}</strong> • {{ stats.count }} vídeo{% if stats.count != 1 %}s{% endif %}</div>
-            <div style="font-size: 12px; color: var(--muted);">Via: {{ stats.source|default('—') }} • Último: "{{ stats.last_topic[:50] }}"</div>
+            <div><strong>{{ titles.get(channel, channel) }}</strong> • {{ stats.count }} rodada{% if stats.count != 1 %}s{% endif %} com tendências</div>
+            <div style="font-size: 12px; color: var(--muted);">Última: {{ ('"' ~ stats.last_topic[:60] ~ '"') if stats.last_topic else "nenhuma tendência era do nicho" }}</div>
           </div>
         {% endfor %}
       </div>
     {% else %}
-      <p style="color: var(--muted);">Sistema ainda sem dados. Use o pipeline normalmente e os dados aparecerão aqui em 5s.</p>
+      <p style="color: var(--muted);">Ainda sem rodada registrada: a contagem começa na próxima rodada diária (10h).</p>
     {% endif %}
   </section>
 </main>

@@ -31,3 +31,4 @@ data/queue.db-shm
 data/provider_health.lock
 data/provider_health.tmp
 data/paid_usage.json
+data/trending_monitor.json

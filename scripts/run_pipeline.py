@@ -58,7 +58,7 @@ from src.spellcheck import fix_script, fix_text
 from src.stock_media import search_stock_clip, search_stock_photo
 from src.thumbnail import make_thumbnail, photo_scene_frame, title_card
 from src.topics import pick_topic, topic_problem
-from src.trending_topics import get_trending_topics, topic_for_channel, filter_topics
+from src.trending_topics import get_trending_topics, topic_for_channel, filter_topics, record_trend_use
 from src.tts import narrate
 from src.video_qa import review_audio, review_video
 from src.visual_check import matches_scene
@@ -557,6 +557,7 @@ def _get_viral_topics_with_trending(
     Filtra para o canal específico (ex: Aprendervia busca temas de IA/carreira).
     """
     queries = list(fallback_queries or [])
+    selected: list[str] = []
 
     # canais que se beneficiam de trends: todos exceto Botafogo/Política que já têm sistema próprio
     if channel_name in ("aprendervia", "curiosidades", "motivacional"):
@@ -574,8 +575,12 @@ def _get_viral_topics_with_trending(
                             break
                 queries.extend(selected)
                 log.info("[%s] adicionados %d trending topics", channel_name, len(selected))
+            # aba Trending do painel: uso real (antes só tinha dado de demonstração)
+            record_trend_use(channel_name, ", ".join(selected) if trending else "", "google_trends",
+                             success=bool(trending))
         except Exception as exc:
             log.warning("[%s] trending topics falhou: %s — usando config", channel_name, exc)
+            record_trend_use(channel_name, "", "google_trends", success=False)
 
     return queries or fallback_queries or []
 
