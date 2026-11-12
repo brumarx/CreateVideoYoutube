@@ -1452,10 +1452,15 @@ _AFIRMACAO_SEM_NUMERO = {
     "unico": ("unic", "only", "sole", "unique"), "primeiro": ("primeir", "first", "pione"),
     "maior": ("maior", "larg", "bigg", "great", "long", "high", "tall"),
     "menor": ("menor", "small", "short", "least"),
+    # juízo e contrafactual (job 885: "uma das obras mais ousadas", "seria impossível transportar carga")
+    "impossivel": ("impossi", "imposs", "could not", "cannot", "unable"), "ousad": ("ousad", "dar", "bold", "audac"),
+    "incrive": ("incrive", "incredib", "amazing", "remarkab"), "genial": ("genia", "genius", "brillian"),
+    "revoluc": ("revoluc", "revolution"), "historic": ("histori", "landmark", "historic"),
 }
 _AFIRMACAO_RE = re.compile(
     r"\b(segundos|minutos?|horas?|semanas?|mes(es)?|decadas?|seculos?|dezenas|centenas|milhares|recordes?"
-    r"|unic[oa]s?|primeir[oa]s?|maior(es)?|menor(es)?)\b")
+    r"|unic[oa]s?|primeir[oa]s?|maior(es)?|menor(es)?|impossive(l|is)|ousad[oa]s?|incrive(l|is)|genia(l|is)"
+    r"|revolucion\w*|historic[oa]s?)\b")
 
 
 def afirmacoes_sem_trecho(frase: str, trecho: str) -> list[str]:
@@ -1468,7 +1473,7 @@ def afirmacoes_sem_trecho(frase: str, trecho: str) -> list[str]:
         antes = f[:m.start()].rstrip()
         if re.search(r"\d[\d.,]*$", antes) or (m[0] == "segundo" and not re.search(r"\b(um|o|alguns|poucos)$", antes)):
             continue
-        raiz = next(k for k in _AFIRMACAO_SEM_NUMERO if m[0].startswith(k[:4]))
+        raiz = next(k for k in _AFIRMACAO_SEM_NUMERO if m[0].startswith(k[:5] if len(k) > 5 else k[:4]))
         if not any(re.search(r"\b" + r, t) for r in _AFIRMACAO_SEM_NUMERO[raiz]):
             faltam.append(m[0])
     return faltam
