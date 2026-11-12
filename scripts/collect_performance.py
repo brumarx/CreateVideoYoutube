@@ -51,7 +51,7 @@ def fetch(channel: str, ids: list[str]) -> list[dict]:
             out.append({
                 "video_id": item["id"],
                 "published_at": snip.get("publishedAt", ""),
-                "title": snip.get("title", ""),
+                "title": (snip.get("title") or ""),
                 "duration_seconds": _seconds(item.get("contentDetails", {}).get("duration", "")),
                 "views": int(stats.get("viewCount", 0)),
                 "likes": int(stats.get("likeCount", 0)),

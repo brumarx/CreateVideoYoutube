@@ -372,7 +372,7 @@ def _duckduckgo(query: str, max_results: int) -> list[dict] | None:
         log.warning("busca duckduckgo falhou (%r): %s", query, exc)
         return None
     facts = [
-        {"titulo": r.get("title", ""), "url": r.get("href", ""), "trecho": (r.get("body") or "")[:500]}
+        {"titulo": (r.get("title") or ""), "url": r.get("href", ""), "trecho": (r.get("body") or "")[:500]}
         for r in results
         if r.get("body") and not any(d in (r.get("href") or "") for d in EXCLUDED_DOMAINS)
     ][:max_results]
@@ -415,7 +415,7 @@ def _tavily(query: str, max_results: int) -> list[dict] | None:
             return None
 
         facts = [
-            {"titulo": r.get("title", ""), "url": r.get("url", ""), "trecho": (r.get("content") or "")[:500]}
+            {"titulo": (r.get("title") or ""), "url": r.get("url", ""), "trecho": (r.get("content") or "")[:500]}
             for r in results
             if r.get("content")
         ]

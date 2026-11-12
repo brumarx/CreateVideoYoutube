@@ -267,7 +267,7 @@ def _vague_problems(script: dict, topic: str = "") -> list[dict]:
     """Avisos de REDAÇÃO (tipo frase_vaga): enchimento sem informação e palavra repetida
     perto na mesma frase. Não reprovam (ver review_script_result). Superlativo no título
     que a narração não diz continua sendo erro (titulo_nao_confere). Sem LLM."""
-    tema = {w[:6] for w in re.findall(r"\w{5,}", _fold(str(script.get("title", "")) + " " + topic))}
+    tema = {w[:6] for w in re.findall(r"\w{5,}", _fold(str((script.get("title") or "")) + " " + topic))}
     problems: list[dict] = []
     for i, sc in enumerate(script.get("scenes", [])):
         text = str(sc.get("narration", ""))
@@ -279,7 +279,7 @@ def _vague_problems(script: dict, topic: str = "") -> list[dict]:
                 problems.append({"tipo": "frase_vaga", "termo": sentence.strip()[:80],
                                  "motivo": f"cena {i + 1}: palavra repetida perto na mesma frase ({word})"})
     narration = _fold(" ".join(str(sc.get("narration", "")) for sc in script.get("scenes", [])))
-    for sup in _SUPERLATIVE_RE.findall(str(script.get("title", ""))):
+    for sup in _SUPERLATIVE_RE.findall(str((script.get("title") or ""))):
         if _fold(sup) not in narration:
             problems.append({"tipo": "titulo_nao_confere", "termo": f"título diz '{sup}'",
                              "motivo": f"título diz '{sup}' e a narração não diz"})
@@ -292,7 +292,7 @@ def _title_problems(script: dict) -> list[dict]:
     (09/11): ele olha o roteiro inteiro e não marca isso. Aqui é uma pergunta
     só, com o título e a narração. Sem resposta válida = não bloqueia."""
     narration = " ".join(sc.get("narration", "") for sc in script.get("scenes", []))
-    title, thumb = script.get("title", ""), script.get("thumbnail_text", "")
+    title, thumb = (script.get("title") or ""), (script.get("thumbnail_text") or "")
     if not (title and narration):
         return []
     prompt = (
@@ -422,7 +422,7 @@ def _compilation_review(script: dict, topic: str, facts: dict) -> list[dict]:
     # começo de frase ("Hoje", "Você") não conta como nome próprio
     import re as _re
 
-    titulo = " ".join([str(script.get("title", "")), str(script.get("thumbnail_text", ""))])
+    titulo = " ".join([str((script.get("title") or "")), str((script.get("thumbnail_text") or ""))])
     new_text = _re.sub(r"História \d+ de \d+\.", " ", " ".join(new) + " " + titulo)
     # palavra comum ou nome de país do próprio canal não é fato novo ("Brasil",
     # "Começamos", "Finalmente" reprovaram o 780: regra certa é número/nome real)
@@ -503,7 +503,7 @@ def review_script_result(
 
     narration_words = set(re.findall(r"\w+", " ".join(sc.get("narration", "") for sc in script.get("scenes", [])).lower()))
     script_text = " ".join(
-        [script.get("title", ""), script.get("thumbnail_text", "")] + [sc.get("narration", "") for sc in script.get("scenes", [])]
+        [(script.get("title") or ""), (script.get("thumbnail_text") or "")] + [sc.get("narration", "") for sc in script.get("scenes", [])]
     ).lower()
     problems = []
     for p in raw_problems:
@@ -885,7 +885,7 @@ def _only_in_reviewed(problems: list[dict], script: dict) -> list[dict]:
     fato DELAS ("Neymar 10 mil reais aos 15") que nem estava no texto novo
     revisado (job 743). Só vale o apontamento cujas palavras estão no texto
     revisado (título, thumb e cenas novas)."""
-    text = " ".join([script.get("title", ""), script.get("thumbnail_text", "")]
+    text = " ".join([(script.get("title") or ""), (script.get("thumbnail_text") or "")]
                     + [sc.get("narration", "") for sc in script.get("scenes", [])]).lower()
     words_in = set(re.findall(r"\w+", text))
     out = []

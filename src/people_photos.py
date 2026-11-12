@@ -64,7 +64,7 @@ def _page_ok(page: dict, name: str, required: str) -> bool:
     """Título com o nome INTEIRO (só uma parte aceitava "Loucos pelo
     Botafogo", verbete da torcida, como foto do Júnior Santos — job 423),
     resumo citando o `required` e foto em jpg/png."""
-    title, extract = _plain(page.get("title", "")), _plain(page.get("extract", ""))
+    title, extract = _plain((page.get("title") or "")), _plain(page.get("extract", ""))
     tokens = [t for t in _plain(name).split() if len(t) >= 3]
     return (
         bool(page.get("original"))

@@ -42,7 +42,7 @@ def archive(channel: str, job_id: int, work_dir: Path, video_id: str, long_form:
         return
     entry = {
         "job_id": job_id, "video_id": video_id, "date": date.today().isoformat(), "long": long_form,
-        "title": script.get("title", ""),
+        "title": (script.get("title") or ""),
         "narration": " ".join(sc.get("narration", "") for sc in script.get("scenes", [])),
         # cenas inteiras (com a busca de imagem): a compilação reaproveita
         # sem pedir nada ao LLM (ver script_gen.compose_compilation)

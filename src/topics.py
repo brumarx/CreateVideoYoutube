@@ -266,7 +266,7 @@ def repeats_subject(topic: str, used: list[str]) -> bool:
     return any(n in usados for n in names)
 
 
-def _confirmed_topic(prompt: str, used: list[str], label: str, niche: str, tries: int = 3) -> str:
+def _confirmed_topic(prompt: str, used: list[str], label: str, niche: str, tries: int = 6) -> str:
     """Pede assunto+tema ao LLM e só aceita o que a busca confirma; assunto
     não confirmado volta pro prompt como proibido. RuntimeError se nenhum
     passar — melhor sem tema novo do que tema inventado."""

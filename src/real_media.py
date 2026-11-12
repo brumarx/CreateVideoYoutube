@@ -103,7 +103,7 @@ def _meta(info: dict) -> tuple[str, str]:
 
 def _candidate(page: dict, kind: str) -> dict | None:
     info = (page.get("imageinfo") or page.get("videoinfo") or [None])[0]
-    title = page.get("title", "")
+    title = (page.get("title") or "")
     if not info or _BAD_TITLE.search(title):
         return None
     artist, lic = _meta(info)
@@ -158,7 +158,7 @@ def _lead_image(subject: str) -> list[dict]:
         })
         page = next(iter(data["query"]["pages"].values()))
         name = page.get("pageimage")
-        title = page.get("title", "")
+        title = (page.get("title") or "")
     except Exception:  # noqa: BLE001
         return []
     # identidade: a busca pode trazer o verbete de OUTRA pessoa de mesmo nome
@@ -259,7 +259,7 @@ def _nasa_clips(subject: str) -> list[dict]:
     out = []
     for item in items:
         data = (item.get("data") or [{}])[0]
-        title = data.get("title", "")
+        title = (data.get("title") or "")
         if not _relevant(f"{title} {' '.join(data.get('keywords') or [])}", subject) or not item.get("href"):
             continue
         out.append({"title": f"NASA:{data.get('nasa_id')}", "manifest": item["href"],
@@ -317,7 +317,7 @@ def _archive_clips(subject: str) -> list[dict]:
         {"title": f"IA:{d['identifier']}", "identifier": d["identifier"],
          "credit": f"Internet Archive ({d.get('title')}, domínio público)"}
         for d in docs
-        if _relevant(str(d.get("title", "")), subject) and not _OWNED.search(str(d.get("title", "")))
+        if _relevant(str((d.get("title") or "")), subject) and not _OWNED.search(str((d.get("title") or "")))
     ]
 
 

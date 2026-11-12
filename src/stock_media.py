@@ -221,7 +221,7 @@ def _smithsonian_photo(query: str, width: int, height: int, check, region: str =
                 log.warning("download smithsonian falhou: %s", exc)
                 continue
             if data and _passes(check, data, query):
-                log.info("foto do Smithsonian (CC0) pra %r: %s", query, row.get("title", "")[:80])
+                log.info("foto do Smithsonian (CC0) pra %r: %s", query, (row.get("title") or "")[:80])
                 return data
     return None
 

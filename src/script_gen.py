@@ -634,7 +634,7 @@ _HYPE_RE = re.compile(
 MAX_PERGUNTAS_MEIO = 1
 
 
-def _hype_problem(script: dict) -> str | None:
+def _hype_problem(script: dict, max_perguntas: int = MAX_PERGUNTAS_MEIO) -> str | None:
     """Promessa/suspense vazio no meio do roteiro, ou perguntas demais no
     meio (o gancho e a pergunta final ao espectador ficam de fora)."""
     frases = [f.strip() for sc in script.get("scenes", []) for f in _SENTENCE_SPLIT.split(sc.get("narration", ""))
@@ -643,7 +643,7 @@ def _hype_problem(script: dict) -> str | None:
         if m := _HYPE_RE.search(f):
             return f"suspense vazio (\"{m[0][:50]}\")"
     meio = [f for f in frases[2:-2] if f.endswith("?")]
-    if len(meio) > MAX_PERGUNTAS_MEIO:
+    if len(meio) > max_perguntas:
         return f"{len(meio)} perguntas no meio (\"{meio[0][:50]}\")"
     return None
 
@@ -922,7 +922,7 @@ def compose_compilation(channel: ChannelConfig, facts: dict, revision_feedback: 
         entry = entry or {"title": item.get("titulo", ""), "narration": item.get("narracao", "")}
         scenes = _story_scenes(entry)
         if scenes:
-            stories.append({"title": entry.get("title", ""), "scenes": scenes})
+            stories.append({"title": (entry.get("title") or ""), "scenes": scenes})
     if len(stories) < 2:
         raise ValueError("compilação sem histórias guardadas suficientes")
     everything = " ".join(sc["narration"] for st in stories for sc in st["scenes"])
@@ -1056,7 +1056,7 @@ def numeros_fora_da_lista(script: dict, fatos: list[str]) -> set[str]:
     """Números (só dígitos) do título, da miniatura e das narrações que não estão na lista
     fechada de fatos. Verificação em Python, sem chamada de API."""
     permitidos = _numeros(" ".join(fatos))
-    textos = [str(script.get("title", "")), str(script.get("thumbnail_text", ""))]
+    textos = [str((script.get("title") or "")), str((script.get("thumbnail_text") or ""))]
     textos += [str(sc.get("narration", "")) for sc in script.get("scenes", []) if isinstance(sc, dict)]
     usados: set[str] = set()
     for t in textos:
@@ -1073,7 +1073,7 @@ def _corrige_numeros_fora_da_lista(script: dict, fatos: list[str]) -> dict:
     cenas = script.get("scenes", [])
     afetadas = [{"i": i, "narration": sc.get("narration", "")} for i, sc in enumerate(cenas)
                 if isinstance(sc, dict) and _numeros(sc.get("narration", "")) & fora]
-    titulo_afetado = bool(_numeros(str(script.get("title", ""))) & fora)
+    titulo_afetado = bool(_numeros(str((script.get("title") or ""))) & fora)
     lista = "\n".join(f"F{i + 1}: {f}" for i, f in enumerate(fatos))
     prompt = (
         "Estes números NÃO estão na lista de fatos verificados e precisam sair do roteiro: "
@@ -1084,7 +1084,7 @@ def _corrige_numeros_fora_da_lista(script: dict, fatos: list[str]) -> dict:
         + "Responda SÓ JSON: {\"cenas\": [{\"i\": 0, \"narration\": \"...\"}]"
         + (", \"titulo\": \"...\"" if titulo_afetado else "") + "}\n\nCENAS AFETADAS:\n"
         + json.dumps(afetadas, ensure_ascii=False)
-        + ("\n\nTÍTULO ATUAL: " + str(script.get("title", "")) if titulo_afetado else "")
+        + ("\n\nTÍTULO ATUAL: " + str((script.get("title") or "")) if titulo_afetado else "")
     )
     try:
         raw = complete([{"role": "user", "content": prompt}], max_tokens=12000, temperature=0.2)
@@ -1298,7 +1298,8 @@ def generate_script(
                 issues.append((ending, f"terminou com {ending}. A última frase retoma o gancho do começo com uma virada "
                                "ou ironia — um fato, não uma dúvida. Ex.: 'Em 1948 o Norte cortou a luz do Sul. Agora não "
                                "consegue manter as próprias acesas.' 'Será que', 'a resposta está' e promessa no fim: proibido. Pergunta direta ao espectador sobre o tema, sem fato novo, pode."))
-            hype = _hype_problem(script)
+            # canal de fatos: 1 pergunta no meio; nos outros a cena pode terminar puxando com pergunta
+            hype = _hype_problem(script, MAX_PERGUNTAS_MEIO if channel.name in FATOS_CANAIS else 3)
             if hype:
                 issues.append((hype, f"tinha {hype}. Nada de suspense vazio ('guarde essa informação', 'muda tudo', "
                                "'poucos sabem', 'quer entender o truque?'): cada frase entrega um fato; no meio, no "
@@ -1486,7 +1487,7 @@ FONTES. Ao generalizar, não deixe frase vaga que não diz nada ("Ele
 participou das partidas", "teve papel importante") — apague a frase. Não mexa no que não foi apontado: mesmo tom, mesmo tamanho, mesmo
 número de cenas. Se o TÍTULO foi apontado, devolva um título novo, alinhado à narração.
 
-TÍTULO: {script.get("title", "")}
+TÍTULO: {(script.get("title") or "")}
 TEXTO DA MINIATURA: {script.get("thumbnail_text") or ""}
 
 PONTOS APONTADOS:
@@ -1515,7 +1516,7 @@ Responda só com JSON: {{"titulo": "título (o mesmo, se não foi apontado)", "t
         return None
     data = _repair_parse(raw, len(narrations))
     allowed = _fact_tokens(
-        " ".join(narrations) + " " + sources + " " + topic + " " + str(script.get("title", "")), every_capital=True,
+        " ".join(narrations) + " " + sources + " " + topic + " " + str((script.get("title") or "")), every_capital=True,
     )
     cenas, novos = _drop_new_facts(data["cenas"], allowed)
     if novos:
@@ -1559,7 +1560,7 @@ def refresh_description(script: dict) -> str:
     try:
         text = complete([{"role": "user", "content": prompt}], max_tokens=400, temperature=0.3,
                         validate=lambda r: 40 <= len(r.strip()) <= 600)
-        allowed = _fact_tokens(narration + " " + str(script.get("title", "")), every_capital=True)
+        allowed = _fact_tokens(narration + " " + str((script.get("title") or "")), every_capital=True)
         if not _fact_tokens(text) - allowed:
             return text.strip()
         log.warning("descrição nova trouxe fato fora da narração — usando o começo da narração")
@@ -1619,7 +1620,7 @@ def refresh_packaging(script: dict, channel: ChannelConfig, topic: str = "", ext
     except RuntimeError as exc:
         # troca só o que cita o que saiu: título vira o tema, thumb sem texto
         log.warning("título/thumb: nenhum provedor respondeu (%s) — trocando só %s", exc, ", ".join(stale))
-        fallback = {"title": (topic or script.get("title", ""))[:60], "thumbnail_text": None}
+        fallback = {"title": (topic or (script.get("title") or ""))[:60], "thumbnail_text": None}
         return {**script, **{k: fallback[k] for k in stale}}
 
 
@@ -1912,7 +1913,7 @@ def vary_close_repeats(script: dict, topic: str = "") -> dict:
     leve: troca a palavra repetida por sinônimo/pronome ou apaga a frase
     vaga. Mesma trava do conserto (_drop_new_facts): nenhum número ou nome
     novo. Sem LLM, segue como está."""
-    repeats = _close_repeats(script, topic + " " + str(script.get("title", "")))
+    repeats = _close_repeats(script, topic + " " + str((script.get("title") or "")))
     if len(repeats) <= MAX_CLOSE_REPEATS:
         return script
     narrations = [str(sc.get("narration", "")) for sc in script["scenes"]]
@@ -1936,7 +1937,7 @@ Responda só com JSON: {{"cenas": ["narração da cena 1", "..."]}} — exatamen
     except RuntimeError as exc:
         log.warning("variação de palavras repetidas: nenhum provedor respondeu (%s) — segue sem", exc)
         return script
-    allowed = _fact_tokens(" ".join(narrations) + " " + topic + " " + str(script.get("title", "")), every_capital=True)
+    allowed = _fact_tokens(" ".join(narrations) + " " + topic + " " + str((script.get("title") or "")), every_capital=True)
     cenas, novos = _drop_new_facts(_repair_parse(raw, len(narrations))["cenas"], allowed)
     if novos:
         log.warning("variação tentou acrescentar fato novo (%s) — frase apagada", ", ".join(sorted(novos)))
@@ -1945,7 +1946,7 @@ Responda só com JSON: {{"cenas": ["narração da cena 1", "..."]}} — exatamen
         return script
     new = {**script, "scenes": scenes}
     log.info("palavras repetidas em frases vizinhas: %d -> %d (%s)", len(repeats),
-             len(_close_repeats(new, topic + " " + str(script.get("title", "")))), ", ".join(dict.fromkeys(repeats)))
+             len(_close_repeats(new, topic + " " + str((script.get("title") or "")))), ", ".join(dict.fromkeys(repeats)))
     return new
 
 
