@@ -1094,6 +1094,10 @@ def run(
             script = vary_close_repeats(script, topic)
         # português revisado antes de narrar: a narração vira legenda na tela
         script = fix_script(script, channel.language)
+        if channel_name in FATOS_CANAIS:
+            # 12/11 (job 879): as trocas por fato repetiam número e frase; sai o repetido
+            from src.fatos import remover_redundantes
+            script = remover_redundantes(script)
         # barra comparativa só com valor falado na cena, sem ranking (22/10)
         script = clean_stat_overlays(script)
         if channel_name in FATOS_CANAIS:

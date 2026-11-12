@@ -865,3 +865,16 @@ def test_extenso_vira_algarismo():
     assert e("em mil novecentos e catorze") == "em 1914"
     assert e("as três câmaras e um navio") == "as três câmaras e um navio"
     assert e("1,8 milhão de m³") == "1,8 milhão de m³"
+
+
+def test_remover_redundantes():
+    from src.fatos import remover_redundantes
+    s = {"scenes": [{"narration": "E aí! Um navio sobe 26 metros."},
+                    {"narration": "Cada passagem sobe 26 metros. A obra usou 1,8 milhão de m³ e acabou em 1914."},
+                    {"narration": "O sistema triplo em Gatún desce o nível do lago para o Atlântico."},
+                    {"narration": "Gatún é um deles, ao lado de Miraflores. A obra ficou pronta em 1914."},
+                    {"narration": "De lá para cá, o sistema triplo continua descendo o nível do lago para o Atlântico. "
+                                  "Você teria coragem?"}]}
+    r = " ".join(sc["narration"] for sc in remover_redundantes(s)["scenes"])
+    assert "Cada passagem sobe 26 metros." in r and r.count("1914") == 1
+    assert "um deles" not in r and "De lá para cá" not in r and r.endswith("Você teria coragem?")

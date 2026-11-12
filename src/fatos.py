@@ -478,6 +478,52 @@ MIN_NUMEROS_FINAL = 4   # Fractal: dado concreto é o vídeo; com menos de 4 nú
 MIN_PALAVRAS_FINAL = 100  # ~46 s de voz; abaixo disso as remoções deixaram só o esqueleto
 
 
+def _raizes(frase: str) -> set[str]:
+    return {w[:5] for w in re.findall(r"\w+", frase.lower()) if len(w) >= 5}
+
+
+_SOLTA = re.compile(r"\b(é|foi|era) (um|uma) (deles|delas)\b", re.I)
+
+
+def remover_redundantes(script: dict) -> dict:
+    """Texto final sem repetição (job 879: depois das trocas por fato, 1914, 1,8 milhão e 26 metros
+    vinham 3 vezes e "o sistema triplo desce o nível do lago" 2 vezes). Fora do gancho (1ª cena),
+    sai a frase cujos números TODOS já foram ditos fora do gancho, e a frase sem número cujas
+    palavras de conteúdo já estão quase todas (80%) numa frase anterior. Pergunta e convite ficam.
+    Não reescreve nada: só tira frase."""
+    cenas = [dict(sc) for sc in script.get("scenes", [])]
+    ditos: set[str] = set()
+    anteriores: list[set[str]] = []
+    removidas = []
+    for i, sc in enumerate(cenas):
+        ficam = []
+        for f in re.split(r"(?<=[.!?])\s+", str(sc.get("narration", "")).strip()):
+            if not f.strip():
+                continue
+            nums, raizes = numeros(f), _raizes(f)
+            if i > 0 and not _frase_livre(f):
+                if nums and nums <= ditos:
+                    removidas.append(f)
+                    continue
+                if not nums and raizes and any(len(raizes & a) >= 0.8 * len(raizes) for a in anteriores):
+                    removidas.append(f)
+                    continue
+                # referência solta ("Gatún é um deles", job 879): a lista a que se refere não foi dita
+                ultima = ficam[-1] if ficam else (cenas[i - 1]["narration"].strip() if i else "")
+                if _SOLTA.search(f) and not ultima.endswith("?"):
+                    removidas.append(f)
+                    continue
+            if i > 0:
+                ditos |= nums
+            anteriores.append(raizes)
+            ficam.append(f)
+        sc["narration"] = " ".join(ficam)
+    if removidas:
+        log.warning("texto final: %d frase(s) repetida(s) removida(s): %s", len(removidas),
+                    "; ".join(f[:60] for f in removidas))
+    return {**script, "scenes": [sc for sc in cenas if sc["narration"].strip()]}
+
+
 def roteiro_magro(script: dict) -> str | None:
     """Motivo para reprovar o texto final que as remoções esvaziaram (job 863: 9 de 11 afirmações sem
     fonte saíram e sobraram 4 cenas, 63 palavras e nenhum número); None se tem corpo."""
