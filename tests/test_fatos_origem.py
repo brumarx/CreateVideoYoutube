@@ -885,3 +885,10 @@ def test_revisao_nao_mexe_em_numero():
     assert not n("26 m, 1,8 mi de m³", "26 m, 1,8 mil m³")
     assert not n("Navios 26m Sem Bombas", "Navios de 26m Sem Bombas")
     assert n("Navio Sobe 26m Sem Bomba", "Navios Sobe 26m Sem Bomba")
+
+
+def test_mesmo_sujeito():
+    from src.fact_check import mesmo_sujeito
+    fato = ["O complexo das Esclusas de Gatún tem cerca de 1,5 km de comprimento."]
+    assert not mesmo_sujeito("Cada câmara tem cerca de 1,5 quilômetro de comprimento.", fato)
+    assert mesmo_sujeito("As eclusas de Gatún medem 1,5 km.", fato)

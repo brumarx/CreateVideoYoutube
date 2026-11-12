@@ -637,6 +637,23 @@ def _mesmo_assunto(frase: str, fato: str, lista: list[str]) -> bool:
     return any(_casa(x, y) for x in a for y in b)
 
 
+_NAO_SUJEITO = {"cada", "todo", "toda", "todos", "todas", "esse", "essa", "esses", "essas", "este", "esta", "isso",
+                "isto", "mais", "cerca", "quase", "menos", "apenas", "ainda", "hoje", "então", "depois", "antes",
+                "assim", "agora", "porque", "quando", "nesse", "nessa", "entre", "sobre", "durante"}
+
+
+def mesmo_sujeito(frase: str, fatos: list[str]) -> bool:
+    """As 2 primeiras palavras de conteúdo da frase (o sujeito, quase sempre) estão em algum dos
+    fatos? Compara pelas 4 primeiras letras sem acento ("eclusas"/"esclusas" ficam de fora disso,
+    então qualquer uma das duas basta)."""
+    palavras = [w for w in re.findall(r"\w+", _fold(frase)) if len(w) >= 4 and w not in _NAO_SUJEITO
+                and not w.isdigit()][:2]
+    if not palavras:
+        return True
+    raizes = {w[:4] for f in fatos for w in re.findall(r"\w+", _fold(f)) if len(w) >= 4}
+    return any(w[:4] in raizes for w in palavras)
+
+
 def substituir_pela_lista(script: dict, problems: list[dict]) -> tuple[dict, list[dict]]:
     """Troca o NÚMERO de uma frase reprovada pelo valor da lista de fatos verificados,
     quando há correspondência segura: mesma unidade e mesmo assunto (pelo menos 2
@@ -699,7 +716,10 @@ def substituir_pela_lista(script: dict, problems: list[dict]) -> tuple[dict, lis
                     # os números da frase já estão na lista, com o mesmo assunto: resolvido, sem trocar —
                     # se a frase não disser mais que esses fatos ("quase a metade do total de Gatún", job 865)
                     from .fatos import _alem_dos_fatos
-                    achou = not _alem_dos_fatos(frase, [{"texto": f} for f in casados])
+                    # e se o SUJEITO da frase for o do fato (job 882: "Cada câmara tem 1,5 km", o fato era o
+                    # complexo inteiro; o número estava na lista e o problema era o sujeito)
+                    achou = (not _alem_dos_fatos(frase, [{"texto": f} for f in casados])
+                             and mesmo_sujeito(frase, casados))
                 # frase sem número da lista (ex.: "Elas serviam de refúgio"): não é resolvida aqui
                 break
             if achou:

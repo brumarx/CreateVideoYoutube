@@ -1262,7 +1262,7 @@ def generate_script(
                                f"errou: {news_problem}. Uma notícia por bloco, na ordem da lista, cada cena com o campo "
                                "\"noticia\"; título = a manchete mais forte, curta, sem \"notícias\"/\"hoje\" (em dia de "
                                "jogo, \"Botafogo x Adversário\" + gancho curto)."))
-            from .fatos import numero_por_extenso, numero_repetido
+            from .fatos import frases_sem_marca, numero_por_extenso, numero_repetido
             repeated = (_repetition_problem(script) or _word_cap_problem(script, channel.word_caps)
                         or numero_repetido(script))
             if channel.name in FATOS_CANAIS:
@@ -1321,8 +1321,10 @@ def generate_script(
                 # defeito de estilo, não de fato: guarda o roteiro — melhor
                 # publicá-lo do que perder o dia (as revisões de fato seguem)
                 # 12/11 (job 880): guarda a tentativa com MENOS defeitos (a última podia ser a pior)
-                if len(issues) <= fallback_defeitos:
-                    filler_fallback, fallback_defeitos = script, len(issues)
+                # no canal de fatos, cada frase sem marca pesa como um defeito (vira corte depois)
+                peso = len(issues) + (len(frases_sem_marca(script)) if channel.name in FATOS_CANAIS else 0)
+                if peso <= fallback_defeitos:
+                    filler_fallback, fallback_defeitos = script, peso
                 last_error = ValueError("; ".join(i[0] for i in issues))
                 log.warning("tentativa %d/%d: %d defeito(s) — %s; tentando de novo", attempt + 1, tentativas, len(issues),
                             "; ".join(i[0] for i in issues))
