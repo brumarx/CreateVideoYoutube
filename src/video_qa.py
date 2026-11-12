@@ -318,7 +318,8 @@ def _som(palavra: str) -> str:
     s = s.replace("w", "v").replace("y", "i").replace("ph", "f").replace("k", "c").replace("q", "c")
     s = re.sub(r"g(?=[ei])", "j", s)
     s = re.sub(r"(.)\1", r"\1", s)
-    return re.sub(r"e$", "i", s)
+    # n e m finais soam iguais ("Gatún" ouvido "Gatum", "Colón" ouvido "Colom", job 891)
+    return re.sub(r"m$", "n", re.sub(r"e$", "i", s))
 
 
 def _nome_ouvido(nome: str, heard_f: str) -> bool:
