@@ -1216,6 +1216,7 @@ def generate_script(
     best_script: dict | None = None
     best_distance = float("inf")
     filler_fallback: dict | None = None
+    fallback_defeitos = 10**6
     for attempt in range(3):
         # 09/11: o plano e as outras chamadas gastaram a janela de 60 s do Groq; espera ela fechar
         # antes do roteiro, em vez de queimar as 3 tentativas em 429
@@ -1317,7 +1318,9 @@ def generate_script(
             if issues:
                 # defeito de estilo, não de fato: guarda o roteiro — melhor
                 # publicá-lo do que perder o dia (as revisões de fato seguem)
-                filler_fallback = script
+                # 12/11 (job 880): guarda a tentativa com MENOS defeitos (a última podia ser a pior)
+                if len(issues) <= fallback_defeitos:
+                    filler_fallback, fallback_defeitos = script, len(issues)
                 last_error = ValueError("; ".join(i[0] for i in issues))
                 log.warning("tentativa %d/3: %d defeito(s) — %s; tentando de novo", attempt + 1, len(issues),
                             "; ".join(i[0] for i in issues))

@@ -1112,6 +1112,7 @@ def run(
             from src.fatos import roteiro_magro
             magro = roteiro_magro(script)
             if magro:
+                log.warning("[%s] texto final magro: %s", job_id, " | ".join(sc.get("narration", "") for sc in script.get("scenes", [])))
                 raise ScriptRejected(magro)
         # 11/11: o texto está final e validado. SÓ AGORA saem título, miniatura, prompt da
         # miniatura e os prompts das imagens de cada cena, todos a partir deste texto.
