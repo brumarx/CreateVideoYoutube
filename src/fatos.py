@@ -376,16 +376,16 @@ _UNID = {"um": 1, "uma": 1, "dois": 2, "duas": 2, "três": 3, "tres": 3, "quatro
          "trezentos": 300, "trezentas": 300, "quatrocentos": 400, "quatrocentas": 400, "quinhentos": 500,
          "quinhentas": 500, "seiscentos": 600, "seiscentas": 600, "setecentos": 700, "setecentas": 700,
          "oitocentos": 800, "oitocentas": 800, "novecentos": 900, "novecentas": 900}
-_ESCALA = {"mil": 1000, "milhão": 10**6, "milhões": 10**6, "bilhão": 10**9, "bilhões": 10**9}
-_ALT_NUM = "|".join(sorted(set(_UNID) | set(_ESCALA), key=len, reverse=True))
+_ESCALA_EXT = {"mil": 1000, "milhão": 10**6, "milhões": 10**6, "bilhão": 10**9, "bilhões": 10**9}
+_ALT_NUM = "|".join(sorted(set(_UNID) | set(_ESCALA_EXT), key=len, reverse=True))
 _SEQ_NUM = re.compile(r"\b(?:" + _ALT_NUM + r")(?:\s+(?:e\s+)?(?:" + _ALT_NUM + r"))*\b", re.I)
 
 
 def _valor_extenso(palavras: list[str]) -> int:
     total = corrente = 0
     for w in palavras:
-        if w in _ESCALA:
-            total += (corrente or 1) * _ESCALA[w]
+        if w in _ESCALA_EXT:
+            total += (corrente or 1) * _ESCALA_EXT[w]
             corrente = 0
         else:
             corrente += _UNID[w]
@@ -411,9 +411,9 @@ def extenso_para_algarismos(texto: str) -> str:
     def troca(m: re.Match) -> str:
         palavras = [w.lower() for w in re.findall(r"\w+", m.group(0)) if w.lower() != "e"]
         v = _valor_extenso(palavras)
-        if v < 10 and not any(w in _ESCALA for w in palavras):
+        if v < 10 and not any(w in _ESCALA_EXT for w in palavras):
             return m.group(0)
-        if re.search(r"\d\s*$", texto[:m.start()]) and palavras[0] in _ESCALA:
+        if re.search(r"\d\s*$", texto[:m.start()]) and palavras[0] in _ESCALA_EXT:
             return m.group(0)  # "1,8 milhão": escala depois de algarismo
         novo = _escreve(v)
         if novo.endswith(("ão", "ões")) and not re.match(r"\s+de\b", texto[m.end():]):
