@@ -855,3 +855,13 @@ def test_frases_sem_marca():
     s = {"scenes": [{"narration": "E aí, mente curiosa! O túnel tem 53,85 km [F1]. Ele foi aberto em 1988. "
                                   "Você teria coragem?"}]}
     assert frases_sem_marca(s) == ["Ele foi aberto em 1988."]
+
+
+def test_extenso_vira_algarismo():
+    from src.fatos import extenso_para_algarismos as e
+    assert e("sobe vinte e seis metros") == "sobe 26 metros"
+    assert e("cem mil toneladas") == "100 mil toneladas"
+    assert e("um milhão e oitocentos mil metros") == "1,8 milhão de metros"
+    assert e("em mil novecentos e catorze") == "em 1914"
+    assert e("as três câmaras e um navio") == "as três câmaras e um navio"
+    assert e("1,8 milhão de m³") == "1,8 milhão de m³"

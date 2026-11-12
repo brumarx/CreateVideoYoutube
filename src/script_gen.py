@@ -1243,6 +1243,11 @@ def generate_script(
                 raise ValueError(f"JSON do roteiro sem campos {missing}: {script}")
 
             script = _trim_muletas(_drop_llm_cta(_drop_repeated_scenes(script)))
+            if channel.name in FATOS_CANAIS:
+                # número por extenso vira algarismo e passa pela conferência como os outros
+                from .fatos import extenso_para_algarismos
+                script = {**script, "scenes": [{**sc, "narration": extenso_para_algarismos(sc.get("narration", ""))}
+                                               for sc in script.get("scenes", [])]}
             # TODOS os defeitos de estilo de uma vez: antes só o 1º ia pra
             # tentativa seguinte, que podia voltar com o 2º (3 defeitos
             # esgotavam as 3 tentativas)

@@ -368,6 +368,60 @@ def numero_por_extenso(texto: str) -> list[str]:
     return achados
 
 
+_UNID = {"um": 1, "uma": 1, "dois": 2, "duas": 2, "três": 3, "tres": 3, "quatro": 4, "cinco": 5, "seis": 6,
+         "sete": 7, "oito": 8, "nove": 9, "dez": 10, "onze": 11, "doze": 12, "treze": 13, "catorze": 14,
+         "quatorze": 14, "quinze": 15, "dezesseis": 16, "dezessete": 17, "dezoito": 18, "dezenove": 19,
+         "vinte": 20, "trinta": 30, "quarenta": 40, "cinquenta": 50, "sessenta": 60, "setenta": 70,
+         "oitenta": 80, "noventa": 90, "cem": 100, "cento": 100, "duzentos": 200, "duzentas": 200,
+         "trezentos": 300, "trezentas": 300, "quatrocentos": 400, "quatrocentas": 400, "quinhentos": 500,
+         "quinhentas": 500, "seiscentos": 600, "seiscentas": 600, "setecentos": 700, "setecentas": 700,
+         "oitocentos": 800, "oitocentas": 800, "novecentos": 900, "novecentas": 900}
+_ESCALA = {"mil": 1000, "milhão": 10**6, "milhões": 10**6, "bilhão": 10**9, "bilhões": 10**9}
+_ALT_NUM = "|".join(sorted(set(_UNID) | set(_ESCALA), key=len, reverse=True))
+_SEQ_NUM = re.compile(r"\b(?:" + _ALT_NUM + r")(?:\s+(?:e\s+)?(?:" + _ALT_NUM + r"))*\b", re.I)
+
+
+def _valor_extenso(palavras: list[str]) -> int:
+    total = corrente = 0
+    for w in palavras:
+        if w in _ESCALA:
+            total += (corrente or 1) * _ESCALA[w]
+            corrente = 0
+        else:
+            corrente += _UNID[w]
+    return total + corrente
+
+
+def _escreve(v: int) -> str:
+    for escala, nome_1, nome_n in ((10**9, "bilhão", "bilhões"), (10**6, "milhão", "milhões")):
+        if v >= escala and v % (escala // 10) == 0:
+            q = v / escala
+            txt = f"{q:.1f}".rstrip("0").rstrip(".").replace(".", ",")
+            return f"{txt} {nome_1 if q < 2 else nome_n}"
+    if v >= 10000 and v % 1000 == 0:
+        return f"{v // 1000} mil"
+    return str(v)
+
+
+def extenso_para_algarismos(texto: str) -> str:
+    """Número por extenso vira algarismo ("vinte e seis metros" -> "26 metros", "cem mil toneladas"
+    -> "100 mil toneladas"), para a conferência por número checar (job 877: o escritor insistiu no
+    extenso nas 3 tentativas e todas as frases saíram). Não afrouxa nada: o algarismo passa pela
+    mesma conferência. Números pequenos (até 9) e "um/uma" artigo ficam como estão."""
+    def troca(m: re.Match) -> str:
+        palavras = [w.lower() for w in re.findall(r"\w+", m.group(0)) if w.lower() != "e"]
+        v = _valor_extenso(palavras)
+        if v < 10 and not any(w in _ESCALA for w in palavras):
+            return m.group(0)
+        if re.search(r"\d\s*$", texto[:m.start()]) and palavras[0] in _ESCALA:
+            return m.group(0)  # "1,8 milhão": escala depois de algarismo
+        novo = _escreve(v)
+        if novo.endswith(("ão", "ões")) and not re.match(r"\s+de\b", texto[m.end():]):
+            novo += " de"  # "um milhão e oitocentos mil metros" -> "1,8 milhão de metros"
+        return novo
+    return _SEQ_NUM.sub(troca, texto or "")
+
+
 def fato_repetido(script: dict) -> str | None:
     """O mesmo fato ([F#]) em duas frases com o mesmo número: dado repetido (job 874: "1,8 milhão de
     metros cúbicos" nas cenas 3 e 9)."""
