@@ -88,10 +88,12 @@ def test_deepseek_so_entra_depois_dos_gratis(monkeypatch):
     assert nomes[-1] == "deepseek"
 
 
-def test_deepseek_sem_saldo_registra_e_nao_repete(monkeypatch):
+def test_deepseek_sem_saldo_registra_e_nao_repete(monkeypatch, tmp_path):
     from src import paid_usage
     registrados = []
     monkeypatch.setattr(paid_usage, "record_exhausted", lambda d: registrados.append(d))
+    # gasto real do dia (data/paid_usage.json) não pode decidir o teste
+    monkeypatch.setattr(paid_usage, "STATE_FILE", tmp_path / "paid_usage.json")
     monkeypatch.setattr(providers, "_health_update", lambda *a, **k: None)  # não grava descanso no arquivo real
     monkeypatch.setattr(providers.time, "sleep", lambda s: None)
     _sem_rede(monkeypatch)
