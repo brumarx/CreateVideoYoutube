@@ -1,0 +1,166 @@
+{
+  "job_id": 862,
+  "video_id": "wnC2qNwr1eQ",
+  "date": "2026-11-12",
+  "long": false,
+  "title": "Ponte Akashi Kaikyō: Vão central mede 1991 metros",
+  "narration": "E aí, mente curiosa! Uma ponte que estica dois metros só com o calor do dia. Parece impossível, mas acontece no Estreito de Akashi, no Japão. Ela cruza quatro quilômetros de mar aberto, ligando Kobe à ilha de Awaji desde 1998. O vão central mede 1991 metros, maior que qualquer outro na época da inauguração. Superou o recorde anterior, da Ponte Great Belt na Dinamarca, por 367 metros de diferença. O título de maior do mundo durou até 2022, quando a Turquia inaugurou a Çanakkale 1915. No início, o projeto previa trilhos de trem e pista; em maio de 1988 virou só rodoviária de seis faixas. Os caixões das fundações desceram em águas de 60 metros, lutando contra correntes fortíssimas. Dois vãos laterais de 960 metros cada completam a travessia total de 3911 metros. Mais de cem empresas diferentes trabalharam quase dez anos para erguer essa estrutura. A dilatação térmica é absorvida por juntas especiais que permitem o 'respiro' diário sem danos. Projetada para ventos de tufão e terremotos, ela balança, mas não quebra. Você atravessaria sabendo disso?",
+  "scenes": [
+    {
+      "narration": "E aí, mente curiosa! Uma ponte que estica dois metros só com o calor do dia. Parece impossível, mas acontece no Estreito de Akashi, no Japão.",
+      "image_prompt": "Aerial view of a long suspension bridge spanning a strait between mainland and island, showing the Akashi Strait waters in Japan, clear daytime sky",
+      "stock_query": "Akashi Strait suspension bridge Japan aerial",
+      "real_subject": "Akashi Kaikyo Bridge",
+      "grafico": {
+        "tipo": "numero",
+        "valor": 2,
+        "rotulo": "metros de dilatação diária"
+      }
+    },
+    {
+      "narration": "Ela cruza quatro quilômetros de mar aberto, ligando Kobe à ilha de Awaji desde 1998.",
+      "image_prompt": "Wide view of a suspension bridge crossing open sea water, connecting a city coastline to a distant island shore, spanning approximately four kilometers",
+      "stock_query": "suspension bridge crossing open sea connecting land",
+      "real_subject": "Akashi Kaikyo Bridge",
+      "grafico": {
+        "tipo": "mapa",
+        "lugares": [
+          "Japan"
+        ],
+        "destaques": [
+          {
+            "pais": "Japan",
+            "cor": "azul",
+            "rotulo": "Japão",
+            "icone": "🇯🇵",
+            "quantidade": 1
+          }
+        ],
+        "cidade": "Kobe",
+        "ano": 1998,
+        "ano_rotulo": "1998",
+        "bandeira": true,
+        "nota": "Estreito de Akashi"
+      }
+    },
+    {
+      "narration": "O vão central mede 1991 metros, maior que qualquer outro na época da inauguração.",
+      "image_prompt": "Close-up view of a massive suspension bridge central span structure, showing the main cables and deck stretching 1991 meters between two tall towers",
+      "stock_query": "suspension bridge central span main cables towers",
+      "real_subject": "Akashi Kaikyo Bridge",
+      "grafico": {
+        "tipo": "numero",
+        "valor": 1991,
+        "rotulo": "metros de vão central"
+      }
+    },
+    {
+      "narration": "Superou o recorde anterior, da Ponte Great Belt na Dinamarca, por 367 metros de diferença.",
+      "image_prompt": "Side-by-side comparison view showing two different suspension bridges, one with longer central span than the other, labeled with distance difference",
+      "stock_query": "two suspension bridges comparison span length",
+      "real_subject": "Great Belt Bridge",
+      "grafico": {
+        "tipo": "comparacao",
+        "a": 1991,
+        "a_rotulo": "Akashi Kaikyō",
+        "b": 1624,
+        "b_rotulo": "Great Belt",
+        "icone": "🌉"
+      }
+    },
+    {
+      "narration": "O título de maior do mundo durou até 2022, quando a Turquia inaugurou a Çanakkale 1915.",
+      "image_prompt": "Modern suspension bridge with record-breaking span length, located in Turkey over a strait, contemporary design with two main towers",
+      "stock_query": "1915 Canakkale Bridge Turkey suspension record",
+      "real_subject": "1915 Çanakkale Bridge",
+      "grafico": {
+        "tipo": "ano",
+        "de": 1998,
+        "ate": 2022,
+        "rotulo": "Recorde mundial de vão central"
+      }
+    },
+    {
+      "narration": "No início, o projeto previa trilhos de trem e pista; em maio de 1988 virou só rodoviária de seis faixas.",
+      "image_prompt": "Technical blueprint or schematic view of a suspension bridge showing six-lane road deck without railway tracks, engineering plan style",
+      "stock_query": "suspension bridge six lane road deck schematic",
+      "real_subject": "Akashi Kaikyo Bridge",
+      "grafico": {
+        "tipo": "cartao",
+        "titulo": "Mudança de projeto 1988",
+        "linhas": [
+          "Era: ferrovia + estrada",
+          "Virou: 6 faixas rodoviárias"
+        ]
+      }
+    },
+    {
+      "narration": "Os caixões das fundações desceram em águas de 60 metros, lutando contra correntes fortíssimas.",
+      "image_prompt": "Underwater construction scene showing large concrete caissons being lowered into deep 60-meter water with strong current turbulence visible",
+      "stock_query": "caisson foundation underwater construction deep water",
+      "real_subject": "Akashi Kaikyo Bridge",
+      "grafico": {
+        "tipo": "perfil",
+        "titulo": "Condições de fundação",
+        "niveis": [
+          {
+            "prof": "Superfície",
+            "valor": 0,
+            "rotulo": "Início da obra"
+          },
+          {
+            "prof": "Fundo do mar",
+            "valor": 60,
+            "rotulo": "Profundidade máxima"
+          }
+        ]
+      }
+    },
+    {
+      "narration": "Dois vãos laterais de 960 metros cada completam a travessia total de 3911 metros.",
+      "image_prompt": "Structural diagram of a suspension bridge showing central span flanked by two equal side spans of 960 meters each, total length annotated",
+      "stock_query": "suspension bridge side spans structural diagram",
+      "real_subject": "Akashi Kaikyo Bridge",
+      "grafico": {
+        "tipo": "comparacao",
+        "a": 1991,
+        "a_rotulo": "Vão central",
+        "b": 960,
+        "b_rotulo": "Cada vão lateral",
+        "icone": "📏"
+      }
+    },
+    {
+      "narration": "Mais de cem empresas diferentes trabalharam quase dez anos para erguer essa estrutura.",
+      "image_prompt": "Construction site aerial view showing multiple work zones, cranes, and equipment across a large bridge project spanning water",
+      "stock_query": "large bridge construction site multiple cranes aerial",
+      "real_subject": "Akashi Kaikyo Bridge",
+      "grafico": {
+        "tipo": "cartao",
+        "titulo": "Escala da obra",
+        "linhas": [
+          "100+ contratados",
+          "Quase 10 anos",
+          "3911 m totais"
+        ]
+      }
+    },
+    {
+      "narration": "A dilatação térmica é absorvida por juntas especiais que permitem o 'respiro' diário sem danos.",
+      "image_prompt": "Close-up detail of expansion joints on a suspension bridge deck, showing specialized mechanical joint mechanism allowing thermal movement",
+      "stock_query": "bridge expansion joint thermal movement detail",
+      "real_subject": "Akashi Kaikyo Bridge"
+    },
+    {
+      "narration": "Projetada para ventos de tufão e terremotos, ela balança, mas não quebra.",
+      "image_prompt": "Suspension bridge deck and cables swaying under strong wind forces, with typhoon storm clouds and turbulent sea below, dynamic motion blur",
+      "stock_query": "suspension bridge swaying typhoon wind storm",
+      "real_subject": "Akashi Kaikyo Bridge"
+    },
+    {
+      "narration": "Você atravessaria sabendo disso?",
+      "image_prompt": "Empty suspension bridge roadway stretching into distance, perspective view from driver position looking across the span",
+      "stock_query": "empty suspension bridge roadway perspective view"
+    }
+  ]
+}

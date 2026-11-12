@@ -1,0 +1,104 @@
+{
+  "job_id": 891,
+  "video_id": "u7g0fFUy-T8",
+  "date": "2026-11-12",
+  "long": false,
+  "title": "Esclusas de Gatún: Navio de carga gigante sobe 26 metros",
+  "narration": "E aí, mente curiosa! Um navio de carga gigante sobe 26 metros — e não é por guindaste, nem por elevador. Três câmaras de concreto fazem esse trabalho, e o caminho tem nome: eclusas de Gatún. O que acontece lá dentro? As eclusas de Gatún ficam no lado atlântico do Canal do Panamá, perto de Colón. São um conjunto triplo de câmaras, ou seja, três pares que trabalham em sequência. Cada par funciona como um degrau de água. Esses três degraus elevam a embarcação até a elevação principal do canal. A água entra e sai pelas laterais, e o nível sobe câmara por câmara. É um elevador d'água em sequência. O conjunto total das eclusas mede cerca de 1,5 km de comprimento. Parece pouco? Cada metro ali é concreto e água em movimento. A primeira concretagem foi lançada em Gatún em 24 de agosto de 1909. É a água que faz o trabalho pesado. No lado atlântico, perto de Colón, esse conjunto triplo é o primeiro obstáculo. As eclusas de Gatún seguem lá, com 1,5 km e 26 metros de desnível. Você teria coragem de atravessar esse sistema?",
+  "scenes": [
+    {
+      "narration": "E aí, mente curiosa! Um navio de carga gigante sobe 26 metros — e não é por guindaste, nem por elevador. Três câmaras de concreto fazem esse trabalho, e o caminho tem nome: eclusas de Gatún. O que acontece lá dentro?",
+      "image_prompt": "a massive cargo ship being lifted 26 meters inside a concrete lock chamber",
+      "stock_query": "cargo ship lock chamber",
+      "real_subject": "Gatun Locks",
+      "grafico": [
+        {
+          "tipo": "numero",
+          "valor": 26,
+          "rotulo": "metros de elevação"
+        }
+      ]
+    },
+    {
+      "narration": "As eclusas de Gatún ficam no lado atlântico do Canal do Panamá, perto de Colón. São um conjunto triplo de câmaras, ou seja, três pares que trabalham em sequência. Cada par funciona como um degrau de água.",
+      "image_prompt": "three consecutive concrete lock chambers on the Atlantic side of the Panama Canal near Colon",
+      "stock_query": "triple lock Panama Canal",
+      "real_subject": "Gatun Locks",
+      "grafico": {
+        "tipo": "mapa",
+        "lugares": [
+          "Panama"
+        ],
+        "destaques": [
+          {
+            "pais": "Panama",
+            "cor": "dourado",
+            "rotulo": "Panamá",
+            "icone": "🚢",
+            "quantidade": 1
+          }
+        ],
+        "cidade": "Colón",
+        "ano": null,
+        "ano_rotulo": null,
+        "bandeira": null,
+        "rota": null,
+        "nota": null,
+        "personagens": null
+      }
+    },
+    {
+      "narration": "Esses três degraus elevam a embarcação até a elevação principal do canal. A água entra e sai pelas laterais, e o nível sobe câmara por câmara. É um elevador d'água em sequência.",
+      "image_prompt": "a ship moving upward through three water level steps as water flows in and out of side openings",
+      "stock_query": "ship water level steps",
+      "real_subject": "Gatun Locks",
+      "grafico": {
+        "tipo": "corte",
+        "esquerda": "Nível baixo",
+        "direita": "Nível alto",
+        "legenda": "Elevação por degraus",
+        "fluxo": "água"
+      }
+    },
+    {
+      "narration": "O conjunto total das eclusas mede cerca de 1,5 km de comprimento. Parece pouco? Cada metro ali é concreto e água em movimento.",
+      "image_prompt": "the full length of the lock system stretching about 1.5 kilometers of concrete and water",
+      "stock_query": "1.5 km lock system",
+      "real_subject": "Gatun Locks",
+      "grafico": {
+        "tipo": "numero",
+        "valor": 1.5,
+        "rotulo": "comprimento em km"
+      }
+    },
+    {
+      "narration": "A primeira concretagem foi lançada em Gatún em 24 de agosto de 1909.",
+      "image_prompt": "construction workers pouring concrete for the first lock chamber on August 24 1909",
+      "stock_query": "1909 Gatun lock construction",
+      "real_subject": "Gatun Locks",
+      "grafico": {
+        "tipo": "ano",
+        "de": 1909,
+        "rotulo": "início da concretagem"
+      }
+    },
+    {
+      "narration": "É a água que faz o trabalho pesado.",
+      "image_prompt": "water flowing powerfully through the lock chambers, moving the ship upward",
+      "stock_query": "water moving ship lock",
+      "real_subject": "Gatun Locks"
+    },
+    {
+      "narration": "No lado atlântico, perto de Colón, esse conjunto triplo é o primeiro obstáculo.",
+      "image_prompt": "the triple lock complex on the Atlantic side near Colon, the first obstacle for ships",
+      "stock_query": "first obstacle Atlantic side",
+      "real_subject": "Gatun Locks"
+    },
+    {
+      "narration": "As eclusas de Gatún seguem lá, com 1,5 km e 26 metros de desnível. Você teria coragem de atravessar esse sistema?",
+      "image_prompt": "the Gatun Locks spanning 1.5 km with a 26‑meter elevation change",
+      "stock_query": "Gatun Locks 26 meters",
+      "real_subject": "Gatun Locks"
+    }
+  ]
+}

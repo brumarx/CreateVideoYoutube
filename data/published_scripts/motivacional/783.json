@@ -1,0 +1,82 @@
+{
+  "job_id": 783,
+  "video_id": "QNo06CCZpy8",
+  "date": "2026-11-08",
+  "long": false,
+  "title": "João Carlos: 79 anos e a luva de R$ 500",
+  "narration": "Após várias cirurgias e a perda quase total dos movimentos das mãos, o maestro João Carlos Martins se despediu do piano em 2019, tocando apenas com os polegares no programa Fantástico. Ele disse que, dessa vez, seria para sempre. A vida do pianista foi marcada por uma série de obstáculos. Em 2004, um crítico inglês da International Piano Magazine descreveu um episódio ocorrido nos anos 60, quando Salvador Dalí, após um recital no Carnegie Hall, o incentivou a se apresentar como o maior intérprete de Bach. As lesões foram implacáveis: um acidente no nervo e uma lesão cerebral causada por um assalto. Essas limitações o afastaram do instrumento diversas vezes. João Carlos Martins dedicou‑se, entre 1979 e 1998, a gravar as obras completas de Bach para teclado, um feito monumental que exigia toda a sua destreza. Mas o que o faria voltar a tocar depois de um ano de sua aposentadoria? A resposta veio de uma invenção inesperada: uma luva adaptadora, criada pelo designer industrial Ubiratã Costa. Essa luva mecânica, coberta com neoprene e hastes de aço, funcionava como molas para os dedos. Com um custo de cerca de R$ 500 em material, a luva proporcionou o movimento de ir e voltar dos dedos, exceto o médio da mão direita. João Carlos Martins descreveu a sensação como um sonho que correu atrás dele; a engenhosa engrenagem foi a chave para o seu retorno ao piano. Pouco antes do Natal de 2019, em um concerto em Sumaré, no interior de São Paulo, o maestro, aos 79 anos, surpreendeu a todos ao voltar a tocar com a luva. A música de Bach, que ele tanto amava, fluía novamente, mostrando que a perseverança pode redefinir o que parecia ser um ponto final.",
+  "scenes": [
+    {
+      "narration": "Após várias cirurgias e a perda quase total dos movimentos das mãos, o maestro João Carlos Martins se despediu do piano em 2019, tocando apenas com os polegares no programa Fantástico. Ele disse que, dessa vez, seria para sempre.",
+      "image_prompt": "A pair of hands, with visible scars, resting on a piano keyboard, dramatic lighting, conveying a sense of finality and sadness. No text, no logos, no UI.",
+      "stock_query": "hands on piano keys, dramatic lighting, farewell",
+      "real_subject": "João Carlos Martins",
+      "grafico": {
+        "tipo": "numero",
+        "valor": "24",
+        "rotulo": "cirurgias"
+      }
+    },
+    {
+      "narration": "A vida do pianista foi marcada por uma série de obstáculos. Em 2004, um crítico inglês da International Piano Magazine descreveu um episódio ocorrido nos anos 60, quando Salvador Dalí, após um recital no Carnegie Hall, o incentivou a se apresentar como o maior intérprete de Bach.",
+      "image_prompt": "A classical concert hall stage, an empty piano, spotlights shining, with a ghost-like silhouette of a pianist in the background. No text, no logos, no UI.",
+      "stock_query": "empty concert hall stage, classical piano",
+      "real_subject": "Carnegie Hall",
+      "grafico": {
+        "tipo": "ano",
+        "de": "1960",
+        "ate": "1970",
+        "rotulo": "Carnegie Hall"
+      }
+    },
+    {
+      "narration": "As lesões foram implacáveis: um acidente no nervo e uma lesão cerebral causada por um assalto. Essas limitações o afastaram do instrumento diversas vezes. João Carlos Martins dedicou‑se, entre 1979 e 1998, a gravar as obras completas de Bach para teclado, um feito monumental que exigia toda a sua destreza.",
+      "image_prompt": "A close-up of a damaged hand, with a faint glow, symbolizing past injuries and resilience, against a blurred background of musical notes. No text, no logos, no UI.",
+      "stock_query": "damaged hand, blurred musical notes",
+      "real_subject": "João Carlos Martins",
+      "grafico": {
+        "tipo": "ano",
+        "de": "1979",
+        "ate": "1998",
+        "rotulo": "Gravações de Bach"
+      }
+    },
+    {
+      "narration": "Mas o que o faria voltar a tocar depois de um ano de sua aposentadoria? A resposta veio de uma invenção inesperada: uma luva adaptadora, criada pelo designer industrial Ubiratã Costa. Essa luva mecânica, coberta com neoprene e hastes de aço, funcionava como molas para os dedos.",
+      "image_prompt": "A close-up of a hand wearing a futuristic, black bionic glove with visible steel rods and carbon fiber plate, on a dark, reflective surface. No text, no logos, no UI.",
+      "stock_query": "bionic glove, mechanical hand, futuristic design",
+      "real_subject": "Bionic glove",
+      "grafico": {
+        "tipo": "numero",
+        "valor": "500",
+        "rotulo": "custo da luva (R$)"
+      }
+    },
+    {
+      "narration": "Com um custo de cerca de R$ 500 em material, a luva proporcionou o movimento de ir e voltar dos dedos, exceto o médio da mão direita. João Carlos Martins descreveu a sensação como um sonho que correu atrás dele; a engenhosa engrenagem foi a chave para o seu retorno ao piano.",
+      "image_prompt": "A hand wearing the bionic glove, gently touching piano keys, with a sense of wonder and renewed ability, soft light illuminating the scene. No text, no logos, no UI.",
+      "stock_query": "hand with bionic glove playing piano, gentle touch",
+      "real_subject": "Bionic glove",
+      "grafico": {
+        "tipo": "comparacao",
+        "a": 1,
+        "a_rotulo": "mão operada",
+        "b": 9,
+        "b_rotulo": "dedos funcionais",
+        "icone": "✋"
+      }
+    },
+    {
+      "narration": "Pouco antes do Natal de 2019, em um concerto em Sumaré, no interior de São Paulo, o maestro, aos 79 anos, surpreendeu a todos ao voltar a tocar com a luva. A música de Bach, que ele tanto amava, fluía novamente, mostrando que a perseverança pode redefinir o que parecia ser um ponto final.",
+      "image_prompt": "A stage with a grand piano, bathed in warm, triumphant light, a figure in the distance, hands on the keys, audience in blurred background. No text, no logos, no UI.",
+      "stock_query": "pianist on stage, grand piano, warm light",
+      "real_subject": "João Carlos Martins",
+      "grafico": {
+        "tipo": "mapa",
+        "cidade": "Sumare",
+        "ano": 2019,
+        "ano_rotulo": "Natal de 2019"
+      }
+    }
+  ]
+}

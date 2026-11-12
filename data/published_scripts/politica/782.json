@@ -1,0 +1,79 @@
+{
+  "job_id": 782,
+  "video_id": "P4_P3O_IMIg",
+  "date": "2026-11-08",
+  "long": false,
+  "title": "Cota Parlamentar: Você sabe como seu imposto é gasto?",
+  "narration": "Imagine um valor mensal de até R$ 50 mil. Esse é o limite máximo da Cota para o Exercício da Atividade Parlamentar, a CEAP, um benefício destinado a deputados federais. Mas quem realmente paga essa conta, e para que esse dinheiro é usado? A CEAP é um recurso pago todo mês aos deputados federais para cobrir despesas diretamente ligadas ao exercício do mandato. Estamos falando de passagens aéreas, hospedagens, alimentação, manutenção de escritório e até contratação de consultorias. Tudo isso custeado pelo orçamento público. É importante notar que o valor da cota não é fixo para todos. Ele varia conforme o estado de origem do parlamentar. Assim, um deputado pode receber um mínimo de R$ 36 mil, enquanto outro, de uma região diferente, pode ter acesso ao teto de R$ 50 mil. Essa diferença busca compensar os custos de residência em Brasília. Mas o que pouca gente sabe é que nem todas as despesas são reembolsadas da mesma forma. Algumas, como Correios, exigem que o deputado apresente os recibos em até três meses para ter o dinheiro de volta. Outras, como passagens aéreas, são pagas por débito automático. Além disso, a cota regular não usada pode ser somada ao longo do exercício. Isso significa que, em determinados períodos, um deputado pode despender um valor muito maior que a média, valendo‑se do saldo guardado anteriormente. Um ponto importante para a fiscalização de quem paga a conta. Com a Emenda Constitucional nº 86, de 2015, conhecida como Orçamento Impositivo, os legisladores são obrigados a destinar pelo menos 50% dos recursos das propostas individuais para a área da saúde. Isso demonstra a força dessas iniciativas na definição do gasto público. A CEAP e as propostas parlamentares são, portanto, mecanismos poderosos para deputados influenciarem diretamente o orçamento público. A transparência e o acompanhamento desses gastos são essenciais para o cidadão que paga o imposto, garantindo a responsabilidade fiscal e um Estado mais enxuto.",
+  "scenes": [
+    {
+      "narration": "Imagine um valor mensal de até R$ 50 mil. Esse é o limite máximo da Cota para o Exercício da Atividade Parlamentar, a CEAP, um benefício destinado a deputados federais. Mas quem realmente paga essa conta, e para que esse dinheiro é usado?",
+      "image_prompt": "A stack of Brazilian real banknotes on a desk, with a blurred background of a modern office environment. The money is neatly arranged, suggesting official use. Bright, clean lighting.",
+      "stock_query": "Brazilian real banknotes stack, office desk, blurred background",
+      "real_subject": "Brazilian real"
+    },
+    {
+      "narration": "A CEAP é um recurso pago todo mês aos deputados federais para cobrir despesas diretamente ligadas ao exercício do mandato. Estamos falando de passagens aéreas, hospedagens, alimentação, manutenção de escritório e até contratação de consultorias. Tudo isso custeado pelo orçamento público.",
+      "image_prompt": "An airplane wing visible from a window seat, with a city skyline in the distance. The cabin interior is visible but blurred. Represents travel expenses. Soft, neutral colors.",
+      "stock_query": "airplane window view, city skyline, travel expenses",
+      "real_subject": "Airplane travel"
+    },
+    {
+      "narration": "É importante notar que o valor da cota não é fixo para todos. Ele varia conforme o estado de origem do parlamentar. Assim, um deputado pode receber um mínimo de R$ 36 mil, enquanto outro, de uma região diferente, pode ter acesso ao teto de R$ 50 mil. Essa diferença busca compensar os custos de residência em Brasília.",
+      "image_prompt": "A map of Brazil with different states highlighted in varying shades of green, depicting regional differences. No text on the map. Focus on geographical diversity. Neutral, informative colors.",
+      "stock_query": "Brazil map, regional differences, state borders",
+      "real_subject": "Brazil map",
+      "grafico": {
+        "tipo": "mapa",
+        "lugares": [
+          "Brazil"
+        ],
+        "destaques": [
+          {
+            "pais": "Brazil",
+            "cor": "verde",
+            "rotulo": "Brasil",
+            "icone": "🇧🇷"
+          }
+        ],
+        "cidade": "Brasilia",
+        "palavra": "varia"
+      }
+    },
+    {
+      "narration": "Mas o que pouca gente sabe é que nem todas as despesas são reembolsadas da mesma forma. Algumas, como Correios, exigem que o deputado apresente os recibos em até três meses para ter o dinheiro de volta. Outras, como passagens aéreas, são pagas por débito automático.",
+      "image_prompt": "A close-up of a hand holding a receipt, with a blurred background of a post office counter. Focus on the paper texture and the act of documentation. Warm, inviting lighting.",
+      "stock_query": "hand holding receipt, post office counter, documentation",
+      "real_subject": "Receipt"
+    },
+    {
+      "narration": "Além disso, a cota regular não usada pode ser somada ao longo do exercício. Isso significa que, em determinados períodos, um deputado pode despender um valor muito maior que a média, valendo‑se do saldo guardado anteriormente. Um ponto importante para a fiscalização de quem paga a conta.",
+      "image_prompt": "A calendar with several dates circled, showing accumulation over time. No specific year or month visible, just the concept of time passing. Clean, organized aesthetic.",
+      "stock_query": "calendar, circled dates, time accumulation",
+      "real_subject": "Calendar",
+      "grafico": {
+        "tipo": "ano",
+        "de": "2026",
+        "ate": "2026",
+        "rotulo": "Acúmulo anual"
+      }
+    },
+    {
+      "narration": "Com a Emenda Constitucional nº 86, de 2015, conhecida como Orçamento Impositivo, os legisladores são obrigados a destinar pelo menos 50% dos recursos das propostas individuais para a área da saúde. Isso demonstra a força dessas iniciativas na definição do gasto público.",
+      "image_prompt": "A hospital corridor with doctors and nurses walking, blurred in the background. Focus on the medical environment and activity. Bright, sterile lighting.",
+      "stock_query": "hospital corridor, doctors, medical activity",
+      "real_subject": "Hospital",
+      "grafico": {
+        "tipo": "numero",
+        "valor": "50%",
+        "rotulo": "para a saúde"
+      }
+    },
+    {
+      "narration": "A CEAP e as propostas parlamentares são, portanto, mecanismos poderosos para deputados influenciarem diretamente o orçamento público. A transparência e o acompanhamento desses gastos são essenciais para o cidadão que paga o imposto, garantindo a responsabilidade fiscal e um Estado mais enxuto.",
+      "image_prompt": "A hand placing a coin into a transparent piggy bank, showing the money accumulating inside. The background is a blurred spreadsheet or financial document. Symbolizes public funds and transparency. Clear, focused image.",
+      "stock_query": "hand putting coin in piggy bank, transparency, financial document",
+      "real_subject": "Piggy bank"
+    }
+  ]
+}

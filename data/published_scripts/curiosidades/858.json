@@ -1,0 +1,175 @@
+{
+  "job_id": 858,
+  "video_id": "w3nLTJ-tkEA",
+  "date": "2026-11-11",
+  "long": false,
+  "title": "Túnel Seikan: 53,85 km que atravessa o mar",
+  "narration": "E aí, mente curiosa! Existe um caminho de 53,85 km que atravessa o mar sem ponte, sem barco e sem avião. Ele passa por baixo da água, escondido da superfície. Como isso é possível? Esse é o Túnel Seikan, no Japão, ligando Honshu a Hokkaido. Do total, 23,3 km ficam sob o leito do Estreito de Tsugaru. O resto é terrestre. E a profundidade impressiona ainda mais. Os trilhos ficam cerca de 100 metros abaixo do leito marinho. A água acima funciona como uma barreira gigantesca de pressão. A construção começou em 1971. Foram 17 anos de trabalho até a inauguração, em 1988. O que motivou tanto esforço? A resposta está no risco. O Estreito de Tsugaru é uma travessia perigosa, sujeita a tempestades e águas agitadas. Uma ponte seria vulnerável demais. Mas como se escava algo assim sem que a água invada tudo? A obra foi feita pela Japan Railway Construction Corporation, a JRCC, antecessora da JRTT. Quer entender o truque? O Túnel Seikan é composto por três tubos. Um túnel piloto, para reconhecer o terreno. Um túnel de serviço, para manutenção e emergências. E o túnel principal, onde os trens realmente passam. E aqui vem a virada que poucos sabem. O túnel principal foi projetado para trens Shinkansen, os trens-bala japoneses. Guarde essa informação, porque ela muda tudo. Só que essa promessa demorou décadas para se cumprir. Em março de 2016, a Hokkaido Shinkansen entrou em operação, entre Shin-Aomori e Shin-Hakodate-Hokuto. E o Túnel Seikan passou a fazer parte dela. O plano antigo finalmente virou rotina. Hoje, atravessar o Estreito de Tsugaru virou algo banal para quem pega o trem. Você entra, senta, olha o celular, e nem imagina que está a 100 metros abaixo do leito do mar. A engenharia desaparece quando funciona bem. E o contraste é esse: por fora, um mar violento e imprevisível. Por dentro, um tubo silencioso e iluminado. Duas realidades separadas por rocha e concreto. Em 17 anos, o Japão construiu um caminho submarino de 53,85 km e redefiniu o que consideramos possível no cotidiano. Hoje, o impossível virou paisagem. Você teria coragem de atravessar esse túnel sabendo o que existe acima da sua cabeça?",
+  "scenes": [
+    {
+      "narration": "E aí, mente curiosa! Existe um caminho de 53,85 km que atravessa o mar sem ponte, sem barco e sem avião. Ele passa por baixo da água, escondido da superfície. Como isso é possível?",
+      "image_prompt": "Underwater tunnel path crossing sea hidden from surface, no bridge, no boat, no plane",
+      "stock_query": "underwater tunnel sea crossing",
+      "grafico": {
+        "tipo": "mapa",
+        "lugares": [
+          "Japan"
+        ],
+        "destaques": [
+          {
+            "pais": "Japan",
+            "cor": "dourado",
+            "rotulo": "Japão",
+            "icone": "🚆",
+            "quantidade": 1
+          }
+        ],
+        "cidade": "Estreito de Tsugaru",
+        "ano": 1988,
+        "ano_rotulo": "inauguração",
+        "rota": {
+          "de": "Honshu",
+          "para": "Hokkaido",
+          "icone": "🚄"
+        },
+        "nota": "túnel submarino",
+        "personagens": null
+      }
+    },
+    {
+      "narration": "Esse é o Túnel Seikan, no Japão, ligando Honshu a Hokkaido. Do total, 23,3 km ficam sob o leito do Estreito de Tsugaru. O resto é terrestre.",
+      "image_prompt": "Seikan Tunnel route map connecting Honshu and Hokkaido under Tsugaru Strait seabed",
+      "stock_query": "Seikan Tunnel map Japan",
+      "real_subject": "Seikan Tunnel",
+      "grafico": {
+        "tipo": "comparacao",
+        "a": 23.3,
+        "a_rotulo": "sob o mar",
+        "b": 30.55,
+        "b_rotulo": "em terra",
+        "icone": "🌊"
+      }
+    },
+    {
+      "narration": "E a profundidade impressiona ainda mais. Os trilhos ficam cerca de 100 metros abaixo do leito marinho. A água acima funciona como uma barreira gigantesca de pressão.",
+      "image_prompt": "Cross-section of railway tunnel 100 meters below seabed with water column above",
+      "stock_query": "tunnel under seabed cross section",
+      "grafico": {
+        "tipo": "perfil",
+        "titulo": "Profundidade do Túnel Seikan",
+        "niveis": [
+          {
+            "prof": "nível do mar",
+            "valor": 0,
+            "rotulo": "superfície"
+          },
+          {
+            "prof": "leito marinho",
+            "valor": 140,
+            "rotulo": "fundo do mar"
+          },
+          {
+            "prof": "trilhos",
+            "valor": 240,
+            "rotulo": "trem"
+          }
+        ]
+      }
+    },
+    {
+      "narration": "A construção começou em 1971. Foram 17 anos de trabalho até a inauguração, em 1988. O que motivou tanto esforço?",
+      "image_prompt": "Tunnel construction site representing 1971 start and 1988 completion",
+      "stock_query": "tunnel construction 1970s",
+      "grafico": {
+        "tipo": "ano",
+        "de": 1971,
+        "ate": 1988,
+        "rotulo": "construção do Túnel Seikan"
+      }
+    },
+    {
+      "narration": "A resposta está no risco. O Estreito de Tsugaru é uma travessia perigosa, sujeita a tempestades e águas agitadas. Uma ponte seria vulnerável demais.",
+      "image_prompt": "Stormy Tsugaru Strait sea surface with rough waves",
+      "stock_query": "Tsugaru Strait stormy sea",
+      "real_subject": "Tsugaru Strait"
+    },
+    {
+      "narration": "Mas como se escava algo assim sem que a água invada tudo? A obra foi feita pela Japan Railway Construction Corporation, a JRCC, antecessora da JRTT. Quer entender o truque?",
+      "image_prompt": "symbolic wide shot related to the story no identifiable face focus on hands objects a silhouette seen from behind or the surrounding environment cinematic lighting no no words no no no logos no no buttons no watermark no no no plaques no banners no billboards realistic photo cinematic light no, realistic photo, cinematic light, no text"
+    },
+    {
+      "narration": "O Túnel Seikan é composto por três tubos. Um túnel piloto, para reconhecer o terreno. Um túnel de serviço, para manutenção e emergências. E o túnel principal, onde os trens realmente passam.",
+      "image_prompt": "Cross-section diagram of three parallel tunnels: pilot, service, main",
+      "stock_query": "three tunnel tubes cross section",
+      "real_subject": "Seikan Tunnel",
+      "grafico": {
+        "tipo": "cartao",
+        "titulo": "Os três tubos do Seikan",
+        "linhas": [
+          "Túnel piloto: reconhece o terreno",
+          "Túnel de serviço: manutenção e emergência",
+          "Túnel principal: passagem dos trens"
+        ]
+      }
+    },
+    {
+      "narration": "E aqui vem a virada que poucos sabem. O túnel principal foi projetado para trens Shinkansen, os trens-bala japoneses. Guarde essa informação, porque ela muda tudo.",
+      "image_prompt": "Shinkansen bullet train inside main tunnel",
+      "stock_query": "Shinkansen train in tunnel",
+      "real_subject": "Shinkansen"
+    },
+    {
+      "narration": "Só que essa promessa demorou décadas para se cumprir. Em março de 2016, a Hokkaido Shinkansen entrou em operação, entre Shin-Aomori e Shin-Hakodate-Hokuto. E o Túnel Seikan passou a fazer parte dela. O plano antigo finalmente virou rotina.",
+      "image_prompt": "Map of Hokkaido Shinkansen line through Seikan Tunnel between Shin-Aomori and Shin-Hakodate-Hokuto",
+      "stock_query": "Hokkaido Shinkansen map Seikan Tunnel",
+      "real_subject": "Hokkaido Shinkansen",
+      "grafico": {
+        "tipo": "mapa",
+        "lugares": [
+          "Japan"
+        ],
+        "destaques": [
+          {
+            "pais": "Japan",
+            "cor": "azul",
+            "rotulo": "Japão",
+            "icone": "🚄",
+            "quantidade": 1
+          }
+        ],
+        "cidade": "Shin-Aomori a Shin-Hakodate-Hokuto",
+        "ano": 2016,
+        "ano_rotulo": "Hokkaido Shinkansen",
+        "rota": {
+          "de": "Shin-Aomori",
+          "para": "Shin-Hakodate-Hokuto",
+          "icone": "🚄"
+        },
+        "nota": "linha em operação",
+        "personagens": null
+      }
+    },
+    {
+      "narration": "Hoje, atravessar o Estreito de Tsugaru virou algo banal para quem pega o trem. Você entra, senta, olha o celular, e nem imagina que está a 100 metros abaixo do leito do mar. A engenharia desaparece quando funciona bem.",
+      "image_prompt": "Train interior seat with smartphone on it, dark tunnel outside window",
+      "stock_query": "train interior smartphone seat"
+    },
+    {
+      "narration": "E o contraste é esse: por fora, um mar violento e imprevisível. Por dentro, um tubo silencioso e iluminado. Duas realidades separadas por rocha e concreto.",
+      "image_prompt": "Split view: violent stormy sea above, illuminated silent tunnel interior below separated by rock and concrete",
+      "stock_query": "storm sea vs tunnel interior split"
+    },
+    {
+      "narration": "Em 17 anos, o Japão construiu um caminho submarino de 53,85 km e redefiniu o que consideramos possível no cotidiano. Hoje, o impossível virou paisagem. Você teria coragem de atravessar esse túnel sabendo o que existe acima da sua cabeça?",
+      "image_prompt": "Seikan Tunnel entrance portal with distance marker 53.85 km",
+      "stock_query": "Seikan Tunnel entrance portal",
+      "grafico": [
+        {
+          "tipo": "numero",
+          "valor": 53.85,
+          "rotulo": "km de caminho submarino construído em 17 anos"
+        }
+      ]
+    }
+  ]
+}
