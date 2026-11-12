@@ -1218,6 +1218,10 @@ def generate_script(
             repeated = (_repetition_problem(script) or _word_cap_problem(script, channel.word_caps)
                         or numero_repetido(script))
             if channel.name in FATOS_CANAIS:
+                from .fatos import fato_repetido
+                repetido = fato_repetido(script)
+                if repetido:
+                    issues.append((repetido, f"repetiu: {repetido}. Cada fato entra UMA vez no roteiro."))
                 extenso = numero_por_extenso(" ".join(sc.get("narration", "") for sc in script.get("scenes", [])))
                 if extenso:
                     issues.append((f"número por extenso ({', '.join(extenso[:3])})",

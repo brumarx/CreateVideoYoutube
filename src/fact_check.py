@@ -760,7 +760,7 @@ def verificar_sem_fato(script: dict, web_facts: list[dict] | None) -> dict:
     script = {k: v for k, v in script.items() if k != "_sem_fato"}
     if not pendentes:
         return script
-    sem_prova = ungrounded_sentences({"scenes": [{"narration": " ".join(pendentes)}]}, None, web_facts)
+    sem_prova = ungrounded_sentences({"scenes": [{"narration": " ".join(pendentes)}]}, None, web_facts, estrito=True)
     if sem_prova is None:
         tirar = set(pendentes)
     else:
@@ -1419,7 +1419,8 @@ def _claim_matches_quote(sentence: str, quote: str) -> bool:
     return True
 
 
-def ungrounded_sentences(script: dict, facts: dict | None, web_facts: list[dict] | None) -> list[dict] | None:
+def ungrounded_sentences(script: dict, facts: dict | None, web_facts: list[dict] | None,
+                         estrito: bool = False) -> list[dict] | None:
     """Frases de fato sem trecho real da fonte que as sustente — viram
     problema "sem_fonte" (o termo é a própria frase, pra o corte achar).
     [] = tudo sustentado; None = sem fonte pra conferir ou checagem fora do ar."""
@@ -1455,6 +1456,24 @@ def ungrounded_sentences(script: dict, facts: dict | None, web_facts: list[dict]
         return None
     source_folded = _fold_text(source)
     problems = []
+    if estrito:
+        # canal de fatos (job 874: "20 de 20 sustentadas" em 3 s): frase que a IA omitiu ou chamou de
+        # "não é fato" só passa sem citação se o código reconhece como livre (pergunta sem premissa,
+        # saudação, convite); o resto precisa de trecho da fonte
+        from .fatos import _frase_livre
+        julgados: dict[int, dict] = {}
+        for item in items:
+            try:
+                julgados[int(item.get("n")) - 1] = item
+            except (TypeError, ValueError, AttributeError):
+                continue
+        items = []
+        for i, frase in enumerate(sentences):
+            item = julgados.get(i) or {"n": i + 1, "fato": True, "trecho": None}
+            if not item.get("fato") and not _frase_livre(frase):
+                item = {**item, "fato": True}
+            if item.get("fato") or not _frase_livre(frase):
+                items.append(item)
     for item in items:
         try:
             idx = int(item.get("n")) - 1

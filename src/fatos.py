@@ -368,6 +368,20 @@ def numero_por_extenso(texto: str) -> list[str]:
     return achados
 
 
+def fato_repetido(script: dict) -> str | None:
+    """O mesmo fato ([F#]) em duas frases com o mesmo número: dado repetido (job 874: "1,8 milhão de
+    metros cúbicos" nas cenas 3 e 9)."""
+    vistos: dict[tuple[str, str], int] = {}
+    for sc in script.get("scenes", []):
+        for frase in _FRASES.split(sc.get("narration", "")):
+            ids = {i.strip() for m in _ID.finditer(frase) for i in re.split(r"[,;]", m.group(1))}
+            for n in numeros(_ID.sub("", frase)):
+                for i in ids:
+                    vistos[(i, n)] = vistos.get((i, n), 0) + 1
+    repetidos = [f"{i} ({n})" for (i, n), q in vistos.items() if q > 1]
+    return f"o mesmo fato em mais de uma frase: {', '.join(repetidos[:3])}" if repetidos else None
+
+
 NUMERO_MAX_FRASES = 2  # o mesmo número em mais frases que isso soa repetido ("26 metros" 5x, job 865)
 
 

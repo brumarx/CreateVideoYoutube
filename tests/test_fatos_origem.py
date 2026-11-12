@@ -409,7 +409,7 @@ def test_afirmacao_provada_por_citacao_deixa_de_ser_problema(monkeypatch):
     from src import fact_check as fc
     evid = [{"titulo": "JR", "url": "https://jr.example/a", "trecho": "As estações são atração para visitantes."}]
     monkeypatch.setattr(fc, "evidence_for_problems", lambda probs, topic: evid)
-    monkeypatch.setattr(fc, "ungrounded_sentences", lambda s, f, w: [])  # tudo sustentado
+    monkeypatch.setattr(fc, "ungrounded_sentences", lambda s, f, w, estrito=False: [])  # tudo sustentado
     problema = [{"tipo": "fora_da_fonte", "termo": "Hoje as estações são atração para visitantes", "motivo": "x"}]
     restantes, fontes = fc.confirmar_afirmacoes(_roteiro_com_afirmacao(), problema, "Seikan", [])
     assert restantes == [] and fontes == evid
@@ -437,7 +437,7 @@ def test_afirmacao_com_numero_nao_passa_pela_confirmacao(monkeypatch):
 def test_checagem_fora_do_ar_nao_muda_nada(monkeypatch):
     from src import fact_check as fc
     monkeypatch.setattr(fc, "evidence_for_problems", lambda probs, topic: [])
-    monkeypatch.setattr(fc, "ungrounded_sentences", lambda s, f, w: None)
+    monkeypatch.setattr(fc, "ungrounded_sentences", lambda s, f, w, estrito=False: None)
     problema = [{"tipo": "fora_da_fonte", "termo": "Hoje as estações são atração para visitantes", "motivo": "x"}]
     assert fc.confirmar_afirmacoes(_roteiro_com_afirmacao(), problema, "Seikan", [])[0] == problema
 
@@ -590,7 +590,7 @@ def test_afirmacao_sem_marca_vai_para_verificacao_e_nao_some():
 def test_verificacao_mantem_a_sustentada_e_tira_a_sem_prova(monkeypatch):
     from src import fact_check as fc
     monkeypatch.setattr(fc, "ungrounded_sentences",
-                        lambda s, f, w: [{"tipo": "sem_fonte", "termo": "Mesmo com os acidentes, a obra continuou."}])
+                        lambda s, f, w, estrito=False: [{"tipo": "sem_fonte", "termo": "Mesmo com os acidentes, a obra continuou."}])
     roteiro = {"scenes": [{"narration": "A escavação exigiu três galerias. Mesmo com os acidentes, a obra continuou. Você teria coragem?"}],
                "_sem_fato": ["A escavação exigiu três galerias.", "Mesmo com os acidentes, a obra continuou."]}
     out = fc.verificar_sem_fato(roteiro, [{"titulo": "x", "url": "u", "trecho": "três galerias"}])
@@ -600,14 +600,14 @@ def test_verificacao_mantem_a_sustentada_e_tira_a_sem_prova(monkeypatch):
 
 def test_verificacao_fora_do_ar_tira_as_pendentes(monkeypatch):
     from src import fact_check as fc
-    monkeypatch.setattr(fc, "ungrounded_sentences", lambda s, f, w: None)
+    monkeypatch.setattr(fc, "ungrounded_sentences", lambda s, f, w, estrito=False: None)
     roteiro = {"scenes": [{"narration": "O túnel tem 53,85 km. A obra continuou."}], "_sem_fato": ["A obra continuou."]}
     assert fc.verificar_sem_fato(roteiro, [])["scenes"][0]["narration"] == "O túnel tem 53,85 km."
 
 
 def test_sem_pendentes_nao_chama_a_verificacao(monkeypatch):
     from src import fact_check as fc
-    monkeypatch.setattr(fc, "ungrounded_sentences", lambda *a: (_ for _ in ()).throw(AssertionError("não devia chamar")))
+    monkeypatch.setattr(fc, "ungrounded_sentences", lambda *a, **k: (_ for _ in ()).throw(AssertionError("não devia chamar")))
     roteiro = {"scenes": [{"narration": "Texto."}]}
     assert fc.verificar_sem_fato(roteiro, []) == roteiro
 
@@ -802,3 +802,23 @@ def test_numero_por_extenso_nao_passa():
     fatos = [{"id": "F1", "texto": "Os navios sobem 26 metros.", "status": "oficial", "fontes": []}]
     out = conferir_frases({"scenes": [{"narration": "Os navios sobem vinte e seis metros [F1]. Sobem 26 metros [F1]."}]}, fatos)
     assert out["scenes"][0]["narration"] == "Sobem 26 metros."
+
+
+# ---------- job 874: checagem por citação estrita e fato repetido
+def test_checagem_estrita_nao_aceita_frase_omitida_ou_dita_nao_fato(monkeypatch):
+    from src import fact_check as fc
+    resposta = '{"frases": [{"n": 1, "fato": false}]}'  # a 1ª chamada de "não é fato", a 2ª omitida
+    monkeypatch.setattr(fc, "complete", lambda msgs, **k: resposta)
+    roteiro = {"scenes": [{"narration": "Um erro de cálculo pode causar acidentes graves. É concreto suficiente para encher vários estádios."}]}
+    fontes = [{"titulo": "t", "url": "u", "trecho": "As eclusas elevam navios 26 metros."}]
+    assert len(fc.ungrounded_sentences(roteiro, None, fontes, estrito=True)) == 2
+    assert fc.ungrounded_sentences(roteiro, None, fontes) == []  # fora do canal de fatos: como antes
+    perg = {"scenes": [{"narration": "Você teria coragem de passar por essas eclusas?"}]}
+    assert fc.ungrounded_sentences(perg, None, fontes, estrito=True) == []
+
+
+def test_mesmo_fato_em_duas_frases_e_defeito():
+    from src.fatos import fato_repetido
+    texto = "Cada câmara exigiu 1,8 milhão de m³ [F8]. Sobe 26 metros [F1]. O concreto somou 1,8 milhão de m³ [F8]."
+    assert "F8" in fato_repetido({"scenes": [{"narration": texto}]})
+    assert fato_repetido({"scenes": [{"narration": "Sobe 26 metros [F1]. Usou 1,8 milhão de m³ [F8]."}]}) is None
