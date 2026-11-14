@@ -491,6 +491,16 @@ def test_acronyms_have_explicit_spoken_form():
     assert "ésse tê efe" in tts._for_speech("o STF")[0]
 
 
+def test_spoken_acronym_comes_back_as_written_sigla_in_caption():
+    from src import tts
+
+    spoken, trocas = tts._for_speech("A manchete é do STF e da CBF.")
+    wb = [{"text": w, "start": i, "end": i + 1} for i, w in enumerate(spoken.split())]
+    textos = [w["text"].strip(".,;:!?") for w in tts._restore_spelling(wb, trocas, {})]
+    assert "STF" in textos and "CBF" in textos
+    assert not any(t in ("tê", "efe", "ésse") for t in textos)
+
+
 def test_person_name_found_for_photo_search():
     from src.real_media import person_in_narration
 

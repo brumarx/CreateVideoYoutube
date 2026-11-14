@@ -516,9 +516,11 @@ def _restore_punctuation(word_boundaries: list[dict], text: str) -> list[dict]:
 def _join_multiword(word_boundaries: list[dict], extra: dict[str, str] | None) -> list[dict]:
     """Pronúncia de várias palavras ("vIA" -> "via I-A") volta pra 1 palavra
     só na legenda, com o tempo do trecho inteiro."""
+    # siglas faladas por extenso ("ésse tê efe" -> STF) também voltam inteiras:
+    # sem isso a legenda mostrava "ésse tê efe" picado em palavras
     multi = {
         tuple(re.findall(r"\w+", v.lower())): k
-        for k, v in {**PRONUNCIATIONS, **(extra or {})}.items() if len(re.findall(r"\w+", v)) > 1
+        for k, v in {**ACRONYM_SPOKEN, **PRONUNCIATIONS, **(extra or {})}.items() if len(re.findall(r"\w+", v)) > 1
     }
     if not multi:
         return word_boundaries
