@@ -48,7 +48,7 @@ EDGE_VOICE_LABELS = {
     "pt-BR-FranciscaNeural": ("Francisca", "F"),
     "pt-BR-ThalitaMultilingualNeural": ("Thalita", "F"),
 }
-_EDGE_DEFAULT_WEIGHTS = {"pt-BR-AntonioNeural": 50, "pt-BR-FranciscaNeural": 30, "pt-BR-ThalitaMultilingualNeural": 20}
+_EDGE_DEFAULT_WEIGHTS = {"pt-BR-AntonioNeural": 60, "pt-BR-FranciscaNeural": 40}
 
 
 def _voice_options(weights: dict) -> list[dict]:

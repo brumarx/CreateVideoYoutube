@@ -255,7 +255,7 @@ class ChannelConfig:
             language=data.get("language", "pt-BR"),
             tts_voice_weights=data.get(
                 "tts_voice_weights",
-                {"pt-BR-AntonioNeural": 50, "pt-BR-FranciscaNeural": 30, "pt-BR-ThalitaMultilingualNeural": 20},
+                {"pt-BR-AntonioNeural": 60, "pt-BR-FranciscaNeural": 40},
             ),
             prompt_base=data["prompt_base"],
             scenes_per_video=data.get("scenes_per_video", 8),
