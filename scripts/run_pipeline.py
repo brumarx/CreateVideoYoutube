@@ -926,7 +926,14 @@ def run(
             if problems is None:
                 # revisor fora do ar: tenta 1x de novo; sem revisão o vídeo
                 # NÃO sai (não existe mais aprovação manual depois)
-                problems = review_script(script, topic, facts, web_facts)
+                # o revisor cai por cota/429 dos provedores, que se recuperam em minutos:
+                # espera e tenta de novo antes de desistir do vídeo (antes era 2 tentativas seguidas)
+                for _wait in (60, 120):
+                    if problems is not None:
+                        break
+                    log.warning("[%s] revisor de fatos fora do ar — nova tentativa em %ds", job_id, _wait)
+                    time.sleep(_wait)
+                    problems = review_script(script, topic, facts, web_facts)
                 if problems is None:
                     if must_publish and channel_name not in FATOS_CANAIS:
                         log.warning("[%s] revisor de fatos indisponível — última tentativa do dia, segue sem revisão", job_id)

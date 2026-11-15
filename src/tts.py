@@ -70,6 +70,8 @@ _SPOKEN_SWAPS = [
     (re.compile(r"\bDescenso\b"), "Rebaixamento"),
     (re.compile(r"\bvs\.?(?=\s)"), "contra"),
     (re.compile(r"\bSt\. (?=[A-Z])"), "Saint "),
+    # técnico do Botafogo: a voz lia "Tite" como "teti" (14/11). "tchi" soa como Brasil
+    (re.compile(r"\bTite\b"), "Títchi"),
 ]
 
 

@@ -421,7 +421,9 @@ def _segment(url: str, start: float, timeout: float = 180) -> Path | None:
     pode ter centenas de MB). mkv aceita qualquer codec (webm/ogv/mp4).
     Até 3 tentativas com espera (o erro real era HTTP 429 da Wikimedia) e o stderr
     do ffmpeg vai pro log, pra saber o motivo da próxima falha."""
-    cmd = ["ffmpeg", "-v", "error", "-y", "-user_agent", _FFMPEG_UA, "-ss", f"{start:.1f}", "-i", url,
+    # -user_agent é opção do protocolo http: num arquivo local (cache .bin) o ffmpeg recusa
+    ua = ["-user_agent", _FFMPEG_UA] if url.startswith(("http://", "https://")) else []
+    cmd = ["ffmpeg", "-v", "error", "-y", *ua, "-ss", f"{start:.1f}", "-i", url,
            "-t", str(SEGMENT_SECONDS), "-an", "-c:v", "copy"]
     last_err = ""
     for attempt in range(3):
