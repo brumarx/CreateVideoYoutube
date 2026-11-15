@@ -1312,17 +1312,22 @@ def run(
         # 11/11: a voz é conferida logo depois da narração (e do ajuste de duração), ANTES das imagens e
         # da montagem: voz errada para o job sem gastar a renderização inteira
         from src.video_qa import review_audio_full
-        audio_problems, audio_names = review_audio_full([s["narration"] for s in script["scenes"]], [n[0] for n in narrations])
+        audio_problems, audio_names = review_audio_full(
+            [s["narration"] for s in script["scenes"]], [n[0] for n in narrations], pronunciations)
         if audio_names and not audio_problems:
             # nome falado errado: corrige sozinho (grafia de fala + refala só as cenas com o nome) e confere de novo
             fixed = _fix_spoken_names(script, narrations, audio_names, pronunciations, foreign, tts_voice, work_dir, job_id)
             if fixed is not None:
                 narrations, pronunciations = fixed
                 audio_problems, audio_names = review_audio_full(
-                    [s["narration"] for s in script["scenes"]], [n[0] for n in narrations],
+                    [s["narration"] for s in script["scenes"]], [n[0] for n in narrations], pronunciations,
                 )
         if audio_problems:
             raise ScriptRejected("áudio reprovado antes da montagem: " + "; ".join(audio_problems))
+        if audio_names:
+            # 15/11: nome continua errado mesmo depois da grafia de fala — não sobe nem privado
+            # pra aprovação (916, 918, 911 subiram assim e saíram com o nome errado). Descarta e refaz
+            raise ScriptRejected("nome falado errado depois da correção: " + "; ".join(audio_names))
         visual_context = f"Canal: {channel.channel_title} — {channel.niche}.\nTema do vídeo: {topic}."
         if channel_name in FATOS_CANAIS:
             # 11/11 (job 857): túnel de ESTRADA na abertura de um vídeo sobre túnel FERROVIÁRIO passou,
@@ -1811,11 +1816,8 @@ def run(
                 log.warning("[%s] cena %d fora de contexto — imagem trocada, remontando o vídeo", job_id, i + 1)
         # voz falando besteira não passa nem na última tentativa do dia —
         # não publicar é melhor que "Fala a é acento circunflexo" (job 414)
-        # (o áudio já foi conferido logo depois da narração; aqui só entram as ressalvas de nome)
-        if audio_names:
-            # nome pronunciado diferente: não reprova (o Whisper também erra nome), sobe privado pra aprovação
-            log.warning("[%s] pronúncia de nome: %s", job_id, "; ".join(audio_names))
-            ressalvas.extend(audio_names)
+        # (o áudio já foi conferido logo depois da narração; nome errado já foi
+        # reprovado ali: não chega aqui com nome errado)
         if qa_problems:
             for p in qa_problems:
                 log.warning("[%s] revisão do vídeo: %s", job_id, p)

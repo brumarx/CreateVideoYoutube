@@ -48,7 +48,7 @@ def test_audio_e_conferido_antes_das_imagens_e_da_montagem():
     checa = PIPELINE.index("audio_problems, audio_names = review_audio_full(")
     assert checa < PIPELINE.index('visual_context = f"Canal: {channel.channel_title}')
     assert checa < PIPELINE.index("concat_scenes(")
-    assert PIPELINE.count("review_audio_full(") == 1
+    assert PIPELINE.count("review_audio_full(") == 2  # a checagem e a conferência depois da grafia de fala
 
 
 # ---------- 3. música sem risco de Content ID
@@ -397,3 +397,19 @@ def test_corte_por_fato_repete_ate_tres_rodadas():
 def test_texto_validado_do_canal_de_fatos_nao_e_reescrito_por_ia():
     assert '''if channel_name not in FATOS_CANAIS:
             # 12/11 (job 869)''' in PIPELINE
+
+
+# ---------- 15/11 (jobs 916, 918): grafia de fala que a correção pôs no lugar não pode reprovar o nome
+def test_grafia_de_fala_corrigida_conta_como_ouvida():
+    from src.video_qa import name_problems
+    texto = "O zagueiro Warleson saiu machucado e Seedorf entrou."
+    ouvido = "O zagueiro Uôrlisõ saiu machucado e Sidórfi entrou."
+    pron = {"Warleson": "Uôrlisõ", "Seedorf": "Sidórfi"}
+    assert name_problems([texto], ouvido, pron) == []
+
+
+def test_nome_errado_mesmo_com_grafia_de_fala_continua_marcado():
+    from src.video_qa import name_problems
+    texto = "O zagueiro Warleson saiu machucado."
+    ouvido = "O zagueiro Tech Store saiu machucado."
+    assert name_problems([texto], ouvido, {"Warleson": "Uôrlisõ"})

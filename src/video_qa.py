@@ -331,10 +331,12 @@ def _nome_ouvido(nome: str, heard_f: str) -> bool:
                for p in re.split(r"[-']", nome) if p)
 
 
-def name_problems(narrations: list[str], heard: str) -> list[str]:
+def name_problems(narrations: list[str], heard: str, pronunciations: dict[str, str] | None = None) -> list[str]:
     """Nome próprio do roteiro que a transcrição não tem (a voz falou outra
-    coisa: "Textor" saiu "Tech Store", "Svalbard" saiu "Esvalbard"). Não reprova:
-    vira ressalva pra aprovação humana, porque o Whisper também erra nome."""
+    coisa: "Textor" saiu "Tech Store", "Svalbard" saiu "Esvalbard").
+    Conta como ouvido também a GRAFIA DE FALA que a correção pôs no lugar
+    (pronunciations: "Warleson" -> "Uôrlisõ"): o áudio sai com a grafia de fala,
+    então a transcrição traz ela e não o nome escrito (jobs 916/918, 15/11)."""
     heard_f = " " + " ".join(re.findall(r"\w+", _fold(heard))) + " "
     missing: list[str] = []
     for text in narrations:
@@ -348,14 +350,20 @@ def name_problems(narrations: list[str], heard: str) -> list[str]:
                     continue
                 if not re.fullmatch(r"[A-Za-zÀ-ÿ'-]+", core):
                     continue
-                if not _nome_ouvido(core, heard_f) and core not in missing:
+                if _nome_ouvido(core, heard_f):
+                    continue
+                falado = (pronunciations or {}).get(core)
+                if falado and _nome_ouvido(falado, heard_f):
+                    continue
+                if core not in missing:
                     missing.append(core)
     if not missing:
         return []
     return [f"nome que a voz não falou como escrito: {', '.join(missing[:6])} — confira a pronúncia (ouvido: \"{heard[:120].strip()}\")"]
 
 
-def review_audio_full(narrations: list[str], scene_audios: list[Path]) -> tuple[list[str], list[str]]:
+def review_audio_full(narrations: list[str], scene_audios: list[Path],
+                      pronunciations: dict[str, str] | None = None) -> tuple[list[str], list[str]]:
     """(problemas graves, ressalvas). Graves reprovam o vídeo; ressalvas sobem
     privadas pra aprovação humana."""
     heard = []
@@ -365,7 +373,7 @@ def review_audio_full(narrations: list[str], scene_audios: list[Path]) -> tuple[
             return ["revisão da fala indisponível (nenhuma transcrição respondeu) — não publica sem ouvir"], []
         heard.append(text)
     joined = " ".join(heard)
-    return audio_problems(narrations, joined), name_problems(narrations, joined)
+    return audio_problems(narrations, joined), name_problems(narrations, joined, pronunciations)
 
 
 def review_audio(narrations: list[str], scene_audios: list[Path]) -> list[str]:
