@@ -31,7 +31,7 @@ language: "pt-BR"
 tts_voice_weights:
   pt-BR-AntonioNeural: 33
   pt-BR-FranciscaNeural: 33
-  pt-BR-ThalitaMultilingualNeural: 33
+  pt-BR-ThalitaMultilingualNeural: 0  # 14/11: troca vogais ("plantão" saiu "plantal") e soou estrangeira
 scenes_per_video: 6
 upload_privacy: "public"
 uploads_per_day: 1

@@ -186,6 +186,55 @@ def _speakable(respelling: str) -> bool:
     return all(_OK_CLUSTER.match(c) for c in _CONSONANTS.findall(plain))
 
 
+def _nomes_da_ressalva(texto: str) -> list[str]:
+    """Nomes da ressalva 'nome que a voz não falou como escrito: A, B — confira...' (src/video_qa.py)."""
+    m = re.search(r"como escrito: (.+?) — confira", texto)
+    return [n.strip() for n in m.group(1).split(",") if n.strip()] if m else []
+
+
+def _fix_spoken_names(script, narrations, audio_names, pronunciations, foreign, tts_voice, work_dir, job_id):
+    """Pede ao LLM uma grafia à portuguesa (com acento na tônica) pra cada nome que a voz errou,
+    refala só as cenas que trazem o nome e devolve (narrations, pronunciations) novos — ou None
+    se não deu pra corrigir nada. Quem chama confere de novo com review_audio_full."""
+    from src.providers import complete
+    from src.tts import narrate
+
+    nomes = [n for txt in audio_names for n in _nomes_da_ressalva(txt)]
+    if not nomes:
+        return None
+    novos: dict[str, str] = {}
+    for nome in dict.fromkeys(nomes):
+        try:
+            resp = complete(
+                [{"role": "user", "content": (
+                    f"Como um brasileiro LÊ em voz alta o nome próprio \"{nome}\" (nome de pessoa, lugar ou "
+                    f"instituição)? Responda SÓ a grafia à portuguesa, com acento na sílaba tônica, sem aspas "
+                    f"e sem explicação. Ex.: \"Domingues\" -> \"Domíngues\"; \"Cicero\" -> \"Císero\".")}],
+                max_tokens=40, temperature=0.1,
+                validate=lambda t: 0 < len(t.strip()) <= 40 and "\n" not in t.strip(),
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("[%s] grafia de fala de %r falhou: %s", job_id, nome, exc)
+            continue
+        grafia = resp.strip().strip('"\'').strip()
+        if grafia and grafia.lower() != nome.lower():
+            novos[nome] = grafia
+    if not novos:
+        return None
+    log.warning("[%s] nome falado errado — grafia de fala: %s", job_id, novos)
+    pronunciations = {**pronunciations, **novos}
+    narrations = list(narrations)
+    for i, scene in enumerate(script["scenes"]):
+        if not any(n in scene["narration"] for n in novos):
+            continue
+        audio_path = work_dir / f"scene_{i}.mp3"
+        _, word_boundaries = narrate(
+            scene["narration"], audio_path, voice=tts_voice, pronunciations=pronunciations, foreign=foreign,
+        )
+        narrations[i] = (audio_path, word_boundaries, _ffprobe_duration(audio_path))
+    return narrations, pronunciations
+
+
 def _foreign_terms(script: dict, pronunciations: dict[str, str]) -> tuple[dict[str, str], dict[str, str]]:
     """Termos do campo "idioma" do roteiro (voz nativa, src/tts.py) e as
     reescritas de "pronuncia" que sobram: nada de termo que está nos dois,
@@ -1264,6 +1313,14 @@ def run(
         # da montagem: voz errada para o job sem gastar a renderização inteira
         from src.video_qa import review_audio_full
         audio_problems, audio_names = review_audio_full([s["narration"] for s in script["scenes"]], [n[0] for n in narrations])
+        if audio_names and not audio_problems:
+            # nome falado errado: corrige sozinho (grafia de fala + refala só as cenas com o nome) e confere de novo
+            fixed = _fix_spoken_names(script, narrations, audio_names, pronunciations, foreign, tts_voice, work_dir, job_id)
+            if fixed is not None:
+                narrations, pronunciations = fixed
+                audio_problems, audio_names = review_audio_full(
+                    [s["narration"] for s in script["scenes"]], [n[0] for n in narrations],
+                )
         if audio_problems:
             raise ScriptRejected("áudio reprovado antes da montagem: " + "; ".join(audio_problems))
         visual_context = f"Canal: {channel.channel_title} — {channel.niche}.\nTema do vídeo: {topic}."
