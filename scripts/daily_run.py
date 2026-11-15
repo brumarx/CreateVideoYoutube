@@ -148,7 +148,8 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
     politica, o curto usa sempre dado real do banco — o que mais passa na
     revisão)."""
     base_cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name, *extra]
-    if NO_UPLOAD:
+    sem_upload = NO_UPLOAD or "--no-upload" in extra
+    if sem_upload and "--no-upload" not in base_cmd:
         base_cmd.append("--no-upload")
     total = MAX_ATTEMPTS + MUST_PUBLISH_ATTEMPTS - 1
     for attempt in range(1, total + 1):
@@ -212,7 +213,22 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
         # (sem vídeo que passe no mesmo tema, o dia fica sem vídeo): sorteia outro
         fresh = attempt + 1 >= MAX_ATTEMPTS
         base_cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name,
-                    *([] if fresh else same), *(["--no-upload"] if NO_UPLOAD else [])]
+                    *([] if fresh else same), *(["--no-upload"] if sem_upload else [])]
+
+def _garante_reserva(channel_name: str, extra: list[str]) -> None:
+    """15/11: deixa um vídeo PRONTO (--no-upload, passa pelas mesmas revisões) pro
+    dia seguinte. Sobe no começo da próxima rodada (upload_pending ready). Se o dia
+    falhar em todas as tentativas, é esse vídeo que sai no lugar — sem vídeo
+    com erro conhecido, e sem dia sem vídeo enquanto houver reserva."""
+    if NO_UPLOAD:
+        return
+    from retry_uploads import _failed_jobs
+
+    if _failed_jobs(channel_name, "ready"):
+        return
+    log.info("[%s] reserva: gerando vídeo pronto pro dia seguinte", channel_name)
+    _run_pipeline(channel_name, [*extra, "--no-upload"], "reserva")
+
 
 def _render_approved(channel_name: str, lock_held: bool = False) -> None:
     """Renderiza (sem publicar) o roteiro aprovado mais antigo do canal com
@@ -275,6 +291,7 @@ def run_channel(channel_name: str, cfg: dict) -> None:
             if ready or _published_today(channel_name):
                 break
             _run_pipeline(channel_name, ["--botafogo-task", task], task)
+        _garante_reserva(channel_name, ["--botafogo-task", "portal"])
         return
 
     from datetime import date
@@ -302,6 +319,7 @@ def run_channel(channel_name: str, cfg: dict) -> None:
             channel_name, [], f"upload {i + 1}/{uploads_per_day} ({daily_format})",
             fallback_short=daily_format == "long",
         )
+    _garante_reserva(channel_name, [])
 
 
 PIPELINE_TIMEOUT_S = 90 * 60    # Short: revisão de fatos (até 20 min) + render de 35 cenas (~40 min)

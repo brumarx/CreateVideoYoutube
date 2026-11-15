@@ -433,3 +433,11 @@ def test_imagem_repetida_identifica_as_cenas_extras(tmp_path):
 def test_pipeline_nao_sobe_privado_com_problema_conhecido():
     assert "ressalvas.extend(qa_problems)" not in PIPELINE
     assert "sobe privado com ressalva\", job_id" not in PIPELINE
+
+
+# ---------- 15/11: sempre um vídeo pronto de reserva (dia sem vídeo só se não houver nenhum)
+def test_reserva_pronta_depois_de_cada_rodada_de_canal():
+    dr = (Path(__file__).resolve().parents[1] / "scripts" / "daily_run.py").read_text(encoding="utf-8")
+    assert dr.count("_garante_reserva(channel_name,") == 2
+    assert 'sem_upload = NO_UPLOAD or "--no-upload" in extra' in dr
+    assert '*([] if fresh else same), *(["--no-upload"] if sem_upload else [])]' in dr
