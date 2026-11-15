@@ -413,3 +413,23 @@ def test_nome_errado_mesmo_com_grafia_de_fala_continua_marcado():
     texto = "O zagueiro Warleson saiu machucado."
     ouvido = "O zagueiro Tech Store saiu machucado."
     assert name_problems([texto], ouvido, {"Warleson": "Uôrlisõ"})
+
+
+# ---------- 15/11 (jobs 915, 918, 919): imagem repetida é trocada; fatos sem convergir e problema de vídeo não sobem
+def test_imagem_repetida_identifica_as_cenas_extras(tmp_path):
+    from PIL import Image
+    from src.video_qa import repeated_scene_numbers
+    import subprocess
+    fontes = ["testsrc", "testsrc", "testsrc", "smptebars"]  # padrões diferentes (cor sólida tem o mesmo hash)
+    vids = []
+    for k, c in enumerate(fontes):
+        v = tmp_path / f"c{k}.mp4"
+        subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", f"{c}=s=64x64:d=1", "-c:v", "libx264", str(v)],
+                       check=True, capture_output=True, stdin=subprocess.DEVNULL)
+        vids.append(v)
+    assert repeated_scene_numbers(vids) == [2, 3]
+
+
+def test_pipeline_nao_sobe_privado_com_problema_conhecido():
+    assert "ressalvas.extend(qa_problems)" not in PIPELINE
+    assert "sobe privado com ressalva\", job_id" not in PIPELINE

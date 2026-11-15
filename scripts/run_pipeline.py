@@ -60,7 +60,7 @@ from src.thumbnail import make_thumbnail, photo_scene_frame, title_card
 from src.topics import pick_topic, topic_problem
 from src.trending_topics import get_trending_topics, topic_for_channel, filter_topics, record_trend_use
 from src.tts import narrate
-from src.video_qa import review_audio, review_video
+from src.video_qa import repeated_scene_numbers, review_audio, review_video
 from src.visual_check import matches_scene
 from src.upload import UPLOAD_META_FILE, after_upload_status, post_comment, top_channel_videos, upload_video
 from src.visuals import generate_image
@@ -968,9 +968,8 @@ def run(
                     # 10/11: no canal de fatos verificados, roteiro sem revisão completa não sobe
                     # nem privado (job 827 tinha contradições reais entre cenas)
                     raise ScriptRejected(f"revisão de fatos sem convergir em {FACT_CHECK_BUDGET_S // 60} min — canal de fatos não sobe sem revisão completa")
-                log.warning("[%s] revisão de fatos passou de %d min sem convergir — sobe privado com ressalva", job_id, FACT_CHECK_BUDGET_S // 60)
-                script = {**script, "_ressalvas": [f"revisão de fatos sem convergir em {FACT_CHECK_BUDGET_S // 60} min: confira o roteiro antes de publicar"]}
-                break
+                # 15/11 (jobs 918, 919): sem convergir não sobe nem privado pra aprovação — erro conhecido não vai pro ar
+                raise ScriptRejected(f"revisão de fatos sem convergir em {FACT_CHECK_BUDGET_S // 60} min — roteiro descartado")
             problems = review_script(script, topic, facts, web_facts)
             if problems is None:
                 # revisor fora do ar: tenta 1x de novo; sem revisão o vídeo
@@ -1788,7 +1787,13 @@ def run(
             designed_scenes={i + 1 for i, src in enumerate(scene_sources) if src in ("grafico", "noticia")},
             )
             bad = [int(m.group(1)) - 1 for p in qa_problems if (m := re.match(r"cena (\d+) fora de contexto", p))]
-            if not bad or len(bad) != len(qa_problems) or visual_round == VISUAL_FIX_ROUNDS:
+            if any(p.startswith("a mesma imagem") for p in qa_problems):
+                # 15/11 (job 915): cenas com a mesma imagem também são trocadas (menos a primeira)
+                designed = {i + 1 for i, src in enumerate(scene_sources) if src in ("grafico", "noticia")}
+                bad += [n - 1 for n in repeated_scene_numbers(scene_videos, designed) if n - 1 not in bad]
+            outros = [p for p in qa_problems
+                      if not re.match(r"cena \d+ fora de contexto", p) and not p.startswith("a mesma imagem")]
+            if not bad or outros or visual_round == VISUAL_FIX_ROUNDS:
                 break
             for i in bad:
                 if not 0 <= i < len(scene_rerender):
@@ -1821,10 +1826,8 @@ def run(
         if qa_problems:
             for p in qa_problems:
                 log.warning("[%s] revisão do vídeo: %s", job_id, p)
-        if qa_problems and must_publish:
-            log.warning("[%s] última tentativa do dia — sobe PRIVADO com ressalvas da revisão do vídeo", job_id)
-            ressalvas.extend(qa_problems)
-        elif qa_problems:
+        if qa_problems:
+            # 15/11: problema que sobrou depois da troca de imagem não sobe nem privado (job 915)
             raise ScriptRejected("vídeo reprovado na revisão antes do upload: " + "; ".join(qa_problems))
         update(job_id, status="rendered", video_path=str(final_video))
         log.info("[%s] revisão do vídeo aprovada", job_id)

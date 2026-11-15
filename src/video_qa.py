@@ -102,6 +102,22 @@ def same_visual_share(frames: list[Image.Image | None]) -> tuple[int, int]:
     return best, len(hashes)
 
 
+def repeated_scene_numbers(scene_videos: list[Path], designed_scenes: set[int] | None = None) -> list[int]:
+    """Números (1-based) das cenas que repetem a imagem do maior grupo, menos a primeira:
+    são as que a correção troca por imagem nova (15/11, job 915: 3 de 4 cenas iguais)."""
+    frames = [_frame(v) for v in scene_videos]
+    idx = [i for i, f in enumerate(frames) if f is not None and (i + 1) not in (designed_scenes or set())]
+    hashes = {i: _ahash(frames[i]) for i in idx}
+    best, best_members = 0, []
+    for i in idx:
+        members = [j for j in idx if bin(hashes[i] ^ hashes[j]).count("1") <= _SAME_VISUAL_MAX_BITS]
+        if len(members) > best:
+            best, best_members = len(members), members
+    if best < _MIN_SAME_VISUAL_SCENES:
+        return []
+    return [j + 1 for j in sorted(best_members)[1:]]
+
+
 def _sheet(frames: list[tuple[int, Image.Image]]) -> bytes:
     cols = 4
     w, h = 480, max(f.height for _, f in frames)

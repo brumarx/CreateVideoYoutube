@@ -208,8 +208,11 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
             # roteiro já aprovado na revisão de fatos e o que reprovou veio
             # depois (imagem, vídeo, áudio, render): refaz só essa parte
             same += ["--script-file", str(script_file)]
+        # 15/11: a partir da última tentativa normal o tema que falhou não é refeito
+        # (sem vídeo que passe no mesmo tema, o dia fica sem vídeo): sorteia outro
+        fresh = attempt + 1 >= MAX_ATTEMPTS
         base_cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name,
-                    *same, *(["--no-upload"] if NO_UPLOAD else [])]
+                    *([] if fresh else same), *(["--no-upload"] if NO_UPLOAD else [])]
 
 def _render_approved(channel_name: str, lock_held: bool = False) -> None:
     """Renderiza (sem publicar) o roteiro aprovado mais antigo do canal com
