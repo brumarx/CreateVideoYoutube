@@ -848,6 +848,18 @@ def _sanitize_person_images(topic: str, script: dict) -> dict:
 QUEUE_DB = Path(__file__).resolve().parent.parent / "data" / "queue.db"
 _FACT_PREFIX = "roteiro reprovado na revisão de fatos: "
 _VIDEO_PREFIX = "vídeo reprovado na revisão antes do upload: "
+# 16/11: todos os textos de erro que o pipeline grava ao descartar (antes só os dois acima:
+# "bloqueio factual…", "ressalva…" etc. não entravam na aprendizagem) -> rótulo no prompt
+_ERRO_PREFIXOS = {
+    _FACT_PREFIX: "fato",
+    _VIDEO_PREFIX: "imagem/vídeo",
+    "bloqueio factual depois de uma correção: ": "fato",
+    "bloqueio factual depois da troca por fato verificado: ": "fato",
+    "ressalva de fato sem resolver — roteiro descartado: ": "fato",
+    "vídeo com ressalva não sobe: ": "fato",
+    "áudio reprovado antes da montagem: ": "áudio",
+    "nome falado errado depois da correção: ": "nome falado",
+}
 
 
 def _split_items(text: str) -> list[str]:
@@ -871,27 +883,30 @@ def recent_mistakes(channel_name: str, jobs: int = 8, max_items: int = 6) -> str
     try:
         with closing(connect_db(QUEUE_DB)) as conn:
             rows = conn.execute(
-                "SELECT error FROM jobs WHERE channel = ? AND status IN ('retried', 'failed') "
-                "AND (error LIKE ? OR error LIKE ?) ORDER BY id DESC LIMIT ?",
-                (channel_name, _FACT_PREFIX + "%", _VIDEO_PREFIX + "%", jobs),
+                "SELECT error FROM jobs WHERE channel = ? AND status IN ('retried', 'failed', 'failed_permanent', 'deleted') "
+                "AND (" + " OR ".join("error LIKE ?" for _ in _ERRO_PREFIXOS) + ") ORDER BY id DESC LIMIT ?",
+                (channel_name, *(p + "%" for p in _ERRO_PREFIXOS), jobs),
             ).fetchall()
     except sqlite3.Error:
         return ""
     lines: list[str] = []
     for (error,) in rows:
-        if error.startswith(_FACT_PREFIX):
-            items = [f"- fato: {i[:220]}" for i in _split_items(error[len(_FACT_PREFIX):])]
-        else:
-            items = [f"- imagem/vídeo: {i[:220]}" for i in _split_items(error[len(_VIDEO_PREFIX):])]
+        pref = next((p for p in _ERRO_PREFIXOS if error.startswith(p)), None)
+        if pref is None:
+            continue
+        items = [f"- {_ERRO_PREFIXOS[pref]}: {i[:220]}" for i in _split_items(error[len(pref):])]
         lines += [i for i in items if i not in lines]
+    from .licoes import regras
+
+    aprendido = regras(channel_name)  # permanente: não expira com os últimos 8 jobs
     if not lines:
-        return ""
+        return aprendido
     return (
         "\n\nERROS RECENTES DESTE CANAL (roteiros/vídeos já reprovados — NÃO repita o mesmo tipo de erro; "
         "na dúvida, deixe a afirmação de fora; mando/local de jogo, próximo adversário, posição na tabela "
         "e números só se estiverem nas fontes; image_prompt de cada cena tem que mostrar exatamente o "
         "assunto daquela cena e variar entre as cenas):\n" + "\n".join(lines[:max_items])
-    )
+    ) + aprendido
 
 
 def _story_scenes(entry: dict) -> list[dict]:

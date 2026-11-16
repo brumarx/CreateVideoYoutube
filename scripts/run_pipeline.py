@@ -46,6 +46,7 @@ from src.fact_check import BLOCKING_TYPES, confirmar_afirmacoes, cortar_e_trocar
 from src.orchestrator import enqueue, update
 from src.people_photos import names_in, person_photo
 from src.real_media import real_clip, real_photos
+from src.licoes import registrar, registrar_problemas, registrar_textos
 from src.script_gen import (
     FATOS_CANAIS,
     art_direction,
@@ -990,6 +991,7 @@ def run(
                     raise ScriptRejected("revisor de fatos indisponível — vídeo não sai sem revisão")
             if not problems:
                 break
+            registrar_problemas(channel_name, problems)  # 16/11: o erro vira lição permanente do canal
             if channel_name in FATOS_CANAIS:
                 # 11/11: título reprovado não reprova o roteiro: o título é refeito do roteiro final, depois da validação
                 if any(p.get("tipo") == "titulo_nao_confere" for p in problems):
@@ -1830,6 +1832,7 @@ def run(
         if qa_problems:
             for p in qa_problems:
                 log.warning("[%s] revisão do vídeo: %s", job_id, p)
+        registrar_textos(channel_name, "video", qa_problems)
         if qa_problems:
             # 15/11: problema que sobrou depois da troca de imagem não sobe nem privado (job 915)
             raise ScriptRejected("vídeo reprovado na revisão antes do upload: " + "; ".join(qa_problems))
@@ -2088,6 +2091,8 @@ def run(
         log.error("[%s] pipeline falhou: %s", job_id, exc)
         update(job_id, status="failed", error=str(exc)[:2000])
         if isinstance(exc, ScriptRejected):
+            if str(exc).startswith(("áudio reprovado", "nome falado errado")):
+                registrar(channel_name, "audio", str(exc).split(": ", 1)[-1][:300])
             # 16/11: descartado = apagado. Vídeo rejeitado não fica em disco esperando uso
             shutil.rmtree(Path(__file__).resolve().parent.parent / "output" / f"job_{job_id}", ignore_errors=True)
             update(job_id, video_path=None, thumbnail_path=None)
