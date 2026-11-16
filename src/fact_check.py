@@ -1354,7 +1354,7 @@ def unknown_names(script: dict, topic: str, facts: dict | None, web_facts: list[
 # "sem_fonte" (prova por citação) também reprova: fora daqui, a última
 # tentativa tratava como "ressalva leve" e soltava o roteiro SEM cortar a
 # frase (job 719, 04/11: "humanos para Marte", "capital próprio")
-BLOCKING_TYPES = set(_TYPES) | {"sem_fonte"}
+BLOCKING_TYPES = set(_TYPES) | {"sem_fonte", "erro_repetido"}  # 16/11: erro_repetido vem das lições (src/licoes.py)
 
 
 def feedback_for_rewrite(problems: list[dict]) -> str:

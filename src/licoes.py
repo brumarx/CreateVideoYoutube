@@ -40,6 +40,7 @@ REGRA_POR_TIPO = {
     "historico": "Reprovações antigas (sem tipo gravado): só escreva o que as fontes confirmam, nada de detalhe inventado, e não repita os erros específicos abaixo.",
     "humano": "O DONO apagou vídeos deste canal por erro. Releia os casos abaixo e não repita nada parecido: ele não aprova vídeo com erro.",
     "par": "",
+    "erro_repetido": "",
     "rejeicao": "",
 }
 MINIMO_REGRA_GERAL = 2   # o tipo aparece 2+ vezes no canal -> instrução fixa
@@ -57,6 +58,8 @@ def _tabela(conn: sqlite3.Connection) -> None:
         "vezes INTEGER NOT NULL DEFAULT 1, primeira TEXT DEFAULT CURRENT_TIMESTAMP, "
         "ultima TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (canal, tipo, chave))"
     )
+    conn.execute("CREATE TABLE IF NOT EXISTS licoes_eventos (canal TEXT NOT NULL, tipo TEXT NOT NULL, "
+                 "peso INTEGER NOT NULL DEFAULT 1, ts TEXT DEFAULT CURRENT_TIMESTAMP)")
     try:
         conn.execute("ALTER TABLE licoes ADD COLUMN avisado INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
@@ -77,6 +80,8 @@ def registrar(canal: str, tipo: str, texto: str, db: Path = QUEUE_DB, vezes: int
                 "texto = excluded.texto, ultima = CURRENT_TIMESTAMP",
                 (canal, tipo, _chave(texto), texto[:300], vezes, vezes),
             )
+            if tipo not in ("_marca", "historico"):  # histórico importado não tem data real
+                conn.execute("INSERT INTO licoes_eventos (canal, tipo, peso) VALUES (?, ?, ?)", (canal, tipo, vezes))
     except sqlite3.Error as exc:
         log.warning("lição não guardada (%s): %s", tipo, exc)
 
@@ -84,6 +89,8 @@ def registrar(canal: str, tipo: str, texto: str, db: Path = QUEUE_DB, vezes: int
 def registrar_problemas(canal: str, problems: list[dict], db: Path = QUEUE_DB) -> None:
     """Problemas da revisão de fatos: dicts com tipo/termo/motivo."""
     for p in problems or []:
+        if p.get("tipo") == "erro_repetido":
+            continue  # já está nas lições (é ele que dispara); recontar inflaria o número
         termo, motivo = str(p.get("termo", "")).strip(), str(p.get("motivo", "")).strip()
         registrar(canal, str(p.get("tipo") or "fato_nao_confirmado"), f"{termo} ({motivo})" if motivo else termo, db)
 
@@ -93,43 +100,71 @@ def registrar_textos(canal: str, tipo: str, itens: list[str], db: Path = QUEUE_D
         registrar(canal, tipo, i, db)
 
 
+MAX_BLOCO = 2800  # caracteres: prompt grande demais dá 413 no Groq; prioridade na ordem das seções
+
+
+def _peso_recencia(ultima: str | None) -> float:
+    """Erro resolvido há tempo pesa menos: 1.0 até 30 dias, 0.5 até 60, 0.25 depois."""
+    from datetime import datetime
+
+    try:
+        dias = (datetime.utcnow() - datetime.fromisoformat(str(ultima)[:19])).days
+    except (ValueError, TypeError):
+        return 1.0
+    return 1.0 if dias <= 30 else 0.5 if dias <= 60 else 0.25
+
+
 def regras(canal: str, max_gerais: int = 8, max_repetidos: int = 8, db: Path = QUEUE_DB) -> str:
-    """Bloco pro prompt: regras gerais dos tipos que já deram erro neste canal + os erros
-    específicos que mais se repetiram. Vazio se nada foi aprendido ainda."""
+    """Bloco pro prompt, com orçamento de tamanho: regras gerais dos tipos que já deram erro neste canal,
+    erros específicos repetidos (os recentes primeiro; o que não volta há 60+ dias sai), pares
+    errado->corrigido e títulos que funcionaram. Vazio se nada foi aprendido ainda."""
     try:
         with closing(connect_db(db)) as conn:
             _tabela(conn)
             tipos = conn.execute(
-                "SELECT tipo, SUM(vezes) v FROM licoes WHERE canal = ? GROUP BY tipo "
+                "SELECT tipo, SUM(vezes) v FROM licoes WHERE canal = ? AND tipo NOT IN ('par', '_marca') GROUP BY tipo "
                 "HAVING v >= ? ORDER BY v DESC LIMIT ?", (canal, MINIMO_REGRA_GERAL, max_gerais)).fetchall()
-            repetidos = conn.execute(
-                "SELECT texto, vezes FROM licoes WHERE canal = ? AND vezes >= ? "
-                "ORDER BY vezes DESC, ultima DESC LIMIT ?", (canal, MINIMO_REPETIDO, max_repetidos)).fetchall()
+            cand = conn.execute(
+                "SELECT texto, vezes, ultima FROM licoes WHERE canal = ? AND vezes >= ? AND tipo NOT IN ('par', '_marca')",
+                (canal, MINIMO_REPETIDO)).fetchall()
     except sqlite3.Error:
         return ""
+    repetidos = sorted(((t, n, n * _peso_recencia(u)) for t, n, u in cand if not (_peso_recencia(u) < 0.5 and n < 3)),
+                       key=lambda x: -x[2])[:max_repetidos]
     linhas = []
     for tipo, n in tipos:
         regra = REGRA_POR_TIPO.get(tipo)
         if regra:
             linhas.append(f"- [{tipo}, já reprovou {n}x neste canal] {regra}")
-    bloco = ""
     for tipo, n in _tipos_de_outros_canais(canal, [t for t, _ in tipos], db):
         regra = REGRA_POR_TIPO.get(tipo)
         if regra:
             linhas.append(f"- [{tipo}, reprovou {n}x em OUTROS canais — vale aqui também] {regra}")
+    secoes: list[str] = []
     if linhas:
-        bloco += ("\n\nREGRAS APRENDIDAS DOS ERROS DESTE CANAL (cada uma já reprovou vídeos de verdade; "
-                  "violar qualquer uma = vídeo descartado):\n" + "\n".join(linhas))
+        secoes.append("\n\nREGRAS APRENDIDAS DOS ERROS DESTE CANAL (cada uma já reprovou vídeos de verdade; "
+                      "violar qualquer uma = vídeo descartado):\n" + "\n".join(linhas))
     if repetidos:
-        bloco += ("\n\nERROS QUE JÁ SE REPETIRAM NESTE CANAL (nunca mais escreva nada parecido):\n"
-                  + "\n".join(f"- ({n}x) {t[:200]}" for t, n in repetidos))
+        secoes.append("\n\nERROS QUE JÁ SE REPETIRAM NESTE CANAL (nunca mais escreva nada parecido):\n"
+                      + "\n".join(f"- ({n}x) {t[:200]}" for t, n, _ in repetidos))
     pares = ultimos_pares(canal, 3, db)
     if pares:
-        bloco += "\n\nCOMO ESTES ERROS FORAM CORRIGIDOS (imite a forma da versão DEPOIS):\n" + "\n".join(f"- {x}" for x in pares)
+        secoes.append("\n\nCOMO ESTES ERROS FORAM CORRIGIDOS (imite a forma da versão DEPOIS):\n" + "\n".join(f"- {x}" for x in pares))
     titulos = melhores_titulos(canal, 3, db)
     if titulos:
-        bloco += "\n\nTÍTULOS QUE MAIS FUNCIONARAM NESTE CANAL (views reais; mesmo estilo, tema novo):\n" + "\n".join(
-            f"- {t} ({v} views)" for t, v in titulos)
+        secoes.append("\n\nTÍTULOS QUE MAIS FUNCIONARAM NESTE CANAL (views reais; mesmo estilo, tema novo):\n" + "\n".join(
+            f"- {t} ({v} views)" for t, v in titulos))
+    bloco = ""
+    for sec in secoes:  # orçamento: seção inteira que não cabe é cortada por linhas, nunca estoura
+        if len(bloco) + len(sec) <= MAX_BLOCO:
+            bloco += sec
+            continue
+        linhas_sec = sec.split("\n")
+        for k in range(len(linhas_sec), 2, -1):
+            parcial = "\n".join(linhas_sec[:k])
+            if len(bloco) + len(parcial) <= MAX_BLOCO:
+                bloco += parcial
+                break
     return bloco
 
 
@@ -265,6 +300,7 @@ def painel(db: Path = QUEUE_DB) -> dict:
     for canal, c in out["canais"].items():
         c["taxa"] = taxa_reprovacao(canal, db) if canal != "_global" else {}
         c["pares"] = ultimos_pares(canal, 5, db)
+        c["tendencia"] = tendencia(canal, db) if canal != "_global" else []
         c["titulos"] = melhores_titulos(canal, 3, db)
         c["tipos"] = [{"tipo": t, "vezes": v, "regra": REGRA_POR_TIPO.get(t, "")}
                       for t, v in sorted(c["tipos"].items(), key=lambda kv: -kv[1]) if t != "par"]
@@ -389,3 +425,53 @@ def sincronizar_apagados(db: Path = QUEUE_DB) -> int:
                     conn.execute("UPDATE jobs SET status = 'deleted', error = 'apagado no YouTube Studio (detectado)' WHERE id = ?", (jid,))
                 achados += 1
     return achados
+
+
+def erros_conhecidos_no_roteiro(canal: str, script: dict, db: Path = QUEUE_DB) -> list[dict]:
+    """A lição AGE: frase do roteiro novo que repete um erro específico já reprovado 2+ vezes neste canal
+    entra como problema ANTES de gastar a revisão (o conserto em laço a corrige). Só casa trecho longo
+    (25+ caracteres) contido na frase ou muito parecido, pra não dar falso positivo."""
+    import difflib
+
+    frases = _frases(script)
+    if not frases:
+        return []
+    try:
+        with closing(connect_db(db)) as conn:
+            _tabela(conn)
+            rows = conn.execute(
+                "SELECT tipo, texto FROM licoes WHERE canal = ? AND vezes >= ? AND tipo IN (%s)" % ",".join("?" * len(_TIPOS_DE_FATO)),
+                (canal, MINIMO_REPETIDO, *sorted(_TIPOS_DE_FATO))).fetchall()
+    except sqlite3.Error:
+        return []
+    achados, vistos = [], set()
+    for tipo, texto in rows:
+        termo = texto.split(" (", 1)[0].strip().lower()
+        if len(termo) < 25:
+            continue
+        for f in frases:
+            fl = f.lower()
+            if termo in fl or difflib.SequenceMatcher(None, termo, fl).ratio() >= 0.8:
+                if f not in vistos:
+                    vistos.add(f)
+                    achados.append({"tipo": "erro_repetido", "termo": f[:200],
+                                    "motivo": f"repete erro que já reprovou antes neste canal ({tipo}): {termo[:80]}"})
+    return achados
+
+
+def tendencia(canal: str, db: Path = QUEUE_DB) -> list[dict]:
+    """Por tipo de erro: ocorrências nos últimos 7 dias x nos 7 anteriores (a regra está funcionando?)."""
+    try:
+        with closing(connect_db(db)) as conn:
+            _tabela(conn)
+            rows = conn.execute(
+                "SELECT tipo, SUM(CASE WHEN ts >= datetime('now','-7 days') THEN peso ELSE 0 END), "
+                "SUM(CASE WHEN ts < datetime('now','-7 days') AND ts >= datetime('now','-14 days') THEN peso ELSE 0 END) "
+                "FROM licoes_eventos WHERE canal = ? AND ts >= datetime('now','-14 days') GROUP BY tipo", (canal,)).fetchall()
+    except sqlite3.Error:
+        return []
+    out = []
+    for tipo, agora, antes in rows:
+        estado = "melhorando" if agora < antes else "igual" if agora == antes else "piorando"
+        out.append({"tipo": tipo, "agora": int(agora or 0), "antes": int(antes or 0), "estado": estado})
+    return sorted(out, key=lambda x: -x["agora"])

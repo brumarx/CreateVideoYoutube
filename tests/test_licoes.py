@@ -91,3 +91,41 @@ def test_erro_forte_de_outro_canal_vale_aqui(tmp_path):
         licoes.registrar("aprendervia", "fora_da_fonte", f"x {i}", db)
     r = licoes.regras("aprendervia", db=db)
     assert "OUTROS canais" in r and "atribuicao_falsa" in r
+
+
+def test_bloco_de_licoes_respeita_o_orcamento(tmp_path):
+    db = tmp_path / "q.db"
+    for i in range(40):
+        for _ in range(3):
+            licoes.registrar("aprendervia", "fora_da_fonte", f"frase longa de erro numero {i} " + "x" * 150, db)
+    assert len(licoes.regras("aprendervia", db=db)) <= licoes.MAX_BLOCO
+
+
+def test_erro_resolvido_ha_muito_tempo_sai_do_prompt(tmp_path):
+    import sqlite3
+    db = tmp_path / "q.db"
+    licoes.registrar("aprendervia", "fora_da_fonte", "erro antigo que nunca mais voltou", db)
+    licoes.registrar("aprendervia", "fora_da_fonte", "erro antigo que nunca mais voltou", db)
+    c = sqlite3.connect(db)
+    c.execute("UPDATE licoes SET ultima = datetime('now', '-90 days')")
+    c.commit(); c.close()
+    assert "erro antigo" not in licoes.regras("aprendervia", db=db)
+
+
+def test_roteiro_que_repete_erro_conhecido_e_pego_antes_da_revisao(tmp_path):
+    db = tmp_path / "q.db"
+    for _ in range(2):
+        licoes.registrar("aprendervia", "atribuicao_falsa", "O Gemini reconhece sotaques e ruído de fundo melhor (fonte não diz)", db)
+    script = {"scenes": [{"narration": "Hoje o Gemini reconhece sotaques e ruído de fundo melhor que antes. Teste isso."}]}
+    achados = licoes.erros_conhecidos_no_roteiro("aprendervia", script, db)
+    assert achados and achados[0]["tipo"] == "erro_repetido"
+    assert licoes.erros_conhecidos_no_roteiro("curiosidades", script, db) == []
+    limpo = {"scenes": [{"narration": "O Whisper transcreve áudio em vários idiomas."}]}
+    assert licoes.erros_conhecidos_no_roteiro("aprendervia", limpo, db) == []
+
+
+def test_tendencia_compara_semanas(tmp_path):
+    db = tmp_path / "q.db"
+    licoes.registrar("motivacional", "fora_da_fonte", "a", db)
+    t = licoes.tendencia("motivacional", db)
+    assert t[0]["agora"] == 1 and t[0]["estado"] == "piorando"

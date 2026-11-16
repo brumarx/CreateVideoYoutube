@@ -479,6 +479,8 @@
       {% if c.taxa and c.taxa.atual is not none %}
       <div class="why">Reprovação nos últimos 7 dias: <b>{{ c.taxa.atual }}%</b> de {{ c.taxa.n_atual }} tentativas{% if c.taxa.antes is not none %} (7 dias antes: {{ c.taxa.antes }}% de {{ c.taxa.n_antes }}){% endif %}</div>
       {% endif %}
+      {% if c.tendencia %}<h3>As regras estão funcionando? (7 dias × 7 dias antes)</h3>
+      {% for t in c.tendencia %}<div class="why">{{ t.tipo }}: {{ t.agora }} agora × {{ t.antes }} antes — <b>{{ t.estado }}</b></div>{% endfor %}{% endif %}
       {% if c.titulos %}<h3>Títulos que mais funcionaram (entram no prompt)</h3>
       {% for t, v in c.titulos %}<div class="why">{{ t }} — {{ v }} views</div>{% endfor %}{% endif %}
       {% if c.pares %}<h3>Como erros foram corrigidos (entram no prompt)</h3>

@@ -46,7 +46,7 @@ from src.fact_check import BLOCKING_TYPES, confirmar_afirmacoes, cortar_e_trocar
 from src.orchestrator import enqueue, update
 from src.people_photos import names_in, person_photo
 from src.real_media import real_clip, real_photos
-from src.licoes import registrar, registrar_problemas, registrar_pares, registrar_textos, tema_reprovado
+from src.licoes import registrar, registrar_problemas, erros_conhecidos_no_roteiro, registrar_pares, registrar_textos, tema_reprovado
 from src.script_gen import (
     FATOS_CANAIS,
     art_direction,
@@ -973,6 +973,12 @@ def run(
                 # 15/11 (jobs 918, 919): sem convergir não sobe nem privado pra aprovação — erro conhecido não vai pro ar
                 raise ScriptRejected(f"revisão de fatos sem convergir em {FACT_CHECK_BUDGET_S // 60} min — roteiro descartado")
             problems = review_script(script, topic, facts, web_facts)
+            if problems is not None and attempt == 0:
+                # 16/11: erro conhecido do canal já escrito no roteiro novo entra como problema (a lição age)
+                conhecidos = erros_conhecidos_no_roteiro(channel_name, script)
+                if conhecidos:
+                    log.warning("[%s] roteiro repete %d erro(s) já reprovado(s) antes neste canal", job_id, len(conhecidos))
+                    problems = conhecidos + [p for p in problems if p.get("termo") not in {c["termo"] for c in conhecidos}]
             if problems is None:
                 # revisor fora do ar: tenta 1x de novo; sem revisão o vídeo
                 # NÃO sai (não existe mais aprovação manual depois)
