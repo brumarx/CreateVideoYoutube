@@ -32,6 +32,7 @@ from src.topics import topic_problem  # noqa: E402
 from src.orchestrator import get_job, jobs_with_status, published_jobs, recent_jobs, update  # noqa: E402
 from src.politica_data import FACT_FETCHERS  # noqa: E402
 from src.topics import STATE_FILE as USED_TOPICS_FILE  # noqa: E402
+from src.licoes import painel as licoes_painel  # noqa: E402
 from system_views import performance_view, system_view, tail as log_tail  # noqa: E402
 
 app = Flask(__name__)
@@ -584,6 +585,9 @@ def delete_video(job_id: int):
         youtube.videos().delete(id=job.youtube_video_id).execute()
     except Exception as exc:  # noqa: BLE001 — mostra o erro, não derruba o painel
         return {"ok": False, "erro": str(exc)[:200]}, 500
+    from src.licoes import registrar_humano
+
+    registrar_humano(job.channel, job.topic, (job.error or "apagado no painel")[:140])  # 16/11: o dono apagou = lição
     update(job_id, status="deleted", error="apagado no YouTube pelo painel")
     return {"ok": True}
 
@@ -664,7 +668,7 @@ def index():
         scripts_ready=[_script_preview(j) for j in raw_jobs if j.status == "script_ready"],
         ready_jobs=[{"id": j.id, "channel": j.channel, "topic": j.topic, "date_label": _date_label(j.created_at)}
                     for j in raw_jobs if j.status == "ready"],
-        perf=performance_view(), system=system_view(), paid=_paid_view(),
+        perf=performance_view(), system=system_view(), paid=_paid_view(), aprendizado=licoes_painel(),
     # Trending topics monitor
     trending=_load_trending_data(),
     )
@@ -1084,6 +1088,9 @@ def reject_job(job_id: int):
     (dá pra apagar ou editar à mão no Studio depois)."""
     job = get_job(job_id)
     if job and job.status == "awaiting_approval":
+        from src.licoes import registrar_humano
+
+        registrar_humano(job.channel, job.topic, (job.error or "rejeitado na aprovação")[:140])
         update(job_id, status="rejected")
     return redirect(url_for("index"))
 

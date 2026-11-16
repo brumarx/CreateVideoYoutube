@@ -460,6 +460,48 @@
     </form>
   </section>
 
+  <section class="tab" id="tab-aprendizado" hidden>
+    <h2>Aprendizado</h2>
+    {% set ap = aprendizado %}
+    <div class="why">Cada erro que reprova um vídeo, e cada vídeo que você apaga, vira regra do canal e entra no prompt dos próximos roteiros. Nada expira. Total registrado: {{ ap.total }}.</div>
+    {% if ap.trava %}
+    <h3>Voltaram mesmo com a regra — precisam de trava em código ({{ ap.trava|length }})</h3>
+    {% for t in ap.trava[:15] %}
+    <div class="problem" style="--c:var(--off)">
+      <div class="head"><span>{{ titles.get(t.canal, t.canal) }} · {{ t.tipo }}</span><span class="tag">{{ t.vezes }}x</span></div>
+      <div class="why">{{ t.texto }}</div>
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% for canal, c in ap.canais.items() %}
+    <details class="ch">
+      <summary>{{ titles.get(canal, canal) }} — {{ c.total }} registros{% if c.humanos %} · {{ c.humanos|length }} apagado(s) por você{% endif %}</summary>
+      <h3>Regras ativas no prompt</h3>
+      {% for t in c.tipos if t.regra %}
+      <div class="problem" style="--c:var(--ok)">
+        <div class="head"><span>{{ t.tipo }}</span><span class="tag">{{ t.vezes }}x</span></div>
+        <div class="why">{{ t.regra }}</div>
+      </div>
+      {% endfor %}
+      {% if c.humanos %}
+      <h3>Vídeos que você apagou (peso 3x)</h3>
+      {% for h in c.humanos %}
+      <div class="problem" style="--c:var(--off)"><div class="head"><span>{{ h.texto }}</span><span class="tag">{{ h.ultima }}</span></div></div>
+      {% endfor %}
+      {% endif %}
+      {% if c.repetidos %}
+      <h3>Erros que já se repetiram</h3>
+      {% for r in c.repetidos %}
+      <div class="problem" style="--c:var(--off)">
+        <div class="head"><span>{{ r.tipo }}</span><span class="tag">{{ r.vezes }}x · {{ r.ultima }}</span></div>
+        <div class="why">{{ r.texto }}</div>
+      </div>
+      {% endfor %}
+      {% endif %}
+    </details>
+    {% endfor %}
+  </section>
+
   <section class="tab" id="tab-sistema" hidden>
     <h2>Sistema</h2>
     {% set sy = system %}
@@ -599,6 +641,9 @@
   </button>
   <button role="tab" data-tab="desempenho" aria-selected="false">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21V10M9 21V4M15 21v-7M21 21H3"/></svg>Desempenho
+  </button>
+  <button role="tab" data-tab="aprendizado" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M9 8h6M9 12h6"/></svg>Aprendizado{% if aprendizado.trava %} <span class="badge">{{ aprendizado.trava|length }}</span>{% endif %}
   </button>
   <button role="tab" data-tab="sistema" aria-selected="false">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><path d="M7 7h.01M7 17h.01"/></svg>Sistema

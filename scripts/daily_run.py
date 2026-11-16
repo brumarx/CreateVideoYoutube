@@ -448,6 +448,18 @@ def main() -> None:
         except Exception:  # noqa: BLE001
             log.exception("[%s] erro ao gerar a reserva — seguindo", channel_name)
 
+    # 16/11: erro que voltou mesmo com a regra no prompt precisa de trava em código — avisa uma vez
+    try:
+        from src.licoes import pendentes_de_trava
+        from src.notify import send_telegram
+
+        trava = pendentes_de_trava()
+        if trava:
+            send_telegram("📚 Erros que voltam mesmo com a regra (precisam de trava em código):\n" + "\n".join(
+                f"- [{c}] ({n}x, {t}) {x[:140]}" for c, t, x, n in trava[:10]))
+    except Exception:  # noqa: BLE001 — aviso nunca derruba a rodada
+        log.exception("aviso de erros repetidos falhou")
+
     # vídeos já renderizados cujo upload falhou (hoje ou antes — ex. token
     # OAuth expirado e reautorizado depois). Roda no fim: upload que falhou
     # por token não gasta cota, então sobra cota pro reenvio.

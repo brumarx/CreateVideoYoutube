@@ -46,7 +46,7 @@ from src.fact_check import BLOCKING_TYPES, confirmar_afirmacoes, cortar_e_trocar
 from src.orchestrator import enqueue, update
 from src.people_photos import names_in, person_photo
 from src.real_media import real_clip, real_photos
-from src.licoes import registrar, registrar_problemas, registrar_textos
+from src.licoes import registrar, registrar_problemas, registrar_textos, tema_reprovado
 from src.script_gen import (
     FATOS_CANAIS,
     art_direction,
@@ -800,7 +800,8 @@ def run(
     # roteiro pronto (--script-file) já teve o tema aceito quando foi escrito
     if facts is None and not already_picked and not script_file:
         for _ in range(MAX_TOPIC_CHECKS):
-            problem = topic_problem(topic, channel.niche, strict=user_provided_topic)
+            problem = topic_problem(topic, channel.niche, strict=user_provided_topic) or (
+                None if user_provided_topic else tema_reprovado(channel_name, topic))  # 16/11
             if problem is None:
                 break
             log.warning("[%s] tema recusado (%s): %s", channel_name, problem, topic)

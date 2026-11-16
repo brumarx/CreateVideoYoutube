@@ -38,6 +38,7 @@ REGRA_POR_TIPO = {
     "video": "Imagem de cada cena tem de mostrar o assunto daquela cena e variar entre as cenas; nada de imagem repetida ou fora de contexto.",
     "audio": "Texto falado sem nome estrangeiro difícil, sigla solta ou número ambíguo; escreva como se fala.",
     "historico": "Reprovações antigas (sem tipo gravado): só escreva o que as fontes confirmam, nada de detalhe inventado, e não repita os erros específicos abaixo.",
+    "humano": "O DONO apagou vídeos deste canal por erro. Releia os casos abaixo e não repita nada parecido: ele não aprova vídeo com erro.",
     "rejeicao": "",
 }
 MINIMO_REGRA_GERAL = 2   # o tipo aparece 2+ vezes no canal -> instrução fixa
@@ -55,6 +56,10 @@ def _tabela(conn: sqlite3.Connection) -> None:
         "vezes INTEGER NOT NULL DEFAULT 1, primeira TEXT DEFAULT CURRENT_TIMESTAMP, "
         "ultima TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (canal, tipo, chave))"
     )
+    try:
+        conn.execute("ALTER TABLE licoes ADD COLUMN avisado INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # coluna já existe
 
 
 def registrar(canal: str, tipo: str, texto: str, db: Path = QUEUE_DB, vezes: int = 1) -> None:
@@ -143,3 +148,111 @@ def importar_historico(db: Path = QUEUE_DB) -> int:
                     registrar(canal, t, txt, db)
                     n += 1
     return n
+
+
+# ---------------------------------------------------------------- 16/11: humano, tema e trava
+PESO_HUMANO = 3                 # o dono apagar vale mais que uma reprovação automática
+REPETIU_COM_REGRA = 3           # erro que volta mesmo com a regra no prompt -> precisa de trava em código
+TEMA_REPROVOU_VEZES = 3         # tema que já reprovou 3+ vezes em 21 dias não é sorteado de novo
+TEMA_SEMELHANCA = 0.5
+_FALHAS = ("roteiro reprovado", "vídeo reprovado", "bloqueio factual", "ressalva de fato", "vídeo com ressalva",
+           "revisão de fatos sem convergir", "áudio reprovado", "nome falado errado")
+
+
+def registrar_humano(canal: str, tema: str, motivo: str, db: Path = QUEUE_DB) -> None:
+    """O dono apagou/rejeitou um vídeo: o sinal mais forte que existe."""
+    registrar(canal, "humano", f"{tema[:140]} — {motivo[:140]}", db, vezes=PESO_HUMANO)
+
+
+def importar_apagados(db: Path = QUEUE_DB) -> int:
+    """Uma vez: vídeos já apagados pelo dono (status deleted com motivo) viram lição."""
+    n = 0
+    with closing(connect_db(db)) as conn:
+        _tabela(conn)
+        if conn.execute("SELECT 1 FROM licoes WHERE tipo = '_marca' AND chave = 'apagados'").fetchone():
+            return 0
+        rows = conn.execute("SELECT channel, topic, error FROM jobs WHERE status = 'deleted' "
+                            "AND error IS NOT NULL AND (error LIKE '%errad%' OR error LIKE '%ressalva%' "
+                            "OR error LIKE '%ruim%' OR error LIKE '%factual%')").fetchall()
+    for canal, tema, erro in rows:
+        registrar_humano(canal, tema, erro, db)
+        n += 1
+    registrar("_global", "_marca", "apagados", db)
+    return n
+
+
+def _palavras(texto: str) -> set[str]:
+    return {w for w in re.findall(r"[a-zà-ú0-9]+", (texto or "").lower()) if len(w) > 3}
+
+
+def tema_reprovado(canal: str, tema: str, db: Path = QUEUE_DB) -> str | None:
+    """Tema (ou muito parecido) que já reprovou várias vezes neste canal nos últimos 21 dias.
+    Devolve o motivo ou None. Evita gastar 20 min num tema que se sabe que não fecha."""
+    alvo = _palavras(tema)
+    if not alvo:
+        return None
+    try:
+        with closing(connect_db(db)) as conn:
+            rows = conn.execute(
+                "SELECT topic, error FROM jobs WHERE channel = ? AND created_at > datetime('now', '-21 days') "
+                "AND status IN ('retried', 'failed', 'failed_permanent', 'deleted') AND error IS NOT NULL",
+                (canal,)).fetchall()
+    except sqlite3.Error:
+        return None
+    falhas: dict[str, int] = {}
+    for topic, erro in rows:
+        if erro.lower().startswith(_FALHAS) or "apagado" in erro.lower():
+            falhas[topic] = falhas.get(topic, 0) + 1
+    for topic, n in falhas.items():
+        a = _palavras(topic)
+        if n >= TEMA_REPROVOU_VEZES and a and len(a & alvo) / len(a | alvo) >= TEMA_SEMELHANCA:
+            return f"tema parecido já reprovou {n}x neste canal nos últimos 21 dias: {topic[:100]}"
+    return None
+
+
+def pendentes_de_trava(marcar: bool = True, db: Path = QUEUE_DB) -> list[tuple[str, str, str, int]]:
+    """Erros que voltaram {REPETIU_COM_REGRA}+ vezes mesmo com a regra no prompt: o prompt não basta,
+    precisam de trava em código. Cada um é avisado uma vez (canal, tipo, texto, vezes)."""
+    try:
+        with closing(connect_db(db)) as conn, conn:
+            _tabela(conn)
+            rows = conn.execute(
+                "SELECT canal, tipo, texto, vezes, chave FROM licoes WHERE vezes >= ? AND avisado = 0 "
+                "AND tipo NOT IN ('historico', '_marca') ORDER BY vezes DESC", (REPETIU_COM_REGRA,)).fetchall()
+            if marcar and rows:
+                conn.executemany("UPDATE licoes SET avisado = 1 WHERE canal = ? AND tipo = ? AND chave = ?",
+                                 [(r[0], r[1], r[4]) for r in rows])
+    except sqlite3.Error:
+        return []
+    return [(r[0], r[1], r[2], r[3]) for r in rows]
+
+
+def painel(db: Path = QUEUE_DB) -> dict:
+    """Tudo que foi aprendido, por canal, pra aba 'Aprendizado' do painel."""
+    out: dict = {"canais": {}, "total": 0, "trava": []}
+    try:
+        with closing(connect_db(db)) as conn:
+            _tabela(conn)
+            rows = conn.execute(
+                "SELECT canal, tipo, texto, vezes, substr(ultima, 1, 10), avisado FROM licoes "
+                "WHERE tipo != '_marca' ORDER BY vezes DESC, ultima DESC").fetchall()
+    except sqlite3.Error:
+        return out
+    for canal, tipo, texto, vezes, ultima, avisado in rows:
+        c = out["canais"].setdefault(canal, {"tipos": {}, "repetidos": [], "humanos": [], "total": 0})
+        c["tipos"][tipo] = c["tipos"].get(tipo, 0) + vezes
+        c["total"] += vezes
+        out["total"] += vezes
+        item = {"texto": texto, "vezes": vezes, "ultima": ultima, "tipo": tipo}
+        if tipo == "humano":
+            c["humanos"].append(item)
+        elif vezes >= MINIMO_REPETIDO and tipo != "historico":
+            c["repetidos"].append(item)
+        if vezes >= REPETIU_COM_REGRA and tipo not in ("historico",):
+            out["trava"].append({**item, "canal": canal})
+    for c in out["canais"].values():
+        c["tipos"] = [{"tipo": t, "vezes": v, "regra": REGRA_POR_TIPO.get(t, "")}
+                      for t, v in sorted(c["tipos"].items(), key=lambda kv: -kv[1])]
+        c["repetidos"] = c["repetidos"][:10]
+        c["humanos"] = c["humanos"][:10]
+    return out
