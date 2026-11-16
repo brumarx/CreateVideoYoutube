@@ -72,3 +72,22 @@ def test_erro_que_volta_com_regra_pede_trava_uma_vez(tmp_path):
         licoes.registrar("motivacional", "fora_da_fonte", "frase X sem fonte", db)
     assert len(licoes.pendentes_de_trava(db=db)) == 1
     assert licoes.pendentes_de_trava(db=db) == []
+
+
+def test_par_errado_corrigido_vira_exemplo_no_prompt(tmp_path):
+    db = tmp_path / "q.db"
+    antes = {"scenes": [{"narration": "O Whisper traduz direto para o português em tempo real. Outra frase."}]}
+    depois = {"scenes": [{"narration": "O Whisper transcreve áudio em vários idiomas. Outra frase."}]}
+    assert licoes.registrar_pares("aprendervia", antes, depois,
+                                  [{"termo": "O Whisper traduz direto para o português"}], db) == 1
+    assert "ANTES:" in licoes.regras("aprendervia", db=db)
+
+
+def test_erro_forte_de_outro_canal_vale_aqui(tmp_path):
+    db = tmp_path / "q.db"
+    for i in range(5):
+        licoes.registrar("curiosidades", "atribuicao_falsa", f"erro {i}", db)
+    for i in range(2):
+        licoes.registrar("aprendervia", "fora_da_fonte", f"x {i}", db)
+    r = licoes.regras("aprendervia", db=db)
+    assert "OUTROS canais" in r and "atribuicao_falsa" in r

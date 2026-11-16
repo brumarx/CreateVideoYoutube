@@ -465,6 +465,17 @@ def main() -> None:
     except Exception:  # noqa: BLE001 — aviso nunca derruba a rodada
         log.exception("aviso de erros repetidos falhou")
 
+    # 16/11: vídeo que você apagou no Studio vira lição (peso 3x)
+    if not NO_UPLOAD:
+        try:
+            from src.licoes import sincronizar_apagados
+
+            n = sincronizar_apagados()
+            if n:
+                log.info("%d vídeo(s) apagado(s) no Studio viraram lição", n)
+        except Exception:  # noqa: BLE001
+            log.exception("conferência de vídeos apagados falhou")
+
     # vídeos já renderizados cujo upload falhou (hoje ou antes — ex. token
     # OAuth expirado e reautorizado depois). Roda no fim: upload que falhou
     # por token não gasta cota, então sobra cota pro reenvio.

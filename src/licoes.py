@@ -39,6 +39,7 @@ REGRA_POR_TIPO = {
     "audio": "Texto falado sem nome estrangeiro difícil, sigla solta ou número ambíguo; escreva como se fala.",
     "historico": "Reprovações antigas (sem tipo gravado): só escreva o que as fontes confirmam, nada de detalhe inventado, e não repita os erros específicos abaixo.",
     "humano": "O DONO apagou vídeos deste canal por erro. Releia os casos abaixo e não repita nada parecido: ele não aprova vídeo com erro.",
+    "par": "",
     "rejeicao": "",
 }
 MINIMO_REGRA_GERAL = 2   # o tipo aparece 2+ vezes no canal -> instrução fixa
@@ -112,12 +113,23 @@ def regras(canal: str, max_gerais: int = 8, max_repetidos: int = 8, db: Path = Q
         if regra:
             linhas.append(f"- [{tipo}, já reprovou {n}x neste canal] {regra}")
     bloco = ""
+    for tipo, n in _tipos_de_outros_canais(canal, [t for t, _ in tipos], db):
+        regra = REGRA_POR_TIPO.get(tipo)
+        if regra:
+            linhas.append(f"- [{tipo}, reprovou {n}x em OUTROS canais — vale aqui também] {regra}")
     if linhas:
         bloco += ("\n\nREGRAS APRENDIDAS DOS ERROS DESTE CANAL (cada uma já reprovou vídeos de verdade; "
                   "violar qualquer uma = vídeo descartado):\n" + "\n".join(linhas))
     if repetidos:
         bloco += ("\n\nERROS QUE JÁ SE REPETIRAM NESTE CANAL (nunca mais escreva nada parecido):\n"
                   + "\n".join(f"- ({n}x) {t[:200]}" for t, n in repetidos))
+    pares = ultimos_pares(canal, 3, db)
+    if pares:
+        bloco += "\n\nCOMO ESTES ERROS FORAM CORRIGIDOS (imite a forma da versão DEPOIS):\n" + "\n".join(f"- {x}" for x in pares)
+    titulos = melhores_titulos(canal, 3, db)
+    if titulos:
+        bloco += "\n\nTÍTULOS QUE MAIS FUNCIONARAM NESTE CANAL (views reais; mesmo estilo, tema novo):\n" + "\n".join(
+            f"- {t} ({v} views)" for t, v in titulos)
     return bloco
 
 
@@ -250,9 +262,130 @@ def painel(db: Path = QUEUE_DB) -> dict:
             c["repetidos"].append(item)
         if vezes >= REPETIU_COM_REGRA and tipo not in ("historico",):
             out["trava"].append({**item, "canal": canal})
-    for c in out["canais"].values():
+    for canal, c in out["canais"].items():
+        c["taxa"] = taxa_reprovacao(canal, db) if canal != "_global" else {}
+        c["pares"] = ultimos_pares(canal, 5, db)
+        c["titulos"] = melhores_titulos(canal, 3, db)
         c["tipos"] = [{"tipo": t, "vezes": v, "regra": REGRA_POR_TIPO.get(t, "")}
-                      for t, v in sorted(c["tipos"].items(), key=lambda kv: -kv[1])]
+                      for t, v in sorted(c["tipos"].items(), key=lambda kv: -kv[1]) if t != "par"]
         c["repetidos"] = c["repetidos"][:10]
         c["humanos"] = c["humanos"][:10]
     return out
+
+
+# ---------------------------------------------------------------- 16/11: pares, títulos, outros canais, medição, Studio
+_TIPOS_DE_FATO = {t for t in REGRA_POR_TIPO if t not in ("video", "audio", "historico", "humano", "rejeicao")}
+MINIMO_OUTROS_CANAIS = 5
+
+
+def _frases(script: dict) -> list[str]:
+    texto = " ".join(str(sc.get("narration", "")) for sc in (script or {}).get("scenes", []) or [])
+    return [f.strip() for f in re.split(r"(?<=[.!?])\s+", texto) if f.strip()]
+
+
+def registrar_pares(canal: str, antes: dict, depois: dict, problems: list[dict], db: Path = QUEUE_DB) -> int:
+    """Conserto bem-sucedido: guarda a frase reprovada e como ficou (errado -> corrigido)."""
+    import difflib
+
+    novas, n = _frases(depois), 0
+    for p in problems or []:
+        termo = str(p.get("termo", "")).strip().lower()
+        if len(termo) < 8:
+            continue
+        velha = next((f for f in _frases(antes) if termo[:40] in f.lower()), None)
+        if not velha or not novas:
+            continue
+        melhor = max(novas, key=lambda f: difflib.SequenceMatcher(None, velha.lower(), f.lower()).ratio())
+        if melhor != velha and difflib.SequenceMatcher(None, velha.lower(), melhor.lower()).ratio() >= 0.35:
+            registrar(canal, "par", f"ANTES: {velha[:140]} | DEPOIS: {melhor[:140]}", db)
+            n += 1
+    return n
+
+
+def ultimos_pares(canal: str, n: int = 3, db: Path = QUEUE_DB) -> list[str]:
+    try:
+        with closing(connect_db(db)) as conn:
+            _tabela(conn)
+            return [r[0] for r in conn.execute(
+                "SELECT texto FROM licoes WHERE canal = ? AND tipo = 'par' ORDER BY ultima DESC LIMIT ?", (canal, n))]
+    except sqlite3.Error:
+        return []
+
+
+def melhores_titulos(canal: str, n: int = 3, db: Path = QUEUE_DB) -> list[tuple[str, int]]:
+    """Aprender com o que DEU CERTO: títulos do canal com mais views reais (mín. 20 views)."""
+    try:
+        with closing(connect_db(db)) as conn:
+            return [(r[0], r[1]) for r in conn.execute(
+                "SELECT title, views_current FROM video_performance WHERE channel = ? AND title IS NOT NULL "
+                "AND title != '' AND views_current >= 20 ORDER BY views_current DESC LIMIT ?", (canal, n))]
+    except sqlite3.Error:
+        return []
+
+
+def _tipos_de_outros_canais(canal: str, ja_tem: list[str], db: Path) -> list[tuple[str, int]]:
+    """Tipo de erro de fato que reprovou muito em OUTROS canais e ainda não aparece neste."""
+    try:
+        with closing(connect_db(db)) as conn:
+            rows = conn.execute(
+                "SELECT tipo, SUM(vezes) v FROM licoes WHERE canal != ? AND canal != '_global' GROUP BY tipo "
+                "HAVING v >= ? ORDER BY v DESC", (canal, MINIMO_OUTROS_CANAIS)).fetchall()
+    except sqlite3.Error:
+        return []
+    return [(t, v) for t, v in rows if t in _TIPOS_DE_FATO and t not in ja_tem][:4]
+
+
+def taxa_reprovacao(canal: str, db: Path = QUEUE_DB) -> dict:
+    """Medição: % de tentativas reprovadas nos últimos 7 dias x nos 7 anteriores (está melhorando?)."""
+    def _janela(ini: str, fim: str):
+        with closing(connect_db(db)) as conn:
+            tot, ruins = conn.execute(
+                "SELECT COUNT(*), SUM(status IN ('retried','failed','failed_permanent','deleted')) FROM jobs "
+                "WHERE channel = ? AND created_at >= datetime('now', ?) AND created_at < datetime('now', ?)",
+                (canal, ini, fim)).fetchone()
+        return int(tot or 0), int(ruins or 0)
+    try:
+        t1, r1 = _janela("-7 days", "+1 day")
+        t0, r0 = _janela("-14 days", "-7 days")
+    except sqlite3.Error:
+        return {}
+    return {"atual": round(100 * r1 / t1) if t1 else None, "antes": round(100 * r0 / t0) if t0 else None,
+            "n_atual": t1, "n_antes": t0}
+
+
+def sincronizar_apagados(db: Path = QUEUE_DB) -> int:
+    """Vídeo publicado que sumiu do YouTube (você apagou no Studio): vira lição humana e o job vira 'deleted'.
+    1 chamada videos.list por canal (1 unidade de cota)."""
+    from googleapiclient.discovery import build
+
+    from .config import ChannelConfig
+    from .upload import _load_credentials
+    from .yt_quota import spend
+
+    achados = 0
+    with closing(connect_db(db)) as conn:
+        rows = conn.execute(
+            "SELECT id, channel, topic, youtube_video_id FROM jobs WHERE status = 'uploaded' AND youtube_video_id IS NOT NULL "
+            "AND youtube_video_id != '' AND created_at > datetime('now', '-14 days')").fetchall()
+    por_canal: dict[str, list[tuple]] = {}
+    for r in rows:
+        por_canal.setdefault(r[1], []).append(r)
+    for canal, jobs in por_canal.items():
+        try:
+            spend("list")
+            yt = build("youtube", "v3", credentials=_load_credentials(ChannelConfig.load(canal).token_file),
+                       cache_discovery=False)
+            vivos = set()
+            for i in range(0, len(jobs), 50):
+                ids = ",".join(j[3] for j in jobs[i:i + 50])
+                vivos |= {it["id"] for it in yt.videos().list(part="id", id=ids).execute().get("items", [])}
+        except Exception as exc:  # noqa: BLE001 — sem token/cota: tenta amanhã, nunca derruba a rodada
+            log.warning("[%s] não consegui conferir vídeos apagados: %s", canal, exc)
+            continue
+        for jid, _c, tema, vid in jobs:
+            if vid not in vivos:
+                registrar_humano(canal, tema, "apagado por você no YouTube Studio", db)
+                with closing(connect_db(db)) as conn, conn:
+                    conn.execute("UPDATE jobs SET status = 'deleted', error = 'apagado no YouTube Studio (detectado)' WHERE id = ?", (jid,))
+                achados += 1
+    return achados

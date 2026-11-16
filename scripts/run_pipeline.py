@@ -46,7 +46,7 @@ from src.fact_check import BLOCKING_TYPES, confirmar_afirmacoes, cortar_e_trocar
 from src.orchestrator import enqueue, update
 from src.people_photos import names_in, person_photo
 from src.real_media import real_clip, real_photos
-from src.licoes import registrar, registrar_problemas, registrar_textos, tema_reprovado
+from src.licoes import registrar, registrar_problemas, registrar_pares, registrar_textos, tema_reprovado
 from src.script_gen import (
     FATOS_CANAIS,
     art_direction,
@@ -1049,6 +1049,7 @@ def run(
                 fixed = _repair_loop(script, problems, topic, facts, web_facts, job_id,
                                 deadline=fact_started + FACT_CHECK_BUDGET_S)
                 if fixed is not None:
+                    registrar_pares(channel_name, script, fixed, problems)  # 16/11: errado -> corrigido vira exemplo
                     script = fixed
                     break
                 cut = _cut_flagged_sentences(script, problems)
@@ -1064,6 +1065,7 @@ def run(
             fixed = _repair_loop(script, problems, topic, facts, web_facts, job_id,
                                 deadline=fact_started + FACT_CHECK_BUDGET_S)
             if fixed is not None:
+                registrar_pares(channel_name, script, fixed, problems)  # 16/11: errado -> corrigido vira exemplo
                 script = fixed
                 break
             cut = _cut_flagged_sentences(script, problems)
