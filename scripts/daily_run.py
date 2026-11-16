@@ -428,6 +428,29 @@ def main() -> None:
     _lock = _acquire_lock()  # mantém a trava até o fim do processo
     # órfãos: com a trava na mão, nenhum pipeline está rodando; job 'pending' parado há
     # mais de 6 h virou fantasma (ex.: processo morreu) e é fechado como falha
+    # 16/11 (botafogo 927): rodada reiniciada/morta no meio de um job deixa ele parado e gasta os dados
+    # (notícias já saíram da fila). Com a trava na mão ninguém roda: job de hoje sem vídeo, com facts.json
+    # e sem upload do canal no dia é retomado com os MESMOS dados, antes de fechar os órfãos
+    retomar: list[tuple[str, int, str]] = []
+    with closing(connect_db(DB_PATH)) as conn:
+        for jid, ch in conn.execute(
+            "SELECT id, channel FROM jobs WHERE status IN ('pending', 'scripted', 'narrated') "
+            "AND video_path IS NULL AND date(updated_at) = date('now') ORDER BY id"
+        ).fetchall():
+            facts = ROOT / "output" / f"job_{jid}" / "facts.json"
+            subiu = conn.execute(
+                "SELECT 1 FROM jobs WHERE channel = ? AND status = 'uploaded' AND date(updated_at) = date('now')",
+                (ch,),
+            ).fetchone()
+            if facts.exists() and not subiu and ch not in [c for c, _, _ in retomar]:
+                retomar.append((ch, jid, str(facts)))
+    for ch, jid, facts in retomar:
+        update(jid, status="retried", error="interrompido: rodada morta/reiniciada — retomado com os mesmos dados")
+        log.warning("[%s] job %d interrompido — retomando com os mesmos dados", ch, jid)
+        try:
+            _run_pipeline(ch, ["--facts-file", facts], "retomada")
+        except Exception:  # noqa: BLE001
+            log.exception("[%s] retomada do job %d falhou — seguindo", ch, jid)
     with closing(connect_db(DB_PATH)) as conn:
         conn.execute(
             "UPDATE jobs SET status = 'failed', error = 'órfão: processo não existe mais' "
