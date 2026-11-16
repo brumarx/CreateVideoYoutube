@@ -236,6 +236,47 @@ def _fix_spoken_names(script, narrations, audio_names, pronunciations, foreign, 
     return narrations, pronunciations
 
 
+def _trocar_nomes_por_descricao(script, narrations, audio_names, pronunciations, foreign, tts_voice, work_dir, job_id):
+    """16/11 (jobs 935-937, curiosidades): nome estrangeiro difícil (Zeeuwse, Hollandsche IJssel) não
+    sai nem com grafia de fala, e três tentativas seguidas reprovaram e o canal ficou sem vídeo.
+    Segunda saída: reescreve só as cenas com o nome trocando-o por descrição em português
+    ("o lago da Zelândia"), refala e quem chama confere de novo."""
+    from src.providers import complete
+    from src.tts import narrate
+
+    nomes = list(dict.fromkeys(n for txt in audio_names for n in _nomes_da_ressalva(txt)))
+    if not nomes:
+        return None
+    narrations = list(narrations)
+    mudou = False
+    for i, scene in enumerate(script["scenes"]):
+        presentes = [n for n in nomes if n in scene["narration"]]
+        if not presentes:
+            continue
+        original = scene["narration"]
+        try:
+            novo = complete(
+                [{"role": "user", "content": (
+                    f"Reescreva a frase trocando os nomes {presentes} por uma descrição curta em português "
+                    f"que um brasileiro fala sem tropeçar (ex.: \"Zeeuwse Meer\" -> \"o lago da Zelândia\"). "
+                    f"Mantenha todos os números, fatos e o tom; não invente nada. Responda SÓ a frase.\n\n"
+                    f"Frase: {original}")}],
+                max_tokens=400, temperature=0.2,
+                validate=lambda t, p=presentes, o=original: bool(t.strip()) and not any(n in t for n in p)
+                and 0.6 <= len(t) / max(len(o), 1) <= 1.4,
+            ).strip()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("[%s] troca de nome por descrição falhou na cena %d: %s", job_id, i, exc)
+            continue
+        log.warning("[%s] cena %d: nome %s trocado por descrição: %r", job_id, i, presentes, novo[:120])
+        scene["narration"] = novo
+        audio_path = work_dir / f"scene_{i}.mp3"
+        _, word_boundaries = narrate(novo, audio_path, voice=tts_voice, pronunciations=pronunciations, foreign=foreign)
+        narrations[i] = (audio_path, word_boundaries, _ffprobe_duration(audio_path))
+        mudou = True
+    return narrations if mudou else None
+
+
 def _foreign_terms(script: dict, pronunciations: dict[str, str]) -> tuple[dict[str, str], dict[str, str]]:
     """Termos do campo "idioma" do roteiro (voz nativa, src/tts.py) e as
     reescritas de "pronuncia" que sobram: nada de termo que está nos dois,
@@ -1333,6 +1374,14 @@ def run(
             fixed = _fix_spoken_names(script, narrations, audio_names, pronunciations, foreign, tts_voice, work_dir, job_id)
             if fixed is not None:
                 narrations, pronunciations = fixed
+                audio_problems, audio_names = review_audio_full(
+                    [s["narration"] for s in script["scenes"]], [n[0] for n in narrations], pronunciations,
+                )
+        if audio_names and not audio_problems:
+            trocado = _trocar_nomes_por_descricao(
+                script, narrations, audio_names, pronunciations, foreign, tts_voice, work_dir, job_id)
+            if trocado is not None:
+                narrations = trocado
                 audio_problems, audio_names = review_audio_full(
                     [s["narration"] for s in script["scenes"]], [n[0] for n in narrations], pronunciations,
                 )
