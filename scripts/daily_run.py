@@ -172,6 +172,11 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
         if rc == 0:
             return
         job = _last_job(channel_name, before)
+        if job is None and rc < 0 and attempt < total:
+            # 16/11: processo morto por sinal (exit -6 = "double free" na lib nativa de busca, curiosidades
+            # 12:10) antes de criar o job: crash passageiro, não configuração — tenta de novo
+            log.warning("[%s] %s: pipeline morreu por sinal (exit %d) antes de criar o job — tentando de novo", channel_name, label, rc)
+            continue
         if job is None:
             # nem criou job: erro de configuração, repetir não resolve
             log.error("[%s] %s falhou (exit %d) sem criar job — seguindo pros próximos", channel_name, label, rc)
