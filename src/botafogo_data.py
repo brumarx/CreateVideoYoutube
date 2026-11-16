@@ -498,6 +498,28 @@ def daily_portal_task(per_video: int = PORTAL_NEWS_PER_VIDEO) -> dict | None:
     return portal_news_task(per_video) or news_task()
 
 
+def ultimo_recurso_task() -> dict | None:
+    """16/11: dia sem jogo pra cobrir e sem notícia nova no Portal/ESPN (o dia ficou sem vídeo, 927).
+    Última saída: "o que está em jogo" no PRÓXIMO jogo do calendário do Portal (ESPN não tinha jogo
+    futuro), com classificação do Brasileirão. Não marca prévia como feita, pra não tirar a prévia
+    normal do dia do jogo. None se não há jogo agendado."""
+    proximos = _agenda().get("proximos_jogos") or []
+    if not proximos:
+        return None
+    jogo = proximos[0]
+    adversario = next((t.strip() for t in jogo["jogo"].split(" x ") if "botafogo" not in t.lower()), jogo["jogo"])
+    facts: dict = {"tipo": "pre-jogo", "competicao": jogo.get("competicao") or "", "adversario": adversario,
+                   "data_hora": jogo["data"]}
+    if jogo.get("mando"):
+        facts["mando"] = jogo["mando"]
+    if jogo.get("local"):
+        facts["local"] = jogo["local"]
+    situacao = _standings_line()
+    if situacao:
+        facts["situacao_botafogo_tabela"] = situacao
+    return {"tipo": "pre-jogo", "titulo": f"Botafogo x {adversario}: o que está em jogo", "facts": facts}
+
+
 def next_pending_task(news_fallback: bool = True) -> dict | None:
     """Escolhe a próxima tarefa pendente: prioriza recapear o jogo
     concluído mais recente ainda não coberto; se não houver, prevê o

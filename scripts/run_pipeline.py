@@ -803,6 +803,24 @@ def run(
             task = daily_portal_task(per_video=8 if long_form else 5)
         else:
             task = next_pending_task(news_fallback=botafogo_task != "jogo")
+        if task is None and botafogo_task == "portal":
+            # 16/11: o vídeo diário do portal não fica sem saída — se o canal ainda não tem vídeo hoje,
+            # faz a prévia do próximo jogo (dados oficiais) em vez de "nada a publicar"
+            from src.botafogo_data import ultimo_recurso_task
+
+            from contextlib import closing
+
+            from src.db import connect_db
+            from src.orchestrator import DB_PATH
+
+            with closing(connect_db(DB_PATH)) as _c:
+                _tem = _c.execute(
+                    "SELECT 1 FROM jobs WHERE channel = 'botafogo' AND date(updated_at) = date('now') "
+                    "AND status IN ('uploaded', 'ready', 'scripted', 'script_approved', 'rendered')").fetchone()
+            if not _tem:
+                task = ultimo_recurso_task()
+                if task:
+                    log.warning("[botafogo] sem notícia nova — último recurso: %s", task["titulo"])
         if task is None:
             log.info("[botafogo] nada a publicar (%s)", botafogo_task or "jogo/notícias")
             return
