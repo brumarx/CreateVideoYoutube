@@ -1082,6 +1082,10 @@ def run(
                     f"{p.get('tipo')}: {p.get('termo')}" for p in problems)[:600])
             if attempt == FACT_CHECK_REWRITES:
                 if not any(p.get("tipo") in BLOCKING_TYPES for p in problems):
+                    if problems:
+                        # 16/11: erro conhecido não sobe nem privado (job 922: miniatura "80 anos" x narração "40 anos")
+                        raise ScriptRejected("ressalva de fato sem resolver — roteiro descartado: " + "; ".join(
+                            f"{p.get('tipo')}: {p.get('termo')}" for p in problems)[:600])
                     log.warning("[%s] só sobraram ressalvas leves da revisão — sobe PRIVADO pra aprovação", job_id)
                     # qualquer apontamento que sobrou vira ressalva: nunca
                     # público sozinho com frase reprovada (job 719, 04/11)
@@ -1996,6 +2000,9 @@ def run(
         # guardado antes do upload: se ele falhar (token OAuth expirado,
         # rede), scripts/retry_uploads.py reenvia o vídeo já renderizado sem
         # precisar gerar tudo de novo.
+        if ressalvas:
+            # 16/11: vídeo com ressalva conhecida não vai pro YouTube, nem privado
+            raise ScriptRejected("vídeo com ressalva não sobe: " + "; ".join(ressalvas)[:600])
         upload_meta = {
             "long": long_form,
             # com ressalva: sobe privado e espera o "Aprovar" do painel
@@ -2080,6 +2087,10 @@ def run(
     except Exception as exc:
         log.error("[%s] pipeline falhou: %s", job_id, exc)
         update(job_id, status="failed", error=str(exc)[:2000])
+        if isinstance(exc, ScriptRejected):
+            # 16/11: descartado = apagado. Vídeo rejeitado não fica em disco esperando uso
+            shutil.rmtree(Path(__file__).resolve().parent.parent / "output" / f"job_{job_id}", ignore_errors=True)
+            update(job_id, video_path=None, thumbnail_path=None)
         raise
 
 

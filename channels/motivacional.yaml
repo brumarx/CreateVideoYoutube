@@ -111,6 +111,11 @@ topics:
   - "Como Junko Tabei quebrou barreiras e se tornou a primeira mulher a chegar ao topo do Everest"
   - "Como João Carlos Martins tocou piano novamente após 10 cirurgias nas mãos e 20 anos de silêncio forçado"
   - "Como Paulo Coelho superou 300 rejeições editoriais antes de publicar “O Alquimista"
+  - "Como Ailton Krenak, filho de lavadeira expulso da escola por ser índio, virou imortal da ABL e mudou a Constituição"
+  - "Como Fernando Henrique Cardoso transformou 10 anos de exílio e a cassação de seus direitos políticos na base do Plano Real"
+  - "Como Paulo Freire transformou 16 anos de exílio político na criação do método de alfabetização mais influente do mundo"
+  - "Como Zico superou 3 cirurgias no joelho antes dos 21 anos e virou o maior ídolo do Flamengo"
+  - "Como Yane Marques sobreviveu a 2 cirurgias no quadril e 4 anos sem patrocínio para levar o bronze olímpico no pentatlo moderno"
 prompt_base: >
   Escreva um roteiro motivacional/inspiracional no estilo de canais de
   desenvolvimento pessoal do YouTube. O ângulo deste canal é a HISTÓRIA REAL
@@ -168,3 +173,5 @@ loja:
   produtos: 1
   so_se_combinar: true
   excluir_categorias: ["Campanha: um de cada lado"]
+fatos_verificados: true  # 16/11: roteiro de lista fechada de fatos + só sobe revisado (canais sem banco de dados)
+musica_sem_risco: true  # só faixa sem risco de Content ID

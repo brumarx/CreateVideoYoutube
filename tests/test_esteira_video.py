@@ -436,8 +436,11 @@ def test_pipeline_nao_sobe_privado_com_problema_conhecido():
 
 
 # ---------- 15/11: sempre um vídeo pronto de reserva (dia sem vídeo só se não houver nenhum)
-def test_reserva_pronta_depois_de_cada_rodada_de_canal():
+def test_reserva_pronta_depois_de_todos_os_canais():
     dr = (Path(__file__).resolve().parents[1] / "scripts" / "daily_run.py").read_text(encoding="utf-8")
-    assert dr.count("_garante_reserva(channel_name,") == 2
+    # 16/11: reserva fora do turno do canal (run_channel devolve; main gera depois), poucas tentativas
+    assert dr.count("_garante_reserva(channel_name, extra)") == 1
+    assert "return [(channel_name," in dr
+    assert "max_total=RESERVA_TENTATIVAS" in dr
     assert 'sem_upload = NO_UPLOAD or "--no-upload" in extra' in dr
     assert '*([] if fresh else same), *(["--no-upload"] if sem_upload else [])]' in dr

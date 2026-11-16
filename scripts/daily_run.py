@@ -64,6 +64,9 @@ NO_UPLOAD = "--no-upload" in sys.argv
 # (--must-publish: revisões cortam frase/avisam em vez de descartar); repete
 # esse modo até MUST_PUBLISH_ATTEMPTS vezes se ainda cair (render, LLM fora)
 MUST_PUBLISH_ATTEMPTS = 3
+# 16/11: reserva só depois que TODOS os canais fizeram o vídeo do dia, e com poucas tentativas
+# (aprendervia gastou 1h15 em reserva reprovada e os outros 4 canais ficaram sem rodar)
+RESERVA_TENTATIVAS = 3
 
 # Pasta output/job_N só era apagada depois de upload com sucesso — falha,
 # retentativa e abandono deixavam tudo pra trás (9,9 GB em 06/10). Apaga a
@@ -137,7 +140,8 @@ def cleanup_output() -> None:
         log.info("limpeza: %d pasta(s) de job antigo removida(s), %.1f GB liberados", removed, freed / 1e9)
 
 
-def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_short: bool = False) -> None:
+def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_short: bool = False,
+                  max_total: int | None = None) -> None:
     """Roda o pipeline até MAX_ATTEMPTS vezes — melhor um vídeo certo do que
     o dia perdido. Repete roteiro reprovado na revisão de fatos e qualquer
     falha ANTES do render; falha depois do render (upload: token, rede, cota)
@@ -151,7 +155,7 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
     sem_upload = NO_UPLOAD or "--no-upload" in extra
     if sem_upload and "--no-upload" not in base_cmd:
         base_cmd.append("--no-upload")
-    total = MAX_ATTEMPTS + MUST_PUBLISH_ATTEMPTS - 1
+    total = max_total or (MAX_ATTEMPTS + MUST_PUBLISH_ATTEMPTS - 1)
     for attempt in range(1, total + 1):
         cmd = base_cmd
         if attempt >= MAX_ATTEMPTS:
@@ -227,7 +231,7 @@ def _garante_reserva(channel_name: str, extra: list[str]) -> None:
     if _failed_jobs(channel_name, "ready"):
         return
     log.info("[%s] reserva: gerando vídeo pronto pro dia seguinte", channel_name)
-    _run_pipeline(channel_name, [*extra, "--no-upload"], "reserva")
+    _run_pipeline(channel_name, [*extra, "--no-upload"], "reserva", max_total=RESERVA_TENTATIVAS)
 
 
 def _render_approved(channel_name: str, lock_held: bool = False) -> None:
@@ -265,14 +269,15 @@ def _render_approved(channel_name: str, lock_held: bool = False) -> None:
            error=None if rc == 0 else f"render do roteiro aprovado falhou (exit {rc})")
 
 
-def run_channel(channel_name: str, cfg: dict) -> None:
+def run_channel(channel_name: str, cfg: dict) -> list[tuple[str, list[str]]]:
+    """Roda o vídeo do dia do canal. Devolve a reserva a gerar DEPOIS de todos os canais."""
     uploads_per_day = cfg.get("uploads_per_day", 1)
     daily_format = cfg.get("daily_format", "short")
     token_file = ROOT / "credentials" / f"token_{channel_name}.json"
 
     if not token_file.exists():
         log.warning("[%s] sem token OAuth (%s) — pulando, rode auth_youtube.py primeiro", channel_name, token_file.name)
-        return
+        return []
 
     # roteiro revisado e aprovado (status script_approved, ver
     # run_pipeline --script-only) renderiza primeiro; vídeo já renderizado
@@ -291,8 +296,7 @@ def run_channel(channel_name: str, cfg: dict) -> None:
             if ready or _published_today(channel_name):
                 break
             _run_pipeline(channel_name, ["--botafogo-task", task], task)
-        _garante_reserva(channel_name, ["--botafogo-task", "portal"])
-        return
+        return [(channel_name, ["--botafogo-task", "portal"])]
 
     from datetime import date
 
@@ -319,7 +323,7 @@ def run_channel(channel_name: str, cfg: dict) -> None:
             channel_name, [], f"upload {i + 1}/{uploads_per_day} ({daily_format})",
             fallback_short=daily_format == "long",
         )
-    _garante_reserva(channel_name, [])
+    return [(channel_name, [])]
 
 
 PIPELINE_TIMEOUT_S = 90 * 60    # Short: revisão de fatos (até 20 min) + render de 35 cenas (~40 min)
@@ -428,13 +432,21 @@ def main() -> None:
     channels_dir = ROOT / "channels"
     cleanup_output()
 
+    reservas: list[tuple[str, list[str]]] = []
     for yaml_path in sorted(channels_dir.glob("*.yaml")):
         channel_name = yaml_path.stem
         try:
             cfg = yaml.safe_load(yaml_path.read_text())
-            run_channel(channel_name, cfg)
+            reservas += run_channel(channel_name, cfg) or []
         except Exception:  # noqa: BLE001 — um canal quebrado não derruba os outros
             log.exception("[%s] erro na rodada deste canal — seguindo pros próximos", channel_name)
+
+    # 16/11: reservas só depois do vídeo do dia de TODOS os canais
+    for channel_name, extra in reservas:
+        try:
+            _garante_reserva(channel_name, extra)
+        except Exception:  # noqa: BLE001
+            log.exception("[%s] erro ao gerar a reserva — seguindo", channel_name)
 
     # vídeos já renderizados cujo upload falhou (hoje ou antes — ex. token
     # OAuth expirado e reautorizado depois). Roda no fim: upload que falhou

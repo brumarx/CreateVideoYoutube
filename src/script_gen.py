@@ -2213,7 +2213,22 @@ def _plan_valid(raw: str) -> bool:
 
 
 # canais que escrevem a partir de uma lista de fatos verificados (passo de extração)
-FATOS_CANAIS = {"curiosidades"}
+def _canais_de_fatos() -> set[str]:
+    """Canais com `fatos_verificados: true` no yaml (os sem banco de dados: o roteiro vem de
+    lista fechada de fatos extraída das fontes). Canal com dado próprio (botafogo, politica) fica fora."""
+    import yaml
+
+    nomes: set[str] = set()
+    for y in sorted((Path(__file__).resolve().parent.parent / "channels").glob("*.yaml")):
+        try:
+            if (yaml.safe_load(y.read_text()) or {}).get("fatos_verificados"):
+                nomes.add(y.stem)
+        except Exception:  # noqa: BLE001 — yaml quebrado não derruba a importação
+            log.warning("channels/%s: yaml ilegível ao procurar fatos_verificados", y.name)
+    return nomes or {"curiosidades"}
+
+
+FATOS_CANAIS = _canais_de_fatos()
 
 
 _PT_UNIDADES = {"zero": 0, "um": 1, "uma": 1, "dois": 2, "duas": 2, "três": 3, "tres": 3, "quatro": 4,

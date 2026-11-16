@@ -194,3 +194,6 @@ afiliado_amazon:
   texto: "🛒 Indicação na Amazon"
   busca: "livro inteligência artificial"
   fixo: false
+fatos_verificados: true  # 16/11: roteiro de lista fechada de fatos + só sobe revisado (canais sem banco de dados)
+claim_sources: true
+musica_sem_risco: true  # só faixa sem risco de Content ID

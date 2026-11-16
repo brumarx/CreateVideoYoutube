@@ -208,6 +208,9 @@ topics:
   - "Como Hong Kong apaga incêndios em arranha-céus usando barcos e água do mar?"
   - "Como a Akashi Kaikyō Bridge superou o impossível desafio de construir a ponte suspensa mais longa do mundo em uma zona sísmica"
   - "Como o Canal do Panamá sobe navios 26 metros acima do nível do mar sem bombas?"
+  - "Como a camada de gelo de Lake Vostok preserva um ecossistema isolado no interior da Antártida"
+  - "Como o Belo Monte conseguiu gerar energia em uma das regiões mais úmidas e de difícil acesso da Amazônia?"
+  - "Por que o Great Pacific Garbage Patch se tornou o maior depósito de lixo plástico flutuante do planeta?"
 prompt_base: >
   Escreva um roteiro envolvente no estilo de canais de curiosidades/histórias
   do YouTube (tipo Reddit stories / fatos incríveis). O ângulo deste canal é
@@ -264,3 +267,4 @@ loja:
   produtos: 1
   so_se_combinar: true
   excluir_categorias: ["Campanha: um de cada lado"]
+fatos_verificados: true  # 16/11: roteiro de lista fechada de fatos + só sobe revisado (canais sem banco de dados)
