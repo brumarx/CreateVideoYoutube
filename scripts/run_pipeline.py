@@ -428,15 +428,6 @@ def _mark_news_blocks(script: dict, facts: dict | None) -> None:
             inicios.append((i, k))
         if isinstance(k, int) and k >= 1:
             prev = k
-    # abertura longa deixava 20+ s numa foto só antes da 1ª manchete (Botafogo 17/11):
-    # no máximo ~190 caracteres (uns 12 s), cortando por frase inteira
-    if script["scenes"] and not script["scenes"][0].get("noticia"):
-        frases, curta = _SENT_SPLIT.split(script["scenes"][0]["narration"].strip()), ""
-        for fr in frases:
-            if curta and len(curta) + len(fr) + 1 > 190:
-                break
-            curta = f"{curta} {fr}".strip()
-        script["scenes"][0]["narration"] = curta or script["scenes"][0]["narration"]
     for ordem, (i, k) in enumerate(inicios):
         scene = script["scenes"][i]
         scene["_manchete"] = {"ordem": ordem + 1, "total": len(inicios), "titulo": noticias[k - 1].get("titulo") or ""}

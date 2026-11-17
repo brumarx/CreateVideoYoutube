@@ -290,9 +290,8 @@ _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 # qual ela narra (foto e manchete na tela saem dele, ver run_pipeline.py).
 NEWS_STRUCTURE = """
 ESTRUTURA OBRIGATÓRIA (são {n} notícias SEPARADAS, formato noticiário):
-- Cena 1 = abertura CURTA (no máximo 25 palavras, uns 10 segundos: o
-  espectador fica olhando uma imagem só até a 1ª manchete): diga quantas
-  notícias tem hoje e só a principal. NÃO liste as cinco. "noticia": 0.
+- Cena 1 = abertura curta: diga quantas notícias tem hoje e cite as
+  principais numa frase só. "noticia": 0.
 - Depois, cada notícia no SEU bloco de cenas, NA ORDEM da lista
   "noticias" (1 = a primeira da lista). Cada cena ganha o campo extra
   "noticia" com esse número. Uma cena NUNCA fala de duas notícias, e
