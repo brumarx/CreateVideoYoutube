@@ -58,6 +58,7 @@ PRONUNCIATIONS = {
     "criativos": "criatívos",
 }
 _SPELLING_BACK = {v.lower(): k for k, v in PRONUNCIATIONS.items()}
+_SPELLING_BACK["séde"] = "sede"  # legenda mostra "sede" (ver _sede_do_lugar)
 
 # Palavras que a voz lê errado por não serem português (ou por ser abreviação
 # de outra língua). Troca só no texto falado; a legenda mostra a fala.
@@ -75,10 +76,26 @@ _SPOKEN_SWAPS = [
 ]
 
 
+def _sede_do_lugar(text: str) -> str:
+    """"sede" de lugar (sede do clube, em General Severiano) é "SÉ-di", e "sede" de
+    beber é "SÊ-di". A voz fala sempre a de beber (17/11, Botafogo): "séde" no
+    lugar; fica "sede" só em "matar a sede", "com sede", "sede de vitória"."""
+    def troca(m: re.Match) -> str:
+        antes = text[max(0, m.start() - 30):m.start()].lower()
+        depois = text[m.end():m.end() + 20]
+        if not re.match(r"\s+(em|no|na)\s+[A-ZÀ-Ý]", depois):
+            if re.search(r"\b(mat\w+|morr\w+|pass\w+|com|sent\w+|tem|tinha|t[êe]m|muita|tanta|uma|enorme)\s+(a\s+|de\s+)?$", antes):
+                return m[0]
+            if re.match(r"\s+de\s+[a-zà-ÿ]", depois):
+                return m[0]
+        return "Séde" if m[0][0] == "S" else "séde"
+    return re.sub(r"\b[Ss]ede\b", troca, text)
+
+
 def _spoken_swaps(text: str) -> str:
     for pattern, spoken in _SPOKEN_SWAPS:
         text = pattern.sub(spoken, text)
-    return text
+    return _sede_do_lugar(text)
 
 _BRAZILIAN_STATES = {
     "AC": "Acre",

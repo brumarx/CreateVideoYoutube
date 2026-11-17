@@ -297,6 +297,13 @@ def _eh_data(frase: str, inicio: int, numero: str) -> bool:
             or (valor.isdigit() and len(valor) == 4 and 1500 <= int(valor) <= 2100))
 
 
+def _eh_rotulo_ou_idade(frase: str, inicio: int, numero: str) -> bool:
+    antes = frase[max(0, inicio - 16):inicio].lower()
+    depois = frase[inicio + len(numero):inicio + len(numero) + 8].lower()
+    return bool(re.search(r"(vers[ãa]o|edi[çc][ãa]o|temporada|epis[óo]dio|cap[íi]tulo|n[ºo°]|n[úu]mero|\bv)\s*$", antes)
+                or re.match(r"\s*anos\b", depois))
+
+
 def estima_antes(frase: str, nums_alvo: set[str], vez: int = 0) -> str:
     """Marca o número de fonte secundária como aproximado, variando a palavra (`vez` alterna):
     quantidade → "cerca de 50 trens", "aproximadamente 34 operários"; data ou outro caso →
@@ -304,6 +311,13 @@ def estima_antes(frase: str, nums_alvo: set[str], vez: int = 0) -> str:
     if re.search(r"estima|calcula-se|aponta-se", frase, re.I):
         return frase
     alvo = next((m for m in re.finditer(r"\d+(?:[.,]\d+)*", frase) if canon(m.group()) in nums_alvo), None)
+    # versão, edição, idade não são quantidade: "versão cerca de 5" (job 934),
+    # "aos cerca de 45 anos" (job 940) — vão pra oração, como as datas
+    if alvo is not None and _eh_rotulo_ou_idade(frase, alvo.start(), alvo.group()):
+        alvo_oracao = alvo
+        alvo = None
+    else:
+        alvo_oracao = alvo
     if alvo is not None and not _eh_data(frase, alvo.start(), alvo.group()):
         if _JA_APROXIMADO.search(frase[:alvo.start()]):
             return frase
@@ -319,6 +333,7 @@ def estima_antes(frase: str, nums_alvo: set[str], vez: int = 0) -> str:
             palavra = palavra[0].upper() + palavra[1:]
         return frase[:alvo.start()] + palavra + " " + frase[alvo.start():]
     oracao = _ORACOES[vez % len(_ORACOES)]
+    alvo = alvo_oracao
     posicao = alvo.start() if alvo is not None else 0
     corte = max((frase.rfind(f, 0, posicao) + len(f) for f in _FRONTEIRAS if frase.rfind(f, 0, posicao) >= 0),
                 default=0) if posicao else 0
