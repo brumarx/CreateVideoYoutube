@@ -1158,10 +1158,7 @@ class Renderer:
         years = re.findall(r"(?<!\d)(1[0-9]\d\d|20[0-2]\d)(?!\d)", narration)
         if not names:
             # sem país: o número forte da cena vira cartão; sem número, o ano
-            if number:
-                return [number]
-            if years and self.last_base is not None:
-                return [{"tipo": "ano", "de": years[0], "rotulo": ""}]
+            # cartão só de número/ano é imagem estática feia (dono, 17/11): sem país, foto/vídeo real
             return None
         for n in names:
             if all(find_country(c) is not find_country(n) for c in self.cast):
@@ -1441,6 +1438,14 @@ def sanitize(grafico, narration: str):
     """Tira do roteiro a batida que não passa nas travas (número que a
     narração não fala, país/cidade/personagem/rótulo que ela não cita, tipo
     desconhecido). None = cena sem gráfico."""
+    # ano sozinho (de == até) é só um número grande no escuro: o dono pediu pra
+    # não usar (17/11, "imagem horrível"); só o contador que anda entre dois anos fica
+    if isinstance(grafico, dict):
+        grafico = [grafico]
+    if isinstance(grafico, list):
+        grafico = [g for g in grafico if not (
+            isinstance(g, dict) and _fold(g.get("tipo", "")) == "ano"
+            and (not g.get("ate") or str(g.get("ate")) == str(g.get("de"))))]
     beats = [b for b in beats_of(grafico) if spoken_numbers_ok(b, narration)]
     beats = [g for b in beats if (g := _ground_beat(b, narration)) is not None]
     if not beats:
