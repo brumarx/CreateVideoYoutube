@@ -411,6 +411,45 @@ _SENT_SPLIT = re.compile(r"(?<=[.!?])\s+")
 _ORDINAIS = ["Primeira", "Segunda", "Terceira", "Quarta", "Quinta", "Sexta", "Sétima", "Oitava", "Nona", "Décima"]
 
 
+def _news_beats_clip(i, scene, duration, manchete, news_frame, plain_frame, facts, news_photos, channel,
+                     width, height, out_dir):
+    """Cena de notícia com mais de uma imagem: abertura = manchetes do dia em sequência
+    (cada uma com a foto dela), notícia = manchete e, depois de uns 4,5 s, a foto limpa.
+    None = cena fica com a imagem única de sempre."""
+    from src.infographic import _beats_clip
+    from src.news_card import headline_card
+
+    site = channel.website.split("//")[-1] if channel.website else ""
+    noticias = [n for n in (facts or {}).get("noticias") or [] if isinstance(n, dict)]
+    frames, starts = [], []
+    if manchete and plain_frame is not None and duration >= 9:
+        frames, starts = [news_frame, plain_frame], [0.0, 4.5]
+    elif i == 0 and not scene.get("noticia") and len(noticias) >= 2 and duration >= 8:
+        n = min(5, len(noticias))
+        for k in range(n):
+            foto = next((f for f in news_photos if f.get("noticia") == k), None)
+            base = photo_scene_frame(foto["url"], width, height) if foto else None
+            frames.append(headline_card(
+                base, kicker=f"DESTAQUE {k + 1} DE {n}", headline=noticias[k].get("titulo") or "", site=site,
+                width=width, height=height, accent=channel.accent))
+            starts.append(duration * k / n)
+    if len(frames) < 2:
+        return None
+    out_dir.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for k, frame in enumerate(frames):
+        pth = out_dir / f"beat_{k}.png"
+        pth.write_bytes(frame)
+        paths.append(pth)
+    out = out_dir / "noticia.mp4"
+    try:
+        _beats_clip(paths, starts, duration, width, height, out)
+    except Exception as exc:  # noqa: BLE001 — sem o clipe, a imagem única de sempre
+        log.warning("cena %d: clipe de manchetes falhou (%s) — imagem única", i + 1, exc)
+        return None
+    return out
+
+
 def _mark_news_blocks(script: dict, facts: dict | None) -> None:
     """Vídeo de várias notícias: a 1ª cena de cada bloco ("noticia" do
     roteiro, ver script_gen.NEWS_STRUCTURE) ganha a manchete pra tela
@@ -1725,6 +1764,15 @@ def run(
                 # reserva sem a manchete: repetida em outra cena, mentiria o assunto
                 last_still = plain_frame if manchete else news_frame
                 scene_sources.append("noticia")
+                # imagem parada 20+ s é feio (dono, 17/11): a abertura passa pelas manchetes
+                # do dia, uma por vez, e a cena de notícia começa com a manchete e depois
+                # mostra a foto limpa
+                clip = _news_beats_clip(
+                    i, scene, scene_duration, manchete, news_frame, plain_frame, facts, news_photos,
+                    channel, width, height, work_dir / f"noticia_{i}",
+                )
+                if clip is not None:
+                    stock_clip_path, image_path = clip, None
             elif player_frame is not None:
                 image_path = work_dir / f"scene_{i}.png"
                 image_path.write_bytes(player_frame)
@@ -1799,7 +1847,7 @@ def run(
                     stat_overlay=scene.get("stat_overlay"),
                     impact_beat=bool(scene.get("impact_beat")),
                     video_path=stock_clip_path,
-                    grayscale=channel.fallback_grayscale and stock_clip_path is not None and scene_sources[-1] != "grafico",
+                    grayscale=channel.fallback_grayscale and stock_clip_path is not None and scene_sources[-1] not in ("grafico", "noticia"),
                     # cartão (gol, manchete, canal) e foto encaixada: zoom leve
                     composed=scene_sources[-1] in ("noticia", "jogador", "repetida", "grafico") or real_frame is not None,
                     # sem cartão de texto no topo da 1ª cena: o gancho em cima do
