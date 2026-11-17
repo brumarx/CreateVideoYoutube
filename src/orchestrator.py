@@ -60,6 +60,7 @@ class Job:
     youtube_video_id: str | None
     error: str | None
     created_at: str | None = None
+    updated_at: str | None = None  # só published_jobs preenche: quando virou 'uploaded'
 
 
 def enqueue(channel: str, topic: str) -> int:
@@ -104,7 +105,7 @@ def jobs_with_status(status: str) -> list[Job]:
 def published_jobs() -> list[Job]:
     """Todo vídeo que está no ar (status uploaded), do mais novo pro mais velho."""
     query = (
-        "SELECT id, channel, topic, status, video_path, thumbnail_path, youtube_video_id, error, created_at FROM jobs"
+        "SELECT id, channel, topic, status, video_path, thumbnail_path, youtube_video_id, error, created_at, updated_at FROM jobs"
         " WHERE status = 'uploaded' AND youtube_video_id IS NOT NULL ORDER BY id DESC"
     )
     with closing(_connect()) as conn:

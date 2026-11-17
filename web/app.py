@@ -267,12 +267,14 @@ def _local(created_at: str | None) -> datetime | None:
 
 
 def _video(job, views: dict) -> dict:
-    when = _local(job.created_at)
+    # data de PUBLICAÇÃO (updated_at ao virar uploaded), não de criação: vídeo
+    # gerado ontem como reserva e subido hoje aparece em "hoje"
+    when = _local(job.updated_at or job.created_at)
     return {
         "id": job.id, "channel": job.channel, "topic": job.topic, "vid": job.youtube_video_id,
         "views": views.get(job.youtube_video_id), "ts": when.timestamp() if when else 0,
         "seconds": _DURATIONS.get(job.youtube_video_id),
-        "date_label": _date_label(job.created_at),
+        "date_label": _date_label(job.updated_at or job.created_at),
     }
 
 
