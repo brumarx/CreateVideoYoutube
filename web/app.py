@@ -336,8 +336,11 @@ def _channel_summary(c: dict, jobs: list, videos: list[dict], running: bool) -> 
     today = date.today()
     mine = [j for j in jobs if j.channel == c["name"]]
     by_day: dict[date, list] = {}
+    # vídeo no ar conta no dia em que SUBIU (reserva gerada ontem e publicada hoje é de hoje)
+    subiu = {v["id"]: datetime.fromtimestamp(v["ts"]).astimezone() for v in videos if v["ts"]}
     for j in mine:
-        when = _local(j.created_at)
+        when = subiu.get(j.id) if j.status == "uploaded" else None
+        when = when or _local(j.created_at)
         if when:
             by_day.setdefault(when.date(), []).append(j)
     grid = []
