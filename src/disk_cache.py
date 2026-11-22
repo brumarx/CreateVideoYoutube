@@ -41,9 +41,12 @@ def get(namespace: str, chave, ttl_days: float = TTL_DAYS):
     try:
         if time.time() - path.stat().st_mtime >= ttl_days * 86400:
             return None
-        return json.loads(path.read_text(encoding="utf-8"))
+        valor = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
+    from . import metricas  # 20/11: reaproveitamento de pesquisa e evidências entra no custo do job
+    metricas.somar(f"cache_reaproveitado_{namespace}")
+    return valor
 
 
 def put(namespace: str, chave, valor) -> None:

@@ -65,8 +65,10 @@ def canon(numero: str) -> str:
 _ESCALAS = {"trilhão": 1e12, "trilhões": 1e12, "trillion": 1e12, "bilhão": 1e9, "bilhões": 1e9, "billion": 1e9,
             "milhão": 1e6, "milhões": 1e6, "million": 1e6, "mil": 1e3, "thousand": 1e3,
             "兆": 1e12, "億": 1e8, "万": 1e4}
-_ESCALA = re.compile(r"(\d+(?:[.,]\d+)*)\s*(trilhões|trilhão|trillion|bilhões|bilhão|billion|milhões|milhão|million|"
-                     r"thousand|mil|兆|億|万)", re.I)
+# 22/11 (E82): a palavra de escala termina ali — "500.000 milhas" virava 500 milhões ("mil" + "has"), "5 milímetros"
+# virava 5000, "2 military" virava 2000. Os ideogramas (兆億万) seguem sem fronteira ("5億円").
+_ESCALA = re.compile(r"(\d+(?:[.,]\d+)*)\s*(?:(trilhões|trilhão|trillion|bilhões|bilhão|billion|milhões|milhão|million|"
+                     r"thousand|mil)(?![^\W\d_])|(兆|億|万))", re.I)
 
 
 def numeros(texto: str) -> set[str]:
@@ -79,7 +81,8 @@ def numeros(texto: str) -> set[str]:
         leituras = {canon(bruto)}
         if re.fullmatch(r"\d{1,3}(,\d{3})+", bruto):
             leituras.add(bruto.replace(",", ""))  # vírgula de milhar (en, ja): "5,384億"
-        escala = _ESCALAS.get(m.group(2).lower() if m.group(2).isascii() else m.group(2))
+        palavra = m.group(2) or m.group(3)
+        escala = _ESCALAS.get(palavra.lower() if palavra.isascii() else palavra)
         for leitura in leituras:
             try:
                 out.add(format(round(float(leitura) * escala), "d"))
@@ -88,11 +91,22 @@ def numeros(texto: str) -> set[str]:
     return out
 
 
-def bloco_numerado(web_facts: list[dict] | None) -> str:
-    """Fontes numeradas [S1], [S2]... para a extração citar de onde tirou cada fato."""
-    linhas = [f"[S{i + 1}] {f.get('titulo', '')} ({dominio(f.get('url', ''))}): {str(f.get('trecho', ''))[:LIMITE_POR_FONTE]}"
-              for i, f in enumerate(web_facts or [])]
-    return "\n".join(linhas)[:LIMITE_BLOCO]
+def bloco_numerado(web_facts: list[dict] | None, topic: str = "") -> str:
+    """Fontes numeradas [S1], [S2]... para a extração citar de onde tirou cada fato. O número [S#] é
+    sempre a posição da fonte em `web_facts` (a atribuição volta por ele). Com o tema e material
+    maior que o bloco, os trechos entram por relevância (src/fontes.py) em vez do corte no fim."""
+    fontes = list(web_facts or [])
+
+    def linha(i: int, texto: str) -> str:
+        f = fontes[i]
+        return f"[S{i + 1}] {f.get('titulo', '')} ({dominio(f.get('url', ''))}): {texto}"
+    from .fontes import cabe, selecionar
+    cab = 12 + max((len(str(f.get("titulo", ""))) + len(dominio(f.get("url", ""))) for f in fontes), default=0)
+    if not topic or cabe(fontes, LIMITE_BLOCO, LIMITE_POR_FONTE, cab):
+        linhas = [linha(i, str(f.get("trecho", ""))[:LIMITE_POR_FONTE]) for i, f in enumerate(fontes)]
+        return "\n".join(linhas)[:LIMITE_BLOCO]
+    escolhidos, _ = selecionar(fontes, topic, LIMITE_BLOCO, por_fonte=LIMITE_POR_FONTE, custo_fixo=cab)
+    return "\n".join(linha(i, escolhidos[i]) for i in range(len(fontes)) if i in escolhidos)[:LIMITE_BLOCO]
 
 
 _MILHAR_ESPACO = re.compile(r"(?<![\d.,])(\d{1,3})((?:[ \u00a0\u202f]\d{3})+)(?![\d.,]|\s*\d)")
@@ -108,7 +122,7 @@ def atribuir(fatos_brutos: list[dict], web_facts: list[dict], outliers: list[str
     """Fatos da extração → fatos com ID, fontes que de fato contêm seus números e status.
     Fato cujo número não está em fonte nenhuma é descartado."""
     fontes = list(web_facts or [])
-    nums_fonte = [numeros(f.get("trecho", "") + " " + f.get("titulo", "")) for f in fontes]
+    nums_fonte = [numeros_fonte(f.get("trecho", "") + " " + f.get("titulo", "")) for f in fontes]
     # número que alguma fonte apresenta como planejamento/orçamento/previsão (ex.: "base de
     # planejamento: 538,4 bilhões") — vale mesmo se o fato veio de outra fonte que diz "custo total"
     planejamento = set()
@@ -152,7 +166,7 @@ _UNIDADES = {
     "euro": "eur", "euros": "eur", "%": "%", "graus": "grau", "pessoas": "pessoa", "operários": "pessoa",
     "trabalhadores": "pessoa", "mortos": "pessoa", "mortes": "pessoa", "vítimas": "pessoa",
 }
-_NUM_UNIDADE = re.compile(r"(\d+(?:[.,]\d+)*)\s*(?:(?:mil|milhões|milhão|bilhões|bilhão)\s*(?:de\s*)?)?([%a-zà-ú]+)?", re.I)
+_NUM_UNIDADE = re.compile(r"(\d+(?:[.,]\d+)*)\s*(?:(?:mil|milhões|milhão|bilhões|bilhão)(?![^\W\d_])\s*(?:de\s*)?)?([%a-zà-ú]+)?", re.I)
 _PARADAS = {"para", "pelo", "pela", "como", "mais", "este", "esta", "isso", "seus", "suas", "sobre", "entre", "cerca",
             "teve", "tinha", "foram", "durante", "total", "aproximadamente"}
 
@@ -160,8 +174,32 @@ _PARADAS = {"para", "pelo", "pela", "como", "mais", "este", "esta", "isso", "seu
 _PES = {"pé", "pés", "pes", "ft", "feet", "foot"}
 
 
-def _pares(texto: str) -> set[tuple[str, str]]:
+_TEMPERATURA = re.compile(r"(?<![\w.,])([−–-]\s?|menos\s+(?!de\b))?(?:(?:cerca de|aproximadamente|uns|umas|quase|"
+                          r"mais de|por volta de|em torno de)\s+)?(\d+(?:[.,]\d+)?)\s*(?:°|º(?=\s?[CF]\b)|graus?)(?:\s*(celsius|c|fahrenheit|f)\b)?"
+                          r"(\s+(?:negativos?|abaixo de zero))?", re.I)
+
+
+def temperaturas(texto: str) -> set[tuple[str, str]]:
+    """20/11 (E18 × E34): temperaturas COM SINAL e escala — "−8,0 °C" -> ("-8", "°C"), "64 graus
+    negativos" -> ("-64", "°C"), "(17,6 °F)" -> ("17.6", "°F"). "Graus" sem escala é Celsius (português)."""
     out = set()
+    for frase in re.split(r"(?<=[.;!?])\s+", texto or ""):
+        achados = list(_TEMPERATURA.finditer(frase))
+        # 20/11: "abaixo de zero"/"negativos" em outra posição da MESMA frase ("Abaixo de zero, o termômetro
+        # chegou a 64,4 graus") vale para a temperatura quando ela é a única da frase; "abaixo de 65" é comparação
+        negativa_na_frase = len(achados) == 1 and re.search(r"\babaixo de zero\b|\bnegativ[oa]s?\b", frase, re.I)
+        for m in achados:
+            escala = "°F" if (m.group(3) or "").lower().startswith("f") else "°C"
+            negativo = bool(m.group(1)) or bool(m.group(4)) or bool(negativa_na_frase)
+            valor = canon(m.group(2))
+            if negativo and valor not in ("0",):
+                valor = "-" + valor
+            out.add((valor, escala))
+    return out
+
+
+def _pares(texto: str) -> set[tuple[str, str]]:
+    out = set(temperaturas(texto))
     for m in _NUM_UNIDADE.finditer(texto):
         bruta = (m.group(2) or "").lower()
         if bruta in _PES:
@@ -310,7 +348,10 @@ def estima_antes(frase: str, nums_alvo: set[str], vez: int = 0) -> str:
     "calcula-se que o museu fechou em 2006", no começo da oração do número."""
     if re.search(r"estima|calcula-se|aponta-se", frase, re.I):
         return frase
-    alvo = next((m for m in re.finditer(r"\d+(?:[.,]\d+)*", frase) if canon(m.group()) in nums_alvo), None)
+    # 21/11: número colado a uma letra é nome, não quantidade ("L2", "A380", "STS82"): "Lcerca de 2" (JWST)
+    alvo = next((m for m in re.finditer(r"(?<![^\W\d_])\d+(?:[.,]\d+)*", frase) if canon(m.group()) in nums_alvo), None)
+    if alvo is None and any(canon(m.group()) in nums_alvo for m in re.finditer(r"\d+(?:[.,]\d+)*", frase)):
+        return frase
     # versão, edição, idade não são quantidade: "versão cerca de 5" (job 934),
     # "aos cerca de 45 anos" (job 940) — vão pra oração, como as datas
     if alvo is not None and _eh_rotulo_ou_idade(frase, alvo.start(), alvo.group()):
@@ -329,9 +370,17 @@ def estima_antes(frase: str, nums_alvo: set[str], vez: int = 0) -> str:
         alvo = re.compile(r"\d+(?:[.,]\d+)*").search(frase, len(antes))
         if re.search(r"\b(de|em|a|para|por|com|sobre)\s+$", frase[:alvo.start()], re.I) and palavra.endswith(" de"):
             palavra = "aproximadamente"  # "elevação de em torno de 26 metros" (job 889)
-        if alvo.start() == 0:
+        ini = alvo.start()
+        # 20/11 (job 998): o sinal fica colado ao número — "cerca de −8 °C", não "−cerca de 8 °C",
+        # e "cerca de menos 64,4", não "menos cerca de 64,4" (sinal falado; "menos de" é outra coisa)
+        if ini > 0 and frase[ini - 1] in "−–-+" and (ini == 1 or frase[ini - 2].isspace()):
+            ini -= 1
+        sinal = re.search(r"\b(menos|mais)\s+$", frase[:ini], re.I)
+        if sinal:
+            ini = sinal.start()
+        if ini == 0:
             palavra = palavra[0].upper() + palavra[1:]
-        return frase[:alvo.start()] + palavra + " " + frase[alvo.start():]
+        return frase[:ini] + palavra + " " + frase[ini:]
     oracao = _ORACOES[vez % len(_ORACOES)]
     alvo = alvo_oracao
     posicao = alvo.start() if alvo is not None else 0
@@ -382,6 +431,20 @@ _EXTENSO = re.compile(
     r"bilhão|bilhões)\b", re.I)
 
 
+_MILHAR_VIRGULA = re.compile(r"(?<![\d.,])\d{1,3}(?:,\d{3})+(?![\d,]|\.\d)")
+
+
+def numeros_fonte(texto: str) -> set[str]:
+    """Números de uma FONTE: os de `numeros` mais a leitura com vírgula de milhar do inglês
+    ("1,524 m" também vale 1524; "5,000 feet" também vale 5000). 19/11 (job 987): o fato
+    "1.524 metros" foi descartado porque "1,524" da Wikipédia em inglês virou 1,524. Só do lado
+    da fonte: o roteiro é português e segue lido com vírgula decimal."""
+    out = numeros(texto)
+    for m in _MILHAR_VIRGULA.finditer(milhar_com_espaco(texto or "")):
+        out.add(canon(m.group(0).replace(",", "")))
+    return out
+
+
 def numero_por_extenso(texto: str) -> list[str]:
     """Números grandes escritos por extenso ("vinte e seis metros", "um milhão e oitocentos mil"):
     escapam da conferência por número (job 873: 367 palavras e nenhum algarismo). "Mil" depois de
@@ -390,8 +453,17 @@ def numero_por_extenso(texto: str) -> list[str]:
     for m in _EXTENSO.finditer(texto or ""):
         if m.group(1).lower() in ("mil", "milhão", "milhões", "bilhão", "bilhões") and re.search(r"\d\s*$", texto[:m.start()]):
             continue
+        if _por_cento(texto, m):
+            continue  # 19/11 (job 988): "26 por cento" é porcentagem, não número por extenso
         achados.append(m.group(0))
     return achados
+
+
+def _por_cento(texto: str, m: re.Match) -> bool:
+    """"cento" de "por cento" depois de algarismo ("26 por cento"): a porcentagem já está em algarismo."""
+    antes = (texto or "")[:m.start()]
+    return m.group(0).lower() == "cento" and bool(
+        re.search(r"(?:\d|\b(?:" + _ALT_NUM + r"))\s*por\s+$", antes, re.I))
 
 
 _UNID = {"um": 1, "uma": 1, "dois": 2, "duas": 2, "três": 3, "tres": 3, "quatro": 4, "cinco": 5, "seis": 6,
@@ -434,8 +506,12 @@ def extenso_para_algarismos(texto: str) -> str:
     -> "100 mil toneladas"), para a conferência por número checar (job 877: o escritor insistiu no
     extenso nas 3 tentativas e todas as frases saíram). Não afrouxa nada: o algarismo passa pela
     mesma conferência. Números pequenos (até 9) e "um/uma" artigo ficam como estão."""
-    def troca(m: re.Match) -> str:
+    def converte(m: re.Match | _Pedaco) -> str:
+        if _por_cento(texto, m):
+            return m.group(0)  # "26 por cento" fica (antes virava "26 por 100")
         palavras = [w.lower() for w in re.findall(r"\w+", m.group(0)) if w.lower() != "e"]
+        if all(w in ("milhões", "bilhões", "trilhões") for w in palavras):
+            return m.group(0)  # 20/11: "milhões de anos" é "muitos milhões", não 1.000.000
         v = _valor_extenso(palavras)
         if v < 10 and not any(w in _ESCALA_EXT for w in palavras):
             return m.group(0)
@@ -445,7 +521,72 @@ def extenso_para_algarismos(texto: str) -> str:
         if novo.endswith(("ão", "ões")) and not re.match(r"\s+de\b", texto[m.end():]):
             novo += " de"  # "um milhão e oitocentos mil metros" -> "1,8 milhão de metros"
         return novo
-    return milhar_com_espaco(_SEQ_NUM.sub(troca, texto or ""))
+
+    def troca(m: re.Match) -> str:
+        # 20/11: "entre vinte e cinquenta anos" são dois números (20 e 50), não 70: a sequência é
+        # partida onde a composição não existe em português (dezena depois de dezena etc.)
+        pedacos = _numeros_da_sequencia(m)
+        if len(pedacos) == 1:
+            return converte(m)
+        out, fim = [], m.start()
+        for p in pedacos:
+            out.append(texto[fim:p.start()])
+            out.append(converte(p))
+            fim = p.end()
+        return "".join(out) + texto[fim:m.end()]
+    saida = _SEQ_NUM.sub(troca, texto or "")
+    # 20/11: decimal falado — "sessenta e quatro vírgula quatro" -> "64,4" (antes ficava "64 vírgula quatro"
+    # e o 64 seco parecia arredondamento de −64,4)
+    saida = re.sub(r"(\d+)\s+v[íi]rgula\s+(\d+|zero|um|uma|dois|duas|tr[êe]s|quatro|cinco|seis|sete|oito|nove)\b",
+                   lambda m: m.group(1) + "," + str(_DIGITO.get(m.group(2).lower(), m.group(2))), saida, flags=re.I)
+    return milhar_com_espaco(saida)
+
+
+_DIGITO = {"zero": 0, "um": 1, "uma": 1, "dois": 2, "duas": 2, "três": 3, "tres": 3, "quatro": 4, "cinco": 5,
+           "seis": 6, "sete": 7, "oito": 8, "nove": 9}
+
+
+class _Pedaco:
+    """Parte de uma sequência por extenso, com a mesma interface de re.Match usada aqui."""
+
+    def __init__(self, texto: str, ini: int, fim: int):
+        self._t, self._i, self._f = texto, ini, fim
+
+    def group(self, _n: int = 0) -> str:
+        return self._t[self._i:self._f]
+
+    def start(self) -> int:
+        return self._i
+
+    def end(self) -> int:
+        return self._f
+
+
+def _ordem(v: int) -> int:
+    return 0 if v < 10 else 1 if v < 100 else 2
+
+
+def _numeros_da_sequencia(m: re.Match) -> list:
+    """Os números de uma sequência por extenso: um só ("cento e vinte e cinco", "dois mil e
+    quinhentos") ou vários, quando a parte seguinte não compõe com a anterior ("vinte e cinquenta":
+    dezena depois de dezena)."""
+    texto = m.string
+    pedacos, ini, anterior = [], None, None
+    ultimo_fim = m.start()
+    for w in re.finditer(r"\w+", m.group(0)):
+        palavra = w.group().lower()
+        if palavra == "e":
+            continue
+        a, b = m.start() + w.start(), m.start() + w.end()
+        if ini is None:
+            ini = a
+        elif palavra not in _ESCALA_EXT and anterior is not None and _ordem(_UNID[palavra]) >= _ordem(anterior):
+            pedacos.append(_Pedaco(texto, ini, ultimo_fim))
+            ini = a
+        anterior = None if palavra in _ESCALA_EXT else _UNID[palavra]
+        ultimo_fim = b
+    pedacos.append(_Pedaco(texto, ini, ultimo_fim))
+    return pedacos
 
 
 def fato_repetido(script: dict) -> str | None:
@@ -465,8 +606,8 @@ def fato_repetido(script: dict) -> str | None:
 NUMERO_MAX_FRASES = 2  # o mesmo número em mais frases que isso soa repetido ("26 metros" 5x, job 865)
 
 
-def numero_repetido(script: dict) -> str | None:
-    """Número (fora ano) dito em mais de NUMERO_MAX_FRASES frases do roteiro."""
+def numero_repetido(script: dict, maximo: int = NUMERO_MAX_FRASES) -> str | None:
+    """Número (fora ano) dito em mais de `maximo` frases do roteiro."""
     contagem: dict[str, int] = {}
     for sc in script.get("scenes", []):
         for frase in _FRASES.split(_ID.sub("", sc.get("narration", ""))):
@@ -477,7 +618,7 @@ def numero_repetido(script: dict) -> str | None:
                 chave = next((k for k in contagem if _algum_igual({k}, {chave})), chave)
                 contagem[chave] = contagem.get(chave, 0) + 1
     pior = max(contagem.items(), key=lambda kv: kv[1], default=("", 0))
-    return f"o número {pior[0]} aparece em {pior[1]} frases" if pior[1] > NUMERO_MAX_FRASES else None
+    return f"o número {pior[0]} aparece em {pior[1]} frases" if pior[1] > maximo else None
 
 
 def _frase_livre(frase: str, resto: str | None = None) -> bool:

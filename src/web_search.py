@@ -83,6 +83,9 @@ def search_topic_facts(query: str, max_results: int = 5, oficiais: bool = False)
                 vistos.add(f["url"])
                 ordenadas.append(f)
         facts = ordenadas
+    # 21/11: todo recorte daqui marca as frases puladas (juntar_frases); o banco de evidências sabe que pode
+    # confiar na vizinhança das frases desta fonte (texto antigo, sem a marca, não tem essa garantia)
+    facts = [{**f, "cortes_marcados": True} for f in facts]
     disk_cache.put("busca_web", [BUSCA_VERSAO, versao, query, max_results, oficiais], facts)
     return facts or None
 
@@ -131,19 +134,39 @@ def _wiki_article(lang: str, title: str) -> tuple[str, str, str | None]:
     return page.get("extract") or "", page.get("fullurl") or "", (links[0].get("title") if links else None)
 
 
-def _dense_passage(text: str, keys: set[str], limit: int) -> str:
+# 21/11 (E86): o recorte junta frases que não são vizinhas no artigo. Sem marca, "On 28 December ... began the
+# sunshield deployment. First, commands deployed the momentum flap" parecia uma sequência da fonte, e as frases
+# do meio (e a data do 1º passo) tinham ficado de fora. Todo corte entre frases escolhidas vira " […] ".
+from .fontes import MARCA_CORTE  # noqa: E402
+
+
+def juntar_frases(frases: list[str], escolhidas) -> str:
+    """As frases escolhidas na ordem original; onde houve frase pulada entre duas escolhidas, a marca de corte."""
+    partes, anterior = [], None
+    for i in sorted(escolhidas):
+        if anterior is not None and i != anterior + 1:
+            partes.append(MARCA_CORTE)
+        partes.append(frases[i])
+        anterior = i
+    return " ".join(partes)
+
+
+def _dense_passage(text: str, keys: set[str], limit: int, bonus_numero: bool = True) -> str:
     """Abertura do artigo (contexto) + as frases com mais tema E data/número
-    (é onde está a virada: tratado, ano, quantidade), na ordem original."""
+    (é onde está a virada: tratado, ano, quantidade), na ordem original. 20/11: `bonus_numero=False`
+    escolhe só pelas palavras pedidas (aprofundamento das lacunas: o COMO, que raramente tem número)."""
     text = re.split(r"\n(?:Ver também|Referências|Bibliografia|Ligações externas|See also|References|Notes|"
                     r"Further reading|External links)\n", text)[0]
-    sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+|\n+", text) if 40 < len(x.strip()) < 400]
+    todas = [x.strip() for x in re.split(r"(?<=[.!?])\s+|\n+", text) if x.strip()]
+    posicao = [k for k, x in enumerate(todas) if 40 < len(x) < 400]  # frase curta/longa demais também é texto pulado
+    sentences = [todas[k] for k in posicao]
     if not sentences:
         return ""
     lead = set(range(min(2, len(sentences))))
 
     def score(i: int) -> float:
         sent = sentences[i]
-        return 2 * len(keys & _keywords(sent)) + (1.5 if re.search(r"\d", sent) else 0)
+        return 2 * len(keys & _keywords(sent)) + (1.5 if bonus_numero and re.search(r"\d", sent) else 0)
 
     chosen, size = set(lead), sum(len(sentences[i]) + 1 for i in lead)
     for i in sorted(range(len(sentences)), key=lambda i: -score(i)):
@@ -151,7 +174,7 @@ def _dense_passage(text: str, keys: set[str], limit: int) -> str:
             continue
         chosen.add(i)
         size += len(sentences[i]) + 1
-    return " ".join(sentences[i] for i in sorted(chosen))
+    return juntar_frases(todas, {posicao[i] for i in chosen})
 
 
 def _article_titles(query: str) -> dict[str, list[str]]:
@@ -327,8 +350,9 @@ def _best_passage(text: str, keys: set[str], limit: int = ENRICHED_CHARS, com_nu
     (extração de fatos), frase com número entra mesmo sem palavra-chave em comum e tem prioridade:
     numa página em japonês nenhuma palavra latina bate, mas "53.85km" e "1988年" estão lá."""
     # japonês e chinês dizem mais com menos caracteres: frase a partir de 10
-    sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+|(?<=[。！？])|\n+", text)
-                 if len(x.strip()) > 30 or (len(x.strip()) >= 10 and re.search(r"[\u3040-\u9fff]", x))]
+    todas = [x.strip() for x in re.split(r"(?<=[.!?])\s+|(?<=[。！？])|\n+", text) if x and x.strip()]
+    posicao = [k for k, x in enumerate(todas) if len(x) > 30 or (len(x) >= 10 and re.search(r"[\u3040-\u9fff]", x))]
+    sentences = [todas[k] for k in posicao]
 
     def peso(i: int) -> int:
         return len(keys & _keywords(sentences[i])) + (3 if com_numeros and re.search(r"\d", sentences[i]) else 0)
@@ -340,7 +364,7 @@ def _best_passage(text: str, keys: set[str], limit: int = ENRICHED_CHARS, com_nu
             continue
         chosen.add(i)
         size += len(sentences[i]) + 1
-    return " ".join(sentences[i] for i in sorted(chosen))
+    return juntar_frases(todas, {posicao[i] for i in chosen})
 
 
 def _enrich(facts: list[dict], query: str, limite: int = ENRICHED_CHARS) -> list[dict]:

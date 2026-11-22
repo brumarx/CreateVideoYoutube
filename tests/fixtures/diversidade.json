@@ -1,0 +1,1139 @@
+{
+ "_origem": "fixtures de diversidade temática (20/11/2026): textos curtos no estilo das fontes reais; a fonte C traz de propósito um valor divergente e a B só cita o assunto em outra parte",
+ "temas": [
+  {
+   "categoria": "biologia",
+   "tema": "Como os tardígrados sobrevivem ao vácuo do espaço e a temperaturas extremas?",
+   "sujeito_no_codigo": false,
+   "relacionada_pega_por": "juiz",
+   "fontes": [
+    {
+     "titulo": "Tardigrade - Wikipedia",
+     "url": "https://en.wikipedia.org/wiki/Tardigrade",
+     "trecho": "Tardigrades are microscopic animals. In 2007, tardigrades were taken into low Earth orbit on the FOTON-M3 mission and survived 10 days of exposure to the vacuum of space. Tardigrades have survived temperatures as low as −272 °C for a few minutes. Researchers estimate that there are about 1,300 described species. It is hypothesized that a protein called Dsup may protect tardigrade DNA from radiation damage."
+    },
+    {
+     "titulo": "Extremophile - Wikipedia",
+     "url": "https://en.wikipedia.org/wiki/Extremophile",
+     "trecho": "Some extremophiles can survive pressures of 1,000 atmospheres in the deep ocean. This article discusses the topic in general terms. Researchers have studied many related phenomena over the past decades, and the literature includes field observations, laboratory experiments and theoretical models. Several reviews summarize the main findings and open questions. Methods vary between studies, and results are not always directly comparable. Further work is needed to clarify the mechanisms involved and their relative importance in different settings. This article discusses the topic in general terms. Researchers have studied many related phenomena over the past decades, and the literature includes field observations, laboratory experiments and theoretical models. Several reviews summarize the main findings and open questions. Methods vary between studies, and results are not always directly comparable. Further work is needed to clarify the mechanisms involved and their relative importance in different settings. Tardigrades are often mentioned in popular accounts of extremophiles."
+    },
+    {
+     "titulo": "Tiny survivors - Science Weekly",
+     "url": "https://www.scienceweekly.example.org/tardigrades",
+     "trecho": "On the FOTON-M3 flight, tardigrades survived 12 days in the vacuum of space."
+    }
+   ],
+   "extracao": [
+    {
+     "afirmacao": "Em 2007, tardígrados ficaram 10 dias expostos ao vácuo do espaço na missão FOTON-M3.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "In 2007, tardigrades were taken into low Earth orbit on the FOTON-M3 mission and survived 10 days of exposure to the vacuum of space"
+      }
+     ],
+     "_esperado": "conflito"
+    },
+    {
+     "afirmacao": "Há cerca de 1.300 espécies descritas de tardígrados.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Researchers estimate that there are about 1,300 described species"
+      }
+     ],
+     "_esperado": "estimado"
+    },
+    {
+     "afirmacao": "A proteína Dsup protege o DNA dos tardígrados contra a radiação.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "It is hypothesized that a protein called Dsup may protect tardigrade DNA from radiation damage"
+      }
+     ],
+     "_esperado": "hipotese"
+    },
+    {
+     "afirmacao": "Tardígrados sobreviveram a −272 °C por alguns minutos.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Tardigrades have survived temperatures as low as −272 °C for a few minutes"
+      }
+     ],
+     "_esperado": "fato"
+    },
+    {
+     "afirmacao": "Tardígrados sobrevivem a pressões de 1.000 atmosferas.",
+     "citacoes": [
+      {
+       "fonte": "S2",
+       "trecho": "Some extremophiles can survive pressures of 1,000 atmospheres in the deep ocean"
+      }
+     ],
+     "_esperado": "relacionada"
+    },
+    {
+     "afirmacao": "Na missão FOTON-M3, tardígrados ficaram 12 dias no vácuo do espaço.",
+     "citacoes": [
+      {
+       "fonte": "S3",
+       "trecho": "On the FOTON-M3 flight, tardigrades survived 12 days in the vacuum of space"
+      }
+     ],
+     "_esperado": "conflito"
+    },
+    {
+     "afirmacao": "Tardígrados sobreviveram a −300 °C.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Tardigrades have survived temperatures as low as −272 °C for a few minutes"
+      }
+     ],
+     "_esperado": "numero_errado"
+    }
+   ],
+   "roteiro": [
+    {
+     "texto": "E aqui começa uma das histórias mais estranhas da biologia.",
+     "tipo": "narrativa",
+     "evidencias": [],
+     "_esperado": "ok"
+    },
+    {
+     "texto": "Em 2007, tardígrados passaram 10 dias expostos ao vácuo do espaço.",
+     "tipo": "factual",
+     "evidencias": [
+      "E1"
+     ],
+     "_esperado": "contraditorio"
+    },
+    {
+     "texto": "A proteína Dsup protege o DNA deles contra a radiação.",
+     "tipo": "factual",
+     "evidencias": [
+      "E3"
+     ],
+     "_esperado": "hipotese_como_fato"
+    },
+    {
+     "texto": "Eles já aguentaram −300 °C.",
+     "tipo": "factual",
+     "evidencias": [
+      "E4"
+     ],
+     "_esperado": "numero"
+    },
+    {
+     "texto": "Por isso, os tardígrados são os animais mais resistentes do planeta.",
+     "tipo": "explicativa",
+     "evidencias": [
+      "E4"
+     ],
+     "_esperado": "causal"
+    },
+    {
+     "texto": "Existem 1.300 espécies descritas.",
+     "tipo": "factual",
+     "evidencias": [
+      "E2"
+     ],
+     "_esperado": "estimativa_marcada"
+    }
+   ],
+   "conserto": "Acredita-se que uma proteína chamada Dsup ajude a proteger o DNA deles contra a radiação."
+  },
+  {
+   "categoria": "história",
+   "tema": "Como a Grande Muralha da China chegou a mais de 21 mil quilômetros?",
+   "sujeito_no_codigo": true,
+   "relacionada_pega_por": "codigo",
+   "fontes": [
+    {
+     "titulo": "Great Wall of China - Wikipedia",
+     "url": "https://en.wikipedia.org/wiki/Great_Wall_of_China",
+     "trecho": "A 2012 survey by China's State Administration of Cultural Heritage concluded that the Great Wall of China, with all its branches, measures 21,196 km. Most of the existing wall was built during the Ming dynasty, between 1368 and 1644. It is estimated that about 400,000 people died during the construction of the wall over the centuries. Some historians believe that sticky rice soup was mixed into the mortar of Ming-era sections."
+    },
+    {
+     "titulo": "Fortification - Wikipedia",
+     "url": "https://en.wikipedia.org/wiki/Fortification",
+     "trecho": "Defensive walls were usually built with rammed earth and stone and took decades to complete. This article discusses the topic in general terms. Researchers have studied many related phenomena over the past decades, and the literature includes field observations, laboratory experiments and theoretical models. Several reviews summarize the main findings and open questions. Methods vary between studies, and results are not always directly comparable. Further work is needed to clarify the mechanisms involved and their relative importance in different settings. This article discusses the topic in general terms. Researchers have studied many related phenomena over the past decades, and the literature includes field observations, laboratory experiments and theoretical models. Several reviews summarize the main findings and open questions. Methods vary between studies, and results are not always directly comparable. Further work is needed to clarify the mechanisms involved and their relative importance in different settings. The Great Wall of China is the most famous example of a defensive wall."
+    },
+    {
+     "titulo": "Ming Great Wall measured - Heritage News",
+     "url": "https://heritagenews.example.com/ming-wall",
+     "trecho": "A 2009 survey found that the Great Wall of China measures 8,850 km."
+    }
+   ],
+   "extracao": [
+    {
+     "afirmacao": "A maior parte da Grande Muralha da China foi construída na dinastia Ming, entre 1368 e 1644.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Most of the existing wall was built during the Ming dynasty, between 1368 and 1644"
+      }
+     ],
+     "_esperado": "fato"
+    },
+    {
+     "afirmacao": "Cerca de 400 mil pessoas morreram na construção da Grande Muralha da China.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "It is estimated that about 400,000 people died during the construction of the wall over the centuries"
+      }
+     ],
+     "_esperado": "estimado"
+    },
+    {
+     "afirmacao": "A argamassa dos trechos Ming da Grande Muralha da China levava sopa de arroz grudento.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Some historians believe that sticky rice soup was mixed into the mortar of Ming-era sections"
+      }
+     ],
+     "_esperado": "hipotese"
+    },
+    {
+     "afirmacao": "Um levantamento de 2012 concluiu que a Grande Muralha da China mede 21.196 km.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "the Great Wall of China, with all its branches, measures 21,196 km"
+      }
+     ],
+     "_esperado": "conflito"
+    },
+    {
+     "afirmacao": "A Grande Muralha da China levou décadas para ser concluída com terra compactada e pedra.",
+     "citacoes": [
+      {
+       "fonte": "S2",
+       "trecho": "Defensive walls were usually built with rammed earth and stone and took decades to complete"
+      }
+     ],
+     "_esperado": "relacionada"
+    },
+    {
+     "afirmacao": "Um levantamento de 2009 concluiu que a Grande Muralha da China mede 8.850 km.",
+     "citacoes": [
+      {
+       "fonte": "S3",
+       "trecho": "A 2009 survey found that the Great Wall of China measures 8,850 km"
+      }
+     ],
+     "_esperado": "conflito"
+    },
+    {
+     "afirmacao": "A Grande Muralha da China foi construída entre 1300 e 1644.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Most of the existing wall was built during the Ming dynasty, between 1368 and 1644"
+      }
+     ],
+     "_esperado": "numero_errado"
+    }
+   ],
+   "roteiro": [
+    {
+     "texto": "Agora pense numa obra que atravessou séculos.",
+     "tipo": "narrativa",
+     "evidencias": [],
+     "_esperado": "ok"
+    },
+    {
+     "texto": "A maior parte da muralha foi erguida na dinastia Ming, entre 1368 e 1644.",
+     "tipo": "factual",
+     "evidencias": [
+      "E1"
+     ],
+     "_esperado": "ok"
+    },
+    {
+     "texto": "A argamassa dos trechos Ming levava sopa de arroz grudento.",
+     "tipo": "factual",
+     "evidencias": [
+      "E3"
+     ],
+     "_esperado": "hipotese_como_fato"
+    },
+    {
+     "texto": "A obra começou em 1300.",
+     "tipo": "factual",
+     "evidencias": [
+      "E1"
+     ],
+     "_esperado": "numero"
+    },
+    {
+     "texto": "Foi por causa da muralha que nenhuma invasão chegou ao interior da China.",
+     "tipo": "explicativa",
+     "evidencias": [
+      "E1"
+     ],
+     "_esperado": "causal"
+    },
+    {
+     "texto": "Morreram 400 mil pessoas na construção.",
+     "tipo": "factual",
+     "evidencias": [
+      "E2"
+     ],
+     "_esperado": "estimativa_marcada"
+    }
+   ],
+   "conserto": "Alguns historiadores acreditam que a argamassa dos trechos Ming levava sopa de arroz grudento."
+  },
+  {
+   "categoria": "geografia e clima",
+   "tema": "Por que o Deserto do Atacama é o lugar mais seco do mundo?",
+   "sujeito_no_codigo": true,
+   "relacionada_pega_por": "codigo",
+   "fontes": [
+    {
+     "titulo": "Atacama Desert - Wikipedia",
+     "url": "https://en.wikipedia.org/wiki/Atacama_Desert",
+     "trecho": "The Atacama Desert is a desert plateau that stretches over 1,600 km along the Pacific coast of South America. The cold Humboldt Current and the Pacific anticyclone create a temperature inversion that blocks rain. Average rainfall in the city of Arica is about 0.76 mm per year. Scientists suggest that parts of the Atacama may have gone without significant rainfall for millions of years."
+    },
+    {
+     "titulo": "Desert - Wikipedia",
+     "url": "https://en.wikipedia.org/wiki/Desert",
+     "trecho": "Many deserts receive less than 250 mm of precipitation per year. This article discusses the topic in general terms. Researchers have studied many related phenomena over the past decades, and the literature includes field observations, laboratory experiments and theoretical models. Several reviews summarize the main findings and open questions. Methods vary between studies, and results are not always directly comparable. Further work is needed to clarify the mechanisms involved and their relative importance in different settings. This article discusses the topic in general terms. Researchers have studied many related phenomena over the past decades, and the literature includes field observations, laboratory experiments and theoretical models. Several reviews summarize the main findings and open questions. Methods vary between studies, and results are not always directly comparable. Further work is needed to clarify the mechanisms involved and their relative importance in different settings. The Atacama Desert in Chile is one of the best known examples."
+    },
+    {
+     "titulo": "South America deserts - Travel Atlas",
+     "url": "https://travelatlas.example.net/atacama",
+     "trecho": "The Atacama Desert stretches for about 1,000 km along the coast of Chile."
+    }
+   ],
+   "extracao": [
+    {
+     "afirmacao": "No Deserto do Atacama, a corrente fria de Humboldt e o anticiclone do Pacífico criam uma inversão térmica que bloqueia a chuva.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "The cold Humboldt Current and the Pacific anticyclone create a temperature inversion that blocks rain"
+      }
+     ],
+     "_esperado": "fato"
+    },
+    {
+     "afirmacao": "A chuva média em Arica, no Atacama, é de cerca de 0,76 mm por ano.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Average rainfall in the city of Arica is about 0.76 mm per year"
+      }
+     ],
+     "_esperado": "estimado"
+    },
+    {
+     "afirmacao": "Partes do Deserto do Atacama ficaram milhões de anos sem chuva significativa.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Scientists suggest that parts of the Atacama may have gone without significant rainfall for millions of years"
+      }
+     ],
+     "_esperado": "hipotese"
+    },
+    {
+     "afirmacao": "O Deserto do Atacama se estende por 1.600 km ao longo da costa do Pacífico.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "The Atacama Desert is a desert plateau that stretches over 1,600 km along the Pacific coast of South America"
+      }
+     ],
+     "_esperado": "conflito"
+    },
+    {
+     "afirmacao": "O Deserto do Atacama recebe menos de 250 mm de chuva por ano.",
+     "citacoes": [
+      {
+       "fonte": "S2",
+       "trecho": "Many deserts receive less than 250 mm of precipitation per year"
+      }
+     ],
+     "_esperado": "relacionada"
+    },
+    {
+     "afirmacao": "O Deserto do Atacama se estende por cerca de 1.000 km ao longo da costa do Chile.",
+     "citacoes": [
+      {
+       "fonte": "S3",
+       "trecho": "The Atacama Desert stretches for about 1,000 km along the coast of Chile"
+      }
+     ],
+     "_esperado": "conflito"
+    },
+    {
+     "afirmacao": "O Deserto do Atacama se estende por 2.600 km.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "The Atacama Desert is a desert plateau that stretches over 1,600 km along the Pacific coast of South America"
+      }
+     ],
+     "_esperado": "numero_errado"
+    }
+   ],
+   "roteiro": [
+    {
+     "texto": "Agora imagine um lugar onde a chuva quase não chega.",
+     "tipo": "narrativa",
+     "evidencias": [],
+     "_esperado": "ok"
+    },
+    {
+     "texto": "No Atacama, a corrente fria de Humboldt e o anticiclone do Pacífico criam uma inversão térmica que bloqueia a chuva.",
+     "tipo": "explicativa",
+     "evidencias": [
+      "E1"
+     ],
+     "_esperado": "ok"
+    },
+    {
+     "texto": "Partes do deserto ficaram milhões de anos sem chuva significativa.",
+     "tipo": "factual",
+     "evidencias": [
+      "E3"
+     ],
+     "_esperado": "hipotese_como_fato"
+    },
+    {
+     "texto": "O deserto se estende por 2.600 km.",
+     "tipo": "factual",
+     "evidencias": [
+      "E4"
+     ],
+     "_esperado": "numero"
+    },
+    {
+     "texto": "Por isso nenhuma planta consegue nascer em todo o deserto.",
+     "tipo": "explicativa",
+     "evidencias": [
+      "E1"
+     ],
+     "_esperado": "causal"
+    },
+    {
+     "texto": "Em Arica, chovem 0,76 mm por ano.",
+     "tipo": "factual",
+     "evidencias": [
+      "E2"
+     ],
+     "_esperado": "estimativa_marcada"
+    }
+   ],
+   "conserto": "Cientistas sugerem que partes do deserto podem ter passado milhões de anos sem chuva significativa."
+  },
+  {
+   "categoria": "ciência",
+   "tema": "Como os astrônomos fotografaram o buraco negro Sagittarius A* no centro da Via Láctea?",
+   "sujeito_no_codigo": true,
+   "relacionada_pega_por": "codigo",
+   "fontes": [
+    {
+     "titulo": "Sagittarius A* - Wikipedia",
+     "url": "https://en.wikipedia.org/wiki/Sagittarius_A*",
+     "trecho": "Sagittarius A* is the supermassive black hole at the Galactic Center of the Milky Way, at a distance of 27,000 light-years from Earth. Its mass is estimated at about 4.3 million times the mass of the Sun. On 12 May 2022, the Event Horizon Telescope collaboration released the first image of Sagittarius A*. Some researchers have proposed that a past outburst of Sagittarius A* could explain the Fermi bubbles."
+    },
+    {
+     "titulo": "Black hole - Wikipedia",
+     "url": "https://en.wikipedia.org/wiki/Black_hole",
+     "trecho": "Nothing, not even light, can escape from inside the event horizon of a black hole. This article discusses the topic in general terms. Researchers have studied many related phenomena over the past decades, and the literature includes field observations, laboratory experiments and theoretical models. Several reviews summarize the main findings and open questions. Methods vary between studies, and results are not always directly comparable. Further work is needed to clarify the mechanisms involved and their relative importance in different settings. This article discusses the topic in general terms. Researchers have studied many related phenomena over the past decades, and the literature includes field observations, laboratory experiments and theoretical models. Several reviews summarize the main findings and open questions. Methods vary between studies, and results are not always directly comparable. Further work is needed to clarify the mechanisms involved and their relative importance in different settings. The black hole at the center of our galaxy, Sagittarius A*, is among the most studied."
+    },
+    {
+     "titulo": "Our galactic center - Astro Daily",
+     "url": "https://astrodaily.example.org/sgr-a",
+     "trecho": "Sagittarius A* lies 26,000 light-years from Earth."
+    }
+   ],
+   "extracao": [
+    {
+     "afirmacao": "Em 12 de maio de 2022, o Event Horizon Telescope divulgou a primeira imagem de Sagittarius A*.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "On 12 May 2022, the Event Horizon Telescope collaboration released the first image of Sagittarius A*"
+      }
+     ],
+     "_esperado": "fato"
+    },
+    {
+     "afirmacao": "A massa de Sagittarius A* é de cerca de 4,3 milhões de vezes a massa do Sol.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Its mass is estimated at about 4.3 million times the mass of the Sun"
+      }
+     ],
+     "_esperado": "estimado"
+    },
+    {
+     "afirmacao": "Uma explosão passada de Sagittarius A* criou as bolhas de Fermi.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Some researchers have proposed that a past outburst of Sagittarius A* could explain the Fermi bubbles"
+      }
+     ],
+     "_esperado": "hipotese"
+    },
+    {
+     "afirmacao": "Sagittarius A* fica a 27 mil anos-luz da Terra.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "at a distance of 27,000 light-years from Earth"
+      }
+     ],
+     "_esperado": "conflito"
+    },
+    {
+     "afirmacao": "Nada, nem a luz, escapa de dentro do horizonte de eventos de Sagittarius A*.",
+     "citacoes": [
+      {
+       "fonte": "S2",
+       "trecho": "Nothing, not even light, can escape from inside the event horizon of a black hole"
+      }
+     ],
+     "_esperado": "relacionada"
+    },
+    {
+     "afirmacao": "Sagittarius A* fica a 26 mil anos-luz da Terra.",
+     "citacoes": [
+      {
+       "fonte": "S3",
+       "trecho": "Sagittarius A* lies 26,000 light-years from Earth"
+      }
+     ],
+     "_esperado": "conflito"
+    },
+    {
+     "afirmacao": "A primeira imagem de Sagittarius A* saiu em 2019.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "On 12 May 2022, the Event Horizon Telescope collaboration released the first image of Sagittarius A*"
+      }
+     ],
+     "_esperado": "numero_errado"
+    }
+   ],
+   "roteiro": [
+    {
+     "texto": "E então veio a foto que ninguém achava possível.",
+     "tipo": "narrativa",
+     "evidencias": [],
+     "_esperado": "ok"
+    },
+    {
+     "texto": "Em 12 de maio de 2022, o Event Horizon Telescope divulgou a primeira imagem de Sagittarius A*.",
+     "tipo": "factual",
+     "evidencias": [
+      "E1"
+     ],
+     "_esperado": "ok"
+    },
+    {
+     "texto": "Uma explosão antiga de Sagittarius A* criou as bolhas de Fermi.",
+     "tipo": "factual",
+     "evidencias": [
+      "E3"
+     ],
+     "_esperado": "hipotese_como_fato"
+    },
+    {
+     "texto": "A imagem saiu em 2019.",
+     "tipo": "factual",
+     "evidencias": [
+      "E1"
+     ],
+     "_esperado": "numero"
+    },
+    {
+     "texto": "Foi essa imagem que provou que a relatividade geral está correta.",
+     "tipo": "explicativa",
+     "evidencias": [
+      "E1"
+     ],
+     "_esperado": "causal"
+    },
+    {
+     "texto": "A massa dele é de 4,3 milhões de sóis.",
+     "tipo": "factual",
+     "evidencias": [
+      "E2"
+     ],
+     "_esperado": "estimativa_marcada"
+    }
+   ],
+   "conserto": "Alguns pesquisadores propõem que uma explosão antiga de Sagittarius A* explicaria as bolhas de Fermi."
+  },
+  {
+   "categoria": "engenharia e tecnologia",
+   "tema": "Como o Burj Khalifa chegou a 828 metros de altura?",
+   "sujeito_no_codigo": true,
+   "relacionada_pega_por": "codigo",
+   "fontes": [
+    {
+     "titulo": "Burj Khalifa - Wikipedia",
+     "url": "https://en.wikipedia.org/wiki/Burj_Khalifa",
+     "trecho": "The Burj Khalifa is a skyscraper in Dubai with a total height of 828 m. It opened on 4 January 2010. Its Y-shaped floor plan was designed to reduce the wind forces on the tower. During construction, concrete was pumped to a record height of 606 m. Around 12,000 workers were on site at the peak of construction, according to estimates. Engineers believe the top of the spire may sway by up to 1.5 m in strong winds."
+    },
+    {
+     "titulo": "Skyscraper - Wikipedia",
+     "url": "https://en.wikipedia.org/wiki/Skyscraper",
+     "trecho": "Tall buildings use tuned mass dampers to reduce swaying caused by wind. This article discusses the topic in general terms. Researchers have studied many related phenomena over the past decades, and the literature includes field observations, laboratory experiments and theoretical models. Several reviews summarize the main findings and open questions. Methods vary between studies, and results are not always directly comparable. Further work is needed to clarify the mechanisms involved and their relative importance in different settings. This article discusses the topic in general terms. Researchers have studied many related phenomena over the past decades, and the literature includes field observations, laboratory experiments and theoretical models. Several reviews summarize the main findings and open questions. Methods vary between studies, and results are not always directly comparable. Further work is needed to clarify the mechanisms involved and their relative importance in different settings. The Burj Khalifa in Dubai is currently the tallest building in the world."
+    },
+    {
+     "titulo": "Record concrete pumping - Construction Today",
+     "url": "https://constructiontoday.example.com/burj",
+     "trecho": "At the Burj Khalifa, concrete was pumped to a height of 580 m."
+    }
+   ],
+   "extracao": [
+    {
+     "afirmacao": "A planta em forma de Y do Burj Khalifa foi projetada para reduzir as forças do vento sobre a torre.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Its Y-shaped floor plan was designed to reduce the wind forces on the tower"
+      }
+     ],
+     "_esperado": "fato"
+    },
+    {
+     "afirmacao": "Cerca de 12 mil operários trabalharam no Burj Khalifa no pico da obra.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Around 12,000 workers were on site at the peak of construction, according to estimates"
+      }
+     ],
+     "_esperado": "estimado"
+    },
+    {
+     "afirmacao": "O topo do Burj Khalifa balança até 1,5 m em ventos fortes.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Engineers believe the top of the spire may sway by up to 1.5 m in strong winds"
+      }
+     ],
+     "_esperado": "hipotese"
+    },
+    {
+     "afirmacao": "Na obra do Burj Khalifa, o concreto foi bombeado a 606 m de altura.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "During construction, concrete was pumped to a record height of 606 m"
+      }
+     ],
+     "_esperado": "conflito"
+    },
+    {
+     "afirmacao": "O Burj Khalifa usa amortecedores de massa sintonizada para reduzir o balanço causado pelo vento.",
+     "citacoes": [
+      {
+       "fonte": "S2",
+       "trecho": "Tall buildings use tuned mass dampers to reduce swaying caused by wind"
+      }
+     ],
+     "_esperado": "relacionada"
+    },
+    {
+     "afirmacao": "Na obra do Burj Khalifa, o concreto foi bombeado a 580 m de altura.",
+     "citacoes": [
+      {
+       "fonte": "S3",
+       "trecho": "At the Burj Khalifa, concrete was pumped to a height of 580 m"
+      }
+     ],
+     "_esperado": "conflito"
+    },
+    {
+     "afirmacao": "O Burj Khalifa tem 900 m de altura.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "The Burj Khalifa is a skyscraper in Dubai with a total height of 828 m"
+      }
+     ],
+     "_esperado": "numero_errado"
+    }
+   ],
+   "roteiro": [
+    {
+     "texto": "Agora imagine subir concreto mais alto que qualquer prédio já feito.",
+     "tipo": "narrativa",
+     "evidencias": [],
+     "_esperado": "ok"
+    },
+    {
+     "texto": "A planta em forma de Y foi projetada para reduzir as forças do vento sobre a torre.",
+     "tipo": "explicativa",
+     "evidencias": [
+      "E1"
+     ],
+     "_esperado": "ok"
+    },
+    {
+     "texto": "O topo balança até 1,5 m em ventos fortes.",
+     "tipo": "factual",
+     "evidencias": [
+      "E3"
+     ],
+     "_esperado": "hipotese_como_fato"
+    },
+    {
+     "texto": "A torre tem 900 m de altura.",
+     "tipo": "factual",
+     "evidencias": [
+      "E4"
+     ],
+     "_esperado": "numero"
+    },
+    {
+     "texto": "É graças à forma em Y que o prédio nunca precisou de manutenção na fachada.",
+     "tipo": "explicativa",
+     "evidencias": [
+      "E1"
+     ],
+     "_esperado": "causal"
+    },
+    {
+     "texto": "Trabalharam 12 mil operários no pico da obra.",
+     "tipo": "factual",
+     "evidencias": [
+      "E2"
+     ],
+     "_esperado": "estimativa_marcada"
+    }
+   ],
+   "conserto": "Engenheiros acreditam que o topo pode balançar até 1,5 m em ventos fortes."
+  },
+  {
+   "categoria": "sociedade e países",
+   "tema": "Como o Butão mede a Felicidade Interna Bruta da população?",
+   "sujeito_no_codigo": true,
+   "relacionada_pega_por": "juiz",
+   "fontes": [
+    {
+     "titulo": "Bhutan - Wikipedia",
+     "url": "https://en.wikipedia.org/wiki/Bhutan",
+     "trecho": "Bhutan introduced the concept of Gross National Happiness in the 1970s. Television and the internet were allowed in Bhutan only in 1999. Its population is estimated at about 770,000 people. Some economists argue that the Gross National Happiness index may have helped Bhutan preserve its forests, which cover about 71% of the country."
+    },
+    {
+     "titulo": "Happiness economics - Wikipedia",
+     "url": "https://en.wikipedia.org/wiki/Happiness_economics",
+     "trecho": "Surveys show that life satisfaction rises with income up to a point. This article discusses the topic in general terms. Researchers have studied many related phenomena over the past decades, and the literature includes field observations, laboratory experiments and theoretical models. Several reviews summarize the main findings and open questions. Methods vary between studies, and results are not always directly comparable. Further work is needed to clarify the mechanisms involved and their relative importance in different settings. This article discusses the topic in general terms. Researchers have studied many related phenomena over the past decades, and the literature includes field observations, laboratory experiments and theoretical models. Several reviews summarize the main findings and open questions. Methods vary between studies, and results are not always directly comparable. Further work is needed to clarify the mechanisms involved and their relative importance in different settings. Bhutan is often cited for its Gross National Happiness policy."
+    },
+    {
+     "titulo": "Himalayan kingdom facts - World Data",
+     "url": "https://worlddata.example.info/bhutan",
+     "trecho": "Bhutan has a population of about 820,000 people."
+    }
+   ],
+   "extracao": [
+    {
+     "afirmacao": "O Butão só permitiu a televisão e a internet em 1999.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Television and the internet were allowed in Bhutan only in 1999"
+      }
+     ],
+     "_esperado": "fato"
+    },
+    {
+     "afirmacao": "O Butão tem cerca de 770 mil pessoas.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Its population is estimated at about 770,000 people"
+      }
+     ],
+     "_esperado": "conflito_estimado"
+    },
+    {
+     "afirmacao": "O índice de Felicidade Interna Bruta ajudou o Butão a preservar suas florestas.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Some economists argue that the Gross National Happiness index may have helped Bhutan preserve its forests"
+      }
+     ],
+     "_esperado": "hipotese"
+    },
+    {
+     "afirmacao": "No Butão, a satisfação com a vida aumenta com a renda até certo ponto.",
+     "citacoes": [
+      {
+       "fonte": "S2",
+       "trecho": "Surveys show that life satisfaction rises with income up to a point"
+      }
+     ],
+     "_esperado": "relacionada"
+    },
+    {
+     "afirmacao": "O Butão tem cerca de 820 mil pessoas.",
+     "citacoes": [
+      {
+       "fonte": "S3",
+       "trecho": "Bhutan has a population of about 820,000 people"
+      }
+     ],
+     "_esperado": "conflito"
+    },
+    {
+     "afirmacao": "O Butão só permitiu a televisão em 2009.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Television and the internet were allowed in Bhutan only in 1999"
+      }
+     ],
+     "_esperado": "numero_errado"
+    }
+   ],
+   "roteiro": [
+    {
+     "texto": "E aqui a história fica curiosa.",
+     "tipo": "narrativa",
+     "evidencias": [],
+     "_esperado": "ok"
+    },
+    {
+     "texto": "O país só liberou a televisão e a internet em 1999.",
+     "tipo": "factual",
+     "evidencias": [
+      "E1"
+     ],
+     "_esperado": "ok"
+    },
+    {
+     "texto": "O índice de felicidade ajudou o Butão a preservar suas florestas.",
+     "tipo": "factual",
+     "evidencias": [
+      "E3"
+     ],
+     "_esperado": "hipotese_como_fato"
+    },
+    {
+     "texto": "A televisão chegou em 2009.",
+     "tipo": "factual",
+     "evidencias": [
+      "E1"
+     ],
+     "_esperado": "numero"
+    },
+    {
+     "texto": "Por isso o Butão é o país mais feliz do mundo.",
+     "tipo": "explicativa",
+     "evidencias": [
+      "E1"
+     ],
+     "_esperado": "causal"
+    }
+   ],
+   "conserto": "Alguns economistas defendem que o índice de felicidade pode ter ajudado o Butão a preservar suas florestas."
+  },
+  {
+   "categoria": "mistérios e curiosidades",
+   "tema": "O que realmente acontece no Triângulo das Bermudas?",
+   "sujeito_no_codigo": true,
+   "relacionada_pega_por": "juiz",
+   "fontes": [
+    {
+     "titulo": "Bermuda Triangle - Wikipedia",
+     "url": "https://en.wikipedia.org/wiki/Bermuda_Triangle",
+     "trecho": "The Bermuda Triangle is a loosely defined region of the North Atlantic Ocean between Miami, Bermuda and Puerto Rico. Its area is estimated at about 1,300,000 km2. The United States Board on Geographic Names does not recognize the Bermuda Triangle as an official name. Some researchers have suggested that methane eruptions from the seabed could sink ships. Flight 19, a group of five US Navy bombers, disappeared in the area in December 1945."
+    },
+    {
+     "titulo": "Rogue wave - Wikipedia",
+     "url": "https://en.wikipedia.org/wiki/Rogue_wave",
+     "trecho": "Rogue waves can reach heights of 30 m and appear without warning. This article discusses the topic in general terms. Researchers have studied many related phenomena over the past decades, and the literature includes field observations, laboratory experiments and theoretical models. Several reviews summarize the main findings and open questions. Methods vary between studies, and results are not always directly comparable. Further work is needed to clarify the mechanisms involved and their relative importance in different settings. This article discusses the topic in general terms. Researchers have studied many related phenomena over the past decades, and the literature includes field observations, laboratory experiments and theoretical models. Several reviews summarize the main findings and open questions. Methods vary between studies, and results are not always directly comparable. Further work is needed to clarify the mechanisms involved and their relative importance in different settings. Rogue waves have been proposed as an explanation for losses in the Bermuda Triangle."
+    },
+    {
+     "titulo": "Atlantic mysteries - Sea Facts",
+     "url": "https://seafacts.example.org/bermuda",
+     "trecho": "Flight 19 was a group of 6 US Navy bombers that vanished in December 1945."
+    }
+   ],
+   "extracao": [
+    {
+     "afirmacao": "O Voo 19, um grupo de cinco bombardeiros da Marinha americana, desapareceu no Triângulo das Bermudas em dezembro de 1945.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Flight 19, a group of five US Navy bombers, disappeared in the area in December 1945"
+      }
+     ],
+     "_esperado": "conflito"
+    },
+    {
+     "afirmacao": "A área do Triângulo das Bermudas é de cerca de 1.300.000 km².",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Its area is estimated at about 1,300,000 km2"
+      }
+     ],
+     "_esperado": "estimado"
+    },
+    {
+     "afirmacao": "Erupções de metano do fundo do mar afundam navios no Triângulo das Bermudas.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Some researchers have suggested that methane eruptions from the seabed could sink ships"
+      }
+     ],
+     "_esperado": "hipotese"
+    },
+    {
+     "afirmacao": "O nome Triângulo das Bermudas não é reconhecido como oficial pelo órgão de nomes geográficos dos Estados Unidos.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "The United States Board on Geographic Names does not recognize the Bermuda Triangle as an official name"
+      }
+     ],
+     "_esperado": "fato"
+    },
+    {
+     "afirmacao": "No Triângulo das Bermudas, ondas gigantes chegam a 30 m de altura sem aviso.",
+     "citacoes": [
+      {
+       "fonte": "S2",
+       "trecho": "Rogue waves can reach heights of 30 m and appear without warning"
+      }
+     ],
+     "_esperado": "relacionada"
+    },
+    {
+     "afirmacao": "O Voo 19, um grupo de 6 bombardeiros da Marinha americana, desapareceu em dezembro de 1945.",
+     "citacoes": [
+      {
+       "fonte": "S3",
+       "trecho": "Flight 19 was a group of 6 US Navy bombers that vanished in December 1945"
+      }
+     ],
+     "_esperado": "conflito"
+    },
+    {
+     "afirmacao": "O Voo 19 desapareceu em 1955.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Flight 19, a group of five US Navy bombers, disappeared in the area in December 1945"
+      }
+     ],
+     "_esperado": "numero_errado"
+    }
+   ],
+   "roteiro": [
+    {
+     "texto": "Mas o que existe de verdade por trás da lenda?",
+     "tipo": "narrativa",
+     "evidencias": [],
+     "_esperado": "ok"
+    },
+    {
+     "texto": "O nome nem é reconhecido como oficial pelo órgão de nomes geográficos dos Estados Unidos.",
+     "tipo": "factual",
+     "evidencias": [
+      "E4"
+     ],
+     "_esperado": "ok"
+    },
+    {
+     "texto": "Erupções de metano do fundo do mar afundam os navios ali.",
+     "tipo": "factual",
+     "evidencias": [
+      "E3"
+     ],
+     "_esperado": "hipotese_como_fato"
+    },
+    {
+     "texto": "O Voo 19 sumiu em 1955.",
+     "tipo": "factual",
+     "evidencias": [
+      "E1"
+     ],
+     "_esperado": "numero"
+    },
+    {
+     "texto": "Foi o metano que derrubou os aviões do Voo 19.",
+     "tipo": "explicativa",
+     "evidencias": [
+      "E1"
+     ],
+     "_esperado": "causal"
+    },
+    {
+     "texto": "A região tem 1.300.000 km².",
+     "tipo": "factual",
+     "evidencias": [
+      "E2"
+     ],
+     "_esperado": "estimativa_marcada"
+    }
+   ],
+   "conserto": "Alguns pesquisadores sugerem que erupções de metano do fundo do mar poderiam afundar navios."
+  },
+  {
+   "categoria": "culinária (tema não previsto)",
+   "tema": "Por que o mel não estraga mesmo depois de milhares de anos?",
+   "sujeito_no_codigo": false,
+   "relacionada_pega_por": "juiz",
+   "fontes": [
+    {
+     "titulo": "Honey - Wikipedia",
+     "url": "https://en.wikipedia.org/wiki/Honey",
+     "trecho": "Honey typically contains about 17% water. Honey has a pH between 3.2 and 4.5, which inhibits the growth of many bacteria. Archaeologists have found pots of honey in ancient Egyptian tombs that were around 3,000 years old. It has been suggested that hydrogen peroxide produced by the enzyme glucose oxidase may contribute to the antibacterial activity of honey. Honey is made up of about 80% sugars."
+    },
+    {
+     "titulo": "Food preservation - Wikipedia",
+     "url": "https://en.wikipedia.org/wiki/Food_preservation",
+     "trecho": "Sugar preserves food by drawing water out of microbial cells through osmosis. This article discusses the topic in general terms. Researchers have studied many related phenomena over the past decades, and the literature includes field observations, laboratory experiments and theoretical models. Several reviews summarize the main findings and open questions. Methods vary between studies, and results are not always directly comparable. Further work is needed to clarify the mechanisms involved and their relative importance in different settings. This article discusses the topic in general terms. Researchers have studied many related phenomena over the past decades, and the literature includes field observations, laboratory experiments and theoretical models. Several reviews summarize the main findings and open questions. Methods vary between studies, and results are not always directly comparable. Further work is needed to clarify the mechanisms involved and their relative importance in different settings. Honey has been used as a preservative since antiquity."
+    },
+    {
+     "titulo": "Sweet facts - Kitchen Science",
+     "url": "https://kitchenscience.example.com/honey",
+     "trecho": "Honey is made up of about 70% sugars."
+    }
+   ],
+   "extracao": [
+    {
+     "afirmacao": "O pH do mel fica entre 3,2 e 4,5, o que inibe o crescimento de muitas bactérias.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Honey has a pH between 3.2 and 4.5, which inhibits the growth of many bacteria"
+      }
+     ],
+     "_esperado": "fato"
+    },
+    {
+     "afirmacao": "Arqueólogos acharam potes de mel com cerca de 3.000 anos em tumbas do Egito antigo.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Archaeologists have found pots of honey in ancient Egyptian tombs that were around 3,000 years old"
+      }
+     ],
+     "_esperado": "estimado"
+    },
+    {
+     "afirmacao": "O peróxido de hidrogênio produzido pela enzima glicose oxidase dá ao mel sua ação antibacteriana.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "It has been suggested that hydrogen peroxide produced by the enzyme glucose oxidase may contribute to the antibacterial activity of honey"
+      }
+     ],
+     "_esperado": "hipotese"
+    },
+    {
+     "afirmacao": "O mel é formado por cerca de 80% de açúcares.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Honey is made up of about 80% sugars"
+      }
+     ],
+     "_esperado": "conflito_estimado"
+    },
+    {
+     "afirmacao": "O mel conserva alimentos tirando a água das células dos micróbios por osmose.",
+     "citacoes": [
+      {
+       "fonte": "S2",
+       "trecho": "Sugar preserves food by drawing water out of microbial cells through osmosis"
+      }
+     ],
+     "_esperado": "relacionada"
+    },
+    {
+     "afirmacao": "O mel é formado por cerca de 70% de açúcares.",
+     "citacoes": [
+      {
+       "fonte": "S3",
+       "trecho": "Honey is made up of about 70% sugars"
+      }
+     ],
+     "_esperado": "conflito"
+    },
+    {
+     "afirmacao": "O pH do mel fica entre 2 e 3.",
+     "citacoes": [
+      {
+       "fonte": "S1",
+       "trecho": "Honey has a pH between 3.2 and 4.5, which inhibits the growth of many bacteria"
+      }
+     ],
+     "_esperado": "numero_errado"
+    }
+   ],
+   "roteiro": [
+    {
+     "texto": "E é aqui que a química entra na história.",
+     "tipo": "narrativa",
+     "evidencias": [],
+     "_esperado": "ok"
+    },
+    {
+     "texto": "O pH do mel fica entre 3,2 e 4,5, o que inibe o crescimento de muitas bactérias.",
+     "tipo": "explicativa",
+     "evidencias": [
+      "E1"
+     ],
+     "_esperado": "ok"
+    },
+    {
+     "texto": "O peróxido de hidrogênio produzido por uma enzima dá ao mel sua ação antibacteriana.",
+     "tipo": "factual",
+     "evidencias": [
+      "E3"
+     ],
+     "_esperado": "hipotese_como_fato"
+    },
+    {
+     "texto": "O pH do mel fica entre 2 e 3.",
+     "tipo": "factual",
+     "evidencias": [
+      "E1"
+     ],
+     "_esperado": "numero"
+    },
+    {
+     "texto": "Por isso o mel cura qualquer infecção.",
+     "tipo": "explicativa",
+     "evidencias": [
+      "E1"
+     ],
+     "_esperado": "causal"
+    },
+    {
+     "texto": "Os potes achados no Egito tinham 3.000 anos.",
+     "tipo": "factual",
+     "evidencias": [
+      "E2"
+     ],
+     "_esperado": "estimativa_marcada"
+    }
+   ],
+   "conserto": "Uma das explicações é que o peróxido de hidrogênio produzido por uma enzima contribui para a ação antibacteriana do mel."
+  }
+ ]
+}

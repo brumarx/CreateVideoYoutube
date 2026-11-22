@@ -90,6 +90,7 @@ def test_deepseek_so_entra_depois_dos_gratis(monkeypatch):
 
 def test_deepseek_sem_saldo_registra_e_nao_repete(monkeypatch, tmp_path):
     from src import paid_usage
+    monkeypatch.setattr(providers, "PROVEDOR_PAGO_LIGADO", True)  # comportamento se religada (hoje desligada)
     registrados = []
     monkeypatch.setattr(paid_usage, "record_exhausted", lambda d: registrados.append(d))
     # gasto real do dia (data/paid_usage.json) não pode decidir o teste

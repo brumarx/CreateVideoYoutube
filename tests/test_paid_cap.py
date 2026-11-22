@@ -18,6 +18,8 @@ def estado_isolado(tmp_path, monkeypatch):
     monkeypatch.setattr(paid_usage, "STATE_FILE", tmp_path / "paid_usage.json")
     monkeypatch.setattr(paid_usage, "_job_atual", None)
     monkeypatch.setattr(providers, "_health_update", lambda *a, **k: None)
+    # 20/11: a DeepSeek está desligada (custo zero); estes testes cobrem o comportamento SE for religada
+    monkeypatch.setattr(providers, "PROVEDOR_PAGO_LIGADO", True)
     yield
 
 

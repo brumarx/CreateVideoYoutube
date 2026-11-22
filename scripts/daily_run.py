@@ -22,11 +22,13 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import os
 import shutil
 import sqlite3
 import subprocess
 import sys
+import time
 from contextlib import closing
 from datetime import date
 from pathlib import Path
@@ -49,6 +51,14 @@ _SCRIPT_PROBLEMS = ("longo demais", "roteiro do arquivo", "revisão de fatos")
 
 # mesmo valor de scripts/run_pipeline.py -> EXIT_SCRIPT_REJECTED
 EXIT_SCRIPT_REJECTED = 3
+# 19/11: provedores de IA indisponíveis (descanso de cota). Volta curta: espera e refaz o MESMO tema
+# (busca, banco de evidências e rascunho estão em cache); volta longa: a retomada fica para o fim da
+# rodada, sem segurar os outros canais e sem gastar tentativa
+EXIT_INFRA = 4
+ESPERA_INFRA_MAX_S = 40 * 60
+MAX_ESPERAS_INFRA = 3
+ADIAMENTO_MAX_S = 4 * 3600
+ADIADOS: list[tuple[float, str, str]] = []  # (retomar_em, canal, tema)
 
 
 # Tentativas por vídeo. Cada uma pega outro tema/notícia/dado (o usado fica
@@ -156,7 +166,10 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
     if sem_upload and "--no-upload" not in base_cmd:
         base_cmd.append("--no-upload")
     total = max_total or (MAX_ATTEMPTS + MUST_PUBLISH_ATTEMPTS - 1)
-    for attempt in range(1, total + 1):
+    esperas_infra = 0
+    attempt = 0
+    while attempt < total:
+        attempt += 1
         cmd = base_cmd
         if attempt >= MAX_ATTEMPTS:
             # o vídeo do dia SEMPRE sai: as revisões (fatos/vídeo) cortam
@@ -182,6 +195,26 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
             log.error("[%s] %s falhou (exit %d) sem criar job — seguindo pros próximos", channel_name, label, rc)
             return
         job_id, status, video_path, topic, error = job
+        if rc == EXIT_INFRA:
+            retomar_em = _retomar_em(error)
+            espera = max(30.0, retomar_em - time.time()) if retomar_em else 600.0
+            if status == "failed":
+                update(job_id, status="retried")
+            if espera <= ESPERA_INFRA_MAX_S and esperas_infra < MAX_ESPERAS_INFRA and topic:
+                esperas_infra += 1
+                total += 1  # infraestrutura não gasta tentativa do roteiro
+                log.warning("[%s] %s: provedores indisponíveis (job %d) — esperando %.0f s e retomando o mesmo tema",
+                            channel_name, label, job_id, espera)
+                time.sleep(espera)
+                base_cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name,
+                            "--topic", topic, *(["--no-upload"] if sem_upload else [])]
+                continue
+            if topic:
+                ADIADOS.append((retomar_em or time.time() + 3600, channel_name, topic))
+                log.warning("[%s] %s: provedores só voltam às %s (job %d) — retomada agendada para o fim da rodada",
+                            channel_name, label, time.strftime("%H:%M", time.localtime(retomar_em or time.time() + 3600)),
+                            job_id)
+            return
         if rc == 124:
             # travado além do limite: não repete (outra tentativa travaria de novo, horas de rodada)
             update(job_id, status="failed", error=f"tempo esgotado ({_timeout_for(cmd, channel_name) // 60} min)")
@@ -223,6 +256,28 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
         fresh = attempt + 1 >= MAX_ATTEMPTS
         base_cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name,
                     *([] if fresh else same), *(["--no-upload"] if sem_upload else [])]
+
+def _retomar_em(error: str | None) -> float | None:
+    """'retomar_em=<epoch>' gravado pelo run_pipeline quando os provedores caem (0 = desconhecido)."""
+    m = re.search(r"retomar_em=(\d+)", error or "")
+    return float(m.group(1)) if m and int(m.group(1)) > 0 else None
+
+
+def _retomar_adiados() -> None:
+    """Jobs que pararam por provedor indisponível com volta longa: no fim da rodada, espera a volta
+    (até ADIAMENTO_MAX_S) e refaz o MESMO tema — a busca, o banco e o rascunho vêm do cache."""
+    for retomar_em, canal, tema in sorted(ADIADOS):
+        espera = retomar_em - time.time()
+        if espera > ADIAMENTO_MAX_S:
+            log.warning("[%s] retomada desistida: provedores só voltam em %.1f h (tema: %s)", canal, espera / 3600, tema[:80])
+            continue
+        if _published_today(canal):
+            continue
+        if espera > 0:
+            log.warning("[%s] aguardando %.0f min a volta dos provedores para retomar: %s", canal, espera / 60, tema[:80])
+            time.sleep(espera + 5)
+        _run_pipeline(canal, ["--topic", tema], "retomada (provedores)")
+
 
 def _garante_reserva(channel_name: str, extra: list[str]) -> None:
     """15/11: deixa um vídeo PRONTO (--no-upload, passa pelas mesmas revisões) pro
@@ -354,7 +409,8 @@ def _timeout_for(cmd: list[str], channel_name: str | None = None) -> int:
     if channel_name:
         try:
             cfg = yaml.safe_load((ROOT / "channels" / f"{channel_name}.yaml").read_text()) or {}
-            if cfg.get("daily_format") == "long":
+            if cfg.get("daily_format") == "long" or cfg.get("formato_pela_duracao"):
+                # 19/11: vídeo de até 5 min (vertical, mais cenas que o Short antigo) — o tempo do longo
                 return LONG_TIMEOUT_S
         except (OSError, yaml.YAMLError):
             pass
@@ -468,6 +524,12 @@ def main() -> None:
             reservas += run_channel(channel_name, cfg) or []
         except Exception:  # noqa: BLE001 — um canal quebrado não derruba os outros
             log.exception("[%s] erro na rodada deste canal — seguindo pros próximos", channel_name)
+
+    # 19/11: retomadas de jobs parados por provedor indisponível (antes das reservas: o vídeo do dia vem primeiro)
+    try:
+        _retomar_adiados()
+    except Exception:  # noqa: BLE001
+        log.exception("retomada de jobs adiados falhou — seguindo")
 
     # 16/11: reservas só depois do vídeo do dia de TODOS os canais
     for channel_name, extra in reservas:

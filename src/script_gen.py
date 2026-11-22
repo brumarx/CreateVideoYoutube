@@ -1472,7 +1472,7 @@ def repair_script(
     deixava buraco na história. None se o modelo não devolver o formato."""
     from .fontes import bloco_fontes
     todas = [str(sc.get("narration", "")) for sc in script["scenes"]]
-    bloco = bloco_fontes(facts, web_facts)
+    bloco = bloco_fontes(facts, web_facts, topic)
     sources = bloco or "(sem fontes: só conhecimento geral verdadeiro e amplamente conhecido)"
     # só as cenas que a revisão apontou vão ao conserto; as demais ficam intocadas.
     # Sem mapeamento (o termo não bate com nenhuma narração), manda todas, como antes.
@@ -2379,7 +2379,7 @@ def extract_facts_e_outliers(topic: str, web_facts: list[dict] | None) -> tuple[
     sustentam. None se sobrarem menos de 8 fatos."""
     from . import disk_cache
     from .fatos import atribuir, bloco_numerado
-    fontes = bloco_numerado(web_facts)
+    fontes = bloco_numerado(web_facts, topic)
     if not fontes.strip():
         return None
     versao = disk_cache.versao_do_codigo("fatos.py") + EXTRACAO_PROMPT_ID

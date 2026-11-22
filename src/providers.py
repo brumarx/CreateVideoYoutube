@@ -23,6 +23,118 @@ from .config import LLMKeys
 
 log = logging.getLogger("providers")
 
+
+class ProvedoresIndisponiveis(RuntimeError):
+    """19/11: nenhum provedor capaz respondeu porque estão todos em descanso (cota) ou fora do ar, e a
+    volta do primeiro está longe demais para esperar dentro da chamada. `disponivel_em` (epoch, UTC) é
+    quando o primeiro volta, se conhecido; `resumo` é o diagnóstico (sem chave nenhuma). Quem chama
+    decide: guardar o trabalho e retomar depois, ou reprovar com diagnóstico de infraestrutura."""
+
+    def __init__(self, mensagem: str, disponivel_em: float | None = None, resumo: str = ""):
+        super().__init__(mensagem)
+        self.disponivel_em = disponivel_em
+        self.resumo = resumo
+
+
+# espera DENTRO da chamada quando o primeiro provedor capaz volta logo (descanso de cota por minuto);
+# acima disso, ProvedoresIndisponiveis com a hora da volta (o job guarda o trabalho e retoma depois)
+ESPERA_CURTA_MAX = 180
+ESPERA_TOTAL_MAX = 600
+_DUR_PARTE = re.compile(r"(\d+(?:\.\d+)?)(ms|h|m|s)")
+_TENTE_EM = re.compile(r"try again in\s+((?:\d+(?:\.\d+)?(?:ms|h|m|s))+)", re.I)
+_CHAVE_NO_TEXTO = re.compile(r"(gsk_|sk-or-v1-|sk-|nvapi-|AIza)[A-Za-z0-9_\-]{8,}")
+
+
+def _duracao(texto: str | None) -> float | None:
+    """'1m26.4s', '547ms', '7.5s', '2h3m4s' ou só segundos ('30') -> segundos."""
+    t = str(texto or "").strip()
+    if not t:
+        return None
+    try:
+        return float(t)
+    except ValueError:
+        pass
+    partes = _DUR_PARTE.findall(t)
+    if not partes:
+        return None
+    mult = {"h": 3600, "m": 60, "s": 1, "ms": 0.001}
+    return sum(float(v) * mult[u] for v, u in partes)
+
+
+def _retry_after(headers) -> float | None:
+    bruto = (headers or {}).get("retry-after")
+    if not bruto:
+        return None
+    seg = _duracao(bruto)
+    if seg is not None:
+        return seg
+    try:
+        from email.utils import parsedate_to_datetime
+        return max(0.0, (parsedate_to_datetime(bruto) - datetime.now(timezone.utc)).total_seconds())
+    except (TypeError, ValueError):
+        return None
+
+
+def _mascara(texto: str, api_key: str = "") -> str:
+    t = str(texto or "")
+    if api_key:
+        t = t.replace(api_key, "***")
+    return _CHAVE_NO_TEXTO.sub(r"\1***", t)
+
+
+def classe_do_erro(status: int | None, body: str) -> str:
+    """Não confundir: "tamanho" (o pedido sozinho passa do limite por pedido/minuto — esperar não
+    resolve), "cota_minuto" (volta em segundos), "cota_diaria" (volta na virada do dia), "config"
+    (chave inválida, modelo inexistente, permissão), "pagamento", "transitoria" (rede/5xx), "outro"."""
+    low = str(body or "").lower()
+    # 20/11: o Groq também responde 400 "Please reduce the length of the messages or completion" (log real
+    # de 19/11, allam-2-7b) — é tamanho, não configuração
+    if status == 413 or "request too large" in low or "reduce the length" in low \
+            or "context length" in low or "maximum context" in low:
+        return "tamanho"
+    if status == 429:
+        if "per day" in low or "per-day" in low or "daily" in low or "(tpd)" in low or "(rpd)" in low:
+            return "cota_diaria"
+        return "cota_minuto"
+    if status == 402:
+        return "pagamento"
+    if status in (400, 401, 403, 404):
+        return "config"
+    if status is None or status >= 500:
+        return "transitoria"
+    return "outro"
+
+
+# último diagnóstico de cada (chave, modelo): o laço da cascata lê depois da chamada (escopo do descanso)
+_ULTIMO_ERRO: dict[tuple[str, str], dict] = {}
+
+
+def _diagnostico(endpoint: str, model: str, status: int | None, body: str, headers, api_key: str) -> dict:
+    """Registro do erro sem chave nenhuma: provedor, modelo, HTTP, código/tipo/mensagem do erro,
+    limites e restantes, retry-after e os resets (x-ratelimit-reset-tokens/requests), organização."""
+    erro = {}
+    try:
+        erro = (json.loads(body) or {}).get("error") or {}
+        erro = erro if isinstance(erro, dict) else {"message": str(erro)}
+    except (ValueError, AttributeError, TypeError):
+        erro = {"message": str(body or "")[:300]}
+    h = headers or {}
+    org = re.search(r"organization `(org_[A-Za-z0-9]+)`", str(body or ""))
+    d = {
+        "provedor": re.sub(r"^https?://([^/]+).*$", r"\1", endpoint), "modelo": model, "http": status,
+        "classe": classe_do_erro(status, body), "codigo": erro.get("code"), "tipo": erro.get("type"),
+        "mensagem": _mascara(str(erro.get("message", "")), api_key)[:300],
+        "org": (org.group(1)[:8] + "…") if org else None,
+        "retry_after": h.get("retry-after"),
+        "limite_requisicoes": h.get("x-ratelimit-limit-requests"), "restam_requisicoes": h.get("x-ratelimit-remaining-requests"),
+        "reset_requisicoes": h.get("x-ratelimit-reset-requests"),
+        "limite_tokens": h.get("x-ratelimit-limit-tokens"), "restam_tokens": h.get("x-ratelimit-remaining-tokens"),
+        "reset_tokens": h.get("x-ratelimit-reset-tokens"),
+    }
+    d = {k: v for k, v in d.items() if v not in (None, "")}
+    d["_org_completa"] = org.group(1) if org else None
+    return d
+
 # Alguns modelos grátis são "reasoning models" e devolvem um bloco
 # <think>...</think> com o raciocínio antes da resposta de verdade, mesmo
 # quando o prompt não pede isso — se isso vazar sem tratamento pro chamador
@@ -60,6 +172,24 @@ _PREFERRED_MODELS = {
 }
 
 PAID_PROVIDER = "deepseek"
+# 20/11: custo zero. A DeepSeek (paga) fica FORA da cascata operacional: nem dentro do teto antigo
+# (US$ 0,15/vídeo, 0,50/dia) é chamada. Credenciais, código e tetos ficam; religar exige trocar isto
+# para True de propósito (nenhuma variável de ambiente ou yaml liga sozinha)
+PROVEDOR_PAGO_LIGADO = False
+
+
+class ProvedorPagoDesligado(RuntimeError):
+    """Tentativa de chamar a API paga com PROVEDOR_PAGO_LIGADO desligado."""
+
+
+def _pago_bloqueado(name: str) -> bool:
+    """Provedor pago fora da cascata: desligado (custo zero) ou com o teto de gasto atingido."""
+    if name != PAID_PROVIDER:
+        return False
+    if not PROVEDOR_PAGO_LIGADO:
+        return True
+    from .paid_usage import dentro_do_teto
+    return not dentro_do_teto()
 
 
 def _registra_pago_ok(result: str) -> None:
@@ -105,7 +235,7 @@ OPENAI_COMPAT_PROVIDERS = [
     ("groq", "groq", "https://api.groq.com/openai/v1/chat/completions", "https://api.groq.com/openai/v1/models"),
     ("openrouter", "openrouter", "https://openrouter.ai/api/v1/chat/completions", "https://openrouter.ai/api/v1/models"),
     ("mistral", "mistral", "https://api.mistral.ai/v1/chat/completions", "https://api.mistral.ai/v1/models"),
-    # DeepSeek é PAGO: fica por último, então só é chamada quando todos os grátis falharam nesta chamada
+    # DeepSeek é PAGO e está DESLIGADA (PROVEDOR_PAGO_LIGADO); a linha fica só para religar de propósito
     ("deepseek", "deepseek", "https://api.deepseek.com/chat/completions", "https://api.deepseek.com/models"),
 ]
 
@@ -138,6 +268,7 @@ def _cloudflare_complete(entries, messages, max_tokens, ok, model_filter, valida
             )
             if ok(result):
                 log.info("resposta via cloudflare/%s", model)
+                _ULTIMO_MODELO[0] = f"cloudflare/{model}"
                 return result
             if result and validate is not None:
                 log.warning("resposta de cloudflare/%s não passou na validação, tentando próximo modelo", model)
@@ -287,11 +418,19 @@ class KeyRotator:
         saved = _health_load()
         self._banned = {k for k in self._keys if saved.get(_key_id(k), {}).get("banned")}
         self._resting = {}
+        self._resting_model: dict[tuple[str, str], float] = {}
+        self._org: dict[str, str] = {}
         now = time.time()
         for k in self._keys:
-            until = float(saved.get(_key_id(k), {}).get("until", 0) or 0)
+            info = saved.get(_key_id(k), {})
+            until = float(info.get("until", 0) or 0)
             if until > now:
                 self._resting[k] = until
+            for modelo, ate in (info.get("modelos") or {}).items():
+                if float(ate or 0) > now:
+                    self._resting_model[(k, modelo)] = float(ate)
+            if info.get("org"):
+                self._org[k] = info["org"]
 
     def order(self) -> list[str]:
         now = time.time()
@@ -317,6 +456,34 @@ class KeyRotator:
             _health_update(key, until=until)
             log.warning("chave em descanso por %.0fs (cota, …%s)", seconds, key[-4:])
 
+    def ate(self, key: str, model: str | None = None) -> float:
+        """Até quando (epoch) a chave — e, com `model`, aquele modelo nela — está em descanso."""
+        return max(self._resting.get(key, 0.0), self._resting_model.get((key, model), 0.0) if model else 0.0)
+
+    def set_org(self, key: str, org: str | None) -> None:
+        """20/11: a organização só é conhecida quando o PRÓPRIO provedor a escreve numa resposta de erro
+        ("... in organization `org_…`"). Sem isso a chave fica sozinha: nenhum agrupamento é suposto.
+        No arquivo de saúde vai pelo hash da chave (_key_id), com a hora em que foi vista."""
+        if org and self._org.get(key) != org:
+            self._org[key] = org
+            _health_update(key, org=org, org_visto_em=round(time.time()))
+            log.info("chave %s é da organização %s… (lido na resposta do provedor)", _key_id(key)[:8], org[:12])
+
+    def rest_model(self, key: str, model: str, seconds: float) -> None:
+        """19/11: cota por modelo (o TPD do gpt-oss-120b não tira o gpt-oss-20b da mesma chave). As
+        chaves da MESMA organização dividem o limite: descansam juntas naquele modelo."""
+        if seconds <= 0:
+            return
+        until = time.time() + seconds
+        org = self._org.get(key)
+        mesmas = [k for k in self._keys if k == key or (org and self._org.get(k) == org)]
+        for k in mesmas:
+            self._resting_model[(k, model)] = max(until, self._resting_model.get((k, model), 0.0))
+            modelos = dict((_health_load().get(_key_id(k), {}).get("modelos") or {}))
+            modelos[model] = self._resting_model[(k, model)]
+            _health_update(k, modelos=modelos)
+        log.warning("%s em descanso por %.0fs em %d chave(s) da mesma organização (…%s)", model, seconds, len(mesmas), key[-4:])
+
 
 # O rodízio PRECISA persistir entre chamadas. Antes era `id(keys)`, mas cada
 # complete() cria um LLMKeys() novo: o id mudava, o rotador nascia do zero e
@@ -341,16 +508,26 @@ _TOO_LARGE_RE = re.compile(r"Request too large.*?\(TPM\): Limit (\d+), Requested
 _MIN_FIT_TOKENS = 1024
 
 
-def _cooldown_seconds(status: int | None, body: str) -> int:
-    """Quanto tempo a chave deve descansar depois de um 429. Cota por dia
-    (TPD) só volta na virada UTC; cota por minuto (TPM) em ~1 min. Sem isso
-    a mesma chave esgotada era tentada em toda chamada seguinte — o log de
-    06/11 tem 2.089 tentativas no Groq, muitas na chave que já tinha
-    estourado o TPD."""
+def _cooldown_seconds(status: int | None, body: str, headers=None) -> int:
+    """Quanto tempo a chave deve descansar depois de um 429. 19/11: o prazo vem do PROVEDOR, nesta
+    ordem: cabeçalho Retry-After; "try again in 7m12s" da mensagem; o reset do limite que estourou
+    (x-ratelimit-reset-tokens para TPM, x-ratelimit-reset-requests para RPM/RPD). Sem nenhum deles:
+    cota diária até a virada UTC, cota por minuto 75 s. Antes era sempre 75 s ou a virada do dia,
+    e uma chave que voltava em 2 s ficava 75 s parada."""
     if status != 429:
         return 0
-    low = body.lower()
-    if "per day" in low or "per-day" in low or "daily" in low or "tpd" in low:
+    low = str(body or "").lower()
+    diaria = classe_do_erro(status, body) == "cota_diaria"
+    espera = _retry_after(headers)
+    if espera is None:
+        m = _TENTE_EM.search(str(body or ""))
+        espera = _duracao(m.group(1)) if m else None
+    if espera is None and headers:
+        tokens = "tokens per minute" in low or "(tpm)" in low or "(itpm)" in low or "(otpm)" in low
+        espera = _duracao(headers.get("x-ratelimit-reset-tokens" if tokens else "x-ratelimit-reset-requests"))
+    if espera is not None:
+        return max(2, int(espera + 0.999) + 1)
+    if diaria:
         now = datetime.now(timezone.utc)
         reset = (now + timedelta(days=1)).replace(hour=0, minute=5, second=0, microsecond=0)
         return max(60, int((reset - now).total_seconds()))
@@ -363,10 +540,13 @@ _LAST_GROQ_CALL = {"at": 0.0}
 
 def _call_openai_compat(
     endpoint: str, api_key: str, model: str, messages: list[dict], max_tokens: int, temperature: float = 0.8,
-    _fitted: bool = False,
+    _fitted: bool = False, _ampliado: bool = False,
 ) -> tuple[str | None, int | None, int]:
     if "api.groq.com" in endpoint:
         _LAST_GROQ_CALL["at"] = time.monotonic()
+    if "api.deepseek.com" in endpoint and not PROVEDOR_PAGO_LIGADO:
+        # última barreira: nenhum caminho (cascata, teste manual, código novo) chega na API paga
+        raise ProvedorPagoDesligado("DeepSeek é paga e está desligada (custo zero)")
     payload = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
     if "api.deepseek.com" in endpoint:
         # sem raciocínio: o Flash gastava os 12 mil tokens de saída pensando e cortava o JSON
@@ -406,8 +586,12 @@ def _call_openai_compat(
                 log.info("%s (%s): max_tokens %d -> %d pra caber no limite por minuto", endpoint, model, max_tokens, fitted)
                 return _call_openai_compat(endpoint, api_key, model, messages, fitted, temperature, _fitted=True)
         if resp.status_code != 200:
-            log.warning("%s (%s) -> HTTP %s: %s", endpoint, model, resp.status_code, resp.text[:200])
-            return None, resp.status_code, _cooldown_seconds(resp.status_code, resp.text)
+            log.warning("%s (%s) -> HTTP %s: %s", endpoint, model, resp.status_code, _mascara(resp.text[:200], api_key))
+            diag = _diagnostico(endpoint, model, resp.status_code, resp.text, resp.headers, api_key)
+            _ULTIMO_ERRO[(_key_id(api_key), model)] = diag
+            log.warning("falha de provedor: %s", json.dumps({k: v for k, v in diag.items() if not k.startswith("_")},
+                                                             ensure_ascii=False))
+            return None, resp.status_code, _cooldown_seconds(resp.status_code, resp.text, resp.headers)
         data = resp.json()
         if "api.deepseek.com" in endpoint:
             _registra_pago_uso(model, data.get("usage") or {})
@@ -418,6 +602,20 @@ def _call_openai_compat(
             # de uma string com 3000 de max_tokens); o provedor diz por quê
             log.warning("%s (%s): finish_reason=%s, uso=%s, max_tokens=%d, %d caracteres",
                         endpoint, model, finish, data.get("usage"), max_tokens, len(content or ""))
+        if finish == "length":
+            # 19/11: resposta TRUNCADA nunca é aceita. Uma vez, com mais espaço de saída se couber no
+            # limite do provedor (no Groq, entrada + saída cabe nos tokens por minuto); senão, None e a
+            # cascata segue para o próximo modelo/chave
+            nome = next((n for n, _, ep, _ in OPENAI_COMPAT_PROVIDERS if ep == endpoint), "")
+            teto = _SMALL_TPM.get(nome)
+            entrada = int(sum(len(str(m.get("content", ""))) for m in messages) / 3.7)
+            maior = min(max_tokens * 2, (teto - entrada - 200) if teto else 16000)
+            # no provedor PAGO não repete (dobraria o gasto; as regras financeiras não mudam aqui)
+            if not _ampliado and maior >= max_tokens * 1.25 and "api.deepseek.com" not in endpoint:
+                log.warning("%s (%s): resposta truncada com max_tokens=%d — de novo com %d", endpoint, model, max_tokens, maior)
+                return _call_openai_compat(endpoint, api_key, model, messages, maior, temperature, _fitted, True)
+            log.warning("%s (%s): resposta truncada (max_tokens=%d) — descartada", endpoint, model, max_tokens)
+            return None, 200, 0
         if content and _strip_reasoning(content) is None:
             # <think> sem fechamento: resposta cortada no meio do raciocínio (max_tokens)
             log.warning("%s (%s): resposta cortada dentro de <think> (%d caracteres, fim %r)",
@@ -483,7 +681,7 @@ def _too_big_for(name: str, messages: list[dict], max_tokens: int = 0) -> bool:
     chars = sum(len(str(m.get("content", ""))) for m in messages)
     return chars / 3.7 + max_tokens > limit - 200
 
-def complete(
+def _complete_cascata(
     messages: list[dict],
     keys: LLMKeys | None = None,
     max_tokens: int = 4096,
@@ -491,6 +689,7 @@ def complete(
     model_filter: Callable[[str], bool] | None = None,
     temperature: float = 0.8,
     _nova_tentativa: bool = False,
+    _esperado: float = 0.0,
 ) -> str:
     """Roda a cascata de provedores (com rodízio de chaves e descoberta
     dinâmica de modelo dentro de cada um) e devolve a primeira resposta não
@@ -530,19 +729,21 @@ def complete(
     # não sem cota). Se nenhum provedor respondeu e houve dessas, a cascata
     # roda de novo UMA vez depois de 90 s, em vez de o roteiro morrer (job 830)
     transitoria = False
+    diagnosticos: list[dict] = []
+    grandes: list[str] = []  # provedores pulados porque o pedido sozinho passa do limite deles
 
     for name, key_attr, chat_endpoint, models_endpoint in OPENAI_COMPAT_PROVIDERS:
         provider_keys = getattr(keys, key_attr)
         if not provider_keys:
             continue
-        if name == PAID_PROVIDER:
-            from .paid_usage import dentro_do_teto
-            if not dentro_do_teto():
-                continue  # teto de gasto (dia ou job) atingido: a DeepSeek não é chamada
+        if _pago_bloqueado(name):
+            continue  # pago desligado (custo zero) ou teto atingido: a DeepSeek não é chamada
         if _too_big_for(name, messages, max_tokens):
             # 09/11: o pedido do roteiro passou de 8 mil tokens e o Groq recusava com 413 em todas
             # as contas; pular o provedor poupa a tentativa e deixa o pedido chegar aos de contexto grande
-            log.info("pulando %s: pedido maior que o limite por minuto dele", name)
+            log.info("pulando %s: o pedido sozinho (entrada + max_tokens) passa do limite por pedido dele "
+                     "(tokens por minuto: um pedido maior que o limite é recusado com 413, esperar não resolve)", name)
+            grandes.append(name)
             continue
         rotator = _rotator_for(provider_keys)
         order = rotator.order()
@@ -558,7 +759,9 @@ def complete(
         too_large: set[tuple[str, str]] = set()
         for only, pass_keys in passes:
             for api_key in pass_keys:
-                if api_key in rotator._banned or rotator._resting.get(api_key, 0.0) > time.monotonic():
+                # 19/11: o prazo do descanso é relógio de parede (time.time); comparado com time.monotonic
+                # dava sempre "em descanso" e a chave que levou um 429 ficava fora pelo resto do processo
+                if api_key in rotator._banned or rotator._resting.get(api_key, 0.0) > time.time():
                     # 10/11: pulada em silêncio (o juiz do job 815 não deixou rastro no log)
                     log.info("%s: chave %s pulada (%s) no passe %s", name, _key_id(api_key),
                              "banida" if api_key in rotator._banned else "em descanso", only or "forte")
@@ -571,11 +774,16 @@ def complete(
                         continue
                     if (api_key, model) in too_large or (model_filter is not None and not model_filter(model)):
                         continue
+                    if rotator.ate(api_key, model) > time.time():
+                        log.info("%s: %s em descanso na chave %s até %s", name, model, _key_id(api_key),
+                                 datetime.fromtimestamp(rotator.ate(api_key, model), timezone.utc).strftime("%H:%M:%S UTC"))
+                        continue
                     result, status, cooldown = _call_openai_compat(
                         chat_endpoint, api_key, model, messages, max_tokens, temperature,
                     )
                     if _ok(result):
                         log.info("resposta via %s/%s", name, model)
+                        _ULTIMO_MODELO[0] = f"{name}/{model}"
                         if name == PAID_PROVIDER:
                             _registra_pago_ok(result)
                         return result  # type: ignore[return-value]
@@ -596,8 +804,17 @@ def complete(
                         else:
                             rotator.rest(api_key, 86400 if status == 402 else 21600)
                         break  # próxima chave, não adianta repetir modelos com a mesma
+                    diag = _ULTIMO_ERRO.pop((_key_id(api_key), model), None)
+                    if diag:
+                        diagnosticos.append(diag)
+                        rotator.set_org(api_key, diag.get("_org_completa"))
                     if cooldown:
-                        # cota estourada: descansa a chave e não insiste nos
+                        if diag and "for model" in diag.get("mensagem", "") and diag["classe"] in ("cota_minuto", "cota_diaria"):
+                            # cota do MODELO (Groq: TPM/TPD por modelo e organização): os outros modelos da
+                            # chave seguem disponíveis; as chaves da mesma organização descansam juntas
+                            rotator.rest_model(api_key, model, cooldown)
+                            continue
+                        # cota da chave inteira: descansa a chave e não insiste nos
                         # outros modelos dela nesta mesma chamada
                         rotator.rest(api_key, cooldown)
                         break
@@ -619,6 +836,7 @@ def complete(
                 result = _call_gemini(api_key, model, messages, max_tokens, temperature)
                 if _ok(result):
                     log.info("resposta via gemini/%s", model)
+                    _ULTIMO_MODELO[0] = f"gemini/{model}"
                     return result  # type: ignore[return-value]
                 if result and validate is not None:
                     log.warning("resposta de gemini/%s não passou na validação, tentando próximo modelo", model)
@@ -626,10 +844,82 @@ def complete(
     if transitoria and not _nova_tentativa:
         log.warning("nenhum provedor respondeu e houve falha de rede/5xx — espera 90 s e tenta a cascata de novo")
         time.sleep(90)
-        return complete(messages, keys, max_tokens, validate, model_filter, temperature, _nova_tentativa=True)
+        return _complete_cascata(messages, keys, max_tokens, validate, model_filter, temperature, _nova_tentativa=True,
+                        _esperado=_esperado)
 
+    # 19/11: o primeiro provedor capaz que volta logo (descanso de cota por minuto): espera o prazo que
+    # o PRÓPRIO provedor deu e tenta de novo — nunca no mesmo segundo, nunca horas parado aqui
+    volta = proxima_disponibilidade(keys, model_filter, grandes)
+    agora = time.time()
+    resumo = _resumo(diagnosticos, grandes, volta)
+    if volta is not None and volta > agora:
+        espera = volta - agora + 1
+        if espera <= ESPERA_CURTA_MAX and _esperado + espera <= ESPERA_TOTAL_MAX:
+            log.warning("nenhum provedor capaz agora — o primeiro volta em %.0f s; esperando (%s)", espera, resumo)
+            time.sleep(espera)
+            return _complete_cascata(messages, keys, max_tokens, validate, model_filter, temperature,
+                                     _nova_tentativa=_nova_tentativa, _esperado=_esperado + espera)
+        raise ProvedoresIndisponiveis(
+            f"Nenhum provedor capaz disponível; o primeiro volta às "
+            f"{datetime.fromtimestamp(volta, timezone.utc).strftime('%H:%M UTC')} ({resumo})", disponivel_em=volta, resumo=resumo)
     raise RuntimeError(
-        "Nenhum provedor LLM respondeu (ou nenhuma resposta passou na validação). "
-        "Confira as chaves em ~/.secrets/keys.env (XAI_API_KEYS, GROQ_API_KEYS, CEREBRAS_API_KEYS, "
-        "OPENROUTER_API_KEYS, MISTRAL_API_KEYS, GEMINI_API_KEYS)."
+        "Nenhum provedor LLM respondeu (ou nenhuma resposta passou na validação) — " + resumo
     )
+
+
+_ULTIMO_MODELO = ["?"]
+
+
+def complete(messages: list[dict], keys: LLMKeys | None = None, max_tokens: int = 4096,
+             validate: Callable[[str], bool] | None = None, model_filter: Callable[[str], bool] | None = None,
+             temperature: float = 0.8) -> str:
+    """A cascata (ver _complete_cascata) com o registro de custo do job: modelo que respondeu e tempo de
+    cada chamada, na etapa corrente (src/metricas)."""
+    from . import metricas
+    t0 = time.time()
+    _ULTIMO_MODELO[0] = "?"
+    try:
+        r = _complete_cascata(messages, keys, max_tokens, validate, model_filter, temperature)
+    except Exception:
+        metricas.chamada(_ULTIMO_MODELO[0], time.time() - t0, ok=False)
+        raise
+    metricas.chamada(_ULTIMO_MODELO[0], time.time() - t0)
+    return r
+
+
+def proxima_disponibilidade(keys: LLMKeys, model_filter: Callable[[str], bool] | None = None,
+                            pular: list[str] | None = None) -> float | None:
+    """Quando (epoch) a primeira chave de um provedor capaz para este pedido sai do descanso. None se
+    nenhuma está em descanso (o problema é outro: validação, configuração, tamanho, provedor fora)."""
+    menor: float | None = None
+    agora = time.time()
+    for name, key_attr, _, _ in OPENAI_COMPAT_PROVIDERS:
+        chaves = getattr(keys, key_attr)
+        if not chaves or name in (pular or []):
+            continue
+        if _pago_bloqueado(name):
+            continue
+        rot = _rotator_for(chaves)
+        modelos = [m for m in _STRONG_MODELS.get(name, []) + _PREFERRED_MODELS.get(name, [])
+                   if model_filter is None or model_filter(m)] or ([None] if model_filter is None else [])
+        for k in chaves:
+            if k in rot._banned:
+                continue
+            for m in modelos:
+                ate = rot.ate(k, m)
+                if ate > agora and (menor is None or ate < menor):
+                    menor = ate
+    return menor
+
+
+def _resumo(diagnosticos: list[dict], grandes: list[str], volta: float | None) -> str:
+    """Diagnóstico curto da cascata (sem chave): o que falhou, por classe, e quando volta."""
+    from collections import Counter
+    classes = Counter(f"{d.get('provedor', '?').split('.')[-2] if '.' in d.get('provedor', '') else d.get('provedor')}"
+                      f"/{d.get('modelo')}: {d.get('classe')}" for d in diagnosticos)
+    partes = [f"{k} x{n}" if n > 1 else k for k, n in classes.items()]
+    if grandes:
+        partes.append("pedido grande demais para " + ", ".join(grandes))
+    if volta:
+        partes.append("primeira volta às " + datetime.fromtimestamp(volta, timezone.utc).strftime("%H:%M:%S UTC"))
+    return "; ".join(partes) or "nenhum provedor configurado respondeu"

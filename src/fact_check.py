@@ -78,7 +78,7 @@ def _review_prompt(script: dict, topic: str, facts: dict | None, web_facts: list
     else:
         narration = f"NARRAÇÃO:\n{narration}"
     from .fontes import bloco_fontes
-    bloco = bloco_fontes(facts, web_facts)
+    bloco = bloco_fontes(facts, web_facts, topic)
     sources = ("FONTES (o mesmo bloco que o roteirista e o conserto leem):\n" + bloco) if bloco else \
         "NENHUMA — o roteiro foi escrito só com conhecimento geral."
     sources = _com_fatos_verificados(sources, script)
@@ -1635,10 +1635,11 @@ def _judge(prompt: str, key: str, max_tokens: int = 3000, whole: dict | None = N
     return items if isinstance(items, list) else None
 
 
-def _sources_text(facts: dict | None, web_facts: list[dict] | None, limit: int | None = None) -> str:
-    """Mesmo bloco de fontes da extração e do conserto (src/fontes.py); `limit` não é mais usado."""
+def _sources_text(facts: dict | None, web_facts: list[dict] | None, limit: int | None = None, topic: str = "") -> str:
+    """Mesmo bloco de fontes da extração e do conserto (src/fontes.py); `limit` não é mais usado.
+    Com o tema, o material que não cabe entra por relevância (19/11, Yakutsk)."""
     from .fontes import bloco_fontes
-    return bloco_fontes(facts, web_facts)
+    return bloco_fontes(facts, web_facts, topic)
 
 
 def verify_full_script(script: dict, topic: str, facts: dict | None, web_facts: list[dict] | None,
@@ -1646,7 +1647,7 @@ def verify_full_script(script: dict, topic: str, facts: dict | None, web_facts: 
     """Roteiro inteiro, de uma vez, pro checador forte: [] = tudo real;
     problemas "fora_da_fonte" (frase) e "titulo_enganoso" (título); None =
     checador fora do ar (revisão incompleta)."""
-    source = _com_fatos_verificados(_sources_text(facts, web_facts), script)
+    source = _com_fatos_verificados(_sources_text(facts, web_facts, topic=topic), script)
     if not source.strip():
         return None
     sentences = [f.strip() for sc in script.get("scenes", []) for f in _GROUND_SPLIT.split(sc.get("narration", ""))
@@ -1730,7 +1731,7 @@ def check_premise(topic: str, facts: dict | None, web_facts: list[dict] | None) 
     trazer premissa falsa ("Por que a SpaceX decidiu encerrar o Falcon 9",
     job 714) e o roteiro inteiro nasce torto. Mantém o ASSUNTO, corrige a
     afirmação. None = sem fonte ou checador fora do ar."""
-    source = _sources_text(facts, web_facts, limit=8000)
+    source = _sources_text(facts, web_facts, limit=8000, topic=topic)
     if not source.strip():
         return None
     from .providers import is_strong_model

@@ -50,7 +50,7 @@ class LLMKeys:
     # Cloudflare Workers AI grátis (10 mil neurons/dia por conta): cada item
     # é "ACCOUNT_ID:API_TOKEN" — várias contas somam cota
     cloudflare: list[str] = field(default_factory=lambda: _keys("CLOUDFLARE_AI_KEYS"))
-    # DeepSeek é PAGO (saldo na conta): só entra como último recurso da cascata de texto
+    # DeepSeek é PAGA: chave guardada, mas fora da cascata (providers.PROVEDOR_PAGO_LIGADO = False, custo zero)
     deepseek: list[str] = field(default_factory=lambda: _keys("DEEPSEEK_API_KEYS"))
 
 
@@ -228,6 +228,16 @@ class ChannelConfig:
     # canal sem pesquisa de tema (motivacional, curiosidades): cada frase com
     # número/data ganha busca na internet pra revisão de fatos ter fonte
     claim_sources: bool = False
+    # 19/11: como o roteiro é feito. "redacao" = banco de evidências + roteirista livre +
+    # auditoria por categoria (src/evidencias.py, src/redacao.py). Vazio = o modo de lista
+    # fechada de fatos com [F#] na frase (src/fatos.py), que segue nos outros canais de fatos.
+    modo_roteiro: str = ""
+    # 19/11: o formato sai da duração REAL da narração: até SHORTS_MAX_SECONDS vira Short vertical
+    # (#Shorts); acima, vídeo normal — em vez de acelerar a voz ou reprovar o roteiro
+    formato_pela_duracao: bool = False
+    # 20/11: formato do vídeo normal (acima do Short): "vertical" (9:16, padrão) ou "16:9" — decisão
+    # editorial do canal; vertical em toda a faixa de 2,5 a 5 min
+    formato_acima_do_short: str = "vertical"
     # CTA falado do site no fim do vídeo, "{site}" vira o domínio. Vazio =
     # o padrão de notícias ("As notícias completas... estão no site ...")
     website_speech: str = ""
@@ -295,6 +305,9 @@ class ChannelConfig:
             loja=data.get("loja") or {},
             greetings=[str(g) for g in _as_list(data.get("greeting")) if g],
             claim_sources=bool(data.get("claim_sources", False)),
+            modo_roteiro=str(data.get("modo_roteiro") or "").strip().lower(),
+            formato_pela_duracao=bool(data.get("formato_pela_duracao", False)),
+            formato_acima_do_short=str(data.get("formato_acima_do_short") or "vertical").strip().lower(),
             website_speech=str(data.get("website_fala") or ""),
             pronunciations={str(k): str(v) for k, v in (data.get("pronuncia") or {}).items()},
             editorial_line=[str(x) for x in data.get("linha_editorial") or []],

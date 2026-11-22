@@ -81,6 +81,9 @@ LONG_WIDTH, LONG_HEIGHT = 1920, 1080
 # comum, fora da aba Shorts (jobs 262/270/278 — 81-197s em 16:9). Folga
 # abaixo dos 180s do limite do Shorts.
 SHORTS_MAX_SECONDS = 170
+# 20/11: critério do YouTube para Short: vertical (ou quadrado) com até 3 min. No modo
+# formato_pela_duracao o vídeo VERTICAL é classificado pela duração do arquivo FINAL contra este limite
+SHORTS_LIMITE_YOUTUBE = 180
 RODADAS_CORTE = 3  # rodadas de corte/troca por fato verificado (só tira frase ou põe fato validado)
 PALAVRAS_POR_MINUTO_VOZ = 130  # medido no job 855 (494 palavras em 219 s ≈ 135/min), com folga
 
@@ -162,6 +165,10 @@ MIN_CHAPTER_GAP_SECONDS = 10
 # então a nova rodada pega outro. Falha de render/upload continua exit 1
 # (upload falho é do scripts/retry_uploads.py, nunca gerar vídeo duplicado).
 EXIT_SCRIPT_REJECTED = 3
+# 19/11: nenhum provedor capaz disponível (cota/descanso longo, provedores fora): não é reprovação do
+# roteiro. O job guarda o trabalho (busca, banco de evidências e rascunho ficam em cache) e o erro traz
+# "retomar_em=<epoch>"; o daily_run espera ou agenda a retomada com o MESMO tema
+EXIT_INFRA = 4
 
 
 class ScriptRejected(RuntimeError):
@@ -718,6 +725,112 @@ def _get_viral_topics_with_trending(
 FACT_CHECK_BUDGET_S = 20 * 60  # teto de tempo do laço de revisão de fatos
 
 
+def _duracao_fora(segundos: float, min_minutes: float, max_minutes: float, folga_fim: float = 0.15) -> str | None:
+    """Duração REAL fora da meta do canal: abaixo de 80% do mínimo (história curta demais — não se
+    preenche para chegar lá) ou acima do máximo com folga. None se está na meta."""
+    if segundos < min_minutes * 60 * 0.8:
+        return f"{segundos:.0f} s, abaixo de {min_minutes * 60 * 0.8:.0f} s (meta {min_minutes:g}-{max_minutes:g} min)"
+    if segundos > max_minutes * 60 * (1 + folga_fim):
+        return f"{segundos:.0f} s, acima de {max_minutes * 60 * (1 + folga_fim):.0f} s (meta {min_minutes:g}-{max_minutes:g} min)"
+    return None
+
+
+def _formato_pela_duracao(segundos: float, min_minutes: float, max_minutes: float,
+                          formato_acima: str = "vertical") -> tuple[str | None, bool, int, int]:
+    """19/11: (motivo se a duração está fora da meta, é vídeo normal?, largura, altura) pela duração
+    da NARRAÇÃO — uma previsão para montar o vídeo. Até SHORTS_MAX_SECONDS: Short vertical. Acima:
+    vídeo normal, vertical (padrão, 20/11) ou 16:9 conforme `formato_acima_do_short`. No vertical a
+    classificação definitiva vem do arquivo final (_e_video_normal_final)."""
+    fora = _duracao_fora(segundos, min_minutes, max_minutes)
+    normal = segundos > SHORTS_MAX_SECONDS
+    if not normal or str(formato_acima).strip().lower() == "vertical":
+        return fora, normal, SHORT_WIDTH, SHORT_HEIGHT
+    return fora, normal, LONG_WIDTH, LONG_HEIGHT
+
+
+def _e_video_normal_final(segundos: float, largura: int, altura: int) -> bool:
+    """20/11: classificação definitiva pela duração REAL do arquivo final. Short = vertical/quadrado
+    com até SHORTS_LIMITE_YOUTUBE (3 min, critério do YouTube); acima disso, ou horizontal, é vídeo
+    normal (sem #Shorts, com capítulos). O formato da imagem não muda: só a classificação."""
+    return not (altura >= largura and segundos <= SHORTS_LIMITE_YOUTUBE)
+
+
+def _min_palavras_redacao(min_minutes: float) -> int:
+    """Modo redação: o mínimo é de duração (85% da meta mínima em palavras, a 135/min), não de números.
+    A duração REAL da voz é conferida depois (_duracao_fora)."""
+    from src.redacao import PALAVRAS_POR_MINUTO
+    return int(min_minutes * PALAVRAS_POR_MINUTO * 0.85)
+
+
+def _escrever_redacao(channel, topic: str, web_facts: list[dict], job_id, min_minutes: float, max_minutes: float,
+                      scenes: int | None) -> tuple[dict, dict]:
+    """Modo redação, 1ª metade: banco de evidências (cache por tema + fontes) e roteiro (rascunho em cache
+    por tema + banco). Numa retomada, nada disso é refeito. Devolve (roteiro, banco)."""
+    from src import metricas
+    from src.redacao import RoteiroReprovado, escrever, guardar_rascunho, rascunho
+    with metricas.etapa("banco_evidencias"):
+        banco = _banco_de_evidencias(topic, web_facts, job_id, max_minutes)
+    script = rascunho(topic, banco)
+    if script:
+        metricas.anotar("roteiro_do_cache", True)
+        log.info("[%s] retomada: roteiro já escrito para este tema e este banco%s", job_id,
+                 " (e já auditado)" if script.get("_auditoria") else " — direto para a auditoria")
+        return script, banco
+    try:
+        with metricas.etapa("escrita"):
+            script = escrever(channel, topic, banco, min_minutes=min_minutes, max_minutes=max_minutes,
+                              cenas_ref=scenes or channel.scenes_per_video)
+    except RoteiroReprovado as exc:
+        raise ScriptRejected(str(exc)) from exc
+    guardar_rascunho(topic, banco, script)
+    return script, banco
+
+
+def _auditar_redacao(channel, script: dict, banco: dict, topic: str, web_facts: list[dict], job_id,
+                     min_minutes: float, max_minutes: float, scenes: int | None) -> dict:
+    """Modo redação, 2ª metade: auditoria + edição por cena (fatos e história). Provedor que cai no meio sobe como
+    ProvedoresIndisponiveis (o job sai com EXIT_INFRA e a rodada retoma depois); o roteiro auditado vai
+    para o rascunho, e a retomada de um roteiro JÁ auditado (mesmo banco, mesmo código) não audita de novo."""
+    from src.fact_check import evidence_for_problems
+    from src import metricas
+    from src.redacao import RoteiroReprovado, auditar_e_corrigir, guardar_rascunho
+    if script.get("_auditoria"):
+        log.info("[%s] retomada: roteiro já auditado e aprovado nesta versão — a auditoria não é repetida", job_id)
+        return script
+    try:
+        with metricas.etapa("auditoria_e_correcao"):
+            script, relatorio_auditoria = auditar_e_corrigir(
+                script, banco, topic, web_facts=web_facts, buscar_evidencia=evidence_for_problems,
+                min_palavras=_min_palavras_redacao(min_minutes))
+    except RoteiroReprovado as exc:
+        log.info("[%s] custo do roteiro reprovado:\n%s", job_id, metricas.texto())
+        raise ScriptRejected(str(exc)) from exc
+    log.info("[%s] custo do roteiro:\n%s", job_id, metricas.texto())
+    script["_auditoria"] = relatorio_auditoria
+    guardar_rascunho(topic, banco, script)  # o auditado é o que volta numa retomada
+    if len(relatorio_auditoria["rodadas"]) > 1:
+        script["_edited"] = True  # a edição mudou o texto: descrição refeita do roteiro final
+    return script
+
+
+def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes: float = 2.5) -> dict:
+    """Banco de evidências do tema (src/evidencias.py), com uma rodada de busca nas lacunas.
+    Pesquisa sem base suficiente reprova com o motivo (nunca vira vídeo sobre premissa sem prova)."""
+    from src.evidencias import PesquisaInsuficiente, exigir_suficiente, minimo_para, montar_banco
+    from src.web_search import search_topic_facts
+
+    def buscar(pergunta: str) -> list[dict]:
+        return search_topic_facts(pergunta, max_results=3, oficiais=True) or []
+    try:
+        banco = exigir_suficiente(montar_banco(topic, web_facts, buscar=buscar), minimo_para(max_minutes))
+    except PesquisaInsuficiente as exc:
+        raise ScriptRejected(str(exc)) from exc
+    log.info("[%s] banco de evidências: %d verificadas de %d", job_id,
+             sum(1 for e in banco["evidencias"] if e["status"] in ("oficial", "corroborado", "fonte_unica")),
+             len(banco["evidencias"]))
+    return banco
+
+
 def run(
     channel_name: str,
     topic: str | None,
@@ -736,6 +849,11 @@ def run(
     compilation: bool = False,
 ) -> None:
     channel = ChannelConfig.load(channel_name)
+    from src import metricas
+    metricas.zerar()  # 20/11: custo deste job (chamadas, tempo e modelo por etapa)
+    # 19/11: modo redação (banco de evidências + roteirista livre + auditoria por categoria)
+    redacao_mode = channel.modo_roteiro == "redacao"
+    banco = None
     # problema conhecido que a última tentativa do dia deixou passar (revisor
     # fora, frase reprovada que sobrou, ressalva da revisão do vídeo): com
     # QUALQUER um, o vídeo sobe PRIVADO e espera aprovação no painel — nunca
@@ -966,7 +1084,9 @@ def run(
         # perfil do banco (politica_data.perfil_parlamentar) busca também na
         # internet: o banco não tem o que é recente
         if facts is None or facts.get("tipo") == "perfil_parlamentar":
-            web_facts = search_topic_facts(topic, oficiais=channel_name in FATOS_CANAIS)
+            from src import metricas
+            with metricas.etapa("pesquisa"):
+                web_facts = search_topic_facts(topic, oficiais=channel_name in FATOS_CANAIS)
             if web_facts and facts:
                 # junto com o perfil, 2 fontes curtas: banco + 4 páginas
                 # passava do limite por minuto do Groq (8,4 mil tokens, job 595)
@@ -1032,6 +1152,15 @@ def run(
             script = _sanitize_club_crests(_sanitize_person_images(
                 topic, _drop_repeated_scenes(json.loads(Path(script_file).read_text()))))
             log.info("[%s] roteiro do arquivo %s (%d cenas)", job_id, script_file, len(script["scenes"]))
+            if redacao_mode and script.get("_redacao"):
+                # o banco de evidências viaja no próprio script.json: a refação audita contra o mesmo banco
+                banco = script.get("_banco")
+                if not banco and web_facts:
+                    banco = _banco_de_evidencias(topic, web_facts, job_id)
+                    script["_banco"] = banco
+        elif redacao_mode and web_facts:
+            # 19/11: pesquisa → banco de evidências (trecho literal conferido) → roteirista livre
+            script, banco = _escrever_redacao(channel, topic, web_facts, job_id, min_minutes, max_minutes, scenes)
         else:
             script = generate_script(
                 channel, topic, facts, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes, web_facts=web_facts,
@@ -1048,10 +1177,15 @@ def run(
             antes = len(web_facts)
             web_facts = [f for f in web_facts if f.get("url") not in set(script["_fontes_outlier"])]
             log.warning("[%s] fontes fora da curva retiradas: %d", job_id, antes - len(web_facts))
-        if channel_name in FATOS_CANAIS:
+        redacao_ativa = bool(redacao_mode and banco)
+        if redacao_ativa and not approved:
+            # 19/11: auditoria por categoria (factual / explicativa / narrativa) + conserto que
+            # reformula a frase apontada, com busca de evidência antes (src/redacao.py)
+            script = _auditar_redacao(channel, script, banco, topic, web_facts, job_id, min_minutes, max_minutes, scenes)
+        if channel_name in FATOS_CANAIS and not redacao_ativa:
             # afirmação que o escritor não marcou com fato: verificada por citação, não apagada às cegas
             script = verificar_sem_fato(script, web_facts)
-        if channel.claim_sources:
+        if channel.claim_sources and not redacao_ativa:
             # canal com claim_sources (motivacional, curiosidades): cada frase com número/data
             # busca fonte, MESMO quando o tema já tem fonte (junto, sem repetir URL)
             from src.fact_check import claim_sources as fontes_por_afirmacao, merge_web_facts
@@ -1060,7 +1194,7 @@ def run(
         # aprovado por humano: a revisão não roda de novo (o humano já leu); a
         # aprovação manual é a barreira, e a revisão de fatos não a desfaz
         fact_started = time.monotonic()
-        for attempt in range(0 if approved else FACT_CHECK_REWRITES + 1):
+        for attempt in range(0 if (approved or redacao_ativa) else FACT_CHECK_REWRITES + 1):
             if time.monotonic() - fact_started > FACT_CHECK_BUDGET_S:
                 # orçamento de tempo do laço: sem convergir, sobe PRIVADO com as
                 # ressalvas em vez de perder o vídeo inteiro (motivacional 777, política 778)
@@ -1267,13 +1401,28 @@ def run(
             script = vary_close_repeats(script, topic)
         # português revisado antes de narrar: a narração vira legenda na tela
         script = fix_script(script, channel.language)
-        if channel_name in FATOS_CANAIS:
+        if channel_name in FATOS_CANAIS and not redacao_ativa:
             # 12/11 (job 879): as trocas por fato repetiam número e frase; sai o repetido
             from src.fatos import gancho_sem_referencia, remover_redundantes
             script = gancho_sem_referencia(remover_redundantes(script), topic)
         # barra comparativa só com valor falado na cena, sem ranking (22/10)
         script = clean_stat_overlays(script)
-        if channel_name in FATOS_CANAIS:
+        if redacao_ativa:
+            # 19/11: sem preencher com fato solto e sem mínimo de números — só a duração conta; o
+            # acabamento (proporção errada, teto do Short) é seguido da conferência final por evidência
+            from src.redacao import conferencia_final, roteiro_insuficiente
+            script = _normalize_currency(ajustar_texto_final(script))
+            from src.fatos import encurtar_roteiro
+            if channel.formato_pela_duracao:
+                # teto da meta do canal (2,5 a 5 min), não o do Short: o formato sai da duração da voz
+                script = encurtar_roteiro(script, int(max_minutes * PALAVRAS_POR_MINUTO_VOZ * 1.05))
+            elif not long_form:
+                script = encurtar_roteiro(script, int(SHORTS_MAX_SECONDS * PALAVRAS_POR_MINUTO_VOZ / 60))
+            script = conferencia_final(script, banco, topic)
+            curto = roteiro_insuficiente(script, _min_palavras_redacao(min_minutes))
+            if curto:
+                raise ScriptRejected(curto)
+        elif channel_name in FATOS_CANAIS:
             # orçamento, "estima-se" e número sem fato: pelos fatos com origem (src/fatos.py)
             # moeda por extenso de novo: a troca por fato pode ter trazido "¥" ou "US$" para a narração
             # 12/11 (jobs 880-884): texto esvaziado pelas remoções é completado com fatos verificados
@@ -1305,6 +1454,10 @@ def run(
                                                           and termina_em_fronteira(str(script["thumbnail_text"]), _narr_final))))))
         if ja_empacotado:
             log.info("[%s] roteiro aprovado com título e imagens do texto validado — mantidos", job_id)
+        elif redacao_ativa:
+            # 19/11: o título do roteirista (auditado) fica de reserva; prompts de imagem saem do texto final
+            script = {**script, "scenes": [{**sc, "image_prompt": "", "stock_query": "", "real_subject": ""}
+                                           for sc in script["scenes"]]}
         elif channel_name in FATOS_CANAIS:
             # nada de antes da validação sobrevive: se a geração falhar, o job reprova
             script = {**script, "title": "", "thumbnail_text": None, "thumbnail_image_prompt": "",
@@ -1406,13 +1559,25 @@ def run(
         if pronunciations:
             log.info("[%s] pronúncia: %s", job_id, pronunciations)
         narrations = []
-        for i, scene in enumerate(script["scenes"]):
-            audio_path = work_dir / f"scene_{i}.mp3"
-            _, word_boundaries = narrate(
-                scene["narration"], audio_path, voice=tts_voice, pronunciations=pronunciations, foreign=foreign,
-            )
-            narrations.append((audio_path, word_boundaries, _ffprobe_duration(audio_path)))
+        with metricas.etapa("narracao"):
+            for i, scene in enumerate(script["scenes"]):
+                audio_path = work_dir / f"scene_{i}.mp3"
+                _, word_boundaries = narrate(
+                    scene["narration"], audio_path, voice=tts_voice, pronunciations=pronunciations, foreign=foreign,
+                )
+                narrations.append((audio_path, word_boundaries, _ffprobe_duration(audio_path)))
         total_seconds = sum(d for _, _, d in narrations)
+        metricas.anotar("duracao_narracao_s", round(total_seconds, 1))
+        log.info("[%s] custo até a narração:\n%s", job_id, metricas.texto())
+        if channel.formato_pela_duracao and not user_forced_format:
+            # 19/11: a duração REAL da voz decide (sem acelerar nem cortar): até SHORTS_MAX_SECONDS é Short
+            # (#Shorts); acima, vídeo normal sem #Shorts, no formato que o canal escolheu (decisão editorial)
+            fora, long_form, width, height = _formato_pela_duracao(
+                total_seconds, min_minutes, max_minutes, channel.formato_acima_do_short)
+            if fora:
+                raise ScriptRejected(f"duração da narração fora da meta: {fora}")
+            log.info("[%s] narração com %.0f s — sai como %s", job_id, total_seconds,
+                     ("vídeo normal %dx%d (sem #Shorts)" % (width, height)) if long_form else "Short vertical")
         if not long_form and total_seconds > SHORTS_MAX_SECONDS:
             narrations = _fit_short(narrations, total_seconds, job_id)
             total_seconds = sum(d for _, _, d in narrations)
@@ -1960,6 +2125,25 @@ def run(
         if qa_problems:
             # 15/11: problema que sobrou depois da troca de imagem não sobe nem privado (job 915)
             raise ScriptRejected("vídeo reprovado na revisão antes do upload: " + "; ".join(qa_problems))
+        if channel.formato_pela_duracao and not user_forced_format:
+            # QA do vídeo final: a duração do arquivo montado também fica na meta (e no formato certo)
+            dur_final = _ffprobe_duration(final_video)
+            fora = _duracao_fora(dur_final, min_minutes, max_minutes, folga_fim=0.25)
+            if fora:
+                raise ScriptRejected(f"duração do vídeo final fora da meta: {fora}")
+            if height >= width:
+                # 20/11: vertical em toda a faixa; a duração do ARQUIVO FINAL (não a estimada da voz) decide
+                # Short (até 3 min, #Shorts) ou vídeo normal vertical (sem #Shorts, com capítulos)
+                normal_final = _e_video_normal_final(dur_final, width, height)
+                if normal_final != long_form:
+                    log.info("[%s] vídeo final com %.0f s: classificado como %s (a narração previa %s)", job_id,
+                             dur_final, "vídeo normal" if normal_final else "Short",
+                             "vídeo normal" if long_form else "Short")
+                long_form = normal_final
+                log.info("[%s] vídeo final %dx%d com %.0f s — sai como %s", job_id, width, height, dur_final,
+                         "vídeo normal vertical (sem #Shorts)" if long_form else "Short (#Shorts)")
+            elif (dur_final > SHORTS_MAX_SECONDS + 10) and not long_form:
+                raise ScriptRejected(f"vídeo final com {dur_final:.0f} s no formato Short (máximo {SHORTS_MAX_SECONDS} s)")
         update(job_id, status="rendered", video_path=str(final_video))
         log.info("[%s] revisão do vídeo aprovada", job_id)
 
@@ -2213,6 +2397,11 @@ def run(
 
     except Exception as exc:
         log.error("[%s] pipeline falhou: %s", job_id, exc)
+        from src.providers import ProvedoresIndisponiveis
+        if isinstance(exc, ProvedoresIndisponiveis):
+            update(job_id, status="failed", error=(f"infraestrutura: {exc} | retomar_em={int(exc.disponivel_em or 0)}")[:2000])
+            log.error("[%s] provedores indisponíveis — trabalho guardado para retomar: %s", job_id, exc)
+            raise
         update(job_id, status="failed", error=str(exc)[:2000])
         if isinstance(exc, ScriptRejected):
             if str(exc).startswith(("áudio reprovado", "nome falado errado")):
@@ -2261,6 +2450,11 @@ def main() -> None:
         )
     except ScriptRejected:
         sys.exit(EXIT_SCRIPT_REJECTED)
+    except Exception as exc:  # noqa: BLE001
+        from src.providers import ProvedoresIndisponiveis
+        if isinstance(exc, ProvedoresIndisponiveis):
+            sys.exit(EXIT_INFRA)
+        raise
 
 
 if __name__ == "__main__":
