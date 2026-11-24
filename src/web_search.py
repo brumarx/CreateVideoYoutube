@@ -388,17 +388,16 @@ def _enrich(facts: list[dict], query: str, limite: int = ENRICHED_CHARS) -> list
 
 
 def _duckduckgo(query: str, max_results: int) -> list[dict] | None:
-    try:
-        from ddgs import DDGS
+    # 22/11: tentativas com rodízio de motores, espera respeitada e sem repetir URL (src/busca_motores.py)
+    from .busca_motores import buscar
 
-        results = DDGS().text(query, region="br-pt", max_results=max_results * 2) or []
-    except Exception as exc:  # noqa: BLE001 — bloqueio/rede: sem fonte, quem chamou decide
-        log.warning("busca duckduckgo falhou (%r): %s", query, exc)
+    results = buscar(query, max_results=max_results * 2, region="br-pt")
+    if not results:
         return None
     facts = [
-        {"titulo": (r.get("title") or ""), "url": r.get("href", ""), "trecho": (r.get("body") or "")[:500]}
+        {**r, "trecho": r["trecho"][:500]}
         for r in results
-        if r.get("body") and not any(d in (r.get("href") or "") for d in EXCLUDED_DOMAINS)
+        if r.get("trecho") and not any(d in r["url"] for d in EXCLUDED_DOMAINS)
     ][:max_results]
     if facts:
         log.info("busca duckduckgo encontrada pra %r (%d resultados)", query, len(facts))

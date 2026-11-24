@@ -23,3 +23,17 @@ def isolamento(tmp_path, monkeypatch):
     from src import disk_cache, providers
     monkeypatch.setattr(disk_cache, "BASE", tmp_path / "cache_teste")
     monkeypatch.setattr(providers.time, "sleep", lambda s: None)
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "plano: o teste usa o plano da história de verdade (redacao.planejar_historia)")
+
+
+@pytest.fixture(autouse=True)
+def sem_plano_da_historia(request, monkeypatch):
+    """23/11: o plano da história é uma chamada de IA antes do escritor; os testes do escritor simulam só as
+    respostas dele. Quem testa o plano marca @pytest.mark.plano."""
+    if request.node.get_closest_marker("plano"):
+        return
+    from src import redacao
+    monkeypatch.setattr(redacao, "planejar_historia", lambda *a, **k: None)

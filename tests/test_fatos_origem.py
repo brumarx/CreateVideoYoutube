@@ -125,6 +125,14 @@ def test_estima_se_nao_duplica():
     assert out["scenes"][0]["narration"] == "Estima-se que o museu fechou em 2006."
 
 
+@pytest.mark.parametrize("frase", ["As amostras ficam a −18 °C.", "As amostras ficam a -18 °C.",
+                                   "Ficam a menos 18 graus.", "São 50 trens."])
+def test_aproximacao_com_sinal_nao_se_repete_a_cada_rodada(frase):
+    """Job 1002: "a cerca de cerca de cerca de -18 °C" — o sinal entre "cerca de" e o número escondia a marca."""
+    uma = ft.estima_antes(frase, {"18", "-18", "50"})
+    assert uma.count("cerca de") == 1 and ft.estima_antes(uma, {"18", "-18", "50"}) == uma
+
+
 def test_pergunta_e_gancho_sem_marca_ficam():
     out = ft.conferir_frases(_rot("E aí, mente curiosa! Você teria coragem de atravessar?"), FATOS)
     assert out["scenes"][0]["narration"] == "E aí, mente curiosa! Você teria coragem de atravessar?"
@@ -940,3 +948,20 @@ def test_hype_sai_do_texto_final():
     s = {"scenes": [{"narration": "E aí! Um navio sobe 26 metros."},
                     {"narration": "O que poucos sabem é que esse sistema é dividido em degraus. Guarde essa informação, porque ela muda tudo."}]}
     assert remover_redundantes(s)["scenes"][1]["narration"] == "Esse sistema é dividido em degraus."
+
+
+@pytest.mark.parametrize("texto,esperado", [
+    ("capacidade para quatro milhões e meio de amostras", "capacidade para 4,5 milhões de amostras"),
+    ("dois milhões e meio de sementes", "2,5 milhões de sementes"),
+    ("4 milhões e meio de pessoas", "4,5 milhões de pessoas"),
+])
+def test_milhoes_e_meio_e_um_numero_so(texto, esperado):
+    """23/11 (Svalbard): "quatro milhões e meio" virava "4 milhões de e meio", lido como 4 e 4.000.000."""
+    assert ft.extenso_para_algarismos(texto) == esperado
+
+
+def test_estimativa_com_numero_por_extenso_nao_vai_para_o_comeco_da_pergunta():
+    """23/11 (Svalbard): "Mas estima-se que por que construir um cofre…"."""
+    f = "Mas por que construir um cofre se já existem mais de oitocentos e cinquenta bancos de genes?"
+    assert ft.estima_antes(f, {"850"}) == "Mas por que construir um cofre se já existem mais de 850 bancos de genes?"
+    assert ft.estima_antes("O cofre recebeu oitocentos e cinquenta pacotes.", {"850"}) == "O cofre recebeu cerca de 850 pacotes."

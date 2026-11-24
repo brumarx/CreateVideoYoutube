@@ -869,17 +869,69 @@ def _complete_cascata(
 
 _ULTIMO_MODELO = ["?"]
 
+# ---------------------------------------------------------------- juiz fixo (23/11)
+# Svalbard (job 1005): a leitura de espectador do Nemotron gastou mais de 8 mil tokens raciocinando, veio
+# cortada, foi descartada e a cascata respondeu com o gpt-oss-120b — versões do mesmo job julgadas por juízes
+# diferentes, sem aviso. Avaliação que decide aprovação usa SEMPRE o mesmo provedor e o mesmo modelo: no
+# máximo 2 pedidos (o 2º, se o 1º veio cortado, com o dobro de saída até o teto medido); sem resposta válida,
+# JuizSemResposta — nunca outro modelo no lugar.
+JUIZ = ("nvidia", "nvidia/nemotron-3-ultra-550b-a55b")
+JUIZ_SAIDA_MAX = 32000  # 23/11: a NVIDIA aceitou 60 mil de saída no Nemotron; o juiz nunca pede mais que isto
+JUIZ_TENTATIVAS = 2
+
+
+class JuizSemResposta(RuntimeError):
+    """O juiz fixo não deu resposta válida em JUIZ_TENTATIVAS pedidos: a avaliação fica NÃO JULGADA."""
+
+
+def _julgar_fixo(messages: list[dict], keys: LLMKeys, max_tokens: int, validate: Callable[[str], bool] | None,
+                 temperature: float) -> str:
+    nome, modelo = JUIZ
+    _, attr, endpoint, _ = next(p for p in OPENAI_COMPAT_PROVIDERS if p[0] == nome)
+    chaves = list(getattr(keys, attr) or [])
+    if not chaves:
+        raise JuizSemResposta(f"juiz {nome}/{modelo} sem chave configurada")
+    rotator = _rotator_for(chaves)
+    saida = min(max_tokens, JUIZ_SAIDA_MAX)
+    motivos = []
+    for tentativa in range(JUIZ_TENTATIVAS):
+        ordem = [k for k in rotator.order() if rotator.ate(k, modelo) <= time.time()]
+        if not ordem:
+            motivos.append("todas as chaves do juiz em descanso")
+            break
+        api_key = ordem[0]
+        _ULTIMO_MODELO[0] = f"{nome}/{modelo}"
+        result, status, cooldown = _call_openai_compat(endpoint, api_key, modelo, messages, saida, temperature,
+                                                       _ampliado=True)  # a 2ª tentativa é decidida aqui
+        if result and (validate is None or validate(result)):
+            log.info("juiz fixo %s/%s respondeu (tentativa %d, saída %d)", nome, modelo, tentativa + 1, saida)
+            return result
+        if result:
+            motivos.append(f"resposta inválida (tentativa {tentativa + 1})")
+        elif status == 200:
+            motivos.append(f"resposta cortada com saída {saida} (tentativa {tentativa + 1})")
+            saida = min(saida * 2, JUIZ_SAIDA_MAX)
+        else:
+            motivos.append(f"HTTP {status} (tentativa {tentativa + 1})")
+            if status in (429, 503) and cooldown:
+                rotator.rest_model(api_key, modelo, cooldown)
+    log.warning("juiz fixo %s/%s sem resposta válida: %s — avaliação NÃO JULGADA (nenhum outro modelo no lugar)",
+                nome, modelo, "; ".join(motivos))
+    raise JuizSemResposta(f"juiz {nome}/{modelo} sem resposta válida: " + "; ".join(motivos))
+
 
 def complete(messages: list[dict], keys: LLMKeys | None = None, max_tokens: int = 4096,
              validate: Callable[[str], bool] | None = None, model_filter: Callable[[str], bool] | None = None,
-             temperature: float = 0.8) -> str:
+             temperature: float = 0.8, juiz: bool = False) -> str:
     """A cascata (ver _complete_cascata) com o registro de custo do job: modelo que respondeu e tempo de
-    cada chamada, na etapa corrente (src/metricas)."""
+    cada chamada, na etapa corrente (src/metricas). `juiz=True`: sem cascata — o JUIZ fixo (mesmo provedor e
+    modelo sempre, ver _julgar_fixo), ou JuizSemResposta."""
     from . import metricas
     t0 = time.time()
     _ULTIMO_MODELO[0] = "?"
     try:
-        r = _complete_cascata(messages, keys, max_tokens, validate, model_filter, temperature)
+        r = (_julgar_fixo(messages, keys or LLMKeys(), max_tokens, validate, temperature) if juiz
+             else _complete_cascata(messages, keys, max_tokens, validate, model_filter, temperature))
     except Exception:
         metricas.chamada(_ULTIMO_MODELO[0], time.time() - t0, ok=False)
         raise

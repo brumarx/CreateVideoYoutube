@@ -371,6 +371,24 @@ def test_8b_edicao_que_inventa_outro_numero_volta_a_original_e_fica_registrada(l
     assert [r["cena"] for r in reg["revertidas"]] == [2] and reg["factuais_sem_correcao"][0]["cena"] == 2
 
 
+def test_8b2_edicao_que_repete_fato_de_outra_cena_volta_a_original(llm):
+    """Job 999 (Svalbard, 22/11): a edição de uma cena repetiu fatos que outras cenas já diziam (2017 três
+    vezes, −18 °C duas) e cada versão ficou pior. A cena sozinha passa na conferência; o roteiro inteiro não."""
+    s = _roteiro([[F("Imagine morar num lugar assim.", "narrativa")],
+                  [F("As estacas descem até 15 metros para os prédios não afundarem.", evid=["E2"])],
+                  [F("Os russos inventaram a estaca em 1890.", evid=["E3"])]])
+    s, problemas = rd.auditar_codigo(s, BANCO)
+    alvos = rd.alvos_da_edicao(s, {"nota": 9}, problemas)
+    llm(ED((3, [F("Por isso as estacas descem até 15 metros.", "explicativa", ["E2"])])))
+    novo, reg = rd.editar_cenas(s, alvos, BANCO, TEMA_988, problemas=problemas)
+    assert [f["texto"] for _, _, f in rd.frases_de(novo)] == [f["texto"] for _, _, f in rd.frases_de(s)]
+    assert [r["cena"] for r in reg["revertidas"]] == [3] and "15 m" in reg["revertidas"][0]["motivo"]
+    # a mesma correção sem repetir o fato entra
+    llm(ED((3, [F("E a solução foi tirar os prédios do chão.", "narrativa")])))
+    bom, reg = rd.editar_cenas(s, alvos, BANCO, TEMA_988, problemas=problemas)
+    assert reg["cenas_editadas"] == [3] and not reg["revertidas"]
+
+
 def test_8c_auditar_e_corrigir_busca_evidencia_antes_de_reformular(llm):
     s = _roteiro([[F("Imagine morar num lugar assim.", "narrativa")],
                   [F("Yakutsk é uma das duas grandes cidades sobre permafrost contínuo.", evid=["E1"])],
@@ -1070,7 +1088,7 @@ def test_toda_frase_de_um_roteiro_grande_recebe_decisao_em_blocos_com_contexto_e
     assert any("mesmo fato aparece em mais de uma cena" in t for t in q["travas"])
     assert [d["n"] for d in q["decisoes"]] == list(range(1, 51))           # nenhuma frase sem decisão
     assert all(d["justificativa"] for d in q["decisoes"])
-    assert q["blocos"] == 5 and len(falso.pedidos) == 7          # 5 blocos + espectador + editor
+    assert q["blocos"] == 5 and len(falso.pedidos) == 11         # 5 blocos + 3 leituras de espectador + 3 do editor
     blocos = [p for p in falso.pedidos if "FRASES A JULGAR" in p]
     assert all(len(re.findall(r"^\d+\) \[", p.split("FRASES A JULGAR")[1].split("Dê uma decisão")[0], re.M)) <= 12
                for p in blocos)
@@ -1079,14 +1097,14 @@ def test_toda_frase_de_um_roteiro_grande_recebe_decisao_em_blocos_com_contexto_e
         julgar = p.split("FRASES A JULGAR")[1].split("Dê uma decisão")[0]
         for ident in set(re.findall(r"\[\w+; (E\d+)\]", julgar)):
             assert f"\n{ident} [" in p.split("FRASES A JULGAR")[0]
-    assert "ESPECTADOR atento" in falso.pedidos[-2] and "Você é o EDITOR" in falso.pedidos[-1]
+    assert all("ESPECTADOR atento" in x for x in falso.pedidos[-6:-3]) and all("Você é o EDITOR" in x for x in falso.pedidos[-3:])
 
 
 def test_frase_esquecida_pelo_auditor_e_perguntada_de_novo(llm):
     s = _roteiro_grande(6)
     falso = llm(AUD(8, omitir={4}), AUD(8))
     problemas, q = rd.auditar_ia(s, BANCO, TEMA_988)
-    assert [d["n"] for d in q["decisoes"]] == [1, 2, 3, 4, 5, 6] and len(falso.pedidos) == 4  # + espectador + editor
+    assert [d["n"] for d in q["decisoes"]] == [1, 2, 3, 4, 5, 6] and len(falso.pedidos) == 8  # + 3 espectador + 3 editor
     assert re.findall(r"^(\d+)\) \[", falso.pedidos[1].split("FRASES A JULGAR")[1], re.M) == ["4"]
 
 
@@ -1125,13 +1143,15 @@ def test_blocos_cabem_no_groq_sem_cortar_evidencia_nem_resposta():
     s = _roteiro_grande(54)
     tamanhos = []
     original = pv.complete
-    pv.complete = lambda messages, **kw: tamanhos.append(pv._too_big_for("groq", messages, kw["max_tokens"])) or \
-        json.dumps(AUD(8)(messages[-1]["content"]))
+    juiz = []
+    # 23/11: só os pedidos da cascata podem cair no Groq; as leituras repetidas vão ao juiz fixo (NVIDIA)
+    pv.complete = lambda messages, **kw: (juiz.append(1) if kw.get("juiz") else tamanhos.append(
+        pv._too_big_for("groq", messages, kw["max_tokens"]))) or json.dumps(AUD(8)(messages[-1]["content"]))
     try:
         rd.auditar_ia(s, BANCO, TEMA_988)
     finally:
         pv.complete = original
-    assert tamanhos and not any(tamanhos)
+    assert tamanhos and not any(tamanhos) and len(juiz) == 2 * rd.LEITURAS
 
 
 # ======================================================================= 20/11: leitura de espectador (roteiro inteiro)
@@ -1162,6 +1182,46 @@ def test_frases_certas_isoladas_mas_combinacao_enganosa_e_pega_na_leitura_inteir
     assert q["factual"]["enganos"] and q["factual"]["nota"] < 10 and q["factual"]["conclusoes_do_publico"]
 
 
+def test_leitura_enganosa_leva_todas_as_frases_com_evidencias_e_todas_as_cenas_ao_editor(llm):
+    """23/11 (Svalbard, job 1004): só a última frase da sequência ia ao editor; ele reescrevia essa e deixava a
+    que de fato causava o engano. Agora o problema leva TODAS as frases, com o que cada evidência comprova."""
+    s, banco = _roteiro_trajeto()
+    llm(AUD(9, enganos=[ENGANO]))
+    probs, q = rd.auditar_ia(s, banco, TEMA_988)
+    p = probs[0]
+    assert [(x["cena"], x["texto"][:9]) for x in p["sequencia"]] == [(1, "O trecho "), (2, "Os trens ")]
+    assert p["sequencia"][0]["evidencias"] == [{"id": "E1", "afirmacao": "O trecho sob a montanha é atravessado em 20 minutos."}]
+    assert p["cenas"] == [1, 2] and p["publico_conclui"].startswith("a viagem desde a capital")
+    alvos = rd.alvos_da_edicao(s, {"nota": 9, "aprovado": True}, probs)
+    assert set(alvos) == {1, 2}                                               # as duas cenas vão ao editor
+    m = alvos[2][0]
+    for trecho in ("O trecho sob a montanha", "Os trens partem", "E1: O trecho", "E2: Os trens",
+                   "a viagem desde a capital leva 20 minutos", "os 20 minutos são só do trecho", "mude SÓ"):
+        assert trecho in m, trecho
+    assert "LEITURA ENGANOSA descrita na cena 3" in alvos[1][0]
+    h = []
+    rd.registrar_historico(h, 1, s, probs, banco)
+    assert {x["frase"][:9] for x in h} == {"O trecho ", "Os trens "}      # as duas frases ficam no histórico
+
+
+def test_corrigir_so_a_frase_que_causa_o_engano_nao_conta_como_devolvida_igual(monkeypatch, llm):
+    s, banco = _roteiro_trajeto()
+    llm(AUD(9, enganos=[ENGANO]))
+    probs, _ = rd.auditar_ia(s, banco, TEMA_988)
+    corrigida = "Só o trecho sob a montanha é atravessado em 20 minutos."
+    resposta = json.dumps({"cenas": [{"cena": 2, "funcao": "f", "preserva": "p", "corrige": "c", "justificativa": "",
+                                      "frases": [F(corrigida, evid=["E1"])]}], "titulo": ""}, ensure_ascii=False)
+    from src import providers
+    monkeypatch.setattr(providers, "complete", lambda *a, **k: resposta)
+    novo, reg = rd.editar_cenas(s, rd.alvos_da_edicao(s, {"nota": 9, "aprovado": True}, probs), banco, TEMA_988,
+                                problemas=probs)
+    assert novo["scenes"][1]["narration"] == corrigida and novo["scenes"][2]["narration"].startswith("Os trens")
+    assert reg["factuais_sem_correcao"] == []                                # a última frase ficou, e está certo
+    monkeypatch.setattr(providers, "complete", lambda *a, **k: json.dumps({"cenas": [], "titulo": ""}))
+    _, reg2 = rd.editar_cenas(s, {2: ["x"]}, banco, TEMA_988, problemas=probs)
+    assert [x["cena"] for x in reg2["factuais_sem_correcao"]] == [3]       # sequência inteira igual: não corrigiu
+
+
 def test_leitura_sem_engano_nao_inventa_problema(llm):
     s, banco = _roteiro_trajeto()
     llm(AUD(9))
@@ -1187,7 +1247,9 @@ def test_sem_leitura_valida_a_auditoria_nao_sai(monkeypatch):
             raise RuntimeError("Nenhum provedor devolveu resposta válida")
         return json.dumps(AUD(9)(p))
     monkeypatch.setattr(providers, "complete", falso)
-    assert rd.auditar_ia(s, banco, TEMA_988) is None
+    # 23/11: sem leitura válida a versão fica NÃO JULGADA — nunca aprovada, e sem outro modelo no lugar
+    _, q = rd.auditar_ia(s, banco, TEMA_988)
+    assert q["nao_julgada"] == ["nenhuma leitura de espectador válida"] and q["aprovado"] is False
 
 
 def test_prompt_do_espectador_cobre_os_sete_tipos():

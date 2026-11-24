@@ -319,8 +319,10 @@ def lista_para_escritor(fatos: list[dict]) -> str:
 
 _FRONTEIRAS = (": ", "; ", ", e ", ", mas ", ", enquanto ")
 # aproximação já escrita antes do número: nada a acrescentar
-_JA_APROXIMADO = re.compile(r"(cerca de|aproximadamente|em torno de|por volta de|quase|mais de|menos de|estima|calcula|aponta)\s*$",
-                            re.I)
+# 23/11 (job 1002): o sinal fica entre a aproximação e o número ("cerca de −18 °C", "cerca de menos 18"); sem
+# aceitá-lo aqui, cada auditoria punha outro "cerca de" ("a cerca de cerca de cerca de -18 °C")
+_JA_APROXIMADO = re.compile(r"(cerca de|aproximadamente|em torno de|por volta de|quase|mais de|menos de|estima|calcula|aponta)"
+                            r"\s*(?:[−–+-]|menos\s+|mais\s+)?$", re.I)
 _MESES = r"janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro"
 # variar para não repetir: quantidade ganha a aproximação antes do número; data e outros casos, a oração
 _APROXIMACOES = ("cerca de", "aproximadamente", "em torno de")
@@ -348,6 +350,12 @@ def estima_antes(frase: str, nums_alvo: set[str], vez: int = 0) -> str:
     "calcula-se que o museu fechou em 2006", no começo da oração do número."""
     if re.search(r"estima|calcula-se|aponta-se", frase, re.I):
         return frase
+    # 23/11 (Svalbard): número só por extenso ("mais de oitocentos e cinquenta bancos") não era achado e a marca
+    # ia para o começo da oração — "Mas estima-se que por que construir…". Procura também no texto com algarismos
+    if not any(canon(m.group()) in nums_alvo for m in re.finditer(r"\d+(?:[.,]\d+)*", frase)):
+        convertida = extenso_para_algarismos(frase)
+        if any(canon(m.group()) in nums_alvo for m in re.finditer(r"\d+(?:[.,]\d+)*", convertida)):
+            frase = convertida
     # 21/11: número colado a uma letra é nome, não quantidade ("L2", "A380", "STS82"): "Lcerca de 2" (JWST)
     alvo = next((m for m in re.finditer(r"(?<![^\W\d_])\d+(?:[.,]\d+)*", frase) if canon(m.group()) in nums_alvo), None)
     if alvo is None and any(canon(m.group()) in nums_alvo for m in re.finditer(r"\d+(?:[.,]\d+)*", frase)):
@@ -537,6 +545,10 @@ def extenso_para_algarismos(texto: str) -> str:
     saida = _SEQ_NUM.sub(troca, texto or "")
     # 20/11: decimal falado — "sessenta e quatro vírgula quatro" -> "64,4" (antes ficava "64 vírgula quatro"
     # e o 64 seco parecia arredondamento de −64,4)
+    # 23/11: "quatro milhões e meio" é 4,5 milhões (antes: "4 milhões de e meio", lido como 4 e 4.000.000)
+    saida = re.sub(r"\b(\d+)\s+(milh(?:ão|ões)|bilh(?:ão|ões)|trilh(?:ão|ões))(\s+de)?\s+e\s+meio\b",
+                   lambda m: f"{m.group(1)},5 {m.group(2)}{m.group(3) or ''}", saida, flags=re.I)
+    saida = re.sub(r"\b(milh(?:ão|ões)|bilh(?:ão|ões)|trilh(?:ão|ões)) de de\b", r"\1 de", saida, flags=re.I)
     saida = re.sub(r"(\d+)\s+v[íi]rgula\s+(\d+|zero|um|uma|dois|duas|tr[êe]s|quatro|cinco|seis|sete|oito|nove)\b",
                    lambda m: m.group(1) + "," + str(_DIGITO.get(m.group(2).lower(), m.group(2))), saida, flags=re.I)
     return milhar_com_espaco(saida)
