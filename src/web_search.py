@@ -577,3 +577,84 @@ def openalex_facts(query: str, n: int = 2) -> list[dict]:
         out.append({"titulo": f"Artigo ({year}): {title}", "url": url,
                     "trecho": f"{title} ({year}). {abstract}"[:900]})
     return out
+
+
+# ---------------------------------------------------------------- sites oficiais do assunto (24/11)
+# Organização responsável pelo assunto: operador (P137), dono (P127), mantenedor (P126), organização-mãe (P749)
+_PROPS_RESPONSAVEIS = ("P137", "P127", "P126", "P749")
+
+
+def _host(url: str) -> str:
+    host = re.sub(r"^https?://", "", (url or "").strip().lower()).split("/")[0].split(":")[0]
+    return host[4:] if host.startswith("www.") else host
+
+
+def sites_oficiais(query: str) -> list[str]:
+    """24/11 (regra do dono): a fonte oficial de um assunto é, em geral, o site do PRÓPRIO projeto ou da
+    organização responsável — e a Wikipédia/Wikidata registram qual é ("official website", P856, do assunto e
+    de quem o opera, possui ou mantém). Ex.: Svalbard → seedvault.no, nordgen.org, croptrust.org,
+    statsbygg.no, regjeringen.no. Devolve os domínios (sem www). Guardado em disco; falha → []."""
+    from . import disk_cache
+    guardado = disk_cache.get("sites_oficiais_v1", query)
+    if guardado is not None:
+        return guardado
+    titulos = _article_titles(query)
+    sites: list[str] = []
+    try:
+        with httpx.Client(headers=OPEN_HEADERS, timeout=20) as c:
+            for lang in ("en", "pt"):
+                for titulo in (titulos.get(lang) or [])[:2]:
+                    r = c.get(f"https://{lang}.wikipedia.org/w/api.php", params={
+                        "action": "query", "prop": "pageprops", "titles": titulo, "format": "json", "redirects": 1}).json()
+                    pagina = next(iter((r.get("query") or {}).get("pages", {}).values()), {})
+                    qid = (pagina.get("pageprops") or {}).get("wikibase_item")
+                    if not qid:
+                        continue
+                    claims = c.get(WIKIDATA_API, params={"action": "wbgetentities", "ids": qid, "props": "claims",
+                                                         "format": "json"}).json()["entities"][qid].get("claims", {})
+
+                    def urls(cl: dict) -> list[str]:
+                        return [s["mainsnak"]["datavalue"]["value"] for s in cl.get("P856", [])
+                                if isinstance(s.get("mainsnak", {}).get("datavalue", {}).get("value"), str)]
+                    sites += urls(claims)
+                    orgs = [s["mainsnak"]["datavalue"]["value"]["id"] for p in _PROPS_RESPONSAVEIS for s in claims.get(p, [])
+                            if isinstance(s.get("mainsnak", {}).get("datavalue", {}).get("value"), dict)][:6]
+                    if orgs:
+                        ents = c.get(WIKIDATA_API, params={"action": "wbgetentities", "ids": "|".join(orgs),
+                                                           "props": "claims", "format": "json"}).json().get("entities", {})
+                        for ent in ents.values():
+                            sites += urls(ent.get("claims", {}))
+                    if sites:
+                        break
+                if sites:
+                    break
+    except Exception as exc:  # noqa: BLE001 — sem Wikidata: só os domínios de governo contam como oficiais
+        log.warning("sites oficiais do assunto indisponíveis (%r): %s", query[:60], exc)
+        return []
+    dominios = list(dict.fromkeys(h for h in (_host(u) for u in sites) if h))
+    log.info("sites oficiais do assunto %r: %s", query[:60], ", ".join(dominios) or "nenhum na Wikidata")
+    disk_cache.put("sites_oficiais_v1", query, dominios)
+    return dominios
+
+
+def e_site_oficial(url: str, dominios: list[str]) -> bool:
+    host = _host(url)
+    return any(host == d or host.endswith("." + d) for d in dominios)
+
+
+def marcar_oficiais(facts: list[dict] | None, dominios: list[str]) -> list[dict]:
+    """Fonte do site oficial do assunto (ou da organização responsável) entra marcada como oficial."""
+    return [{**f, "oficial": True} if e_site_oficial(f.get("url", ""), dominios) else f for f in facts or []]
+
+
+def fontes_dos_sites_oficiais(query: str, dominios: list[str], por_site: int = 3) -> list[dict]:
+    """Páginas dos próprios sites oficiais sobre o assunto (busca "site:dominio assunto"), já marcadas oficiais."""
+    titulos = _article_titles(query)
+    assunto = (titulos.get("en") or titulos.get("pt") or [query])[0]
+    achados: list[dict] = []
+    for d in dominios[:5]:
+        for f in search_topic_facts(f"site:{d} {assunto}", max_results=por_site) or []:
+            if e_site_oficial(f.get("url", ""), [d]) and f.get("url") not in {a.get("url") for a in achados}:
+                achados.append({**f, "oficial": True})
+    log.info("páginas dos sites oficiais para %r: %d", query[:60], len(achados))
+    return achados

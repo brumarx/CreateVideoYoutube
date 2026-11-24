@@ -817,10 +817,16 @@ def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes:
     """Banco de evidências do tema (src/evidencias.py), com uma rodada de busca nas lacunas.
     Pesquisa sem base suficiente reprova com o motivo (nunca vira vídeo sobre premissa sem prova)."""
     from src.evidencias import PesquisaInsuficiente, exigir_suficiente, minimo_para, montar_banco, so_oficiais
-    from src.web_search import search_topic_facts
+    from src.web_search import fontes_dos_sites_oficiais, marcar_oficiais, search_topic_facts, sites_oficiais
+
+    # 24/11: o site oficial do assunto (e o de quem o opera/possui/mantém), pela Wikidata, conta como fonte
+    # oficial — e as páginas dele entram no banco antes de tudo
+    dominios = sites_oficiais(topic)
+    if dominios:
+        web_facts = fontes_dos_sites_oficiais(topic, dominios) + marcar_oficiais(web_facts, dominios)
 
     def buscar(pergunta: str) -> list[dict]:
-        return search_topic_facts(pergunta, max_results=3, oficiais=True) or []
+        return marcar_oficiais(search_topic_facts(pergunta, max_results=3, oficiais=True) or [], dominios)
     completo = montar_banco(topic, web_facts, buscar=buscar)
     try:
         # 24/11: só evidência oficial e verificada entra na redação; sem o mínimo delas, o tema não vira vídeo

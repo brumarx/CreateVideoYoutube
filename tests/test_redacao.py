@@ -1605,3 +1605,16 @@ def test_redacao_so_usa_evidencia_oficial():
     assert [e["id"] for e in ev.so_oficiais(banco)["evidencias"]] == ["E1", "E6"]
     with pytest.raises(ev.PesquisaInsuficiente):
         ev.exigir_suficiente(ev.so_oficiais(banco), 5)
+
+
+def test_site_oficial_do_assunto_conta_como_fonte_oficial():
+    # 24/11: o site do próprio projeto (Wikidata P856, e o de quem o opera/possui) é a fonte oficial
+    from src import web_search as ws
+    doms = ["seedvault.no", "nordgen.org"]
+    assert ws.e_site_oficial("https://www.seedvault.no/about/", doms)
+    assert ws.e_site_oficial("https://seedvault.nordgen.org/Information/Faq", doms)
+    assert not ws.e_site_oficial("https://en.wikipedia.org/wiki/Svalbard", doms)
+    assert not ws.e_site_oficial("https://notnordgen.org/x", doms)
+    marcadas = ws.marcar_oficiais([{"url": "https://www.nordgen.org/x"}, {"url": "https://grokipedia.com/y"}], doms)
+    assert [f.get("oficial") for f in marcadas] == [True, None]
+    assert ev.classe_fonte(marcadas[0]) == "oficial" and ev.classe_fonte(marcadas[1]) != "oficial"
