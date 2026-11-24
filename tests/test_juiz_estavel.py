@@ -238,7 +238,8 @@ def test_juiz_reveza_chaves_e_espera_o_descanso_como_o_groq(rede, monkeypatch):
     from src.config import LLMKeys
     chaves = LLMKeys(nvidia=["nvapi-reveza-1", "nvapi-reveza-2"])  # chaves novas: rotação sem descanso herdado
     esperas = []
-    agora = [1000.0]
+    import time as _t
+    agora = [_t.time()]  # relógio real: o descanso guardado no rotador é medido nele
     monkeypatch.setattr(pv.time, "time", lambda: agora[0])
     monkeypatch.setattr(pv.time, "sleep", lambda s: (esperas.append(s), agora.__setitem__(0, agora[0] + s)))
     pedidos = rede((None, 429, 30), (None, 429, 30), ('{"ok": 1}', 200, 0))

@@ -331,7 +331,7 @@ def test_historico_de_um_job_nao_contamina_outro(monkeypatch):
 
 
 def test_prompts_do_escritor_e_do_editor_trazem_a_regra_de_precisao():
-    assert "{regra_precisao}" in rd._PROMPT_ESCRITOR and "{regra_precisao}" in rd._PROMPT_EDICAO
+    assert "{regra_precisao}" in rd._PROMPT_FRASES and "{regra_precisao}" in rd._PROMPT_EDICAO
     for termo in ("quantificador", "frequência", "certeza", "extensão", "causa", "tempo", "unidades"):
         assert termo in rd._REGRA_PRECISAO
     assert "Nunca troque um exagero por outro equivalente" in rd._REGRA_PRECISAO

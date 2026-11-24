@@ -175,15 +175,21 @@ def test_trecho_existe_confere_no_texto_baixado(trecho, ok):
 
 
 # ======================================================================= 2. narrativa
-def test_2_prompt_do_escritor_pede_historia_e_nao_ids_no_texto(llm):
-    falso = llm({"titulo": "Yakutsk", "descricao": "d", "tags": [], "cenas": [{"frases": [F("Mas por quê?", "narrativa")]}]})
-    from src.config import ChannelConfig
-    rd.escrever(ChannelConfig.load("curiosidades"), TEMA_988, BANCO, min_minutes=0.01, max_minutes=5, cenas_ref=6,
-                tentativas=1)
-    pedido = falso.pedidos[0]
-    # 24/11: o escritor RESUME o que as evidências contam, sem liberdade para criar
-    assert "RESUMIR" in pedido and "nada de comparação, causa, conclusão" in pedido
-    assert "nunca no texto" in pedido and "[F" not in pedido
+@pytest.mark.frases_da_fonte
+def test_2_escritor_so_monta_frases_da_fonte_e_nao_escreve_fato():
+    # 24/11: os fatos vêm das FRASES DA FONTE conferidas; a montagem só escolhe, ordena e liga
+    assert "pode dizer MENOS, nunca MAIS" in rd._PROMPT_FRASES
+    assert "Você NÃO escreve fatos" in rd._PROMPT_MONTAGEM and "nunca invente" in rd._PROMPT_MONTAGEM
+    frases = [{"ref": "F1", "id": "E1", "texto": "Yakutsk é uma das duas grandes cidades sobre permafrost contínuo."},
+              {"ref": "F2", "id": "E2", "texto": "As estacas descem até 15 metros."}]
+    s = rd.montar_de_frases({"titulo": "t", "cenas": [
+        {"frases": [{"narrativa": "Já imaginou morar ali?"}, "F1", "F9", {"narrativa": "O recorde foi de 64 graus."}]},
+        {"frases": [{"narrativa": "E por quê?"}]},
+        {"frases": ["F2", "F1", {"texto": "Frase inventada pelo modelo.", "tipo": "factual"}]}]}, frases, BANCO, set())
+    textos = [[f["texto"] for f in sc["frases"]] for sc in s["scenes"]]
+    # referência que não existe, narrativa com número, cena só narrativa, frase repetida e texto livre: fora
+    assert textos == [["Já imaginou morar ali?", frases[0]["texto"]], [frases[1]["texto"]]]
+    assert s["scenes"][1]["frases"][0]["evidencias"] == ["E2"]
 
 
 def test_2b_lista_de_fatos_e_detectada_e_historia_passa():
@@ -700,14 +706,11 @@ def test_sem_evidencia_de_temperatura_vale_descricao_qualitativa_sustentada_e_na
     assert "Nunca ponha outro número no lugar" in falso.pedidos[0]
 
 
-def test_prompts_proibem_arredondar_decimal_sem_avisar_e_numero_substituto(llm):
-    falso = llm(_cenas_64("O recorde de frio foi de −64,4 °C."))
-    from src.config import ChannelConfig
-    rd.escrever(ChannelConfig.load("curiosidades"), TEMA_988, BANCO_FRIO, min_minutes=0.1, max_minutes=5,
-                cenas_ref=6, tentativas=1)
-    p = falso.pedidos[0]
+def test_prompts_proibem_arredondar_decimal_sem_avisar_e_numero_substituto():
+    # 24/11: as regras de número estão onde o fato é escrito — nas frases da fonte
+    p = rd._PROMPT_FRASES
     assert "Decimal (−64,4 °C)" in p and "mais de 64 graus\n  negativos" in p
-    assert "nunca outro número no lugar" in p and "Mantenha o sinal" in p
+    assert "Nunca outro número no lugar" in p and "Mantenha o sinal" in p
 
 
 def test_sinal_negativo_fica_colado_ao_numero_na_estimativa():
@@ -863,14 +866,10 @@ def test_recorde_corroborado_nao_precisa_de_atribuicao():
     assert probs == []
 
 
-def test_prompt_separa_estimativa_de_fonte_unica(llm):
-    falso = llm(_cenas_64("O recorde de frio foi de −64,4 °C."))
-    from src.config import ChannelConfig
-    rd.escrever(ChannelConfig.load("curiosidades"), TEMA_988, BANCO_FRIO, min_minutes=0.1, max_minutes=5,
-                cenas_ref=6, tentativas=1)
-    p = falso.pedidos[0]
-    assert "Valor medido/exato fica EXATO, mesmo de fonte única" in p and '"estimado" ou "fonte_unica"' not in p
-    assert '"fonte_unica" com recorde ou superlativo: diga de onde vem' in p
+def test_prompt_separa_estimativa_de_fonte_unica():
+    p = rd._PROMPT_FRASES
+    assert "Valor medido/exato fica EXATO, mesmo de fonte única" in p
+    assert '"fonte única" com recorde ou superlativo: diga de onde vem' in p
 
 
 # ======================================================================= 20/11: sentido dos números negativos
@@ -1618,3 +1617,15 @@ def test_site_oficial_do_assunto_conta_como_fonte_oficial():
     marcadas = ws.marcar_oficiais([{"url": "https://www.nordgen.org/x"}, {"url": "https://grokipedia.com/y"}], doms)
     assert [f.get("oficial") for f in marcadas] == [True, None]
     assert ev.classe_fonte(marcadas[0]) == "oficial" and ev.classe_fonte(marcadas[1]) != "oficial"
+
+
+@pytest.mark.frases_da_fonte
+def test_frase_da_fonte_que_excede_o_trecho_nao_entra_no_roteiro(llm):
+    # 24/11 (Svalbard 1011: "baixa umidade, sem atividade sísmica"): a frase que diz mais que o trecho sai na
+    # conferência; a que tem número fora da evidência sai nas travas em código; só a sustentada vira F1
+    llm({"frases": [{"id": "E1", "texto": "Yakutsk é uma das duas grandes cidades sobre permafrost contínuo."},
+                    {"id": "E2", "texto": "As estacas descem até 15 metros, em solo de baixa umidade e sem terremotos."},
+                    {"id": "E4", "texto": "O permafrost fica a 0 °C ou menos por pelo menos 7 anos seguidos."}]},
+        {"decisoes": [{"n": 1, "decisao": "sustentada"}, {"n": 2, "decisao": "excede", "o_que_excede": "umidade"}]})
+    frases = rd.frases_da_fonte(TEMA_988, BANCO, ["E1", "E2", "E4", "E99"])
+    assert [(f["ref"], f["id"]) for f in frases] == [("F1", "E1")]
