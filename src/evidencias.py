@@ -2047,6 +2047,16 @@ def por_id(banco: dict | None) -> dict[str, dict]:
     return {e["id"]: e for e in (banco or {}).get("evidencias", [])}
 
 
+def so_oficiais(banco: dict | None) -> dict | None:
+    """24/11 (regra do dono): o roteiro só usa evidência OFICIAL e verificada — trecho provado numa fonte
+    oficial/acadêmica. Wikipédia, Grokipedia, turismo e imprensa de fonte única ficam fora do banco que o
+    escritor, o editor e os auditores veem (na rodada de Svalbard eram elas que traziam "Marrocos e Líbano",
+    "arenito", "Juízo Final")."""
+    if not banco:
+        return banco
+    return {**banco, "evidencias": [e for e in banco.get("evidencias", []) if e.get("status") == "oficial"]}
+
+
 def usaveis(banco: dict | None) -> list[dict]:
     return [e for e in (banco or {}).get("evidencias", []) if e["status"] in STATUS_USAVEIS]
 

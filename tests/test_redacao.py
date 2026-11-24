@@ -1594,3 +1594,14 @@ def test_corte_automatico_tira_so_a_frase_reprovada():
     assert [sc["narration"] for sc in cortado["scenes"]] == ["A rocha é fria."]  # cena só com narrativa sai
     assert rd.cortar_frases_reprovadas(s, [{"cena": None, "frase": None}]) is None  # sem frase apontada: não corta
     assert rd.cortar_frases_reprovadas(s, []) is None
+
+
+def test_redacao_so_usa_evidencia_oficial():
+    # 24/11 (regra do dono): fonte única (Wikipédia, Grokipedia, turismo), corroborada sem oficial,
+    # contraditória e não verificada ficam fora do banco que o escritor e os auditores veem
+    banco = {"lacunas": [], "evidencias": [{"id": f"E{i}", "status": s} for i, s in
+                                          enumerate(("oficial", "fonte_unica", "corroborado", "contraditorio",
+                                                     "nao_verificado", "oficial"), 1)]}
+    assert [e["id"] for e in ev.so_oficiais(banco)["evidencias"]] == ["E1", "E6"]
+    with pytest.raises(ev.PesquisaInsuficiente):
+        ev.exigir_suficiente(ev.so_oficiais(banco), 5)

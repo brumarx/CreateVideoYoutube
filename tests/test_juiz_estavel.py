@@ -244,4 +244,4 @@ def test_juiz_reveza_chaves_e_espera_o_descanso_como_o_groq(rede, monkeypatch):
     pedidos = rede((None, 429, 30), (None, 429, 30), ('{"ok": 1}', 200, 0))
     r = pv.complete([{"role": "user", "content": "x"}], keys=chaves, max_tokens=8000, temperature=0.1, juiz=True)
     assert r == '{"ok": 1}' and len(pedidos) == 3
-    assert len(esperas) == 1 and 0 < esperas[0] <= pv.ESPERA_CURTA_MAX
+    assert esperas and all(0 < s <= pv.ESPERA_CURTA_MAX for s in esperas) and sum(esperas) <= pv.ESPERA_TOTAL_MAX

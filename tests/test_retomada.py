@@ -16,7 +16,8 @@ from tests.auditor_falso import AUD
 RAIZ = Path(__file__).resolve().parent.parent
 TEMA = "Como Yakutsk funciona sobre o permafrost"
 FRASES = [f"Em Yakutsk, o fato verificado número {k} vale {k + 10} metros de estaca." for k in range(1, 13)]
-FONTE = {"titulo": "Yakutsk", "url": "https://en.wikipedia.org/wiki/Yakutsk", "trecho": " ".join(FRASES)}
+FONTE = {"titulo": "Yakutsk", "url": "https://www.yakutsk.gov.ru/cidade",  # 24/11: só fonte oficial entra na redação
+          "trecho": " ".join(FRASES)}
 
 
 def _pipeline():

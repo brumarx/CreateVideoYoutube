@@ -816,18 +816,20 @@ def _auditar_redacao(channel, script: dict, banco: dict, topic: str, web_facts: 
 def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes: float = 2.5) -> dict:
     """Banco de evidências do tema (src/evidencias.py), com uma rodada de busca nas lacunas.
     Pesquisa sem base suficiente reprova com o motivo (nunca vira vídeo sobre premissa sem prova)."""
-    from src.evidencias import PesquisaInsuficiente, exigir_suficiente, minimo_para, montar_banco
+    from src.evidencias import PesquisaInsuficiente, exigir_suficiente, minimo_para, montar_banco, so_oficiais
     from src.web_search import search_topic_facts
 
     def buscar(pergunta: str) -> list[dict]:
         return search_topic_facts(pergunta, max_results=3, oficiais=True) or []
+    completo = montar_banco(topic, web_facts, buscar=buscar)
     try:
-        banco = exigir_suficiente(montar_banco(topic, web_facts, buscar=buscar), minimo_para(max_minutes))
+        # 24/11: só evidência oficial e verificada entra na redação; sem o mínimo delas, o tema não vira vídeo
+        banco = exigir_suficiente(so_oficiais(completo), minimo_para(max_minutes))
     except PesquisaInsuficiente as exc:
-        raise ScriptRejected(str(exc)) from exc
-    log.info("[%s] banco de evidências: %d verificadas de %d", job_id,
-             sum(1 for e in banco["evidencias"] if e["status"] in ("oficial", "corroborado", "fonte_unica")),
-             len(banco["evidencias"]))
+        total = len((completo or {}).get("evidencias", []))
+        raise ScriptRejected(f"{exc} — só evidência oficial conta ({total} no banco completo)") from exc
+    log.info("[%s] banco de evidências: %d oficiais e verificadas (de %d no banco completo)", job_id,
+             len(banco["evidencias"]), len((completo or {}).get("evidencias", [])))
     return banco
 
 
