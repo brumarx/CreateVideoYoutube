@@ -32,7 +32,8 @@ tts_voice_weights:
   pt-BR-AntonioNeural: 33
   pt-BR-FranciscaNeural: 33
   pt-BR-ThalitaMultilingualNeural: 0  # 14/11: troca vogais ("plantão" saiu "plantal") e soou estrangeira
-scenes_per_video: 6
+# 24/11: mesmo tempo do Fractal Curioso (2,5 a 5 min, vertical 9:16)
+scenes_per_video: 12
 upload_privacy: "public"
 uploads_per_day: 1
 # valor default só pra quando alguém rodar sem --topic/--long manualmente —
@@ -41,8 +42,10 @@ uploads_per_day: 1
 # run_pipeline.py, branch "botafogo").
 daily_format: "short"
 # pré-jogo: rápido, gancho + contexto + expectativa.
-short_min_minutes: 1.5
-short_max_minutes: 2
+short_min_minutes: 2.5
+short_max_minutes: 5
+formato_pela_duracao: true  # até 3 min é Short; acima, vídeo normal vertical
+formato_acima_do_short: "vertical"
 # pós-jogo: espaço pra cobrir formação, posse de bola, gols e destaques
 # sem virar lista lida às pressas.
 long_min_minutes: 4
