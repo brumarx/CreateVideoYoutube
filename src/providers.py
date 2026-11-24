@@ -540,7 +540,7 @@ _LAST_GROQ_CALL = {"at": 0.0}
 
 def _call_openai_compat(
     endpoint: str, api_key: str, model: str, messages: list[dict], max_tokens: int, temperature: float = 0.8,
-    _fitted: bool = False, _ampliado: bool = False,
+    _fitted: bool = False, _ampliado: bool = False, pensar: bool = False,
 ) -> tuple[str | None, int | None, int]:
     if "api.groq.com" in endpoint:
         _LAST_GROQ_CALL["at"] = time.monotonic()
@@ -560,12 +560,14 @@ def _call_openai_compat(
     if "nemotron" in model:
         # o Nemotron também pensa dentro do max_tokens: o roteiro voltava
         # vazio ou cortado no meio do JSON e o Groq escrevia no lugar (04/11).
-        # Escrita (temperatura alta): sem raciocínio, 3x mais rápido.
-        # Julgamento (checagem de fato, temperatura baixa): pensa, com folga
-        if temperature >= 0.5:
-            payload["chat_template_kwargs"] = {"enable_thinking": False}
-        else:
+        # 24/11: só o JUIZ fixo pensa (com folga). O resto (banco de evidências, auditoria factual,
+        # escrita) sem raciocínio: com ele, 19 de 26 respostas da rodada de Svalbard saíram cortadas
+        # (o raciocínio comia o max_tokens) e cada etapa perdia ~5 min antes de cair no Groq; sem
+        # ele, a auditoria factual levou 14 s em vez de 52, sem corte
+        if pensar:
             payload["max_tokens"] = max_tokens + 4096
+        else:
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
     try:
         resp = httpx.post(
             endpoint,
@@ -573,7 +575,7 @@ def _call_openai_compat(
             json=payload,
             # julgamento (raciocínio ligado, temperatura baixa) passa de 3 min: 21/10 o juiz
             # do job 821 deu timeout aos 180 s e o roteiro morreu sem revisão
-            timeout=(420 if temperature < 0.5 else 180) if "nemotron" in model else 60,
+            timeout=(420 if pensar else 180) if "nemotron" in model else 60,
         )
         m = _TOO_LARGE_RE.search(resp.text) if resp.status_code == 413 else None
         if m and not _fitted:
@@ -584,7 +586,8 @@ def _call_openai_compat(
             fitted = max_tokens - (int(m.group(2)) - int(m.group(1))) - 64
             if max(_MIN_FIT_TOKENS, max_tokens * 3 // 4) <= fitted < max_tokens:
                 log.info("%s (%s): max_tokens %d -> %d pra caber no limite por minuto", endpoint, model, max_tokens, fitted)
-                return _call_openai_compat(endpoint, api_key, model, messages, fitted, temperature, _fitted=True)
+                return _call_openai_compat(endpoint, api_key, model, messages, fitted, temperature, _fitted=True,
+                                           pensar=pensar)
         if resp.status_code != 200:
             log.warning("%s (%s) -> HTTP %s: %s", endpoint, model, resp.status_code, _mascara(resp.text[:200], api_key))
             diag = _diagnostico(endpoint, model, resp.status_code, resp.text, resp.headers, api_key)
@@ -613,7 +616,8 @@ def _call_openai_compat(
             # no provedor PAGO não repete (dobraria o gasto; as regras financeiras não mudam aqui)
             if not _ampliado and maior >= max_tokens * 1.25 and "api.deepseek.com" not in endpoint:
                 log.warning("%s (%s): resposta truncada com max_tokens=%d — de novo com %d", endpoint, model, max_tokens, maior)
-                return _call_openai_compat(endpoint, api_key, model, messages, maior, temperature, _fitted, True)
+                return _call_openai_compat(endpoint, api_key, model, messages, maior, temperature, _fitted, True,
+                                           pensar=pensar)
             log.warning("%s (%s): resposta truncada (max_tokens=%d) — descartada", endpoint, model, max_tokens)
             return None, 200, 0
         if content and _strip_reasoning(content) is None:
@@ -902,7 +906,7 @@ def _julgar_fixo(messages: list[dict], keys: LLMKeys, max_tokens: int, validate:
         api_key = ordem[0]
         _ULTIMO_MODELO[0] = f"{nome}/{modelo}"
         result, status, cooldown = _call_openai_compat(endpoint, api_key, modelo, messages, saida, temperature,
-                                                       _ampliado=True)  # a 2ª tentativa é decidida aqui
+                                                       _ampliado=True, pensar=True)  # a 2ª tentativa é decidida aqui
         if result and (validate is None or validate(result)):
             log.info("juiz fixo %s/%s respondeu (tentativa %d, saída %d)", nome, modelo, tentativa + 1, saida)
             return result

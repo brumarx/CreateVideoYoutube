@@ -25,8 +25,10 @@ def rede(monkeypatch):
     def instalar(*respostas):
         fila = list(respostas)
 
-        def chamar(endpoint, api_key, model, messages, max_tokens, temperature=0.8, _fitted=False, _ampliado=False):
-            pedidos.append({"endpoint": endpoint, "modelo": model, "saida": max_tokens, "ampliado": _ampliado})
+        def chamar(endpoint, api_key, model, messages, max_tokens, temperature=0.8, _fitted=False, _ampliado=False,
+                   pensar=False):
+            pedidos.append({"endpoint": endpoint, "modelo": model, "saida": max_tokens, "ampliado": _ampliado,
+                            "pensar": pensar})
             return fila.pop(0)
         monkeypatch.setattr(pv, "_call_openai_compat", chamar)
         monkeypatch.setattr(pv, "_complete_cascata", lambda *a, **k: pytest.fail("juiz caiu na cascata"))
@@ -209,3 +211,23 @@ def test_faixa_dada_por_uma_fonte_continua_permitida():
 
 def test_anos_seguidos_nao_sao_faixa_de_medida():
     assert rd.faixa_de_fontes_divergentes("Houve retiradas em 2017 e 2019.", [], BANCO) is None
+
+
+def test_so_o_juiz_fixo_pensa_no_nemotron(monkeypatch):
+    # 24/11: com raciocínio, 19 de 26 respostas da rodada de Svalbard saíram cortadas; só o juiz pensa
+    enviados = []
+
+    class _R:
+        status_code = 200
+        text = ""
+        headers = {}
+
+        def json(self):
+            return {"choices": [{"message": {"content": "{}"}, "finish_reason": "stop"}]}
+    monkeypatch.setattr(pv.httpx, "post", lambda url, **kw: enviados.append(kw["json"]) or _R())
+    ep = "https://integrate.api.nvidia.com/v1/chat/completions"
+    pv._call_openai_compat(ep, "k", "nvidia/nemotron-3-ultra-550b-a55b", [{"role": "user", "content": "x"}], 1000, 0.1)
+    pv._call_openai_compat(ep, "k", "nvidia/nemotron-3-ultra-550b-a55b", [{"role": "user", "content": "x"}], 1000, 0.1,
+                           pensar=True)
+    assert enviados[0]["chat_template_kwargs"] == {"enable_thinking": False} and enviados[0]["max_tokens"] == 1000
+    assert "chat_template_kwargs" not in enviados[1] and enviados[1]["max_tokens"] == 1000 + 4096
