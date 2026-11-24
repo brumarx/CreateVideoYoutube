@@ -228,7 +228,7 @@ class ChannelConfig:
     # canal sem pesquisa de tema (motivacional, curiosidades): cada frase com
     # número/data ganha busca na internet pra revisão de fatos ter fonte
     claim_sources: bool = False
-    # 19/11: como o roteiro é feito. "redacao" = banco de evidências + roteirista livre +
+    # 19/11: como o roteiro é feito. "redacao" = banco de evidências + roteiro que só resume as fontes (24/11) +
     # auditoria por categoria (src/evidencias.py, src/redacao.py). Vazio = o modo de lista
     # fechada de fatos com [F#] na frase (src/fatos.py), que segue nos outros canais de fatos.
     modo_roteiro: str = ""

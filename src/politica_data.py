@@ -24,6 +24,7 @@ já usada em todo o resto.
 from __future__ import annotations
 
 import json
+import logging
 import random
 import re
 import unicodedata
@@ -31,6 +32,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+log = logging.getLogger(__name__)
 # o site (politica-br.org) migrou pro Postgres (schema `dados`, sincronizado
 # pelo ETL); o SQLite antigo sai de uso. DSN em ~/.politica.env (POL_PG_DSN)
 PG_ENV_FILE = Path.home() / ".politica.env"
@@ -1317,4 +1319,37 @@ def foto_pessoa_conhecida(texto: str) -> str | None:
                 ).fetchone()
                 if row and row[0]:
                     return row[0]
+    return None
+
+
+MATERIA_DIAS = 7  # matéria mais velha que isso não vira vídeo (o canal fala do que está acontecendo)
+
+
+def materia_task() -> dict | None:
+    """24/11: o vídeo do canal é o RESUMO de um texto publicado no politica-br.org (matéria ou coluna,
+    sem distinção): o mais recente dos últimos MATERIA_DIAS dias ainda não usado. Formato igual ao da
+    matéria do Botafogo ({"noticias": [1 item]}, foto de capa, link pro site). None = sem texto novo
+    (o chamador cai nos rankings/perfis do banco)."""
+    try:
+        with _connect() as conn:
+            linhas = conn.execute(
+                "SELECT id, title, subtitle, slug, body_text, cover_image_url, published_at FROM public.articles "
+                "WHERE status = 'published' AND published_at >= now() - make_interval(days => ?) "
+                "AND length(coalesce(body_text, '')) >= 600 ORDER BY published_at DESC", (MATERIA_DIAS,)).fetchall()
+    except Exception as exc:  # noqa: BLE001 — banco fora: cai nos rankings
+        log.warning("matérias do politica-br.org indisponíveis: %s", exc)
+        return None
+    state = _load_used()
+    usadas = set(state.get("materias", []))
+    for id_, titulo, subtitulo, slug, texto, capa, publicado in linhas:
+        if str(id_) in usadas:
+            continue
+        state["materias"] = sorted(usadas | {str(id_)})
+        _save_used(state)
+        noticia = {"titulo": titulo, "resumo": subtitulo or "", "texto": texto, "veiculo": "Política BR",
+                   "publicado_em": publicado.isoformat()}
+        return {"tipo": "noticias", "titulo": titulo,
+                "facts": {"tipo": "noticias", "noticias": [noticia]},
+                "fotos": [{"url": capa, "credito": "politica-br.org", "noticia": 0}] if capa else [],
+                "fontes": [{"titulo": titulo, "url": f"{SITE_URL}/materias/{slug}"}]}
     return None

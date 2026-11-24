@@ -148,7 +148,7 @@ def test_same_visual_share_separates_different_images():
 # ---------- tts: falas que a voz lia errado ----------
 
 @pytest.mark.parametrize("texto, esperado", [
-    ("Tite alivia a pressão", "Tchitchi alivia"),
+    ("Tite alivia a pressão", "Títchi alivia"),  # 15/11: "tchi" soa como Brasil (src/tts.py)
     ("na zona de descenso", "zona de rebaixamento"),
     ("Chelsea vs Arsenal", "Chelsea contra Arsenal"),
     ("saiu de St. John's", "Saint John's"),

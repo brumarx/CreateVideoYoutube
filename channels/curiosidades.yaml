@@ -216,6 +216,12 @@ topics:
   - "Como a camada de gelo de Lake Vostok preserva um ecossistema isolado no interior da Antártida"
   - "Como o Belo Monte conseguiu gerar energia em uma das regiões mais úmidas e de difícil acesso da Amazônia?"
   - "Por que o Great Pacific Garbage Patch se tornou o maior depósito de lixo plástico flutuante do planeta?"
+  - "Como a Holanda construiu as Delta Works e domou o Mar do Norte após a enchente de 1953"
+  - "Por que o lago Natron na Tanzânia transforma animais em estátuas de pedra?"
+  - "Como a mina Yanacocha, a 4.000 metros nos Andes, virou uma das maiores produtoras de ouro do mundo apesar da altitude extrema e da oposição local"
+  - "Como a cratera de Yamal surgiu do nada na Sibéria e o que ela revela sobre o permafrost"
+  - "Como o Sahara Forest Project cultiva comida no deserto usando apenas água do mar e sol"
+  - "Como Yakutsk, a cidade mais fria do mundo, funciona com edifícios sobre estacas e tubulações acima do solo a -50 °C?"
 prompt_base: >
   Escreva um roteiro envolvente no estilo de canais de curiosidades/histórias
   do YouTube (tipo Reddit stories / fatos incríveis). O ângulo deste canal é
@@ -273,4 +279,4 @@ loja:
   so_se_combinar: true
   excluir_categorias: ["Campanha: um de cada lado"]
 fatos_verificados: true  # 16/11: roteiro de lista fechada de fatos + só sobe revisado (canais sem banco de dados)
-modo_roteiro: redacao  # 19/11: banco de evidências + roteirista livre + auditoria por categoria (src/redacao.py)
+modo_roteiro: redacao  # 19/11: banco de evidências + auditoria por categoria; 24/11: o roteiro só resume as fontes (src/redacao.py)

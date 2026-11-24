@@ -181,7 +181,8 @@ def test_2_prompt_do_escritor_pede_historia_e_nao_ids_no_texto(llm):
     rd.escrever(ChannelConfig.load("curiosidades"), TEMA_988, BANCO, min_minutes=0.01, max_minutes=5, cenas_ref=6,
                 tentativas=1)
     pedido = falso.pedidos[0]
-    assert "CONTAR A MELHOR HISTÓRIA" in pedido and "Não é para percorrer E1, E2, E3" in pedido
+    # 24/11: o escritor RESUME o que as evidências contam, sem liberdade para criar
+    assert "RESUMIR" in pedido and "nada de comparação, causa, conclusão" in pedido
     assert "nunca no texto" in pedido and "[F" not in pedido
 
 
@@ -481,11 +482,13 @@ def test_10b_pipeline_liga_o_modo_redacao_e_mantem_a_producao():
     assert src.index("art_direction(script, channel)") > pos
 
 
-def test_10c_so_o_fractal_esta_no_modo_redacao():
+def test_10c_canais_de_fatos_no_modo_redacao_politica_e_botafogo_fora():
+    # 24/11: o aprendizado do Fractal vale para todos os canais de fatos, menos política e Botafogo
     from src.config import ChannelConfig
-    assert ChannelConfig.load("curiosidades").modo_roteiro == "redacao"
-    assert ChannelConfig.load("motivacional").modo_roteiro == ""
-    assert ChannelConfig.load("aprendervia").modo_roteiro == ""
+    for c in ("curiosidades", "motivacional", "aprendervia"):
+        assert ChannelConfig.load(c).modo_roteiro == "redacao"
+    for c in ("politica", "botafogo"):
+        assert ChannelConfig.load(c).modo_roteiro == ""
 
 
 # ======================================================================= regressão Yakutsk
@@ -660,12 +663,15 @@ def test_escritor_que_insiste_no_64_recebe_o_valor_certo_e_o_numero_nao_chega_ao
     assert [v["problemas_factuais"] > 0 for v in rel["versoes"]] == [True, False]
 
 
-def test_editor_que_insiste_duas_vezes_reprova_o_roteiro(llm):
+def test_editor_que_insiste_duas_vezes_tem_a_frase_cortada_automaticamente(llm):
+    # 24/11: antes reprovava o roteiro inteiro; agora a frase sem evidência sai sozinha e a versão cortada é auditada
     s = rd.de_json(_cenas_64("O inverno já marcou 64 graus negativos."), BANCO_FRIO)
     llm(AUD(8, []), ED((2, [F("O inverno já marcou 64 graus negativos.", evid=["E5"])])),
         ED((2, [F("O inverno já marcou 63 graus negativos.", evid=["E5"])])), AUD(8, []))
-    with pytest.raises(rd.RoteiroReprovado, match="sem evidência depois de 2 edição"):
-        rd.auditar_e_corrigir(s, BANCO_FRIO, TEMA_988)
+    final, rel = rd.auditar_e_corrigir(s, BANCO_FRIO, TEMA_988)
+    texto = " ".join(sc["narration"] for sc in final["scenes"])
+    assert "64 graus" not in texto and "63 graus" not in texto
+    assert rel["versoes"][-1]["origem"] == "corte"
 
 
 def test_conserto_com_valor_exato_e_aceito(llm):
@@ -1575,3 +1581,16 @@ def test_estimativa_nao_entra_dentro_de_nome_com_numero():
     t = "O telescópio entrou na órbita em torno de L2 após 29 dias."
     assert ft.estima_antes(t, {"2", "29"}) == "O telescópio entrou na órbita em torno de L2 após cerca de 29 dias."
     assert ft.estima_antes("O A380 levou 50 pessoas.", {"380"}) == "O A380 levou 50 pessoas."
+
+
+def test_corte_automatico_tira_so_a_frase_reprovada():
+    # 24/11 (Svalbard v6): a frase reprovada sem correção com fonte sai sozinha; o resto fica
+    s = {"title": "t", "scenes": [
+        {"narration": "a b", "frases": [{"texto": "A rocha é fria.", "tipo": "factual", "evidencias": ["E29"]},
+                                        {"texto": "Frase enganosa.", "tipo": "explicativa", "evidencias": ["E29"]}]},
+        {"narration": "c", "frases": [{"texto": "E aí?", "tipo": "narrativa", "evidencias": []},
+                                      {"texto": "Só esta é ruim.", "tipo": "factual", "evidencias": ["E1"]}]}]}
+    cortado = rd.cortar_frases_reprovadas(s, [{"cena": 0, "frase": 1}, {"cena": 1, "frase": 1}])
+    assert [sc["narration"] for sc in cortado["scenes"]] == ["A rocha é fria."]  # cena só com narrativa sai
+    assert rd.cortar_frases_reprovadas(s, [{"cena": None, "frase": None}]) is None  # sem frase apontada: não corta
+    assert rd.cortar_frases_reprovadas(s, []) is None

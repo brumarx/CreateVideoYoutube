@@ -131,7 +131,9 @@ fonte, ex.: "segundo declaração ao TSE" / "segundo dados abertos da
 Câmara"):
 {json.dumps(facts, ensure_ascii=False, separators=(",", ":"))}
 """
-        if _news_count(facts):
+        if _news_count(facts) == 1:
+            facts_block += MATERIA_UNICA
+        elif _news_count(facts):
             facts_block += NEWS_STRUCTURE.format(n=_news_count(facts))
 
     web_facts_block = ""
@@ -306,6 +308,17 @@ ESTRUTURA OBRIGATÓRIA (são {n} notícias SEPARADAS, formato noticiário):
   caracteres), escrita como notícia única: "Júnior Santos Deixa o
   Botafogo", "Justiça multa Textor". Nunca "X notícias", "hoje",
   "notícias do dia" nem lista de assuntos.
+"""
+
+# 24/11: Botafogo e Política — 1 vídeo = 1 matéria escrita no site do canal (botafogo.win /
+# politica-br.org). O roteiro é o RESUMO dessa matéria, sem liberdade para criar.
+MATERIA_UNICA = """
+ESTRUTURA OBRIGATÓRIA (o vídeo é o RESUMO de UMA matéria do site, a única da lista "noticias"):
+- Conte só o que o texto da matéria diz, na ordem que faz sentido para quem ouve: abra com o fato
+  principal da matéria, depois os pontos dela, e feche com o ponto final da matéria.
+- Nada que não esteja no texto da matéria: nenhum número, nome, causa, opinião ou conclusão nova.
+- Todas as cenas têm "noticia": 1. Sem "Primeira notícia" nem contagem de notícias.
+- Título: a manchete da matéria, curta (até 60 caracteres), sem "notícias" nem "hoje".
 """
 
 # título de noticiário genérico: "5 notícias do Botafogo hoje" e "Botafogo

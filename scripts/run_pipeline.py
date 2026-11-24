@@ -941,43 +941,27 @@ def run(
 
         # --fact-label força um tema específico (teste manual/painel) em vez
         # de sortear entre os fetchers.
-        facts = pick_fact_set(fact_label) if fact_label else random_fact_set()
-        if topic is None:
-            topic = facts["tema"]
-    elif channel_name == "botafogo":
-        from src.botafogo_data import daily_portal_task, next_pending_task
+        # 24/11: primeiro o resumo de um texto publicado no politica-br.org (matéria ou coluna); sem texto
+        # novo, os rankings/perfis do banco de sempre
+        from src.politica_data import materia_task
 
-        # Botafogo não joga todo dia — sem prévia ou pós-jogo pendente,
-        # não gera vídeo nenhum hoje (silêncio, não erro; ver
-        # src/botafogo_data.py). O `return` acontece ANTES do `enqueue()`
-        # abaixo, então não cria job nenhum no banco nesses dias.
-        # daily_run chama 2x: "jogo" (prévia/pós-jogo, silêncio sem jogo) e
-        # "portal" (1 vídeo/dia com temas do botafogo.win). Sem a opção
-        # (execução manual): jogo se houver, senão notícias.
-        if botafogo_task == "portal":
-            # longo precisa de mais notícia de verdade pra 4-6min — com
-            # poucas o LLM estica inventando detalhe e a revisão barra
-            task = daily_portal_task(per_video=8 if long_form else 5)
+        materia = None if fact_label else materia_task()
+        if materia:
+            facts = materia["facts"]
+            news_photos = materia["fotos"]
+            news_sources = materia["fontes"]
+            if topic is None:
+                topic = materia["titulo"]
         else:
-            task = next_pending_task(news_fallback=botafogo_task != "jogo")
-        if task is None and botafogo_task == "portal":
-            # 16/11: o vídeo diário do portal não fica sem saída — se o canal ainda não tem vídeo hoje,
-            # faz a prévia do próximo jogo (dados oficiais) em vez de "nada a publicar"
-            from src.botafogo_data import ultimo_recurso_task
+            facts = pick_fact_set(fact_label) if fact_label else random_fact_set()
+            if topic is None:
+                topic = facts["tema"]
+    elif channel_name == "botafogo":
+        # 24/11: 1 vídeo = o resumo de UMA matéria escrita no botafogo.win (a mais recente ainda não usada).
+        # Sem matéria nova, não há vídeo; o pré/pós-jogo da ESPN e as agregadas saíram (pedido do dono)
+        from src.botafogo_data import materia_task
 
-            from contextlib import closing
-
-            from src.db import connect_db
-            from src.orchestrator import DB_PATH
-
-            with closing(connect_db(DB_PATH)) as _c:
-                _tem = _c.execute(
-                    "SELECT 1 FROM jobs WHERE channel = 'botafogo' AND date(updated_at) = date('now') "
-                    "AND status IN ('uploaded', 'ready', 'scripted', 'script_approved', 'rendered')").fetchone()
-            if not _tem:
-                task = ultimo_recurso_task()
-                if task:
-                    log.warning("[botafogo] sem notícia nova — último recurso: %s", task["titulo"])
+        task = materia_task()
         if task is None:
             log.info("[botafogo] nada a publicar (%s)", botafogo_task or "jogo/notícias")
             return

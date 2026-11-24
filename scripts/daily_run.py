@@ -352,7 +352,7 @@ def run_channel(channel_name: str, cfg: dict) -> list[tuple[str, list[str]]]:
         # de sempre, silêncio sem jogo) + 1 por dia com temas do botafogo.win
         # um vídeo por dia no canal: tenta a prévia/pós-jogo; sem jogo (silêncio),
         # cai no tema do botafogo.win. Se já há vídeo do dia, para aqui.
-        for task in ("jogo", "portal"):
+        for task in ("portal",):  # 24/11: só a matéria do botafogo.win (pré/pós-jogo da ESPN saiu)
             if ready or _published_today(channel_name):
                 break
             _run_pipeline(channel_name, ["--botafogo-task", task], task)

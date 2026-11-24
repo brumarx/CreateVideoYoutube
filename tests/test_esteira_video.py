@@ -48,7 +48,8 @@ def test_audio_e_conferido_antes_das_imagens_e_da_montagem():
     checa = PIPELINE.index("audio_problems, audio_names = review_audio_full(")
     assert checa < PIPELINE.index('visual_context = f"Canal: {channel.channel_title}')
     assert checa < PIPELINE.index("concat_scenes(")
-    assert PIPELINE.count("review_audio_full(") == 2  # a checagem e a conferência depois da grafia de fala
+    # a checagem, a conferência depois da grafia de fala e (16/11) a conferência depois de trocar o nome por descrição
+    assert PIPELINE.count("review_audio_full(") == 3
 
 
 # ---------- 3. música sem risco de Content ID

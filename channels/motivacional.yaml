@@ -116,6 +116,12 @@ topics:
   - "Como Paulo Freire transformou 16 anos de exílio político na criação do método de alfabetização mais influente do mundo"
   - "Como Zico superou 3 cirurgias no joelho antes dos 21 anos e virou o maior ídolo do Flamengo"
   - "Como Yane Marques sobreviveu a 2 cirurgias no quadril e 4 anos sem patrocínio para levar o bronze olímpico no pentatlo moderno"
+  - "Como Adhemar Ferreira da Silva treinou sozinho num terreno baldio e virou bicampeão olímpico com recorde mundial"
+  - "Como Oscar Schmidt marcou 49.737 pontos na carreira sem nunca jogar na NBA e virou o maior cestinha da história do basquete"
+  - "Como João Carlos de Oliveira perdeu a perna em acidente, fez 22 cirurgias e quebrou o recorde mundial do salto triplo um ano depois"
+  - "Como Rafaela Silva venceu 4 cirurgias no joelho e conquistou o ouro olímpico: a lição prática de resiliência"
+  - "Como Yasmin Brunet superou 15 anos de transtorno alimentar e ansiedade para se tornar referência de autoaceitação"
+  - "Como Anderson Silva quebrou a perna em 2013, fez 3 cirurgias e voltou a vencer no UFC aos 39 anos"
 prompt_base: >
   Escreva um roteiro motivacional/inspiracional no estilo de canais de
   desenvolvimento pessoal do YouTube. O ângulo deste canal é a HISTÓRIA REAL
@@ -174,4 +180,5 @@ loja:
   so_se_combinar: true
   excluir_categorias: ["Campanha: um de cada lado"]
 fatos_verificados: true  # 16/11: roteiro de lista fechada de fatos + só sobe revisado (canais sem banco de dados)
+modo_roteiro: redacao  # 24/11: mesmo caminho do Fractal — banco de evidências, roteiro que só resume as fontes, auditoria e corte automático (src/redacao.py)
 musica_sem_risco: true  # só faixa sem risco de Content ID

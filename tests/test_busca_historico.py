@@ -336,3 +336,27 @@ def test_prompts_do_escritor_e_do_editor_trazem_a_regra_de_precisao():
         assert termo in rd._REGRA_PRECISAO
     assert "Nunca troque um exagero por outro equivalente" in rd._REGRA_PRECISAO
     assert "divergência não é faixa" in rd._REGRA_PRECISAO_CURTA
+
+
+def test_trava_frequencia_job1008_reprovada_bloqueia_e_sustentada_pela_e38_passa():
+    """Job 1008, cena 5: o "nunca correram risco" (E21, sem sustentação) entrou no histórico como exagero de
+    frequência e a trava recusou a correção "vazamentos recorrentes", que a E38 sustenta ("recurrent minor leaks")."""
+    e21 = _ev("E21", "Fortes chuvas em outubro de 2016 levaram a grande atenção da mídia na primavera de 2017.",
+              "The heavy rainfall in October 2016 led to massive media attention in the spring 2017, and the partners "
+              "decided to re-assure all seed depositors that the seeds in the Vault remained safe")
+    e38 = _ev("E38", "Após 10 anos, o governo implementou melhorias devido a vazamentos menores no túnel no degelo.",
+              "After 10 years of operation, the Norwegian Government decided to implement a number of improvements "
+              "to the facility, due to recurrent minor leaks in the entrance tunnel during the snow melting season")
+    banco = {**BANCO, "evidencias": [e21, e38]}
+    nunca = F("A mídia explodiu em 2017, mas as sementes nunca correram risco.", evid=["E21"])
+    s = {"title": "t", "scenes": [{"narration": nunca["texto"], "frases": [nunca]}]}
+    h: list[dict] = []
+    rd.registrar_historico(h, 1, s, [rd._p("leitura_enganosa", nunca["texto"], 0, 0, "ordem")], banco)
+    assert h[0]["escalas"] == {"frequencia": "nunca"}
+    # 1. a afirmação reprovada, sem sustentação, continua bloqueada (mesma frase com outras palavras)
+    de_novo = F("Em 2017 a mídia explodiu, mas as sementes jamais correram risco.", evid=["E21"])
+    assert "volta o exagero" in (rd.exagero_na_edicao([de_novo], [nunca], 0, banco, h) or "")
+    # 2. a afirmação mais restrita, sustentada pela E38, passa
+    restrita = F("Depois de 10 anos, o governo fez melhorias por causa de vazamentos menores e recorrentes no "
+                 "túnel de entrada durante o degelo.", evid=["E38"])
+    assert rd.exagero_na_edicao([restrita], [nunca], 0, banco, h) is None

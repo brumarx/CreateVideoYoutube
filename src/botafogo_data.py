@@ -498,6 +498,44 @@ def daily_portal_task(per_video: int = PORTAL_NEWS_PER_VIDEO) -> dict | None:
     return portal_news_task(per_video) or news_task()
 
 
+def materia_task(paginas: int = 4, min_texto: int = 600) -> dict | None:
+    """24/11: o vídeo do canal é o resumo de UMA matéria escrita no botafogo.win (a mais recente ainda não
+    usada, com texto de verdade — post de vídeo/"melhores momentos" sem texto não serve). O portal publica
+    ~1 matéria própria por dia no meio de dezenas de agregadas: procura nas primeiras `paginas`. Sem matéria
+    nova, não há vídeo — nada de ESPN nem pré/pós-jogo."""
+    state = _load_state()
+    used = set(state.get("portal_news", []))
+    for pagina in range(1, paginas + 1):
+        try:
+            resp = httpx.get(f"{PORTAL_API}/articles", params={"per_page": 50, "page": pagina}, timeout=_TIMEOUT)
+            resp.raise_for_status()
+            items = resp.json().get("items") or []
+        except Exception as exc:  # noqa: BLE001 — portal fora do ar: sem vídeo hoje
+            log.warning("Portal Botafogo falhou: %s", exc)
+            return None
+        for art in items:
+            if art.get("source_type") != "authored" or str(art["id"]) in used or _outro_botafogo(art):
+                continue
+            try:
+                detail = httpx.get(f"{PORTAL_API}/articles/{art['slug']}", timeout=_TIMEOUT).json()
+                texto = _story_text(detail.get("body_html") or "")
+            except Exception as exc:  # noqa: BLE001
+                log.warning("texto da matéria %s indisponível: %s", art.get("slug"), exc)
+                continue
+            if len(texto) < min_texto:
+                log.info("portal: matéria própria sem texto suficiente (%d caracteres): %s", len(texto), art.get("title"))
+                continue
+            art["_texto"] = texto
+            state["portal_news"] = sorted(used | {str(art["id"])})
+            _remember_titles(state, [art["title"]])
+            _save_state(state)
+            task = _portal_task([art])
+            return {**task, "titulo": art["title"].strip()}
+        if not items:
+            break
+    return None
+
+
 def ultimo_recurso_task() -> dict | None:
     """16/11: dia sem jogo pra cobrir e sem notícia nova no Portal/ESPN (o dia ficou sem vídeo, 927).
     Última saída: "o que está em jogo" no PRÓXIMO jogo do calendário do Portal (ESPN não tinha jogo
@@ -913,7 +951,7 @@ def _is_video_or_promo(art: dict) -> bool:
     return bool(_PROMO_RE.search(art.get("excerpt") or ""))
 
 
-def portal_news_task(per_video: int = PORTAL_NEWS_PER_VIDEO) -> dict | None:
+def portal_news_task(per_video: int = PORTAL_NEWS_PER_VIDEO, so_proprias: bool = False) -> dict | None:
     """Tarefa de notícias a partir do Portal Botafogo (reserva da ESPN): até
     PORTAL_NEWS_PER_VIDEO manchetes recentes, de assuntos diferentes, ainda
     não usadas. Matéria própria do portal (authored) vem com o texto
@@ -943,6 +981,8 @@ def portal_news_task(per_video: int = PORTAL_NEWS_PER_VIDEO) -> dict | None:
         # post de live/vídeo de canal (ex.: "LIVE DO SETOR") não é notícia
         if not published or str(art["id"]) in used or len(title) < 25 or "live" in title.lower().split():
             continue
+        if so_proprias and art.get("source_type") != "authored":
+            continue  # 24/11: o vídeo é o resumo de uma matéria ESCRITA no botafogo.win, não agregada
         if _outro_botafogo(art):
             log.info("portal: pulando notícia de outro Botafogo: %s", title)
             continue
@@ -1049,7 +1089,7 @@ def _portal_task(escolhidas: list[dict]) -> dict:
     noticias, fotos, fontes = [], [], []
     for art in escolhidas:
         texto = art.get("_texto") or ""
-        if art.get("source_type") == "authored":
+        if art.get("source_type") == "authored" and not texto:
             try:
                 detail = httpx.get(f"{PORTAL_API}/articles/{art['slug']}", timeout=_TIMEOUT).json()
                 texto = _story_text(detail.get("body_html") or "")

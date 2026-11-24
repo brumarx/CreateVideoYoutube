@@ -809,18 +809,17 @@ Tema: {tema}
 
 {material}
 
-Sua tarefa: ler, entender e CONTAR A MELHOR HISTÓRIA possível sobre o tema com este material.
-Não é para percorrer E1, E2, E3 transformando cada item numa cena. Escolha o fato mais
-surpreendente para abrir, crie curiosidade, organize uma progressão (o que é → como funciona →
-por que → consequência ou virada), explique o difícil com palavras simples, use comparações que
-ajudem a imaginar a escala, transições naturais e, quando o assunto permitir, suspense. Termine
-entregando a resposta da curiosidade criada no começo. Nada de relatório, lista ou tom de IA.
+Sua tarefa: RESUMIR, como história falada, o que as evidências contam. Você não cria conteúdo:
+escolhe as evidências, a ordem, e diz cada uma com palavras simples (sem colar a fonte).
+- Frase factual/explicativa diz só o que o trecho citado diz: nada de comparação, causa, conclusão
+  ou frase de efeito que ele não traga.
+- Narrativa só para a pergunta da abertura, a pergunta final e ligações curtas ("E", "Mas").
+- Cada fato UMA vez; a abertura não anuncia o que vem depois; o fim responde à pergunta.
 
 LIMITES (inegociáveis):
 - Toda afirmação sobre o mundo (número, data, lugar, técnica, causa, recorde, superlativo) vem
   das evidências. Nenhum fato novo disfarçado de narrativa; nenhuma relação de causa que as
   evidências não sustentem; nenhuma resposta às perguntas que as fontes não respondem.
-- Comparação e analogia só com o que as evidências dizem (sem medida inventada).
 - Evidência "contraditorio": não escolha um valor — diga os dois e que as fontes divergem, ou não use.
 - "estimado": diga como aproximação ("cerca de"). Valor medido/exato fica EXATO, mesmo de fonte única.
 - "hipotese": diga como hipótese ("acredita-se", "uma das explicações"), nunca como fato.
@@ -1035,10 +1034,13 @@ GRAVIDADES = GRAVIDADES_BLOQUEIAM + ("ambiguidade", "improvavel", "estilo")
 TIPOS_ENGANO = ("combinacao", "comparacao", "sujeito_trocado", "parcial_como_total", "causal", "sentido_alterado", "ordem")
 
 _PROMPT_EDITOR = """Você é o EDITOR do vídeo (a checagem de fatos é feita à parte: aqui só a HISTÓRIA).
-Tema: {tema}. Título: "{titulo}".
+Título: "{titulo}".
 Narração, cena por cena:
 {cenas}
 
+Avalie SÓ o que está escrito neste roteiro: como ele conta (ordem, ligação entre cenas, repetição, clareza,
+abertura, conclusão). NÃO cobre fatos, detalhes, acontecimentos ou etapas que não estão no roteiro — o
+roteiro só pode dizer o que as fontes verificadas sustentam, e o que falta não é defeito da história.
 Dê de 0 a 10 a cada critério e aponte os problemas com as cenas onde estão. Seja exigente: 8 ou mais só
 para o que alguém assistiria até o fim.
 - "abertura": prende a atenção logo no começo;
@@ -1673,6 +1675,7 @@ def exagero_na_edicao(frases: list[dict], originais: list[dict], cena: int, banc
         ids = [x for x in f.get("evidencias") or [] if x in evs]
         presentes = _escalas_presentes(f["texto"])
         nums = numeros(extenso_para_algarismos(f["texto"]))
+        sem = marcadores_sem_suporte(f["texto"], [evs[x] for x in ids])
         for h in historico:
             if h["tipo"].startswith("editorial:"):
                 continue
@@ -1681,7 +1684,9 @@ def exagero_na_edicao(frases: list[dict], originais: list[dict], cena: int, banc
                 continue
             # só a escala que a evidência NÃO sustentava: "permafrost natural como reserva" é fato; o
             # "naturalmente congeladas" reprovado fica para o histórico no pedido (a palavra não distingue os dois)
-            volta = set(h["escalas"]) & presentes
+            # 24/11 (job 1008): a escala só VOLTA se as evidências da frase nova também não a sustentam — o
+            # "nunca correram risco" (E21) reprovado bloqueava "vazamentos recorrentes" (E38: "recurrent minor leaks")
+            volta = set(h["escalas"]) & presentes & set(sem)
             if volta:
                 c = sorted(volta)[0]
                 return (f"volta o exagero reprovado na v{h['versao']} ({c}): \"{f['texto'][:120]}\" — a frase "
@@ -1693,7 +1698,6 @@ def exagero_na_edicao(frases: list[dict], originais: list[dict], cena: int, banc
                     and set(h["numeros"]) <= nums and not _DIVERGENCIA_DITA.search(f["texto"])):
                 return (f"volta a combinação de números {', '.join(h['numeros'])} reprovada na v{h['versao']} como "
                         f"{h['tipo'].replace('_', ' ')}: diga a divergência como divergência ou use um valor só")
-        sem = marcadores_sem_suporte(f["texto"], [evs[x] for x in ids])
         novos = {c: w for c, w in sem.items() if c not in cats_antigas}
         if novos:
             c, w = next(iter(novos.items()))
@@ -2429,6 +2433,20 @@ def auditar_e_corrigir(script: dict, banco: dict, topic: str, *, web_facts: list
             nova = registrar(s3, p3, q3, "composicao", trocadas, base_n)
             nova["origem_das_cenas"] = origem_cenas
             final = escolher()
+    if final is None:
+        # 24/11 (Svalbard v6): a frase reprovada cuja correção não tem fonte SAI do roteiro, sozinha — em vez de
+        # reprovar o vídeo inteiro por uma frase. Uma auditoria completa da versão cortada decide.
+        melhor = max((x for x in versoes if not x.get("substituida")), key=chave_selecao, default=None)
+        cortado = cortar_frases_reprovadas(melhor["_script"], melhor["problemas"]) if melhor else None
+        curto = roteiro_insuficiente(cortado, min_palavras) if cortado else None
+        if cortado and not curto:
+            log.info("corte automático: %d frase(s) reprovada(s) saem da versão %d — auditoria completa",
+                     len(melhor["problemas"]), melhor["versao"])
+            s4, p4, q4 = _auditar_versao(cortado, banco, topic, previas)
+            registrar(s4, p4, q4, "corte", [], melhor["versao"])
+            final = escolher()
+        elif melhor:
+            log.warning("corte automático não aplicado: %s", curto or "problema sem frase identificada")
     resumo = ("versao", "origem", "cenas_modificadas", "hash", "palavras", "de_versao", "aprovado", "coerencia",
               "nao_julgada", "alertas",
               "frases_julgadas", "frases_reaproveitadas", "reauditada", "reauditada_de", "substituida", "origem_das_cenas")
@@ -2509,6 +2527,22 @@ def conferencia_final(script: dict, banco: dict, topic: str = "") -> dict:
         frases = [f for j, f in enumerate(sc["frases"]) if (i, j) not in tirar]
         if frases:
             cenas.append({**sc, "frases": frases, "narration": " ".join(f["texto"] for f in frases)})
+    return {**script, "scenes": cenas}
+
+
+def cortar_frases_reprovadas(script: dict, problemas: list[dict]) -> dict | None:
+    """Tira do roteiro as frases apontadas pelos problemas (cena, frase). None se algum problema não aponta uma
+    frase, se não há o que cortar ou se o roteiro ficaria sem cena. Cena que fica vazia sai."""
+    alvo = {(p.get("cena"), p.get("frase")) for p in problemas}
+    if not alvo or any(not isinstance(c, int) or not isinstance(f, int) for c, f in alvo):
+        return None
+    cenas = []
+    for i, sc in enumerate(script.get("scenes") or []):
+        frases = [f for k, f in enumerate(sc.get("frases") or []) if (i, k) not in alvo]
+        if any(f.get("tipo") != "narrativa" for f in frases):
+            cenas.append({**sc, "frases": frases, "narration": " ".join(f["texto"] for f in frases)})
+    if not cenas or sum(len(sc["frases"]) for sc in cenas) == sum(len(sc.get("frases") or []) for sc in script["scenes"]):
+        return None
     return {**script, "scenes": cenas}
 
 
