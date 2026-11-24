@@ -227,6 +227,8 @@ def _load_channels() -> list[dict]:
                 "long_max_minutes": cfg.get("long_max_minutes", 20),
                 "daily_format": cfg.get("daily_format", "short"),
                 "weekly_long": cfg.get("longo_semanal", ""),
+                "regime": ("semanal" if cfg.get("longo_semanal") and cfg.get("daily_format", "short") == "short"
+                           else cfg.get("daily_format", "short")),
                 "voices": _voice_options(cfg.get("tts_voice_weights", {})),
                 # política no formato curto ignora `topics` (lista acima) e
                 # sorteia um destes ~20 fatos reais do banco de transparência
@@ -676,6 +678,7 @@ def index():
         perf=performance_view(), system=system_view(), paid=_paid_view(), aprendizado=licoes_painel(),
     # Trending topics monitor
     trending=_load_trending_data(),
+    weekdays=__import__("src.script_archive", fromlist=["WEEKDAYS"]).WEEKDAYS,
     )
 
 
@@ -702,12 +705,25 @@ def save_duration(channel: str):
         else:
             text = f"{replacement}\n{text}"
 
-    daily_format = request.form.get("daily_format", "")
+    # 24/11: regime do canal — só curtos, só longos, ou curtos + 1 longo por semana (no dia escolhido)
+    from src.script_archive import WEEKDAYS
+
+    regime = request.form.get("regime", "")
+    daily_format = {"short": "short", "long": "long", "semanal": "short"}.get(regime) or request.form.get("daily_format", "")
     if daily_format in ("short", "long"):
         pattern = r"^daily_format:.*$"
         replacement = f'daily_format: "{daily_format}"'
         if re.search(pattern, text, flags=re.MULTILINE):
             text = re.sub(pattern, replacement, text, count=1, flags=re.MULTILINE)
+        else:
+            text = f"{replacement}\n{text}"
+    if regime in ("short", "long", "semanal"):
+        dia = request.form.get("dia_longo", "") if regime == "semanal" else ""
+        if regime == "semanal" and dia not in WEEKDAYS:
+            dia = "sábado"
+        replacement = f'longo_semanal: "{dia}"'
+        if re.search(r"^longo_semanal:.*$", text, flags=re.MULTILINE):
+            text = re.sub(r"^longo_semanal:.*$", replacement, text, count=1, flags=re.MULTILINE)
         else:
             text = f"{replacement}\n{text}"
 

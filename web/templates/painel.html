@@ -354,12 +354,21 @@
 
       <form class="section" method="post" action="{{ url_for('save_duration', channel=c.name) }}">
         <h3>Formato e duração</h3>
-        <label class="full">Formato do vídeo diário
-          <select name="daily_format">
-            <option value="short" {{ "selected" if c.daily_format == "short" }}>Curto (vertical, Shorts)</option>
-            <option value="long" {{ "selected" if c.daily_format == "long" }}>Longo (16:9)</option>
-          </select>
-        </label>
+        <div class="fields">
+          <label>Regime do canal
+            <select name="regime">
+              <option value="short" {{ "selected" if c.regime == "short" }}>Só curtos</option>
+              <option value="semanal" {{ "selected" if c.regime == "semanal" }}>Curtos + 1 longo por semana</option>
+              <option value="long" {{ "selected" if c.regime == "long" }}>Só longos</option>
+            </select>
+          </label>
+          <label>Dia do longo semanal
+            <select name="dia_longo">
+              {% for d in weekdays %}<option value="{{ d }}" {{ "selected" if c.weekly_long == d }}>{{ d }}</option>{% endfor %}
+            </select>
+          </label>
+        </div>
+        <p class="hint" style="margin:6px 0 0;">Curto: vertical 9:16 (até 3 min vira Short; acima, vídeo normal vertical). Longo: 16:9. O dia só vale em "Curtos + 1 longo por semana".</p>
         <div class="fields" style="margin-top:8px;">
           <label>Curto, mínimo (min)<input type="number" step="0.5" min="0.5" name="short_min_minutes" value="{{ c.short_min_minutes }}"></label>
           <label>Curto, máximo (min)<input type="number" step="0.5" min="0.5" name="short_max_minutes" value="{{ c.short_max_minutes }}"></label>
