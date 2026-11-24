@@ -898,9 +898,19 @@ def _julgar_fixo(messages: list[dict], keys: LLMKeys, max_tokens: int, validate:
     rotator = _rotator_for(chaves)
     saida = min(max_tokens, JUIZ_SAIDA_MAX)
     motivos = []
-    for tentativa in range(JUIZ_TENTATIVAS):
+    tentativa, esperado = 0, 0.0
+    while tentativa < JUIZ_TENTATIVAS:
         ordem = [k for k in rotator.order() if rotator.ate(k, modelo) <= time.time()]
         if not ordem:
+            # 24/11: como na cascata (Groq): todas as chaves do juiz descansando → espera a primeira voltar,
+            # dentro dos mesmos tetos; só desiste se o descanso for longo
+            volta = min(rotator.ate(k, modelo) for k in chaves)
+            espera = volta - time.time() + 1
+            if espera <= ESPERA_CURTA_MAX and esperado + espera <= ESPERA_TOTAL_MAX:
+                log.warning("juiz fixo: todas as %d chave(s) em descanso — esperando %.0f s", len(chaves), espera)
+                time.sleep(max(espera, 0))
+                esperado += max(espera, 0)
+                continue
             motivos.append("todas as chaves do juiz em descanso")
             break
         api_key = ordem[0]
@@ -910,15 +920,20 @@ def _julgar_fixo(messages: list[dict], keys: LLMKeys, max_tokens: int, validate:
         if result and (validate is None or validate(result)):
             log.info("juiz fixo %s/%s respondeu (tentativa %d, saída %d)", nome, modelo, tentativa + 1, saida)
             return result
+        if not result and status in (429, 503):
+            # 24/11: limite da chave não é resposta do juiz — a chave descansa e a próxima (ou a mesma, depois
+            # do descanso) tenta, sem gastar uma das JUIZ_TENTATIVAS
+            rotator.rest_model(api_key, modelo, cooldown or 60)
+            motivos.append(f"HTTP {status} numa chave (descansa {cooldown or 60} s)")
+            continue
+        tentativa += 1
         if result:
-            motivos.append(f"resposta inválida (tentativa {tentativa + 1})")
+            motivos.append(f"resposta inválida (tentativa {tentativa})")
         elif status == 200:
-            motivos.append(f"resposta cortada com saída {saida} (tentativa {tentativa + 1})")
+            motivos.append(f"resposta cortada com saída {saida} (tentativa {tentativa})")
             saida = min(saida * 2, JUIZ_SAIDA_MAX)
         else:
-            motivos.append(f"HTTP {status} (tentativa {tentativa + 1})")
-            if status in (429, 503) and cooldown:
-                rotator.rest_model(api_key, modelo, cooldown)
+            motivos.append(f"HTTP {status} (tentativa {tentativa})")
     log.warning("juiz fixo %s/%s sem resposta válida: %s — avaliação NÃO JULGADA (nenhum outro modelo no lugar)",
                 nome, modelo, "; ".join(motivos))
     raise JuizSemResposta(f"juiz {nome}/{modelo} sem resposta válida: " + "; ".join(motivos))

@@ -231,3 +231,17 @@ def test_so_o_juiz_fixo_pensa_no_nemotron(monkeypatch):
                            pensar=True)
     assert enviados[0]["chat_template_kwargs"] == {"enable_thinking": False} and enviados[0]["max_tokens"] == 1000
     assert "chat_template_kwargs" not in enviados[1] and enviados[1]["max_tokens"] == 1000 + 4096
+
+
+def test_juiz_reveza_chaves_e_espera_o_descanso_como_o_groq(rede, monkeypatch):
+    # 24/11: 429 não gasta tentativa — a chave descansa, a outra tenta; todas descansando, espera e volta
+    from src.config import LLMKeys
+    chaves = LLMKeys(nvidia=["nvapi-reveza-1", "nvapi-reveza-2"])  # chaves novas: rotação sem descanso herdado
+    esperas = []
+    agora = [1000.0]
+    monkeypatch.setattr(pv.time, "time", lambda: agora[0])
+    monkeypatch.setattr(pv.time, "sleep", lambda s: (esperas.append(s), agora.__setitem__(0, agora[0] + s)))
+    pedidos = rede((None, 429, 30), (None, 429, 30), ('{"ok": 1}', 200, 0))
+    r = pv.complete([{"role": "user", "content": "x"}], keys=chaves, max_tokens=8000, temperature=0.1, juiz=True)
+    assert r == '{"ok": 1}' and len(pedidos) == 3
+    assert len(esperas) == 1 and 0 < esperas[0] <= pv.ESPERA_CURTA_MAX
