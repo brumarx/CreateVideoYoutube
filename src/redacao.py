@@ -863,7 +863,9 @@ _PROMPT_FRASES = """Tema: {tema}
 Para CADA evidência abaixo, escreva UMA frase falada em português do Brasil (até 30 palavras) que diga o que
 o TRECHO da fonte diz — pode dizer MENOS, nunca MAIS. Proibido acrescentar fato, causa, consequência, adjetivo
 de valor, comparação, generalização ou conclusão que o trecho não traga. Frase simples, natural de ouvir, sem
-citar o id. Trecho com dois fatos importantes: até 2 frases.
+citar o id. Trecho com dois fatos importantes: até 2 frases. As frases vão ser lidas em sequência num vídeo:
+NÃO comece pelo nome do assunto ("O cofre…", "O túnel…") — comece pelo dado mais interessante do trecho
+(o número, o lugar, quem fez, quando), e varie o começo de uma frase para outra.
 REGRAS DE PRECISÃO (inegociáveis):
 - Evidência "contraditória": diga os dois valores e que as fontes divergem, ou não escreva frase.
 - "estimativa": diga como aproximação ("cerca de"). Valor medido/exato fica EXATO, mesmo de fonte única.
@@ -888,9 +890,12 @@ Responda SÓ JSON: {{"decisoes": [{{"n": 1, "decisao": "sustentada", "o_que_exce
 
 _PROMPT_MONTAGEM = """Você monta o roteiro de um vídeo do canal "{canal}" (YouTube, português do Brasil). Tema: {tema}
 Você NÃO escreve fatos. Os fatos são as FRASES PRONTAS abaixo, já conferidas contra as fontes oficiais: você
-ESCOLHE quais entram, pelo código (F1, F2...), e a ORDEM que conta a melhor história. Pode acrescentar só
-frases NARRATIVAS curtas (até 12 palavras) que não afirmam nada sobre o mundo: a pergunta da abertura, ligações
-("Mas tem um detalhe.", "E por quê?") e a pergunta final ao público. Sem número, nome próprio ou fato nelas.
+ESCOLHE quais entram, pelo código (F1, F2...), e a ORDEM que conta a melhor história. Entre os fatos, frases
+NARRATIVAS curtas (até 12 palavras) fazem a história andar: a pergunta da abertura, uma pergunta ou ligação a
+cada um ou dois fatos ("E por que tão longe?", "Mas tem um detalhe.", "Agora, o mais curioso:") e a pergunta
+final ao público. Narrativa é SÓ pergunta ou transição — nunca afirmação ("A transparência é total" afirma:
+proibido) — e sem número, nome próprio ou fato. Prefira os fatos que fazem história (o que aconteceu, por que
+ali, como funciona) aos institucionais (quem administra, portal, acordos); não precisa usar todas as frases.
 História: abra com o fato mais curioso e a pergunta do tema; depois o que é, como funciona, por que, o que já
 aconteceu; feche respondendo a pergunta com uma frase da lista. Cada fato UMA vez; não anuncie no começo o que
 vai contar depois; datas só as que mudam a história (sem linha do tempo). Entre {cenas_min} e {cenas_max} cenas,
@@ -1007,7 +1012,8 @@ def escrever(channel, topic: str, banco: dict, *, min_minutes: float, max_minute
     nomes = _nomes_conhecidos({"scenes": [{"narration": f["texto"], "frases": [
         {"texto": f["texto"], "tipo": "factual", "evidencias": [f["id"]]}]} for f in frases]}, topic)
     plano_txt = (f"PLANO: pergunta da abertura: {plano['angulo'].get('pergunta', '')} | resposta da conclusão: "
-                 f"{plano['angulo'].get('resposta', '')}") if plano else ""
+                 f"{plano['angulo'].get('resposta', '')}\nBlocos: "
+                 + " → ".join(str(b.get("funcao", "")) for b in plano["blocos"])) if plano else ""
     pedido = _PROMPT_MONTAGEM.format(
         canal=getattr(channel, "channel_title", "") or channel.name, tema=topic, plano=plano_txt,
         frases="\n".join(f"{f['ref']} [{f['id']}] {f['texto']}" for f in frases),

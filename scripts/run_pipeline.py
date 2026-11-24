@@ -826,7 +826,12 @@ def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes:
         web_facts = fontes_dos_sites_oficiais(topic, dominios) + marcar_oficiais(web_facts, dominios)
 
     def buscar(pergunta: str) -> list[dict]:
-        return marcar_oficiais(search_topic_facts(pergunta, max_results=3, oficiais=True) or [], dominios)
+        # 24/11: a pergunta da história (lacuna) é buscada também DENTRO dos sites oficiais do assunto — a retirada
+        # do ICARDA está no seedvault.no, não nas páginas institucionais que a primeira busca trouxe
+        achados = search_topic_facts(pergunta, max_results=3, oficiais=True) or []
+        for d in dominios[:2]:
+            achados += search_topic_facts(f"site:{d} {pergunta}", max_results=2) or []
+        return marcar_oficiais(achados, dominios)
     completo = montar_banco(topic, web_facts, buscar=buscar)
     try:
         # 24/11: só evidência oficial e verificada entra na redação; sem o mínimo delas, o tema não vira vídeo

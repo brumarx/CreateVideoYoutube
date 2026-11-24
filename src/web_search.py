@@ -652,8 +652,12 @@ def fontes_dos_sites_oficiais(query: str, dominios: list[str], por_site: int = 3
     titulos = _article_titles(query)
     assunto = (titulos.get("en") or titulos.get("pt") or [query])[0]
     achados: list[dict] = []
-    for d in dominios[:5]:
-        for f in search_topic_facts(f"site:{d} {assunto}", max_results=por_site) or []:
+    # o site principal (o do próprio projeto) também pela história e pelos fatos: a página institucional não
+    # traz o que aconteceu (Svalbard: a retirada do ICARDA estava na página de história do seedvault.no)
+    consultas = [(d, f"site:{d} {assunto}") for d in dominios[:5]]
+    consultas += [(d, f"site:{d} {assunto} {extra}") for d in dominios[:2] for extra in ("history", "facts")]
+    for d, consulta in consultas:
+        for f in search_topic_facts(consulta, max_results=por_site) or []:
             if e_site_oficial(f.get("url", ""), [d]) and f.get("url") not in {a.get("url") for a in achados}:
                 achados.append({**f, "oficial": True})
     log.info("páginas dos sites oficiais para %r: %d", query[:60], len(achados))
