@@ -662,3 +662,56 @@ def fontes_dos_sites_oficiais(query: str, dominios: list[str], por_site: int = 3
                 achados.append({**f, "oficial": True})
     log.info("páginas dos sites oficiais para %r: %d", query[:60], len(achados))
     return achados
+
+
+_PALAVRAS_HISTORIA = ("history", "historia", "histoire", "about", "sobre", "faq", "news", "nyheter", "noticias",
+                      "facts", "timeline", "milestone", "how", "works", "funciona", "press", "deposit", "withdraw")
+
+
+def paginas_dos_sites_oficiais(query: str, dominios: list[str], por_site: int = 6) -> list[dict]:
+    """24/11: o buscador devolve páginas diferentes a cada vez (Svalbard: 10 páginas oficiais numa rodada, 3 na
+    outra). Aqui a página inicial de cada site oficial é aberta e os links INTERNOS mais ligados ao assunto e à
+    história (história, sobre, notícias, perguntas frequentes) são seguidos — sem buscador, mesmo resultado
+    toda vez. Devolve as páginas já marcadas oficiais, com o trecho que mais fala do tema."""
+    from concurrent.futures import ThreadPoolExecutor
+    from urllib.parse import urljoin
+    titulos = _article_titles(query)
+    assunto = " ".join((titulos.get("en") or [])[:1] + (titulos.get("pt") or [])[:1]) or query
+    chaves = _keywords(assunto) | _keywords(query)
+    ua = {"User-Agent": "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128 Safari/537.36"}
+
+    def links_do_site(d: str) -> list[str]:
+        try:
+            resp = httpx.get(f"https://{d}/", timeout=12, follow_redirects=True, headers=ua)
+            resp.raise_for_status()
+        except Exception as exc:  # noqa: BLE001 — site fora: fica sem
+            log.info("site oficial %s indisponível: %s", d, exc)
+            return []
+        vistos: dict[str, int] = {}
+        for href, texto in re.findall(r'<a\s[^>]*href="([^"#]+)"[^>]*>(.*?)</a>', resp.text, re.S | re.I):
+            url = urljoin(str(resp.url), href.strip())
+            if not e_site_oficial(url, [d]) or re.search(r"\.(jpg|jpeg|png|gif|svg|zip|mp4)(\?|$)", url, re.I):
+                continue
+            rotulo = re.sub(r"<[^>]+>", " ", texto) + " " + url.replace("-", " ").replace("/", " ")
+            nota = 2 * len(chaves & _keywords(rotulo)) + sum(1 for p in _PALAVRAS_HISTORIA if p in dobrar_simples(rotulo))
+            if nota:
+                vistos[url] = max(nota, vistos.get(url, 0))
+        return [str(resp.url)] + sorted(vistos, key=lambda u: -vistos[u])[:por_site]
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        urls = list(dict.fromkeys(u for lista in pool.map(links_do_site, dominios[:4]) for u in lista))
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        textos = list(pool.map(_page_text, urls))
+    paginas = []
+    for url, texto in zip(urls, textos):
+        trecho = _best_passage(texto, chaves, TRECHO_FATOS, True) if texto else ""
+        if len(trecho) >= 200:
+            paginas.append({"titulo": url.rstrip("/").rsplit("/", 1)[-1] or url, "url": url, "trecho": trecho,
+                            "oficial": True})
+    log.info("páginas abertas direto nos sites oficiais para %r: %d de %d", query[:60], len(paginas), len(urls))
+    return paginas
+
+
+def dobrar_simples(texto: str) -> str:
+    import unicodedata
+    return unicodedata.normalize("NFKD", texto.lower()).encode("ascii", "ignore").decode()

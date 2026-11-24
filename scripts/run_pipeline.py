@@ -817,13 +817,17 @@ def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes:
     """Banco de evidências do tema (src/evidencias.py), com uma rodada de busca nas lacunas.
     Pesquisa sem base suficiente reprova com o motivo (nunca vira vídeo sobre premissa sem prova)."""
     from src.evidencias import PesquisaInsuficiente, exigir_suficiente, minimo_para, montar_banco, so_oficiais
-    from src.web_search import fontes_dos_sites_oficiais, marcar_oficiais, search_topic_facts, sites_oficiais
+    from src.web_search import (fontes_dos_sites_oficiais, marcar_oficiais, paginas_dos_sites_oficiais,
+                                search_topic_facts, sites_oficiais)
 
     # 24/11: o site oficial do assunto (e o de quem o opera/possui/mantém), pela Wikidata, conta como fonte
     # oficial — e as páginas dele entram no banco antes de tudo
     dominios = sites_oficiais(topic)
     if dominios:
-        web_facts = fontes_dos_sites_oficiais(topic, dominios) + marcar_oficiais(web_facts, dominios)
+        diretas = paginas_dos_sites_oficiais(topic, dominios)
+        urls = {f["url"] for f in diretas}
+        web_facts = diretas + [f for f in fontes_dos_sites_oficiais(topic, dominios) if f["url"] not in urls] \
+            + marcar_oficiais(web_facts, dominios)
 
     def buscar(pergunta: str) -> list[dict]:
         # 24/11: a pergunta da história (lacuna) é buscada também DENTRO dos sites oficiais do assunto — a retirada
