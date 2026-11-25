@@ -813,6 +813,9 @@ def _auditar_redacao(channel, script: dict, banco: dict, topic: str, web_facts: 
     return script
 
 
+MIN_PAGINAS_OFICIAIS = 6
+
+
 def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes: float = 2.5) -> dict:
     """Banco de evidências do tema (src/evidencias.py), com uma rodada de busca nas lacunas.
     Pesquisa sem base suficiente reprova com o motivo (nunca vira vídeo sobre premissa sem prova)."""
@@ -828,6 +831,14 @@ def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes:
         urls = {f["url"] for f in diretas}
         web_facts = diretas + [f for f in fontes_dos_sites_oficiais(topic, dominios) if f["url"] not in urls] \
             + marcar_oficiais(web_facts, dominios)
+        oficiais = [f for f in web_facts if f.get("oficial")]
+        # 25/11 (Svalbard 1015): só evidência oficial entra no roteiro, mas a Wikipédia e a Grokipedia ocupavam os
+        # lotes da extração (−18 °C e a página da instalação ficaram de fora) e ainda punham fato oficial em
+        # "contraditório" (fonte primária manda). Com páginas oficiais bastantes, só elas são lidas
+        if len(oficiais) >= MIN_PAGINAS_OFICIAIS:
+            log.info("[%s] %d página(s) oficial(is): a extração lê só elas (%d de outras fontes ficam fora)",
+                     job_id, len(oficiais), len(web_facts) - len(oficiais))
+            web_facts = oficiais
 
     def buscar(pergunta: str) -> list[dict]:
         # 24/11: a pergunta da história (lacuna) é buscada também DENTRO dos sites oficiais do assunto — a retirada

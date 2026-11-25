@@ -665,7 +665,8 @@ def fontes_dos_sites_oficiais(query: str, dominios: list[str], por_site: int = 3
 
 
 _PALAVRAS_HISTORIA = ("history", "historia", "histoire", "about", "sobre", "faq", "news", "nyheter", "noticias",
-                      "facts", "timeline", "milestone", "how", "works", "funciona", "press", "deposit", "withdraw")
+                      "facts", "timeline", "milestone", "how", "works", "funciona", "press", "deposit", "withdraw",
+                      "facility", "building", "construction", "tunnel", "design", "operations", "seeds", "fakta")
 
 
 def paginas_dos_sites_oficiais(query: str, dominios: list[str], por_site: int = 6) -> list[dict]:
@@ -680,6 +681,16 @@ def paginas_dos_sites_oficiais(query: str, dominios: list[str], por_site: int = 
     chaves = _keywords(assunto) | _keywords(query)
     ua = {"User-Agent": "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128 Safari/537.36"}
 
+    def pontuar(html: str, base: str, d: str, vistos: dict[str, int]) -> None:
+        for href, texto in re.findall(r'<a\s[^>]*href="([^"#]+)"[^>]*>(.*?)</a>', html, re.S | re.I):
+            url = urljoin(base, href.strip())
+            if not e_site_oficial(url, [d]) or re.search(r"\.(jpg|jpeg|png|gif|svg|zip|mp4|pdf)(\?|$)", url, re.I):
+                continue
+            rotulo = re.sub(r"<[^>]+>", " ", texto) + " " + url.replace("-", " ").replace("/", " ")
+            nota = 2 * len(chaves & _keywords(rotulo)) + sum(1 for p in _PALAVRAS_HISTORIA if p in dobrar_simples(rotulo))
+            if nota:
+                vistos[url] = max(nota, vistos.get(url, 0))
+
     def links_do_site(d: str) -> list[str]:
         try:
             resp = httpx.get(f"https://{d}/", timeout=12, follow_redirects=True, headers=ua)
@@ -687,16 +698,22 @@ def paginas_dos_sites_oficiais(query: str, dominios: list[str], por_site: int = 
         except Exception as exc:  # noqa: BLE001 — site fora: fica sem
             log.info("site oficial %s indisponível: %s", d, exc)
             return []
+        inicio = str(resp.url)
         vistos: dict[str, int] = {}
-        for href, texto in re.findall(r'<a\s[^>]*href="([^"#]+)"[^>]*>(.*?)</a>', resp.text, re.S | re.I):
-            url = urljoin(str(resp.url), href.strip())
-            if not e_site_oficial(url, [d]) or re.search(r"\.(jpg|jpeg|png|gif|svg|zip|mp4)(\?|$)", url, re.I):
+        pontuar(resp.text, inicio, d, vistos)
+        # 25/11 (Svalbard 1015): a página que conta como o cofre funciona (/about/the-facility/: 2008, 100 m dentro
+        # da montanha, −18 °C) só aparece dentro de "About"; um nível a mais nas páginas-índice (sobre, história)
+        indices = [u for u in sorted(vistos, key=lambda u: -vistos[u])
+                   if re.search(r"/(about|om|sobre|a-propos|uber|history|historia|facts|fakta)/?$", u, re.I)][:3]
+        for u in indices:
+            try:
+                r = httpx.get(u, timeout=12, follow_redirects=True, headers=ua)
+                r.raise_for_status()
+                pontuar(r.text, str(r.url), d, vistos)
+            except Exception:  # noqa: BLE001
                 continue
-            rotulo = re.sub(r"<[^>]+>", " ", texto) + " " + url.replace("-", " ").replace("/", " ")
-            nota = 2 * len(chaves & _keywords(rotulo)) + sum(1 for p in _PALAVRAS_HISTORIA if p in dobrar_simples(rotulo))
-            if nota:
-                vistos[url] = max(nota, vistos.get(url, 0))
-        return [str(resp.url)] + sorted(vistos, key=lambda u: -vistos[u])[:por_site]
+        vistos.pop(inicio, None)
+        return [inicio] + sorted(vistos, key=lambda u: -vistos[u])[:por_site]
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         urls = list(dict.fromkeys(u for lista in pool.map(links_do_site, dominios[:4]) for u in lista))
@@ -704,12 +721,33 @@ def paginas_dos_sites_oficiais(query: str, dominios: list[str], por_site: int = 
         textos = list(pool.map(_page_text, urls))
     paginas = []
     for url, texto in zip(urls, textos):
-        trecho = _best_passage(texto, chaves, TRECHO_FATOS, True) if texto else ""
-        if len(trecho) >= 200:
-            paginas.append({"titulo": url.rstrip("/").rsplit("/", 1)[-1] or url, "url": url, "trecho": trecho,
+        # 25/11: página oficial longa (FAQ da NordGen, 9 mil caracteres) era lida só no melhor trecho de 3 mil —
+        # −18 °C e o túnel ficavam de fora. Agora a página inteira, em partes seguidas, até PARTES_POR_PAGINA
+        titulo = url.rstrip("/").rsplit("/", 1)[-1] or url
+        for k, trecho in enumerate(partes_da_pagina(texto or "", chaves)):
+            paginas.append({"titulo": titulo + (f" ({k + 1})" if k else ""), "url": url, "trecho": trecho,
                             "oficial": True})
     log.info("páginas abertas direto nos sites oficiais para %r: %d de %d", query[:60], len(paginas), len(urls))
     return paginas
+
+
+PARTES_POR_PAGINA = 4
+
+
+def partes_da_pagina(texto: str, chaves: set[str], limite: int = TRECHO_FATOS) -> list[str]:
+    """O texto em blocos seguidos de até `limite` caracteres (cortados entre frases); fica o bloco que fala do
+    assunto (palavra-chave) ou tem número; no máximo PARTES_POR_PAGINA, e só com 200 caracteres ou mais."""
+    frases = [x.strip() for x in re.split(r"(?<=[.!?])\s+|\n+", texto) if x and x.strip()]
+    blocos, atual = [], ""
+    for f in frases:
+        if atual and len(atual) + len(f) + 1 > limite:
+            blocos.append(atual)
+            atual = ""
+        atual = (atual + " " + f).strip()[:limite]
+    if atual:
+        blocos.append(atual)
+    bons = [b for b in blocos if len(b) >= 200 and (chaves & _keywords(b) or re.search(r"\d", b))]
+    return bons[:PARTES_POR_PAGINA]
 
 
 def dobrar_simples(texto: str) -> str:

@@ -59,7 +59,7 @@ FORCA = {"oficial": 3, "corroborado": 2, "fonte_unica": 1, "contraditorio": 0, "
 # usado e a extração dependia da única chave NVIDIA
 LIMITE_LOTE = 9000           # caracteres de fonte por chamada de extração
 POR_FONTE = 4000             # teto de uma fonte num lote (uma Wikipédia não empurra as outras)
-MAX_LOTES = 3                # o que não coube num lote e é relevante vai no seguinte, nunca some calado
+MAX_LOTES = 5                # 25/11: 3→5 (página oficial inteira em partes); o que não coube num lote e é relevante vai no seguinte, nunca some calado
 RESPOSTA_EXTRACAO = 4000     # tokens reservados para o JSON das evidências
 MIN_PALAVRAS_TRECHO = 5
 MAX_LACUNAS_BUSCADAS = 2

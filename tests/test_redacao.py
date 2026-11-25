@@ -1642,3 +1642,13 @@ def test_conferencia_sem_resposta_nao_aprova_frase(monkeypatch):
     monkeypatch.setattr(pv, "complete", cai)
     r = rd.conferir_contra_trechos([{"texto": "As estacas descem até 15 metros.", "evidencias": ["E2"]}], BANCO)
     assert r == {0: "não conferida"}
+
+
+def test_pagina_oficial_longa_e_lida_inteira_em_partes():
+    # 25/11 (FAQ da NordGen, 9 mil caracteres): o −18 °C estava depois dos primeiros 3 mil
+    from src import web_search as ws
+    texto = " ".join(f"The vault question number {k} has an answer about seeds." for k in range(150)) + \
+        " The seeds are stored at minus 18 degrees inside the mountain."
+    partes = ws.partes_da_pagina(texto, {"vault", "seeds"}, limite=3000)
+    assert 2 <= len(partes) <= ws.PARTES_POR_PAGINA and all(len(p) <= 3000 for p in partes)
+    assert any("minus 18" in p for p in partes) or len(partes) == ws.PARTES_POR_PAGINA
