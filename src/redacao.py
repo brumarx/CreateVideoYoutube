@@ -1852,6 +1852,10 @@ Para cada cena a editar:
 - números em algarismos; decimal da evidência fica exato ("−64,4 °C") ou com aproximação no sentido certo
   ("mais de 64"); número que nenhuma evidência traz sai (descreva sem número só se uma evidência sustenta a
   descrição). Nunca ponha outro número no lugar.
+- 25/11: sem DEDUÇÃO (consequência, finalidade ou causa que o trecho não diz: "ganhando tempo para o reparo",
+  "por isso"), sem "hoje" para dado de outra época, sem termo mais forte que o do trecho ("regiões do sul" não é
+  "Hemisfério Sul"), sem inverter o sentido do trecho e sem juntar dois trechos numa relação que nenhum afirma.
+  Frase reprovada por dedução: TIRE a dedução, não reescreva a mesma ideia com outras palavras.
 {regra_precisao}
 Problema FACTUAL — ANTES de reescrever: ache a parte EXATA da frase que vai além da evidência, o trecho da fonte
 que sustenta o resto, e escreva a formulação MAIS RESTRITA que continua interessante. Corrigir é tirar ou
