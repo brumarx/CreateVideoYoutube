@@ -2181,7 +2181,7 @@ def _revisar_lote(itens: list[dict], topic: str) -> dict[int, dict]:
     return out
 
 
-def revisar_afirmacoes(banco: dict | None, topic: str) -> dict | None:
+def revisar_afirmacoes(banco: dict | None, topic: str, ids: set[str] | None = None) -> dict | None:
     """25/11: cada afirmação utilizável relida pelo juiz fixo contra o trecho que o escritor vê, antes do escritor.
     "corrigir" troca a afirmação (a original fica em `afirmacao_original`); "descartar" tira a evidência das
     utilizáveis (status "nao_verificado" com o motivo); "fiel" só marca. Sem decisão do juiz, nada muda.
@@ -2191,7 +2191,9 @@ def revisar_afirmacoes(banco: dict | None, topic: str) -> dict | None:
     from . import disk_cache
     trechos = _trecho_do_escritor(banco)
     regras = _regras_revisao()
-    alvos = [e for e in usaveis(banco) if trechos.get(e["id"])]
+    # 25/11 (Svalbard 1019: 200 evidências, 3–4 min por lote = ~45 min): só as que o roteiro cita (`ids`) —
+    # é nelas que a distorção da afirmação chega ao vídeo; o resto do banco nunca é dito
+    alvos = [e for e in usaveis(banco) if trechos.get(e["id"]) and (ids is None or e["id"] in ids)]
     decisoes: dict[str, dict] = {}
     faltam: list[dict] = []
     for e in alvos:

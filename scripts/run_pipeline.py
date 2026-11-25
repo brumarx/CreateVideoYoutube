@@ -839,7 +839,6 @@ def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes:
                          minutos_reserva: float | None = None) -> dict:
     """Banco de evidências do tema (src/evidencias.py), com uma rodada de busca nas lacunas.
     Pesquisa sem base suficiente reprova com o motivo (nunca vira vídeo sobre premissa sem prova)."""
-    from src import evidencias as ev
     from src.evidencias import PesquisaInsuficiente, exigir_suficiente, minimo_para, montar_banco, usaveis
     from src.web_search import (fontes_dos_sites_oficiais, marcar_oficiais, paginas_dos_sites_oficiais,
                                 referencias_da_wikipedia, search_topic_facts, sem_fontes_fracas, sites_oficiais)
@@ -878,16 +877,9 @@ def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes:
         return sem_fontes_fracas(marcar_oficiais(achados, dominios))
 
     def escolher(completo: dict | None, minimo: int) -> tuple[dict | None, str]:
-        # 25/11 (Svalbard): as afirmações do banco escolhido são relidas pelo juiz fixo contra o trecho antes do
-        # escritor (src/evidencias.revisar_afirmacoes; cache por evidência, então banco em cache sai barato).
-        # Descartada deixa de contar: se as oficiais revisadas não bastam, escolhe de novo no banco revisado
-        banco, origem = evidencias_do_roteiro(completo, minimo)
-        if not banco:
-            return banco, origem
-        banco = ev.revisar_afirmacoes(banco, topic)
-        if origem == "oficiais" and len(usaveis(banco)) < minimo:
-            banco, origem = evidencias_do_roteiro(ev.revisar_afirmacoes(completo, topic), minimo)
-        return banco, origem
+        # 25/11 (Svalbard 1019): revisar o banco inteiro levava ~45 min; a revisão passou para a escrita e só
+        # relê as afirmações que o roteiro cita (redacao.revisar_citadas)
+        return evidencias_do_roteiro(completo, minimo)
 
     completo = montar_banco(topic, web_facts, buscar=buscar)
     banco, origem = escolher(completo, minimo)

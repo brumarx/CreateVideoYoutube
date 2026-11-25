@@ -1147,6 +1147,18 @@ def _itens_factuais(script: dict) -> list[tuple[int, int, dict]]:
     return out
 
 
+def revisar_citadas(ids: set[str], banco: dict, topic: str) -> None:
+    """25/11: antes da conferência, as afirmações que as frases citam são relidas pelo juiz contra o trecho
+    (evidencias.revisar_afirmacoes; cache por evidência). Muda o banco NO LUGAR: o plano, a conferência e a
+    auditoria passam a ver a afirmação revisada; a descartada deixa de valer como prova."""
+    from . import evidencias as ev
+    if not ids or not banco.get("evidencias"):
+        return
+    novo = ev.revisar_afirmacoes(banco, topic, ids=ids)
+    if novo is not None and novo is not banco:
+        banco["evidencias"][:] = novo["evidencias"]
+
+
 def conferir_na_escrita(script: dict, banco: dict, topic: str) -> tuple[dict, list[str]]:
     """Confere cada frase factual contra os trechos; reescreve na hora as que excedem (uma vez) e confere de novo;
     as que ainda excedem saem. Devolve (roteiro, motivos do que saiu)."""
@@ -1154,6 +1166,7 @@ def conferir_na_escrita(script: dict, banco: dict, topic: str) -> tuple[dict, li
     alvos = _itens_factuais(script)
     if not alvos:
         return script, []
+    revisar_citadas({e for _, _, it in alvos for e in it["evidencias"]}, banco, topic)
     veredito = conferir_contra_trechos([it for _, _, it in alvos], banco)
     ruins = [(alvos[k], motivo) for k, motivo in veredito.items() if motivo]
     if not ruins:
@@ -2139,6 +2152,7 @@ def conferir_edicao(novas: list[dict], cenas: list[dict], registro: dict, banco:
             alvos.append((k, j, {"texto": f["texto"], "evidencias": list(f.get("evidencias") or []), "anterior": ant}))
     if not alvos:
         return
+    revisar_citadas({e for _, _, it in alvos for e in it["evidencias"]}, banco, "")
     veredito = conferir_contra_trechos([it for _, _, it in alvos], banco)
     fora: dict[int, set[int]] = {}
     for n, motivo in veredito.items():

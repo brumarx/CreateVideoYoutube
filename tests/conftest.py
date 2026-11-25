@@ -69,4 +69,4 @@ def revisao_das_afirmacoes_simulada(request, monkeypatch):
     if request.node.get_closest_marker("revisao"):
         return
     from src import evidencias
-    monkeypatch.setattr(evidencias, "revisar_afirmacoes", lambda banco, topic: banco)
+    monkeypatch.setattr(evidencias, "revisar_afirmacoes", lambda banco, topic, ids=None: banco)

@@ -1873,3 +1873,24 @@ def test_ritmo_vem_dos_videos_mais_vistos_do_canal(tmp_path, monkeypatch):
     r = rd.ritmo_de_referencia("curiosidades")
     assert r.index("muito visto") < r.index("pouco visto") and "NUNCA as frases" in r
     assert rd.ritmo_de_referencia("sem_canal") == ""
+
+
+@pytest.mark.conferencia
+def test_conferencia_revisa_so_as_afirmacoes_citadas_e_ve_a_revisada(monkeypatch):
+    # 25/11 (Svalbard 1019: revisar 200 evidências levava ~45 min): só as citadas, no próprio banco
+    from src import evidencias as ev
+    pedidos = []
+
+    def revisa(banco, topic, ids=None):
+        pedidos.append(set(ids))
+        return {**banco, "evidencias": [{**e, "afirmacao": "As estacas descem até 15 metros."} if e["id"] == "E2" else e
+                                         for e in banco["evidencias"]]}
+    monkeypatch.setattr(ev, "revisar_afirmacoes", revisa)
+    vistos = []
+    monkeypatch.setattr(rd, "conferir_contra_trechos", lambda itens, banco: vistos.append(
+        next(e["afirmacao"] for e in banco["evidencias"] if e["id"] == "E2")) or {k: None for k in range(len(itens))})
+    banco = json.loads(json.dumps(BANCO))
+    s = _roteiro([[F("Já imaginou?", "narrativa"), F("As estacas descem até 15 metros.", evid=["E2"])]])
+    rd.conferir_na_escrita(s, banco, TEMA_988)
+    assert pedidos == [{"E2"}] and vistos == ["As estacas descem até 15 metros."]
+    assert next(e for e in banco["evidencias"] if e["id"] == "E2")["afirmacao"] == "As estacas descem até 15 metros."
