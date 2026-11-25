@@ -1689,3 +1689,18 @@ def test_modo_redacao_prefere_tema_com_site_oficial(monkeypatch):
     assert topics._com_site_oficial("curiosidades", ["Mary Celeste", "Como o CarbFix guarda CO2", "Somerton"]) \
         == "Como o CarbFix guarda CO2"
     assert topics._com_site_oficial("curiosidades", ["Mary Celeste", "Somerton"]) == "Mary Celeste"
+
+
+def test_longo_da_semana_fica_pendente_ate_sair(tmp_path, monkeypatch):
+    # 25/11: longo rebaixado a curto (material curto) não conta; o longo é tentado nos dias seguintes
+    import json as _json
+    from datetime import date
+    from src import script_archive as sa
+    monkeypatch.setattr(sa, "ARCHIVE_DIR", tmp_path)
+    (tmp_path / "curiosidades").mkdir()
+    quarta = date(2026, 11, 25)
+    (tmp_path / "curiosidades" / "1.json").write_text(_json.dumps({"long": False, "date": "2026-11-24"}))
+    (tmp_path / "curiosidades" / "2.json").write_text(_json.dumps({"long": True, "date": "2026-11-22"}))  # domingo
+    assert not sa.longo_feito_na_semana("curiosidades", quarta)
+    (tmp_path / "curiosidades" / "3.json").write_text(_json.dumps({"long": True, "date": "2026-11-23"}))  # segunda
+    assert sa.longo_feito_na_semana("curiosidades", quarta)

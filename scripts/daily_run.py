@@ -360,9 +360,13 @@ def run_channel(channel_name: str, cfg: dict) -> list[tuple[str, list[str]]]:
 
     from datetime import date
 
-    from src.script_archive import weekday_index
+    from src.script_archive import longo_feito_na_semana, weekday_index
 
-    if not ready and weekday_index(cfg.get("longo_semanal")) == date.today().weekday():
+    dia_longo = weekday_index(cfg.get("longo_semanal"))
+    # 25/11: "pelo menos um longo por semana": do dia marcado em diante, até sair um longo nesta semana (tema sem
+    # material para longo sai curto e o longo passa para o dia seguinte)
+    if not ready and dia_longo is not None and dia_longo <= date.today().weekday() \
+            and not longo_feito_na_semana(channel_name):
         # longo semanal no lugar do Short do dia (a cota de upload é uma só
         # pros 5 canais). Longo é tema próprio da fila do canal, não compilação
         # de Shorts (o dono não quer compilação). A última tentativa sai em

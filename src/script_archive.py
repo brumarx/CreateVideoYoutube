@@ -33,6 +33,21 @@ def weekday_index(name: str | None) -> int | None:
     return None
 
 
+def longo_feito_na_semana(channel: str, hoje: date | None = None) -> bool:
+    """25/11: já subiu um longo do canal nesta semana (segunda a domingo)? O longo que o material rebaixou
+    para curto não conta: o longo fica pendente e é tentado nos dias seguintes da semana."""
+    hoje = hoje or date.today()
+    segunda = hoje.toordinal() - hoje.weekday()
+    for f in (ARCHIVE_DIR / channel).glob("*.json") if (ARCHIVE_DIR / channel).exists() else []:
+        try:
+            e = json.loads(f.read_text())
+            if e.get("long") and date.fromisoformat(str(e.get("date"))).toordinal() >= segunda:
+                return True
+        except (OSError, ValueError):
+            continue
+    return False
+
+
 def archive(channel: str, job_id: int, work_dir: Path, video_id: str, long_form: bool = False) -> None:
     """Guarda o roteiro do vídeo que acabou de subir. Nunca levanta exceção:
     é só pro longo semanal, o upload já deu certo."""

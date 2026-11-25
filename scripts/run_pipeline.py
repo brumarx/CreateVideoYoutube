@@ -763,13 +763,16 @@ def _min_palavras_redacao(min_minutes: float) -> int:
 
 
 def _escrever_redacao(channel, topic: str, web_facts: list[dict], job_id, min_minutes: float, max_minutes: float,
-                      scenes: int | None) -> tuple[dict, dict]:
+                      scenes: int | None, reserva: tuple[float, float, int] | None = None) -> tuple[dict, dict]:
     """Modo redação, 1ª metade: banco de evidências (cache por tema + fontes) e roteiro (rascunho em cache
     por tema + banco). Numa retomada, nada disso é refeito. Devolve (roteiro, banco)."""
     from src import metricas
     from src.redacao import RoteiroReprovado, escrever, guardar_rascunho, rascunho
     with metricas.etapa("banco_evidencias"):
-        banco = _banco_de_evidencias(topic, web_facts, job_id, max_minutes)
+        banco = _banco_de_evidencias(topic, web_facts, job_id, max_minutes,
+                                     minutos_reserva=reserva[1] if reserva else None)
+    if banco.get("_so_curto") and reserva:
+        min_minutes, max_minutes, scenes = reserva
     script = rascunho(topic, banco)
     if script:
         metricas.anotar("roteiro_do_cache", True)
@@ -832,7 +835,8 @@ def evidencias_do_roteiro(completo: dict | None, minimo: int) -> tuple[dict | No
     return {**completo, "evidencias": boas}, "oficiais + referências"
 
 
-def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes: float = 2.5) -> dict:
+def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes: float = 2.5,
+                         minutos_reserva: float | None = None) -> dict:
     """Banco de evidências do tema (src/evidencias.py), com uma rodada de busca nas lacunas.
     Pesquisa sem base suficiente reprova com o motivo (nunca vira vídeo sobre premissa sem prova)."""
     from src.evidencias import PesquisaInsuficiente, exigir_suficiente, minimo_para, montar_banco
@@ -878,6 +882,15 @@ def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes:
                  job_id, len((banco or {}).get("evidencias", [])), minimo)
         completo = montar_banco(topic, todas, buscar=buscar)
         banco, origem = evidencias_do_roteiro(completo, minimo)
+    n = len((banco or {}).get("evidencias", []))
+    if n < minimo and minutos_reserva:
+        # 25/11: material não dá para o longo da semana, mas dá para um curto: sai curto hoje (o longo fica
+        # pendente na semana, ver daily_run) — o tema escolhido é o publicado
+        reserva, origem_r = evidencias_do_roteiro(completo, minimo_para(minutos_reserva))
+        if len((reserva or {}).get("evidencias", [])) >= minimo_para(minutos_reserva):
+            log.warning("[%s] material dá %d evidência(s): não chega ao longo (mínimo %d), dá para curto (mínimo %d)",
+                        job_id, len(reserva["evidencias"]), minimo, minimo_para(minutos_reserva))
+            banco, origem, minimo = {**reserva, "_so_curto": True}, origem_r, minimo_para(minutos_reserva)
     try:
         banco = exigir_suficiente(banco, minimo)
     except PesquisaInsuficiente as exc:
@@ -1202,7 +1215,15 @@ def run(
                     script["_banco"] = banco
         elif redacao_mode and web_facts:
             # 19/11: pesquisa → banco de evidências (trecho literal conferido) → roteirista livre
-            script, banco = _escrever_redacao(channel, topic, web_facts, job_id, min_minutes, max_minutes, scenes)
+            reserva = ((channel.short_min_minutes, channel.short_max_minutes, list_count) if long_form else None)
+            script, banco = _escrever_redacao(channel, topic, web_facts, job_id, min_minutes, max_minutes, scenes,
+                                              reserva=reserva)
+            if banco.get("_so_curto") and long_form:
+                # 25/11: o material do tema só dá para o curto: o vídeo de hoje sai curto
+                long_form = False
+                width, height = SHORT_WIDTH, SHORT_HEIGHT
+                min_minutes, max_minutes, scenes = reserva
+                log.warning("[%s] material só dá para curto: o longo da semana fica pendente", job_id)
         else:
             script = generate_script(
                 channel, topic, facts, scenes=scenes, min_minutes=min_minutes, max_minutes=max_minutes, web_facts=web_facts,
