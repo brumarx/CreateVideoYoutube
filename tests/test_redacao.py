@@ -1900,3 +1900,35 @@ def test_palavra_do_comenta_nao_e_nome_proprio():
     # 25/11 (Svalbard 1020): "Comenta SEMENTE se você conhecia essa história." virou "frase factual sem evidência"
     assert rd.afirmacao_escondida("Comenta SEMENTE se você conhecia essa história.", set()) is None
     assert rd.afirmacao_escondida("Comenta SEMENTE se você já foi a Oslo.", set())  # o resto ainda é conferido
+
+
+def test_corte_que_deixaria_curto_vai_para_a_edicao_mesmo_depois_de_dois_cortes(monkeypatch):
+    # 25/11 (Svalbard 1020): 2 cortes gastavam as 2 rodadas; a frase que só a reescrita resolve ficava sem edição
+    s = _roteiro([[F("Quinze metros de estaca seguram cada prédio.", evid=["E2"])],
+                  [F("Yakutsk é uma das duas grandes cidades sobre permafrost contínuo.", evid=["E1"])],
+                  [F("Os prédios ficam sobre estacas para não aquecer o solo congelado.", evid=["E3"])],
+                  [F("E você, moraria lá?", "narrativa")]])
+    n = {"k": 0}
+
+    def auditar(script, banco, topic, previas):
+        n["k"] += 1
+        frase = script["scenes"][1]["frases"][0]["texto"]
+        probs = [] if n["k"] > 1 else [rd._p("leitura_enganosa", frase, 1, 0, "x")]
+        return script, probs, {"nota": 9, "aprovado": not probs, "criterios": {}, "alvos": [], "travas": []}
+    chamado = []
+
+    def editar(script, alvos, banco, topic, **k):
+        chamado.append(sorted(alvos))
+        return script, {"cenas_editadas": [2], "revertidas": [], "titulo": None, "detalhes": []}
+    monkeypatch.setattr(rd, "_auditar_versao", auditar)
+    monkeypatch.setattr(rd, "editar_cenas", editar)
+    monkeypatch.setattr(rd, "registrar_tentativas", lambda *a, **k: None)
+    monkeypatch.setattr(rd, "instantaneo", lambda v, o, m, t, p, q, b: {
+        "versao": v, "origem": o, "hash": rd._hash_versao(t, b), "aprovado": not p, "coerencia": 1, "alertas": [],
+        "nao_julgada": [], "factual": {"nota": 9, "problemas": p}, "semantica": {"enganos": []},
+        "editorial": {"nota": 9, "travas": [], "criterios": {}}, "cenas_modificadas": m})
+    for nome in ("_registra_versao", "_registra_problemas", "_registra_comparacao"):
+        monkeypatch.setattr(rd, nome, lambda *a, **k: None)
+    monkeypatch.setattr(rd, "comparar_versoes", lambda a, b: {})
+    rd.auditar_e_corrigir(s, BANCO, TEMA_988, min_palavras=rd._palavras(s))  # cortar deixaria curto demais
+    assert chamado == [[1]]

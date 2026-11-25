@@ -2666,6 +2666,7 @@ def _registra_comparacao(c: dict) -> None:
 
 
 # problemas achados pela conferência em código: a edição que os conserta passa de novo por ela (ver editar_cenas)
+CORTES_MAX = 2  # 25/11: cortes antes da edição (sem chamada de escrita; cada um custa uma auditoria completa)
 TIPOS_DO_CODIGO = frozenset({"numero_arredondado", "numero_contraditorio", "numero_sem_evidencia", "divergencia_como_faixa",
                              "sinal_invertido", "hipotese_como_fato", "fonte_unica_sem_atribuicao", "ordem_nao_comprovada"})
 
@@ -2723,12 +2724,15 @@ def auditar_e_corrigir(script: dict, banco: dict, topic: str, *, web_facts: list
         return inst
 
     origem, mudou, de_versao = "escrita", [], None
-    for _ in range(EDICOES_MAX + 1):
+    relatorio["cortes"] = 0
+    # 25/11 (Svalbard 1020: dois cortes gastaram as 2 rodadas e a última frase enganosa, que só uma reescrita
+    # resolvia — o corte deixaria 273 de 286 palavras —, ficou sem edição): corte e edição têm limites próprios
+    for _ in range(EDICOES_MAX + CORTES_MAX + 1):
         script, problemas, qualidade = _auditar_versao(script, banco, topic, previas)
         atual = registrar(script, problemas, qualidade, origem, mudou, de_versao)
         if atual["aprovado"] and qualidade["nota"] >= NOTA_ALVO:
             break
-        if relatorio["edicoes"] >= EDICOES_MAX:
+        if relatorio["edicoes"] >= EDICOES_MAX and relatorio["cortes"] >= CORTES_MAX:
             break
         # 23/11: a próxima edição parte da versão atual — a não ser que uma anterior tenha estritamente menos
         # problemas de fato e de leitura E história no mínimo tão boa (a edição que piorou os fatos sem melhorar
@@ -2747,14 +2751,16 @@ def auditar_e_corrigir(script: dict, banco: dict, topic: str, *, web_facts: list
         # (o problema que o CÓDIGO acha — número arredondado, sinal, atribuição — vai à edição: o conserto é conferido
         # pelo próprio código; o que só a IA julga — excede, sem suporte, leitura enganosa — sai)
         julgados = [p for p in problemas if p["tipo"] not in TIPOS_DO_CODIGO]
-        if julgados:
+        if julgados and relatorio["cortes"] < CORTES_MAX:
             cortado = cortar_frases_reprovadas(script, julgados)
             if cortado and not roteiro_insuficiente(cortado, min_palavras) and _palavras(cortado) >= piso:
-                relatorio["edicoes"] += 1
+                relatorio["cortes"] += 1
                 log.info("corte antes da edição: %d frase(s) reprovada(s) saem da versão %d", len(julgados), base["versao"])
                 origem, mudou, de_versao = "corte", [], base["versao"]
                 script = cortado
                 continue
+        if relatorio["edicoes"] >= EDICOES_MAX:
+            break
         novas_ids: set[str] = set()
         sem_suporte = [p for p in problemas if p["tipo"] in ("sem_evidencia", "sem_suporte", "numero_sem_evidencia", "excede")]
         if sem_suporte and buscar_evidencia and web_facts is not None:
