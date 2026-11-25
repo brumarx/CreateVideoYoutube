@@ -903,14 +903,22 @@ Responda SÓ JSON:
 _PROMPT_CONFERE = """Confira cada FRASE de um roteiro contra os TRECHOS das evidências que ela cita (só os trechos
 contam, não o que você sabe). A frase anterior aparece só para entender a quem a frase se refere.
 "sustentada": tudo o que a frase afirma está nos trechos (tradução, resumo e arredondamento no sentido certo valem).
-"excede": a frase afirma algo que os trechos não dizem — diga exatamente o quê.
+"excede": a frase afirma algo que os trechos não dizem — diga exatamente o quê. Contam como "excede" (25/11):
+- DEDUÇÃO: conclusão, consequência, finalidade ou causa que o trecho não diz ("por tempo suficiente para
+  reparo", "por isso", "o que garante", "para que") — mesmo que pareça lógica;
+- TEMPO TROCADO: dado de uma data/estudo/época dito como atual ("hoje", presente) ou de outra data;
+- TERMO MAIS FORTE: palavra mais ampla ou absoluta que a do trecho ("regiões do sul" → "Hemisfério Sul",
+  "muitos" → "todos", "ajuda" → "garante", "pode" → "vai");
+- SENTIDO INVERTIDO: o trecho diz que algo NÃO bastava/não era e a frase usa como se bastasse;
+- JUNÇÃO: dois trechos combinados numa relação (causa, comparação) que nenhum deles afirma.
 {itens}
 Responda SÓ JSON: {{"decisoes": [{{"n": 1, "decisao": "sustentada", "o_que_excede": ""}}]}}"""
 
 _PROMPT_REESCREVE = """Estas frases de um roteiro de vídeo (tema: {tema}) dizem mais do que a fonte. Reescreva cada
 uma para dizer SÓ o que o TRECHO diz (pode dizer menos, nunca mais), no mesmo lugar da história: mantenha a
 ligação com a frase anterior e com a seguinte, o tom falado e o tamanho parecido. Se nada da frase cabe no
-trecho, responda texto vazio (a frase sai).
+trecho, responda texto vazio (a frase sai). Sem dedução, sem "hoje" para dado de outra época, sem termo mais forte
+que o do trecho.
 {itens}
 Responda SÓ JSON: {{"frases": [{{"n": 1, "texto": "..."}}]}}"""
 

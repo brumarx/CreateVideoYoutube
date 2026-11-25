@@ -1704,3 +1704,11 @@ def test_longo_da_semana_fica_pendente_ate_sair(tmp_path, monkeypatch):
     assert not sa.longo_feito_na_semana("curiosidades", quarta)
     (tmp_path / "curiosidades" / "3.json").write_text(_json.dumps({"long": True, "date": "2026-11-23"}))  # segunda
     assert sa.longo_feito_na_semana("curiosidades", quarta)
+
+
+def test_conferencia_cobra_deducao_tempo_trocado_e_termo_mais_forte():
+    # 25/11 (Svalbard 1016): "segura o frio por tempo suficiente para reparo" (dedução), "hoje cerca de −3,5 °C"
+    # (estudo de 2004) e "Hemisfério Sul" (fonte: "Southern regions") passaram na conferência da escrita
+    p = rd._PROMPT_CONFERE
+    assert "DEDUÇÃO" in p and "TEMPO TROCADO" in p and "TERMO MAIS FORTE" in p and "SENTIDO INVERTIDO" in p
+    assert "Hemisfério Sul" in p and "sem termo mais forte" in rd._PROMPT_REESCREVE
