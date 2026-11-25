@@ -800,8 +800,20 @@ def material_do_plano(plano: dict, banco: dict) -> str:
             f"Pergunta da abertura: {plano['angulo'].get('pergunta', '')}\n"
             f"Resposta da conclusão: {plano['angulo'].get('resposta', '')}\n{blocos}\n"
             + ("Não exagerar: " + "; ".join(plano["nao_exagerar"]) + "\n" if plano.get("nao_exagerar") else "")
-            + "\nEVIDÊNCIAS DO PLANO (as únicas que você usa; cada uma com o trecho, o que comprova e o que NÃO comprova):\n"
-            + bloco_do_mapa(mapa_do_conhecimento(banco), ids=ids, limite_trecho=400, plano=plano))
+            + "\nEVIDÊNCIAS DO PLANO (a base da história; cada uma com o trecho, o que comprova e o que NÃO comprova):\n"
+            + bloco_do_mapa(mapa_do_conhecimento(banco), ids=ids, limite_trecho=400, plano=plano)
+            + _outros_fatos(banco, ids))
+
+
+def _outros_fatos(banco: dict, ids: set[str]) -> str:
+    """25/11 (catálogo Svalbard): o escritor só via o bloco do plano e escrevia fato que existe no banco citando o
+    id errado (ICARDA/E94, "três janelas"/E74). Os outros fatos aprovados vão junto, só a afirmação."""
+    from .evidencias import usaveis
+    resto = {e["id"] for e in usaveis(banco)} - ids
+    if not resto:
+        return ""
+    return ("\n\nOUTROS FATOS APROVADOS (use só se a história pedir; cite o id de cada um que usar):\n"
+            + bloco_para_escritor(banco, 0, ids=resto))
 
 
 def _valido_escritor(raw: str) -> bool:
@@ -850,7 +862,36 @@ def defeitos(script: dict, banco: dict, topic: str, min_pal: int, max_pal: int, 
             lista.append(str(d))
     # 20/11: o que o editor travaria (linha do tempo, fato repetido) já volta ao escritor nas tentativas dele
     lista += travas_editoriais(script)
+    lista += fato_em_duas_cenas(script) + narrativa_que_afirma(script)
     return script, lista, problemas
+
+
+def fato_em_duas_cenas(script: dict) -> list[str]:
+    """25/11 (catálogo Svalbard: sem_repeticao 2 a 5 em toda versão): o mesmo fato aprovado citado em duas cenas é
+    o mesmo fato contado duas vezes."""
+    onde: dict[str, list[int]] = {}
+    for i, _, f in frases_de(script):
+        for e in f.get("evidencias") or []:
+            if i + 1 not in onde.setdefault(e, []):
+                onde[e].append(i + 1)
+    return [f"o fato {e} aparece nas cenas {', '.join(map(str, c))}: conte uma vez só" for e, c in onde.items() if len(c) > 1]
+
+
+_ALEGA = re.compile(r"\b(funciona|funcionou|garante|garantiu|prova|provou|total|totalmente|sempre|já|porque|por isso|"
+                    r"graças|salvou|protege|resolve|resolveu)\b", re.I)
+
+
+def narrativa_que_afirma(script: dict) -> list[str]:
+    """25/11 (catálogo: "A transparência é total", "O seguro já funcionou", "Ela funciona porque…"): narrativa sem
+    número nem nome, mas afirmando. Pergunta é livre."""
+    out = []
+    for _, _, f in frases_de(script):
+        t = f["texto"].strip()
+        if f.get("tipo") == "narrativa" and not t.endswith("?"):
+            m = _ALEGA.search(t)
+            if m:
+                out.append(f"a frase narrativa \"{t[:90]}\" afirma algo (\"{m.group(0)}\"): ou vira fato com id, ou sai")
+    return out
 
 
 # ---------------------------------------------------------------- escrita livre + conferência na hora (25/11)
@@ -865,14 +906,16 @@ _PROMPT_ESCRITOR = """Você é o roteirista do canal "{canal}" (YouTube, portugu
 
 Sua tarefa: CONTAR COMO HISTÓRIA o que as evidências contam — tom de quem conta um caso a um amigo, com
 começo curioso, tensão e resposta — sem inventar nada. Você escolhe as evidências, a ordem e as palavras.
-- Cada frase factual/explicativa diz SÓ o que o TRECHO das evidências que ela cita diz (pode dizer menos,
-  nunca mais). Depois de escrever, cada frase é conferida contra o trecho: o que o trecho não diz é cortado.
-  Nada de causa, consequência, comparação, adjetivo de valor, generalização ou detalhe que você "sabe".
-- Narrativa (pergunta da abertura, ligações, pergunta final) não afirma fato: sem número, nome ou dado.
-- Uma ideia puxa a outra (o que, por que, como, o que aconteceu); cada fato UMA vez; a abertura não anuncia
-  o que vem depois; o fim responde à pergunta do começo com um fato das evidências.
+- Cada evidência é um FATO APROVADO, conferido contra a fonte. Cada frase factual/explicativa reconta um fato
+  (ou dois do mesmo assunto) e cita o id de TODO fato que usa: pode dizer menos, nunca mais — a frase é conferida
+  contra o fato e o excesso é cortado. Nada de causa, finalidade, comparação ou detalhe que você "sabe";
+  mantenha as ressalvas do fato ("ajuda a", "cerca de").
+- NUNCA ligue fatos com "por isso", "porque", "graças a", "o que garante", salvo se o fato diz a causa.
+- Narrativa (abertura, ligação, pergunta) não afirma: sem número, nome, "funciona", "garante", "já".
+- Uma ideia puxa a outra (o que, por que, como, o que aconteceu); a abertura não anuncia o que vem depois; o
+  fim responde à pergunta do começo com um fato das evidências.
 - Prefira o que faz história (o que aconteceu, por que ali, como funciona) ao institucional (quem administra,
-  acordos, portal); um fato institucional só se mudar a história.
+  acordos, portal).
 REGRAS DE PRECISÃO (inegociáveis):
 - Evidência "contraditorio": diga os dois valores e que as fontes divergem, ou não use.
 - "estimado": diga como aproximação ("cerca de"). Valor medido/exato fica EXATO, mesmo de fonte única.
@@ -889,7 +932,8 @@ REGRAS DE PRECISÃO (inegociáveis):
 - Sem saudação inicial e sem pedir like/inscrição (entram depois).
 {linha_canal}
 FORMATO: entre {cenas_min} e {cenas_max} cenas (cada cena 1 a 3 frases), no total entre {min_pal} e {max_pal}
-palavras faladas; com evidência de menos, fique mais curto — nunca invente. Cada frase com:
+palavras faladas (mire em ~{alvo_pal}); com evidência de menos, fique mais curto — nunca invente. Cada fato
+UMA vez (o mesmo id não volta). Cada frase com:
 - "tipo": "factual" (afirma algo sobre o mundo), "explicativa" (explica causa ou funcionamento) ou
   "narrativa" (abertura, transição, pergunta — sem afirmar fato);
 - "evidencias": ids cujo TRECHO sustenta a frase (obrigatório em factual e explicativa; vazio em narrativa).
@@ -900,10 +944,12 @@ Responda SÓ JSON:
   "cenas": [{{"frases": [{{"texto": "...", "tipo": "narrativa", "evidencias": []}},
                          {{"texto": "...", "tipo": "factual", "evidencias": ["E2"]}}]}}]}}"""
 
-_PROMPT_CONFERE = """Confira cada FRASE de um roteiro contra os TRECHOS das evidências que ela cita (só os trechos
-contam, não o que você sabe). A frase anterior aparece só para entender a quem a frase se refere.
-"sustentada": tudo o que a frase afirma está nos trechos (tradução, resumo e arredondamento no sentido certo valem).
-"excede": a frase afirma algo que os trechos não dizem — diga exatamente o quê. Contam como "excede" (25/11):
+_PROMPT_CONFERE = """Confira cada FRASE de um roteiro contra os FATOS que ela cita (cada fato é uma afirmação já
+conferida contra a fonte; o trecho original vem junto só para tirar dúvida de sentido). Só os fatos e trechos contam,
+não o que você sabe. A frase anterior aparece só para entender a quem a frase se refere.
+"sustentada": tudo o que a frase afirma está nos fatos citados — recontar com outras palavras, resumir, juntar dois
+fatos citados SEM criar relação entre eles e arredondar no sentido certo valem; não reprove estilo nem tom.
+"excede": a frase afirma algo que os fatos não dizem — diga exatamente o quê. Contam como "excede" (25/11):
 - DEDUÇÃO: conclusão, consequência, finalidade ou causa que o trecho não diz ("por tempo suficiente para
   reparo", "por isso", "o que garante", "para que") — mesmo que pareça lógica;
 - TEMPO TROCADO: dado de uma data/estudo/época dito como atual ("hoje", presente) ou de outra data;
@@ -927,14 +973,18 @@ TRECHO_CONFERE = 600
 
 
 def _trechos_das(ids: list[str], mapa: dict[str, dict]) -> str:
-    return "\n".join(f"   TRECHO {x}: \"{mapa[x]['trecho'][:TRECHO_CONFERE] or mapa[x]['afirmacao']}\""
-                     for x in ids[:3] if x in mapa) or "   (nenhuma evidência válida citada)"
+    """25/11: o FATO APROVADO (afirmação em português já conferida contra a fonte) é a régua; o trecho original
+    vai junto só para dúvida de sentido. Português × português: o juiz rígido não reprova tradução."""
+    return "\n".join(f"   FATO {x}: \"{mapa[x]['afirmacao']}\""
+                     + (f"\n      (trecho original: \"{mapa[x]['trecho'][:TRECHO_CONFERE]}\")" if mapa[x].get("trecho") else "")
+                     for x in ids[:4] if x in mapa) or "   (nenhuma evidência válida citada)"
 
 
 # 25/11 (Svalbard 1017: "Por isso a engenharia adiciona refrigeração"): conector de causa na frase só passa se
 # algum trecho citado também afirma causa; o juiz ainda confere se é ESSA causa
-_CONECTOR_CAUSAL = re.compile(r"\b(por isso|por causa diss[oa]|portanto|consequentemente|daí que|graças a isso|"
-                              r"o que garante|é por isso|por esse motivo|por essa razão)\b", re.I)
+_CONECTOR_CAUSAL = re.compile(r"\b(por isso|por causa diss[oa]|portanto|consequentemente|daí que|graças a|"
+                              r"o que garante|o que permite|o que faz com que|é por isso|é assim que|por esse motivo|"
+                              r"por essa razão|porque|garantindo|assegurando)\b", re.I)
 _CAUSA_NO_TRECHO = re.compile(r"\b(because|therefore|thus|hence|as a result|due to|owing to|consequently|so that|"
                               r"in order to|that is why|which is why|reason|porque|por isso|portanto|devido|graças|"
                               r"por causa|razão|motivo|para que|a fim de|fordi|derfor)\b", re.I)
@@ -1072,6 +1122,7 @@ def escrever(channel, topic: str, banco: dict, *, min_minutes: float, max_minute
         canal=getattr(channel, "channel_title", "") or channel.name, tema=topic, material=material,
         linha_canal=(f"Linha do canal: {linha}\n" if linha else "") + current_date_rule(),
         cenas_min=cenas_min, cenas_max=cenas_max, min_pal=min_pal, max_pal=max_pal,
+        alvo_pal=min(max_pal, round(min_pal * 1.25)),
         regra_precisao=_REGRA_PRECISAO_CURTA,
         feedback=(f"\nPARECER DA REVISÃO ANTERIOR (corrija):\n{feedback}\n" if feedback else ""))
     pedido += recent_mistakes(channel.name)
@@ -2459,6 +2510,11 @@ def _registra_comparacao(c: dict) -> None:
              "".join(f"\n  cena {k} piorou a história: {'; '.join(m)[:300]}" for k, m in c["responsaveis"].items()))
 
 
+# problemas achados pela conferência em código: a edição que os conserta passa de novo por ela (ver editar_cenas)
+TIPOS_DO_CODIGO = frozenset({"numero_arredondado", "numero_contraditorio", "numero_sem_evidencia", "divergencia_como_faixa",
+                             "sinal_invertido", "hipotese_como_fato", "fonte_unica_sem_atribuicao", "ordem_nao_comprovada"})
+
+
 def auditar_e_corrigir(script: dict, banco: dict, topic: str, *, web_facts: list[dict] | None = None,
                        buscar_evidencia: Callable[[list[dict], str], list[dict]] | None = None,
                        min_palavras: int = 0) -> tuple[dict, dict]:
@@ -2530,6 +2586,20 @@ def auditar_e_corrigir(script: dict, banco: dict, topic: str, *, web_facts: list
             log.info("a próxima edição parte da versão %d (%d problema(s)), não da %d (%d)", base["versao"],
                      len(base["problemas"]), atual["versao"], len(atual["problemas"]))
         script, problemas, qualidade = base["_script"], base["problemas"], base["qualidade"]
+        # 25/11 (catálogo Svalbard): corrigir fato reescrevendo trocava um exagero por outro e desmontava a história
+        # (editorial 6,9 → 4,0); o corte puro subiu o editorial de 6,9 para 8,1. Frase reprovada SAI primeiro; a
+        # edição seguinte só mexe na história, com a frase nova conferida contra o fato (conferir_edicao)
+        # (o problema que o CÓDIGO acha — número arredondado, sinal, atribuição — vai à edição: o conserto é conferido
+        # pelo próprio código; o que só a IA julga — excede, sem suporte, leitura enganosa — sai)
+        julgados = [p for p in problemas if p["tipo"] not in TIPOS_DO_CODIGO]
+        if julgados:
+            cortado = cortar_frases_reprovadas(script, julgados)
+            if cortado and not roteiro_insuficiente(cortado, min_palavras) and _palavras(cortado) >= piso:
+                relatorio["edicoes"] += 1
+                log.info("corte antes da edição: %d frase(s) reprovada(s) saem da versão %d", len(julgados), base["versao"])
+                origem, mudou, de_versao = "corte", [], base["versao"]
+                script = cortado
+                continue
         novas_ids: set[str] = set()
         sem_suporte = [p for p in problemas if p["tipo"] in ("sem_evidencia", "sem_suporte", "numero_sem_evidencia", "excede")]
         if sem_suporte and buscar_evidencia and web_facts is not None:

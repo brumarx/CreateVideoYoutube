@@ -80,7 +80,10 @@ def test_escritor_recebe_o_plano_e_so_as_evidencias_dele(monkeypatch):
     assert "MAPA DO CONHECIMENTO" in plano_p and "E7" not in plano_p                # não verificada fica fora
     assert "PLANO DA HISTÓRIA" in escrita and "o que acontece quando um banco de genes some?" in escrita
     assert "NÃO comprova: destruição total" in escrita
-    assert "E2 [" not in escrita and "E5 [" not in escrita                           # fora do plano: o escritor não vê
+    # 25/11: fora do plano o escritor vê só a afirmação, em OUTROS FATOS APROVADOS (citava id errado sem eles)
+    plano_parte, outros = escrita.split("OUTROS FATOS APROVADOS")
+    assert "E2 [" not in plano_parte and "E5 [" not in plano_parte and "E2 [" in outros
+    assert "trecho (" not in outros.split("Responda SÓ JSON")[0]
     assert "E99" not in escrita                                                      # id inventado pelo plano sai
 
 

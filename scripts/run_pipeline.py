@@ -839,7 +839,8 @@ def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes:
                          minutos_reserva: float | None = None) -> dict:
     """Banco de evidências do tema (src/evidencias.py), com uma rodada de busca nas lacunas.
     Pesquisa sem base suficiente reprova com o motivo (nunca vira vídeo sobre premissa sem prova)."""
-    from src.evidencias import PesquisaInsuficiente, exigir_suficiente, minimo_para, montar_banco
+    from src import evidencias as ev
+    from src.evidencias import PesquisaInsuficiente, exigir_suficiente, minimo_para, montar_banco, usaveis
     from src.web_search import (fontes_dos_sites_oficiais, marcar_oficiais, paginas_dos_sites_oficiais,
                                 referencias_da_wikipedia, search_topic_facts, sem_fontes_fracas, sites_oficiais)
 
@@ -875,21 +876,34 @@ def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes:
         for d in dominios[:2]:
             achados += search_topic_facts(f"site:{d} {pergunta}", max_results=2) or []
         return sem_fontes_fracas(marcar_oficiais(achados, dominios))
-    completo = montar_banco(topic, web_facts, buscar=buscar)
-    banco, origem = evidencias_do_roteiro(completo, minimo)
-    if so_oficial and len((banco or {}).get("evidencias", [])) < minimo and len(todas) > len(web_facts):
-        log.info("[%s] páginas oficiais renderam %d evidência(s) (mínimo %d): extração com todas as fontes",
-                 job_id, len((banco or {}).get("evidencias", [])), minimo)
-        completo = montar_banco(topic, todas, buscar=buscar)
+
+    def escolher(completo: dict | None, minimo: int) -> tuple[dict | None, str]:
+        # 25/11 (Svalbard): as afirmações do banco escolhido são relidas pelo juiz fixo contra o trecho antes do
+        # escritor (src/evidencias.revisar_afirmacoes; cache por evidência, então banco em cache sai barato).
+        # Descartada deixa de contar: se as oficiais revisadas não bastam, escolhe de novo no banco revisado
         banco, origem = evidencias_do_roteiro(completo, minimo)
-    n = len((banco or {}).get("evidencias", []))
+        if not banco:
+            return banco, origem
+        banco = ev.revisar_afirmacoes(banco, topic)
+        if origem == "oficiais" and len(usaveis(banco)) < minimo:
+            banco, origem = evidencias_do_roteiro(ev.revisar_afirmacoes(completo, topic), minimo)
+        return banco, origem
+
+    completo = montar_banco(topic, web_facts, buscar=buscar)
+    banco, origem = escolher(completo, minimo)
+    if so_oficial and len(usaveis(banco)) < minimo and len(todas) > len(web_facts):
+        log.info("[%s] páginas oficiais renderam %d evidência(s) (mínimo %d): extração com todas as fontes",
+                 job_id, len(usaveis(banco)), minimo)
+        completo = montar_banco(topic, todas, buscar=buscar)
+        banco, origem = escolher(completo, minimo)
+    n = len(usaveis(banco))
     if n < minimo and minutos_reserva:
         # 25/11: material não dá para o longo da semana, mas dá para um curto: sai curto hoje (o longo fica
         # pendente na semana, ver daily_run) — o tema escolhido é o publicado
-        reserva, origem_r = evidencias_do_roteiro(completo, minimo_para(minutos_reserva))
-        if len((reserva or {}).get("evidencias", [])) >= minimo_para(minutos_reserva):
+        reserva, origem_r = escolher(completo, minimo_para(minutos_reserva))
+        if len(usaveis(reserva)) >= minimo_para(minutos_reserva):
             log.warning("[%s] material dá %d evidência(s): não chega ao longo (mínimo %d), dá para curto (mínimo %d)",
-                        job_id, len(reserva["evidencias"]), minimo, minimo_para(minutos_reserva))
+                        job_id, len(usaveis(reserva)), minimo, minimo_para(minutos_reserva))
             banco, origem, minimo = {**reserva, "_so_curto": True}, origem_r, minimo_para(minutos_reserva)
     try:
         banco = exigir_suficiente(banco, minimo)
@@ -897,7 +911,7 @@ def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes:
         total = len((completo or {}).get("evidencias", []))
         raise ScriptRejected(f"{exc} — fontes: {origem} ({total} no banco completo)") from exc
     log.info("[%s] banco de evidências: %d verificadas (%s) de %d no banco completo", job_id,
-             len(banco["evidencias"]), origem, len((completo or {}).get("evidencias", [])))
+             len(usaveis(banco)), origem, len((completo or {}).get("evidencias", [])))
     return banco
 
 

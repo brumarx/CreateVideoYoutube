@@ -317,12 +317,14 @@ def test_bloco_do_historico_poe_os_factuais_antes_dos_editoriais():
 
 
 def test_historico_de_um_job_nao_contamina_outro(monkeypatch):
-    monkeypatch.setattr(rd, "_auditar_versao", _auditor_falso([[("excede", 1, "coleções inteiras")], []]))
+    # 25/11: problema que só a IA julga (excede) agora sai por corte, sem edição; o histórico é testado com um que
+    # o código acha (vai à edição)
+    monkeypatch.setattr(rd, "_auditar_versao", _auditor_falso([[("hipotese_como_fato", 1, "coleções inteiras")], []]))
     ed = Editor(ED((2, [F("Bancos de genes do Iraque e da Síria foram danificados pela guerra.", evid=["E1"])])))
     monkeypatch.setattr(providers, "complete", ed)
     rd.auditar_e_corrigir(_roteiro(), BANCO, "Svalbard")
     # outro job (outro tema): o primeiro pedido de edição não traz nada do job anterior
-    monkeypatch.setattr(rd, "_auditar_versao", _auditor_falso([[("excede", 2, "a fonte não diz sempre")], []]))
+    monkeypatch.setattr(rd, "_auditar_versao", _auditor_falso([[("hipotese_como_fato", 2, "a fonte não diz sempre")], []]))
     ed2 = Editor(ED((3, [F("Em 2016, a água do degelo entrou no túnel de entrada.", evid=["E2"])])))
     monkeypatch.setattr(providers, "complete", ed2)
     rd.auditar_e_corrigir(_roteiro(), BANCO, "Outro tema")

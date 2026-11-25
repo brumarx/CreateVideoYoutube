@@ -30,6 +30,7 @@ def isolamento(tmp_path, monkeypatch):
 def pytest_configure(config):
     config.addinivalue_line("markers", "plano: o teste usa o plano da história de verdade (redacao.planejar_historia)")
     config.addinivalue_line("markers", "conferencia: o teste usa a conferência na escrita de verdade (redacao.conferir_na_escrita)")
+    config.addinivalue_line("markers", "revisao: o teste usa a revisão das afirmações de verdade (evidencias.revisar_afirmacoes)")
 
 
 @pytest.fixture(autouse=True)
@@ -52,3 +53,14 @@ def conferencia_na_escrita_simulada(request, monkeypatch):
     from src import redacao
     monkeypatch.setattr(redacao, "conferir_na_escrita", lambda script, banco, topic: (script, []))
     monkeypatch.setattr(redacao, "conferir_edicao", lambda *a, **k: None)  # 25/11: a mesma conferência na edição
+
+
+@pytest.fixture(autouse=True)
+def revisao_das_afirmacoes_simulada(request, monkeypatch):
+    """25/11: o banco escolhido para o roteiro passa pela revisão das afirmações (evidencias.revisar_afirmacoes:
+    chamadas ao juiz fixo). Os testes do pipeline simulam só as outras respostas: aqui a revisão devolve o banco
+    como veio. Quem testa a revisão de verdade marca @pytest.mark.revisao."""
+    if request.node.get_closest_marker("revisao"):
+        return
+    from src import evidencias
+    monkeypatch.setattr(evidencias, "revisar_afirmacoes", lambda banco, topic: banco)

@@ -2061,6 +2061,177 @@ def usaveis(banco: dict | None) -> list[dict]:
     return [e for e in (banco or {}).get("evidencias", []) if e["status"] in STATUS_USAVEIS]
 
 
+# ---------------------------------------------------------------- revisão das afirmações (25/11)
+# Catálogo de falhas de Svalbard: a afirmação do banco dizia mais que o trecho ("serve como protetor natural
+# mantendo as sementes na temperatura necessária", "Hemisfério Sul" por "Southern regions", "para garantir" por
+# "to contribute to securing", "elevou o total para" por "added to the more than") e o escritor repetia o exagero.
+# O juiz de sustentação (cascata, sem raciocínio) aprovou. Aqui o JUIZ fixo, com raciocínio, relê cada afirmação
+# utilizável contra o MESMO trecho que o escritor vê e decide: fiel, corrigir (frase nova fiel) ou descartar.
+# Uma vez por evidência: a decisão fica em cache pelo texto da afirmação e do trecho (e pelas regras).
+LOTE_REVISAO = 10
+TRECHO_REVISAO = 600
+DECISOES_REVISAO = ("fiel", "corrigir", "descartar")
+
+_PROMPT_REVISAO = """Você revisa as AFIRMAÇÕES de um banco de evidências de um vídeo (tema: {tema}). Cada AFIRMAÇÃO
+(português) deveria dizer EXATAMENTE o que o TRECHO da fonte (no idioma original) diz — nem mais, nem menos forte.
+Só o trecho conta, não o que você sabe. Leia com rigor; para cada item decida:
+
+"fiel": a afirmação diz o que o trecho diz (tradução, resumo e arredondamento no sentido certo valem).
+"corrigir": a afirmação diz MAIS ou OUTRA COISA que o trecho. Dê "afirmacao_corrigida": UMA frase em português do
+  Brasil que diz exatamente o que o trecho diz sobre o mesmo assunto. Corrija quando houver:
+  - FINALIDADE, CAUSA ou CONSEQUÊNCIA que o trecho não afirma ("foi criado para", "para garantir", "o que garante",
+    "por isso", "sem depender de") — "It allows" é "permite", não "foi criado para permitir";
+  - EFEITO ou AÇÃO atribuídos ao sujeito que o trecho não diz que ele faz, muitas vezes num gerúndio ("mantendo X",
+    "permitindo Y", "evitando Z"): "X serves as a protectant, as the seeds need to be kept cold" diz que X serve de
+    proteção PORQUE as sementes precisam ficar frias — NÃO diz que X mantém as sementes frias;
+  - TERMO MAIS FORTE ou mais amplo que o do trecho: "helping ensure" é "ajuda a garantir", "contribute to securing"
+    é "contribuir para garantir", "Southern regions" é "regiões do sul" (não "Hemisfério Sul"), "mostly" é "em
+    sua maioria", "many" não vira "todos";
+  - RESSALVA ou MODO perdidos: mantenha "em muitos aspectos", "pode", "teria de", "seria", "cerca de",
+    "aproximadamente" (condicional/necessidade não vira fato consumado: "would have to be" é "teria de ser");
+  - TEMPO ou SENTIDO trocados: "added to the more than 1.4 million already" é "somou-se às mais de 1,4 milhão
+    que já estavam lá" (não "elevou o total para mais de 1,4 milhão"); data/época do trecho fica a do trecho;
+  - PALAVRAS A MAIS: qualificador, detalhe ou conclusão que o trecho não tem ("vitais", "sem transferência de
+    posse") — tire;
+  - SUJEITO trocado ou perdido: mantenha quem faz/diz o quê; citação ou opinião é atribuída a quem a diz
+    ("segundo X, ...").
+  A frase corrigida não acrescenta nada (nenhum número, nome ou dado que não esteja no trecho) e fica completa e
+  compreensível sozinha.
+"descartar": o trecho é texto de interface/navegação do site ("see the tab in the menu above", "click here") e
+  não sobra fato; OU é fragmento sem sujeito/atribuição que não dá uma afirmação completa; OU o trecho não diz o
+  que a afirmação diz e não há fato aproveitável. Se o trecho tem um fato real junto com texto de interface,
+  prefira "corrigir" ficando só com o fato — a frase corrigida NUNCA leva instrução de navegação ("veja/consulte a
+  aba", "no menu acima", "clique").
+Na dúvida entre "fiel" e "corrigir", corrija: a frase corrigida fiel nunca prejudica.
+
+{itens}
+
+Responda SÓ JSON: {{"revisoes": [{{"n": 1, "decisao": "fiel|corrigir|descartar", "afirmacao_corrigida": "",
+"motivo": "o que a afirmação diz a mais (ou por que descartar)"}}]}}"""
+
+
+def _trecho_do_escritor(banco: dict) -> dict[str, str]:
+    """{id: trecho} — o MESMO trecho que o escritor e a conferência leem (redacao.mapa_do_conhecimento: a citação
+    verificada da melhor autoridade)."""
+    from .redacao import mapa_do_conhecimento
+    return {m["id"]: m["trecho"] for m in mapa_do_conhecimento(banco)}
+
+
+def _regras_revisao() -> str:
+    import inspect
+    return _impressao(1, _PROMPT_REVISAO, DECISOES_REVISAO, inspect.getsource(_revisao_valida))
+
+
+def _revisao_valida(d, trecho: str) -> dict | None:
+    """Decisão aproveitável do juiz, já com a trava de código: correção com número que o trecho não tem (ou
+    vazia) não vale — fica a afirmação original (devolve None)."""
+    if not isinstance(d, dict):
+        return None
+    decisao = str(d.get("decisao", "")).strip().lower()
+    if decisao not in DECISOES_REVISAO:
+        return None
+    motivo = re.sub(r"\s+", " ", str(d.get("motivo") or "")).strip()[:300]
+    if decisao != "corrigir":
+        return {"decisao": decisao, "motivo": motivo}
+    nova = re.sub(r"\s+", " ", str(d.get("afirmacao_corrigida") or "")).strip()
+    if len(nova.split()) < 3:
+        return None
+    ok, _ = numeros_conferidos(nova, numeros(nova), trecho)
+    if not ok:
+        log.info("revisão: correção recusada (número fora do trecho): %s", nova[:160])
+        return None
+    return {"decisao": "corrigir", "afirmacao_corrigida": nova, "motivo": motivo}
+
+
+def _revisar_lote(itens: list[dict], topic: str) -> dict[int, dict]:
+    """{n (1-based): decisão válida}. Juiz fixo (raciocínio); fora do ar → a cascata forte. Sem resposta: {}."""
+    from .providers import ProvedoresIndisponiveis, complete, is_strong_model
+    texto = "\n".join(f"{n}) AFIRMAÇÃO: {it['afirmacao']}\n   TRECHO: \"{it['trecho'][:TRECHO_REVISAO]}\""
+                      for n, it in enumerate(itens, 1))
+    pedido = [{"role": "user", "content": _PROMPT_REVISAO.format(tema=topic, itens=texto)}]
+    valido = lambda r: '"revisoes"' in (r or "")  # noqa: E731
+    try:
+        try:
+            raw = complete(pedido, max_tokens=6000, temperature=0.1, validate=valido, juiz=True)
+        except ProvedoresIndisponiveis:
+            raise
+        except RuntimeError as exc:
+            log.warning("juiz da revisão das afirmações sem resposta (%s) — revisa a cascata", str(exc)[:120])
+            raw = complete(pedido, max_tokens=6000, temperature=0.1, validate=valido, model_filter=is_strong_model)
+    except ProvedoresIndisponiveis:
+        raise
+    except RuntimeError as exc:
+        log.warning("revisão das afirmações indisponível (%s): ficam como estão", exc)
+        return {}
+    try:
+        lista = _json(raw).get("revisoes") or []
+    except ValueError:
+        return {}
+    out: dict[int, dict] = {}
+    for d in lista if isinstance(lista, list) else []:
+        if not isinstance(d, dict) or not str(d.get("n", "")).strip().isdigit():
+            continue
+        n = int(str(d["n"]).strip())
+        if 1 <= n <= len(itens):
+            v = _revisao_valida(d, itens[n - 1]["trecho"])
+            if v:
+                out[n] = v
+    return out
+
+
+def revisar_afirmacoes(banco: dict | None, topic: str) -> dict | None:
+    """25/11: cada afirmação utilizável relida pelo juiz fixo contra o trecho que o escritor vê, antes do escritor.
+    "corrigir" troca a afirmação (a original fica em `afirmacao_original`); "descartar" tira a evidência das
+    utilizáveis (status "nao_verificado" com o motivo); "fiel" só marca. Sem decisão do juiz, nada muda.
+    Devolve um banco novo (o recebido não é alterado)."""
+    if not banco or not banco.get("evidencias"):
+        return banco
+    from . import disk_cache
+    trechos = _trecho_do_escritor(banco)
+    regras = _regras_revisao()
+    alvos = [e for e in usaveis(banco) if trechos.get(e["id"])]
+    decisoes: dict[str, dict] = {}
+    faltam: list[dict] = []
+    for e in alvos:
+        chave = [regras, e["afirmacao"], trechos[e["id"]]]
+        guardado = disk_cache.get("revisao_afirmacao", chave)
+        if isinstance(guardado, dict) and guardado.get("decisao") in DECISOES_REVISAO:
+            decisoes[e["id"]] = guardado
+        else:
+            faltam.append({"id": e["id"], "afirmacao": e["afirmacao"], "trecho": trechos[e["id"]], "chave": chave})
+    _contar_cache("revisao", len(decisoes), len(faltam))
+    for k in range(0, len(faltam), LOTE_REVISAO):
+        lote = faltam[k:k + LOTE_REVISAO]
+        for n, d in _revisar_lote(lote, topic).items():
+            it = lote[n - 1]
+            decisoes[it["id"]] = d
+            disk_cache.put("revisao_afirmacao", it["chave"], d)
+    novas = []
+    cont = {"fiel": 0, "corrigir": 0, "descartar": 0}
+    for e in banco["evidencias"]:
+        d = decisoes.get(e["id"])
+        if not d:
+            novas.append(e)
+            continue
+        cont[d["decisao"]] += 1
+        if d["decisao"] == "fiel":
+            novas.append({**e, "revisada": "fiel"})
+        elif d["decisao"] == "corrigir":
+            nova = d["afirmacao_corrigida"]
+            log.info("revisão %s: %s → %s", e["id"], e["afirmacao"], nova)
+            nums = numeros(nova)
+            novas.append({**e, "afirmacao_original": e["afirmacao"], "afirmacao": nova, "revisada": "corrigida",
+                          "motivo_revisao": d.get("motivo", ""), "numeros": sorted(nums),
+                          "tipo": "quantitativo" if nums else "qualitativo"})
+        else:
+            log.info("revisão %s: descartada (%s): %s", e["id"], d.get("motivo", ""), e["afirmacao"])
+            novas.append({**e, "status": "nao_verificado", "status_original": e["status"], "revisada": "descartada",
+                          "motivo": f"descartada na revisão da afirmação: {d.get('motivo', '')}".strip()})
+    log.info("revisão das afirmações: %d revisadas de %d, %d fiéis, %d corrigidas, %d descartadas",
+             sum(cont.values()), len(alvos), cont["fiel"], cont["corrigir"], cont["descartar"])
+    return {**banco, "evidencias": novas}
+
+
 def numeros_da_evidencia(e: dict) -> set[str]:
     """Números que a evidência sustenta: os da afirmação e os dos trechos verificados (lidos como
     fonte, com vírgula de milhar do inglês)."""

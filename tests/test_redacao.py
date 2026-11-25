@@ -178,7 +178,8 @@ def test_trecho_existe_confere_no_texto_baixado(trecho, ok):
 def test_2_escritor_conta_historia_e_sabe_que_cada_frase_e_conferida():
     # 25/11: escrita livre com tom de história; cada frase factual é conferida contra o trecho citado
     assert "CONTAR COMO HISTÓRIA" in rd._PROMPT_ESCRITOR and "nunca mais" in rd._PROMPT_ESCRITOR
-    assert "conferida contra o trecho" in rd._PROMPT_ESCRITOR and "nunca invente" in rd._PROMPT_ESCRITOR
+    assert "conferida" in rd._PROMPT_ESCRITOR and "FATO APROVADO" in rd._PROMPT_ESCRITOR and "nunca invente" in rd._PROMPT_ESCRITOR
+    assert "NUNCA ligue fatos" in rd._PROMPT_ESCRITOR  # 25/11: sem costura de causa entre fatos
 
 
 def test_2b_lista_de_fatos_e_detectada_e_historia_passa():
@@ -1765,3 +1766,46 @@ def test_frase_nova_da_edicao_que_excede_sai_e_cena_sem_frase_volta(llm):
     assert [f["texto"] for f in novas[0]["frases"]] == ["Yakutsk é uma das duas grandes cidades sobre permafrost contínuo."]
     assert novas[1] is cenas[1] and registro["cenas_editadas"] == [1]
     assert len(registro["cortadas_na_conferencia"]) == 2
+
+
+def test_mesmo_fato_em_duas_cenas_e_narrativa_que_afirma_voltam_ao_escritor():
+    # 25/11 (catálogo Svalbard): sem_repeticao 2 a 5 em toda versão; "O seguro já funcionou" passava como narrativa
+    s = _roteiro([[F("Já imaginou?", "narrativa"), F("Yakutsk fica sobre permafrost.", evid=["E1"])],
+                  [F("O seguro já funcionou.", "narrativa"), F("A cidade fica sobre permafrost contínuo.", evid=["E1"])]])
+    assert rd.fato_em_duas_cenas(s) == ["o fato E1 aparece nas cenas 1, 2: conte uma vez só"]
+    m = rd.narrativa_que_afirma(s)
+    assert len(m) == 1 and "já" in m[0]
+    _, lista, _ = rd.defeitos(s, BANCO, TEMA_988, 0, 10**4, 0, 99)
+    assert any("aparece nas cenas" in x for x in lista) and any("afirma algo" in x for x in lista)
+
+
+def test_porque_e_graca_a_sem_causa_no_fato_reprova():
+    mapa = {m["id"]: m for m in rd.mapa_do_conhecimento(BANCO)}
+    assert rd.causa_sem_trecho("As estacas descem 15 metros porque o solo é gelo.", ["E4"], mapa)
+    assert rd.causa_sem_trecho("Graças a isso, o solo segue congelado.", ["E4"], mapa)
+
+
+def test_frase_reprovada_pela_ia_sai_antes_da_edicao_e_o_editor_nao_e_chamado(monkeypatch):
+    # 25/11 (catálogo Svalbard): reescrever o exagero trocava um por outro (editorial 6,9 → 4,0); o corte puro subiu
+    # o editorial para 8,1. Problema que só a IA julga sai; a edição fica para a história
+    s = _roteiro([[F("Imagine morar ali.", "narrativa"), F("Yakutsk é uma das duas grandes cidades sobre permafrost contínuo.", evid=["E1"])],
+                  [F("As estacas descem até 15 metros.", evid=["E2"]), F("E o permafrost nunca derrete.", evid=["E4"])],
+                  [F("Os prédios ficam sobre estacas para não aquecer o solo congelado.", evid=["E3"])]])
+    n = {"k": 0}
+
+    def auditar(script, banco, topic, previas):
+        n["k"] += 1
+        probs = [] if n["k"] > 1 else [rd._p("excede", "E o permafrost nunca derrete.", 1, 1, "nunca")]
+        return script, probs, {"nota": 9, "aprovado": True, "criterios": {}, "alvos": [], "travas": []}
+    monkeypatch.setattr(rd, "_auditar_versao", auditar)
+    monkeypatch.setattr(rd, "editar_cenas", lambda *a, **k: (_ for _ in ()).throw(AssertionError("editor chamado")))
+    monkeypatch.setattr(rd, "instantaneo", lambda v, o, m, t, p, q, b: {
+        "versao": v, "origem": o, "hash": rd._hash_versao(t, b), "aprovado": not p, "coerencia": 1, "alertas": [],
+        "nao_julgada": [], "factual": {"nota": 9, "problemas": p}, "semantica": {"enganos": []},
+        "editorial": {"nota": 9, "travas": [], "criterios": {}}, "cenas_modificadas": m})
+    for nome in ("_registra_versao", "_registra_problemas", "_registra_comparacao"):
+        monkeypatch.setattr(rd, nome, lambda *a, **k: None)
+    monkeypatch.setattr(rd, "comparar_versoes", lambda a, b: {})
+    final, rel = rd.auditar_e_corrigir(s, BANCO, TEMA_988)
+    textos = [f["texto"] for sc in final["scenes"] for f in sc["frases"]]
+    assert "E o permafrost nunca derrete." not in textos and "As estacas descem até 15 metros." in textos
