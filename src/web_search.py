@@ -404,6 +404,65 @@ def _duckduckgo(query: str, max_results: int) -> list[dict] | None:
     return facts or None
 
 
+EXTRACT_URL = "https://api.tavily.com/extract"
+EXTRACT_MAX = 10  # páginas por chamada de reserva (1 crédito a cada 5 páginas lidas, modo básico)
+
+
+def textos_via_tavily(urls: list[str]) -> dict[str, str]:
+    """25/11: reserva para página que nos devolve anti-robô ou erro (nla.gov.au, Cloudflare): o Tavily Extract lê do
+    lado dele. Só para as que falharam, no máximo EXTRACT_MAX por chamada; cache por endereço. {url: texto}."""
+    from . import disk_cache
+    if not urls or not TAVILY_API_KEYS:
+        return {}
+    saida: dict[str, str] = {}
+    faltam = []
+    for u in dict.fromkeys(urls):
+        guardado = disk_cache.get("tavily_extract", u)
+        if guardado is not None:
+            if guardado:
+                saida[u] = guardado
+        else:
+            faltam.append(u)
+    faltam = faltam[:EXTRACT_MAX]
+    if not faltam:
+        return saida
+    rotator = _rotator_for(TAVILY_API_KEYS)
+    for api_key in rotator.order():
+        try:
+            resp = httpx.post(EXTRACT_URL, json={"api_key": api_key, "urls": faltam, "extract_depth": "basic", "format": "text"},
+                              timeout=40)
+            if resp.status_code in (401, 403, 432):
+                rotator.ban(api_key)
+                continue
+            resp.raise_for_status()
+            dados = resp.json()
+        except Exception as exc:  # noqa: BLE001 — reserva nunca derruba a pesquisa
+            log.info("tavily extract falhou: %s", exc)
+            return saida
+        lidos = {}
+        for r in dados.get("results") or []:
+            texto = str(r.get("raw_content") or "").strip()
+            if r.get("url") and texto and not pagina_de_bloqueio(texto):
+                lidos[r["url"]] = texto
+        for u in faltam:
+            texto = lidos.get(u) or next((t for k, t in lidos.items() if k.rstrip("/") == u.rstrip("/")), "")
+            disk_cache.put("tavily_extract", u, texto)
+            if texto:
+                saida[u] = texto
+        log.info("tavily extract: %d de %d página(s) bloqueada(s) lidas pela reserva", len(lidos), len(faltam))
+        return saida
+    return saida
+
+
+def _com_reserva(urls: list[str], textos: list[str]) -> list[str]:
+    """Os textos baixados, com as páginas vazias ou anti-robô relidas pelo Tavily Extract."""
+    ruins = [u for u, t in zip(urls, textos) if not t or pagina_de_bloqueio(t)]
+    if not ruins:
+        return textos
+    lidos = textos_via_tavily(ruins)
+    return [lidos.get(u, t) for u, t in zip(urls, textos)]
+
+
 def _tavily(query: str, max_results: int) -> list[dict] | None:
     if not TAVILY_API_KEYS:
         return None
@@ -718,7 +777,7 @@ def paginas_dos_sites_oficiais(query: str, dominios: list[str], por_site: int = 
     with ThreadPoolExecutor(max_workers=4) as pool:
         urls = list(dict.fromkeys(u for lista in pool.map(links_do_site, dominios[:4]) for u in lista))
     with ThreadPoolExecutor(max_workers=6) as pool:
-        textos = list(pool.map(_page_text, urls))
+        textos = _com_reserva(urls, list(pool.map(_page_text, urls)))
     paginas = []
     for url, texto in zip(urls, textos):
         # 25/11: página oficial longa (FAQ da NordGen, 9 mil caracteres) era lida só no melhor trecho de 3 mil —
@@ -766,7 +825,7 @@ _FONTE_FRACA = re.compile(
     r"(^|\.)(grokipedia\.com|wikiwand\.com|everybodywiki\.com|wikizero\.com|dbpedia\.org|fandom\.com|quora\.com|"
     r"reddit\.com|medium\.com|blogspot\.[a-z.]+|wordpress\.com|pinterest\.[a-z.]+|tiktok\.com|facebook\.com|"
     r"instagram\.com|x\.com|twitter\.com|youtube\.com|youtu\.be|megacurioso\.com\.br|hypeness\.com\.br|"
-    r"brainly\.[a-z.]+|scribd\.com|slideshare\.net|amazon\.[a-z.]+|ebay\.[a-z.]+)$", re.I)
+    r"brainly\.[a-z.]+|scribd\.com|slideshare\.net|amazon\.[a-z.]+|ebay\.[a-z.]+|tavily\.com)$", re.I)
 
 
 def fonte_fraca(url: str) -> bool:
@@ -825,7 +884,7 @@ def referencias_da_wikipedia(query: str, max_paginas: int = 8) -> list[dict]:
     links.sort(key=lambda u: 0 if _REF_BOA.search(_host(u) + "/") else 1)
     links = links[:max_paginas * 2]
     with ThreadPoolExecutor(max_workers=6) as pool:
-        textos = list(pool.map(_page_text, links))
+        textos = _com_reserva(links, list(pool.map(_page_text, links)))
     saida = []
     por_dominio: dict[str, int] = {}
     for url, texto in zip(links, textos):

@@ -574,7 +574,9 @@ def _aplicar_trocas(evidencias: list[dict], trocas: dict[int, list[dict]] | None
 # ---------------------------------------------------------------- sustentação (trecho comprova a afirmação?)
 MARGEM_CONTEXTO = 600   # caracteres de cada lado do trecho: o que é preciso para interpretar "a cidade", "ali"
 LOTE_SUSTENTACAO = 8
-RESPOSTA_SUSTENTACAO = 1800
+# 25/11 (Svalbard 1019): com 1800 a resposta (decisão + partes + termos de 8 itens) vinha cortada em quase todo lote
+# e era refeita inteira com 3600 — cada lote pagava duas chamadas (3–4 min em vez de 1,5–2). Já começa com 3600
+RESPOSTA_SUSTENTACAO = 3600
 DECISOES = ("sustenta", "parcial", "irrelevante", "contradiz")
 
 

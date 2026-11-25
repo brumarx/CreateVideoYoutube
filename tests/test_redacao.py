@@ -1809,3 +1809,15 @@ def test_frase_reprovada_pela_ia_sai_antes_da_edicao_e_o_editor_nao_e_chamado(mo
     final, rel = rd.auditar_e_corrigir(s, BANCO, TEMA_988)
     textos = [f["texto"] for sc in final["scenes"] for f in sc["frases"]]
     assert "E o permafrost nunca derrete." not in textos and "As estacas descem até 15 metros." in textos
+
+
+def test_pagina_bloqueada_e_relida_pelo_tavily_extract(monkeypatch):
+    # 25/11: página anti-robô (nla.gov.au) ou vazia vai para a reserva do Tavily Extract; a boa não
+    from src import web_search as ws
+    pedidas = []
+    monkeypatch.setattr(ws, "textos_via_tavily", lambda urls: pedidas.extend(urls) or {"https://b.gov/x": "texto bom"})
+    saida = ws._com_reserva(["https://a.gov/y", "https://b.gov/x", "https://c.gov/z"],
+                            ["conteúdo normal da página", "Making sure you're not a bot!", ""])
+    assert pedidas == ["https://b.gov/x", "https://c.gov/z"]
+    assert saida == ["conteúdo normal da página", "texto bom", ""]
+    assert ws.fonte_fraca("https://tavily.com/knowledge/company/abc")
