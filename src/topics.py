@@ -15,6 +15,10 @@ vistos do nicho via yt-dlp (sem gastar cota da YouTube Data API, que fica
 toda pros uploads) e pede pro LLM o ASSUNTO REAL de um deles. Se a busca ou
 o LLM falhar, cai na lista fixa normalmente.
 
+Tema do público (25/11): canal com `pesquisa_temas` no yaml e pesquisa semanal com menos de 14 dias
+(scripts/pesquisar_temas.py → src/pesquisa_temas.py) usa primeiro o ASSUNTO de um vídeo que fez 5x+ a mediana
+do próprio canal — logo depois da série em teste, antes da fila fixa, das ideias e dos virais.
+
 Tema que não veio da lista fixa (viral ou gerado) só vale com um assunto
 real e específico (caso, pessoa, lugar, evento) que a busca na internet
 confirma — antes o LLM transformava a trend num tema genérico ("7 casos
@@ -410,6 +414,44 @@ def _com_site_oficial(channel_name: str, unused: list[str]) -> str:
     return candidatos[0]
 
 
+def _parecido_com_usado(assunto: str, used: list[str]) -> bool:
+    """25/11: o mesmo assunto com outras palavras (dois outliers sobre o Palm Jumeirah, ou o outlier de um
+    tema que a fila fixa já fez): 60%+ das palavras do assunto num tema já usado."""
+    from .pesquisa_temas import palavras
+    alvo = palavras(assunto)
+    if not alvo:
+        return False
+    return any(len(alvo & palavras(t)) >= max(2, 0.6 * len(alvo)) for t in used)
+
+
+def _tema_do_publico(channel_name: str, niche: str, used: list[str], preferir_site_oficial: bool) -> str | None:
+    """25/11 (Grupo C): assunto de um outlier da última pesquisa do canal (src/pesquisa_temas.py) — o que o
+    público já provou que quer ver. Vai o ASSUNTO, nunca o título do outro canal: título e roteiro saem do
+    pipeline de sempre. No modo redação (precisa de material de fonte), o candidato com artigo na Wikipédia
+    passa na frente. Assunto já usado, parecido com um usado ou fora do nicho fica de fora."""
+    from . import pesquisa_temas
+
+    candidatos = pesquisa_temas.candidatos_do_publico(channel_name)
+    if not candidatos or random.random() >= pesquisa_temas.parcela_do_publico(channel_name):
+        return None
+    if preferir_site_oficial:
+        candidatos = sorted(candidatos, key=lambda c: not c.get("wikipedia"))  # estável: mantém o rank
+    for c in candidatos:
+        assunto = c["assunto"]
+        if (not _is_valid_topic(assunto) or assunto in used or repeats_subject(assunto, used)
+                or _parecido_com_usado(assunto, used)):
+            continue
+        # o tema sai da fila como "já escolhido" e o run_pipeline não o checa de novo: o nicho é visto aqui
+        problema = topic_problem(assunto, niche, strict=False)
+        if problema:
+            log.info("[%s] candidato do público fora do nicho (%s): %s", channel_name, problema, assunto)
+            continue
+        log.info("[%s] tema do público: %s (outlier %.1fx a mediana de %s: %s)", channel_name, assunto,
+                 c.get("score") or 0, c.get("canal") or "?", c.get("url") or "")
+        return assunto
+    return None
+
+
 def pick_topic(
     channel_name: str,
     pool: list[str],
@@ -435,6 +477,9 @@ def pick_topic(
     topic = next((t for t in priority or [] if t not in used_set), None)
     if topic is not None:
         log.info("[%s] tema da série em teste: %s", channel_name, topic)
+    elif (publico := _tema_do_publico(channel_name, niche, used, preferir_site_oficial)) is not None:
+        # 25/11: o que o público já provou (pesquisa semanal) antes da fila fixa, ideias e virais
+        topic = publico
     elif ideas and (not unused or random.random() < IDEA_SHARE):
         # pool de ideias (projetos do GitHub + listas de projetos): ver src/idea_sources.py
         topic = random.choice(ideas)

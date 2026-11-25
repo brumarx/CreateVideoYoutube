@@ -201,3 +201,19 @@ fatos_verificados: true  # 16/11: roteiro de lista fechada de fatos + só sobe r
 modo_roteiro: redacao  # 24/11: mesmo caminho do Fractal — banco de evidências, roteiro que só resume as fontes, auditoria e corte automático (src/redacao.py)
 claim_sources: true
 musica_sem_risco: true  # só faixa sem risco de Content ID
+# 25/11: tema pelo que o público já provou (src/pesquisa_temas.py, semanal em scripts/pesquisar_temas.py):
+# vídeo de outro canal com 5x+ a mediana dele vira ASSUNTO candidato (nunca o título) e passa na frente da
+# fila fixa enquanto a pesquisa tiver menos de 14 dias
+pesquisa_temas:
+  # 25/11: só 30% dos temas da pesquisa até o assunto deixar de ser o título do outro canal (C4, IA)
+  parcela: 0.3
+  idioma: pt
+  formato: shorts
+  buscas:
+    - "IA grátis"
+    - "ChatGPT dicas"
+    - "IA para estudar"
+    - "IA para currículo"
+    - "inteligência artificial no celular"
+    - "Gemini grátis"
+  canais_referencia: []

@@ -8,6 +8,9 @@ data/used_political_facts.json
 data/playlists.json
 data/botafogo_covered_matches.json
 data/stock_media_recent.json
+data/variedade.json
+data/variedade.lock
+data/variedade.tmp
 data/google_tts_usage.json
 __pycache__/
 *.pyc
@@ -32,3 +35,5 @@ data/provider_health.lock
 data/provider_health.tmp
 data/paid_usage.json
 data/trending_monitor.json
+data/temas_pesquisados/
+data/ganchos_usados.json

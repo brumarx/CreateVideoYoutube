@@ -252,6 +252,9 @@ class ChannelConfig:
     # bordão do canal com teto de frases no vídeo ({"imposto": 2}): o prompt
     # pedia "no máximo 2 vezes" e o vídeo da cota (26/10) disse "imposto" em 4
     word_caps: dict[str, int] = field(default_factory=dict)
+    # 25/11: pesquisa de temas pelo que o público já provou (src/pesquisa_temas.py): {buscas: [...],
+    # canais_referencia: [...], idioma: pt, formato: shorts|videos, parcela: 1.0}. Vazio = sem pesquisa
+    pesquisa_temas: dict = field(default_factory=dict)
 
     @staticmethod
     def load(name: str) -> "ChannelConfig":
@@ -312,4 +315,5 @@ class ChannelConfig:
             pronunciations={str(k): str(v) for k, v in (data.get("pronuncia") or {}).items()},
             editorial_line=[str(x) for x in data.get("linha_editorial") or []],
             word_caps={str(k).lower(): int(v) for k, v in (data.get("bordao_max") or {}).items()},
+            pesquisa_temas=dict(data.get("pesquisa_temas") or {}),
         )

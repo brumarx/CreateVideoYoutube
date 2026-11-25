@@ -280,3 +280,19 @@ loja:
   excluir_categorias: ["Campanha: um de cada lado"]
 fatos_verificados: true  # 16/11: roteiro de lista fechada de fatos + só sobe revisado (canais sem banco de dados)
 modo_roteiro: redacao  # 19/11: banco de evidências + auditoria por categoria; 24/11: o roteiro só resume as fontes (src/redacao.py)
+# 25/11: tema pelo que o público já provou (src/pesquisa_temas.py, semanal em scripts/pesquisar_temas.py):
+# vídeo de outro canal com 5x+ a mediana dele vira ASSUNTO candidato (nunca o título) e passa na frente da
+# fila fixa enquanto a pesquisa tiver menos de 14 dias. Buscas dos três filões do nicho
+pesquisa_temas:
+  # 25/11: só 30% dos temas da pesquisa até o assunto deixar de ser o título do outro canal (C4, IA)
+  parcela: 0.3
+  idioma: pt
+  formato: shorts
+  buscas:
+    - "megaprojetos"
+    - "como um país resolveu"
+    - "engenharia impossível"
+    - "animais mais perigosos do mundo"
+    - "fenômenos naturais extremos"
+    - "mistérios não resolvidos"
+  canais_referencia: []

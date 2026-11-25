@@ -26,6 +26,9 @@ def isolamento(request, tmp_path, monkeypatch):
     from src import web_search
     monkeypatch.setattr(web_search, "referencias_da_wikipedia", lambda *a, **k: [])  # 25/11: abre dezenas de páginas
     monkeypatch.setattr(web_search, "textos_via_tavily", lambda urls: {})  # 25/11: reserva paga cota do Tavily
+    from src import pesquisa_temas
+    # 25/11: o pick_topic lê a pesquisa de temas real (data/temas_pesquisados) — teste nunca vê a do projeto
+    monkeypatch.setattr(pesquisa_temas, "DIR", tmp_path / "temas_pesquisados")
     from src import redacao
     monkeypatch.setattr(redacao, "_GANCHOS_USADOS", tmp_path / "ganchos_usados.json")  # 25/11: rodízio do gancho
     if not request.node.get_closest_marker("ritmo"):
