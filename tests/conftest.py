@@ -51,3 +51,4 @@ def conferencia_na_escrita_simulada(request, monkeypatch):
         return
     from src import redacao
     monkeypatch.setattr(redacao, "conferir_na_escrita", lambda script, banco, topic: (script, []))
+    monkeypatch.setattr(redacao, "conferir_edicao", lambda *a, **k: None)  # 25/11: a mesma conferência na edição

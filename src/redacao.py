@@ -931,10 +931,32 @@ def _trechos_das(ids: list[str], mapa: dict[str, dict]) -> str:
                      for x in ids[:3] if x in mapa) or "   (nenhuma evidência válida citada)"
 
 
+# 25/11 (Svalbard 1017: "Por isso a engenharia adiciona refrigeração"): conector de causa na frase só passa se
+# algum trecho citado também afirma causa; o juiz ainda confere se é ESSA causa
+_CONECTOR_CAUSAL = re.compile(r"\b(por isso|por causa diss[oa]|portanto|consequentemente|daí que|graças a isso|"
+                              r"o que garante|é por isso|por esse motivo|por essa razão)\b", re.I)
+_CAUSA_NO_TRECHO = re.compile(r"\b(because|therefore|thus|hence|as a result|due to|owing to|consequently|so that|"
+                              r"in order to|that is why|which is why|reason|porque|por isso|portanto|devido|graças|"
+                              r"por causa|razão|motivo|para que|a fim de|fordi|derfor)\b", re.I)
+
+
+def causa_sem_trecho(texto: str, ids: list[str], mapa: dict[str, dict]) -> str | None:
+    m = _CONECTOR_CAUSAL.search(texto)
+    if not m:
+        return None
+    trechos = " ".join(f"{mapa[x].get('trecho') or ''} {mapa[x].get('afirmacao') or ''}" for x in ids if x in mapa)
+    if _CAUSA_NO_TRECHO.search(trechos):
+        return None
+    return f'DEDUÇÃO: "{m.group(0)}" liga dois fatos numa causa que nenhum trecho citado afirma'
+
+
 def conferir_contra_trechos(itens: list[dict], banco: dict) -> dict[int, str | None]:
     """itens: [{"texto", "evidencias", "anterior"}]. Devolve {índice: None (sustentada) | o que excede}.
-    Sem resposta da conferência a frase conta como não conferida (nunca passa por falta de juiz)."""
-    from .providers import complete, is_strong_model
+    Sem resposta da conferência a frase conta como não conferida (nunca passa por falta de juiz).
+    25/11 (Svalbard 1017): quem confere é o JUIZ fixo, com raciocínio — sem ele o Nemotron deixou passar
+    "por isso" sem causa no trecho e o fundo dos bancos de genes virando o fundo do cofre. Juiz fora do ar →
+    a cascata sem raciocínio."""
+    from .providers import ProvedoresIndisponiveis, complete, is_strong_model
     mapa = {m["id"]: m for m in mapa_do_conhecimento(banco)}
     saida: dict[int, str | None] = {}
     for ini in range(0, len(itens), CONFERE_POR_CHAMADA):
@@ -943,9 +965,17 @@ def conferir_contra_trechos(itens: list[dict], banco: dict) -> dict[int, str | N
                           + f"FRASE: {it['texto']}\n{_trechos_das(it['evidencias'], mapa)}"
                           for n, it in enumerate(lote, 1))
         decisoes: dict[int, dict] = {}
+        pedido = [{"role": "user", "content": _PROMPT_CONFERE.format(itens=texto)}]
         try:
-            raw = complete([{"role": "user", "content": _PROMPT_CONFERE.format(itens=texto)}], max_tokens=4000,
-                           temperature=0.1, validate=lambda r: '"decisoes"' in r, model_filter=is_strong_model)
+            try:
+                raw = complete(pedido, max_tokens=4000, temperature=0.1, validate=lambda r: '"decisoes"' in r,
+                               juiz=True)
+            except ProvedoresIndisponiveis:
+                raise
+            except RuntimeError as exc:
+                log.warning("juiz da conferência sem resposta (%s) — confere a cascata", str(exc)[:120])
+                raw = complete(pedido, max_tokens=4000, temperature=0.1, validate=lambda r: '"decisoes"' in r,
+                               model_filter=is_strong_model)
             decisoes = {int(d["n"]): d for d in _obj(raw).get("decisoes") or []
                         if isinstance(d, dict) and str(d.get("n", "")).isdigit()}
         except RuntimeError as exc:
@@ -953,8 +983,9 @@ def conferir_contra_trechos(itens: list[dict], banco: dict) -> dict[int, str | N
         for n, it in enumerate(lote, 1):
             d = decisoes.get(n) or {}
             ok = str(d.get("decisao", "")).strip().lower() == "sustentada"
-            saida[ini + n - 1] = None if ok else (str(d.get("o_que_excede") or "").strip()
-                                                  or ("diz mais do que o trecho" if d else "não conferida"))
+            saida[ini + n - 1] = (causa_sem_trecho(it["texto"], it.get("evidencias") or [], mapa) if ok
+                                  else (str(d.get("o_que_excede") or "").strip()
+                                        or ("diz mais do que o trecho" if d else "não conferida")))
     return saida
 
 
@@ -1902,6 +1933,45 @@ def nome_novo_na_correcao(frases: list[dict], originais: list[dict], motivos: li
     return None
 
 
+def conferir_edicao(novas: list[dict], cenas: list[dict], registro: dict, banco: dict) -> None:
+    """25/11 (Svalbard 1017): a frase que a EDIÇÃO escreve passa pela mesma conferência contra os trechos da
+    escrita — antes a edição reescrevia "garante a operação" e "por isso" sem ninguém conferir. Frase nova que
+    excede sai da cena; cena que fica sem frase volta a ser a original. Mexe em `novas` e no registro."""
+    alvos = []
+    for i in registro["cenas_editadas"]:
+        k = i - 1
+        antes = {_norm(f["texto"]) for f in cenas[k].get("frases") or []}
+        frases = novas[k]["frases"]
+        for j, f in enumerate(frases):
+            if f.get("tipo") == "narrativa" or _norm(f["texto"]) in antes:
+                continue
+            ant = frases[j - 1]["texto"] if j else (novas[k - 1]["frases"][-1]["texto"]
+                                                    if k and novas[k - 1].get("frases") else "")
+            alvos.append((k, j, {"texto": f["texto"], "evidencias": list(f.get("evidencias") or []), "anterior": ant}))
+    if not alvos:
+        return
+    veredito = conferir_contra_trechos([it for _, _, it in alvos], banco)
+    fora: dict[int, set[int]] = {}
+    for n, motivo in veredito.items():
+        if motivo:
+            k, j, it = alvos[n]
+            fora.setdefault(k, set()).add(j)
+            registro.setdefault("cortadas_na_conferencia", []).append(
+                {"cena": k + 1, "frase": it["texto"][:160], "motivo": motivo[:200]})
+            log.warning("edição da cena %d: frase nova excede o trecho (%s) — sai: %s", k + 1, motivo[:120],
+                        it["texto"][:100])
+    for k, js in fora.items():
+        restam = [f for j, f in enumerate(novas[k]["frases"]) if j not in js]
+        if not any(f.get("tipo") != "narrativa" for f in restam):
+            novas[k] = cenas[k]
+            registro["cenas_editadas"].remove(k + 1)
+            registro["detalhes"] = [d for d in registro["detalhes"] if d["cena"] != k + 1]
+            registro["revertidas"].append({"cena": k + 1, "motivo": "toda frase nova excedia o trecho"})
+        else:
+            novas[k] = {**novas[k], "frases": restam, "narration": " ".join(f["texto"] for f in restam)}
+    log.info("conferência da edição: %d frase(s) nova(s), %d excediam", len(alvos), sum(1 for m in veredito.values() if m))
+
+
 def editar_cenas(script: dict, alvos: dict[int, list[str]], banco: dict, topic: str, *,
                  titulo_motivo: str = "", problemas: list[dict] | None = None,
                  prioritarias: set[str] | None = None, historico: list[dict] | None = None) -> tuple[dict, dict]:
@@ -2017,6 +2087,7 @@ def editar_cenas(script: dict, alvos: dict[int, list[str]], banco: dict, topic: 
         registro["detalhes"].append({"cena": i + 1, **{k: str(c.get(k, ""))[:300]
                                                         for k in ("funcao", "preserva", "corrige", "reprovado", "trecho")},
                                      "antes": cenas[i].get("narration", ""), "depois": novas[i]["narration"]})
+    conferir_edicao(novas, cenas, registro, banco)
     saida = {**script, "scenes": novas}
     textos_novos = {(i, _norm(f["texto"])) for i, sc in enumerate(novas) for f in sc.get("frases") or []}
     for p in problemas or []:

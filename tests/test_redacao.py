@@ -1712,3 +1712,56 @@ def test_conferencia_cobra_deducao_tempo_trocado_e_termo_mais_forte():
     p = rd._PROMPT_CONFERE
     assert "DEDUÇÃO" in p and "TEMPO TROCADO" in p and "TERMO MAIS FORTE" in p and "SENTIDO INVERTIDO" in p
     assert "Hemisfério Sul" in p and "sem termo mais forte" in rd._PROMPT_REESCREVE
+
+
+def test_conector_de_causa_sem_causa_no_trecho_reprova():
+    # 25/11 (Svalbard 1017): "Por isso a engenharia adiciona refrigeração" — o trecho citado não afirma causa
+    mapa = {m["id"]: m for m in rd.mapa_do_conhecimento(BANCO)}
+    assert rd.causa_sem_trecho("Por isso o permafrost fica a 0 °C.", ["E4"], mapa)
+    assert rd.causa_sem_trecho("O permafrost fica a 0 °C.", ["E4"], mapa) is None
+    # E2 diz "to avoid the risk" — não é conector de causa; E3 diz "para não aquecer"; nenhum dos dois afirma causa
+    assert rd.causa_sem_trecho("Portanto as estacas descem 15 metros.", ["E2"], mapa)
+
+
+@pytest.mark.conferencia
+def test_conferencia_usa_o_juiz_e_reprova_por_isso_mesmo_aprovado(monkeypatch):
+    from src import providers as pv
+    chamadas = []
+
+    def juiz(messages, **kw):
+        chamadas.append(kw.get("juiz"))
+        return json.dumps({"decisoes": [{"n": 1, "decisao": "sustentada"}, {"n": 2, "decisao": "sustentada"}]})
+    monkeypatch.setattr(pv, "complete", juiz)
+    r = rd.conferir_contra_trechos([{"texto": "Por isso o permafrost fica a 0 °C.", "evidencias": ["E4"]},
+                                    {"texto": "As estacas descem até 15 metros.", "evidencias": ["E2"]}], BANCO)
+    assert chamadas == [True] and r[0].startswith("DEDUÇÃO") and r[1] is None
+
+
+@pytest.mark.conferencia
+def test_juiz_fora_do_ar_a_cascata_confere(monkeypatch):
+    from src import providers as pv
+
+    def resp(messages, **kw):
+        if kw.get("juiz"):
+            raise pv.JuizSemResposta("juiz sem resposta")
+        return json.dumps({"decisoes": [{"n": 1, "decisao": "sustentada"}]})
+    monkeypatch.setattr(pv, "complete", resp)
+    assert rd.conferir_contra_trechos([{"texto": "As estacas descem até 15 metros.", "evidencias": ["E2"]}],
+                                      BANCO) == {0: None}
+
+
+@pytest.mark.conferencia
+def test_frase_nova_da_edicao_que_excede_sai_e_cena_sem_frase_volta(llm):
+    # 25/11 (Svalbard 1017): a edição reescrevia sem conferência ("garante a operação do cofre")
+    cenas = [{"frases": [F("Yakutsk é uma das duas grandes cidades sobre permafrost contínuo.", "factual", ["E1"])]},
+             {"frases": [F("As estacas descem até 15 metros.", "factual", ["E2"])]}]
+    novas = [{"frases": [F("Yakutsk é uma das duas grandes cidades sobre permafrost contínuo.", "factual", ["E1"]),
+                         F("Lá o permafrost nunca derrete.", "factual", ["E4"])]},
+             {"frases": [F("As estacas descem até 15 metros, sempre.", "factual", ["E2"])]}]
+    registro = {"cenas_editadas": [1, 2], "revertidas": [], "detalhes": [{"cena": 1}, {"cena": 2}]}
+    llm({"decisoes": [{"n": 1, "decisao": "excede", "o_que_excede": "nunca derrete"},
+                      {"n": 2, "decisao": "excede", "o_que_excede": "sempre"}]})
+    rd.conferir_edicao(novas, cenas, registro, BANCO)
+    assert [f["texto"] for f in novas[0]["frases"]] == ["Yakutsk é uma das duas grandes cidades sobre permafrost contínuo."]
+    assert novas[1] is cenas[1] and registro["cenas_editadas"] == [1]
+    assert len(registro["cortadas_na_conferencia"]) == 2
