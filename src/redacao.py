@@ -24,6 +24,7 @@ import json
 import logging
 import math
 import re
+from pathlib import Path
 from typing import Callable
 
 from .evidencias import FORCA, STATUS_USAVEIS, adicionar_fontes, bloco_para_escritor, numeros_da_evidencia, por_id, usaveis
@@ -726,8 +727,12 @@ Como ler o mapa:
   de uma coisa não passa para outra.
 
 PLANEJE:
+0) O GANCHO (a 1ª frase do vídeo, até 12 palavras): escolha UMA fórmula desta lista e o fato MAIS ESTRANHO do
+   material que a sustenta (verdadeiro e entregue no vídeo; o fato, não o contexto):
+{formulas}
 1) O ÂNGULO: a pergunta que a abertura desperta e a resposta que a conclusão entrega — só com o que o material
-   sustenta (sem apoio, escolha outro ângulo dentro do tema).
+   sustenta (sem apoio, escolha outro ângulo dentro do tema). E o PONTO DE VISTA: uma frase com a leitura do
+   canal sobre a história, apoiada nos fatos (sem número novo, sem exagero), dita no fechamento.
 2) De 5 a 9 BLOCOS, em ordem, cada um com uma FUNÇÃO na história (por exemplo: abertura, o problema que existe,
    como funciona, por que ali, como guarda e protege, o que guarda de fato, como entra e sai, o que já
    aconteceu, os limites, conclusão — use só os que o material sustenta), o que o bloco conta e as evidências
@@ -737,13 +742,66 @@ PLANEJE:
    sempre, possível ou aconteceu, causa ou coincidência, de quem é a característica, que medida e unidade).
 Não use todas as evidências: escolha o que explica a história; o resto fica de fora.
 Responda SÓ JSON:
-{{"angulo": {{"pergunta": "...", "resposta": "..."}},
+{{"gancho": {{"formula": "nome_da_formula", "evidencia": "E3", "frase": "até 12 palavras"}},
+  "angulo": {{"pergunta": "...", "resposta": "...", "ponto_de_vista": "..."}},
   "blocos": [{{"funcao": "abertura", "conta": "...", "evidencias": ["E1"]}}],
   "evidencias": {{"E1": {{"comprova": "...", "nao_comprova": "..."}}}},
   "nao_exagerar": ["..."]}}"""
 
 
 EVID_POR_BLOCO = 4  # o pedido diz 3; o código corta no 4º
+
+# 25/11 (grupo A das melhorias; referência: projeto-canais docs/ganchos.md): os 3 primeiros segundos decidem se a
+# pessoa fica. O plano escolhe UMA fórmula, nunca a dos últimos vídeos do canal, e o gancho sai de um fato aprovado
+FORMULAS_GANCHO = {
+    "numero_absurdo": "um número do material que parece impossível",
+    "inversao": "o contrário do que todo mundo pensa",
+    "comparacao_de_tempo": "antes × agora, ou quanto tempo algo leva",
+    "voce_fez_sem_saber": "algo que o espectador faz sem saber o porquê",
+    "impossivel_real": "o que parece impossível e existe",
+    "objeto_comum_com_segredo": "uma coisa comum com um segredo",
+    "forma_estranha": "um formato ou lugar estranho",
+    "permanencia": "algo que dura muito mais do que se imagina",
+    "origem_literal": "de onde veio, ao pé da letra",
+    "durabilidade": "o que resiste a quase tudo",
+    "movimento_invisivel": "algo acontecendo agora sem ninguém ver",
+    "proibido": "o que é proibido ou só pouca gente pode fazer",
+    "mito_derrubado": "um mito que o material desmente",
+    "escala_humana": "um tamanho traduzido para o corpo ou o dia a dia",
+    "coincidencia_historica": "duas coisas que aconteceram juntas",
+    "pergunta_que_ninguem_fez": "uma pergunta óbvia que ninguém faz",
+    "recorde": "o maior, o menor, o primeiro (só se a fonte disser)",
+    "contagem_regressiva": "um prazo ou contagem",
+    "consequencia_inesperada": "um efeito que ninguém esperava",
+    "o_que_acontece_se": "o que acontece se…?",
+    "lugar_secreto": "um lugar que quase ninguém vê por dentro",
+    "quem_decide": "quem tem a chave ou a última palavra",
+}
+GANCHOS_SEM_REPETIR = 3  # fórmulas dos últimos vídeos do canal que o plano não pode repetir
+_GANCHOS_USADOS = Path(__file__).resolve().parent.parent / "data" / "ganchos_usados.json"
+
+
+def ganchos_recentes(canal: str) -> list[str]:
+    try:
+        return list(json.loads(_GANCHOS_USADOS.read_text()).get(canal) or [])[-GANCHOS_SEM_REPETIR:]
+    except (OSError, ValueError):
+        return []
+
+
+def registrar_gancho(canal: str, formula: str) -> None:
+    if not canal or formula not in FORMULAS_GANCHO:
+        return
+    try:
+        dados = json.loads(_GANCHOS_USADOS.read_text()) if _GANCHOS_USADOS.exists() else {}
+    except (OSError, ValueError):
+        dados = {}
+    dados[canal] = (list(dados.get(canal) or []) + [formula])[-20:]
+    _GANCHOS_USADOS.parent.mkdir(parents=True, exist_ok=True)
+    _GANCHOS_USADOS.write_text(json.dumps(dados, ensure_ascii=False, indent=1))
+
+
+def bloco_formulas(evitar: list[str]) -> str:
+    return "\n".join(f"- {k}: {v}" for k, v in FORMULAS_GANCHO.items() if k not in evitar)
 
 
 def _plano_valido(d: dict, validos: set[str]) -> dict | None:
@@ -757,11 +815,16 @@ def _plano_valido(d: dict, validos: set[str]) -> dict | None:
     lim = {k: v for k, v in (d.get("evidencias") or {}).items() if k in usados and isinstance(v, dict)}
     if len(usados) < 4 or len(lim) < len(usados) * 0.8:
         return None
-    return {"angulo": d["angulo"], "blocos": blocos, "evidencias": lim,
+    g = d.get("gancho") if isinstance(d.get("gancho"), dict) else {}
+    gancho = ({"formula": str(g.get("formula")), "evidencia": str(g.get("evidencia") or ""),
+               "frase": str(g.get("frase") or "")[:160]}
+              if g.get("formula") in FORMULAS_GANCHO and str(g.get("evidencia") or "") in validos else None)
+    return {"angulo": d["angulo"], "blocos": blocos, "evidencias": lim, "gancho": gancho,
             "nao_exagerar": [str(x)[:200] for x in d.get("nao_exagerar") or []][:10]}
 
 
-def planejar_historia(topic: str, banco: dict, *, min_minutes: float, max_minutes: float) -> dict | None:
+def planejar_historia(topic: str, banco: dict, *, min_minutes: float, max_minutes: float,
+                      canal: str = "") -> dict | None:
     """O plano da história a partir do mapa (uma chamada, guardada em cache pelo tema + banco + código).
     None se nenhum modelo forte devolver um plano válido (o escritor volta a ler o banco inteiro)."""
     import hashlib
@@ -770,7 +833,8 @@ def planejar_historia(topic: str, banco: dict, *, min_minutes: float, max_minute
     mapa = mapa_do_conhecimento(banco)
     validos = {m["id"] for m in mapa}
     pedido = _PROMPT_PLANO.format(tema=topic, mapa=bloco_do_mapa(mapa, limite_trecho=180),
-                                  min_min=min_minutes, max_min=max_minutes)
+                                  min_min=min_minutes, max_min=max_minutes,
+                                  formulas=bloco_formulas(ganchos_recentes(canal)))
     chave = [1, hashlib.sha1(pedido.encode()).hexdigest()]
     salvo = disk_cache.get("plano_historia", chave, ttl_days=7)
     if salvo:
@@ -796,9 +860,15 @@ def material_do_plano(plano: dict, banco: dict) -> str:
     ids = {x for b in plano["blocos"] for x in b["evidencias"]}
     blocos = "\n".join(f"{k}. [{b.get('funcao', '')}] {b.get('conta', '')} (evidências: {', '.join(b['evidencias']) or '-'})"
                        for k, b in enumerate(plano["blocos"], 1))
+    g = plano.get("gancho") or {}
     return (f"PLANO DA HISTÓRIA (siga o ângulo e a ordem; cada bloco vira uma ou mais cenas com a FUNÇÃO dele):\n"
-            f"Pergunta da abertura: {plano['angulo'].get('pergunta', '')}\n"
-            f"Resposta da conclusão: {plano['angulo'].get('resposta', '')}\n{blocos}\n"
+            + (f"Gancho (1ª frase, fórmula {g.get('formula')}, fato {g.get('evidencia')}): {g.get('frase', '')}\n"
+               if g.get("frase") else "")
+            + f"Pergunta da abertura: {plano['angulo'].get('pergunta', '')}\n"
+            f"Resposta da conclusão: {plano['angulo'].get('resposta', '')}\n"
+            + (f"Ponto de vista (dito no fechamento): {plano['angulo']['ponto_de_vista']}\n"
+               if plano["angulo"].get("ponto_de_vista") else "")
+            + f"{blocos}\n"
             + ("Não exagerar: " + "; ".join(plano["nao_exagerar"]) + "\n" if plano.get("nao_exagerar") else "")
             + "\nEVIDÊNCIAS DO PLANO (a base da história; cada uma com o trecho, o que comprova e o que NÃO comprova):\n"
             + bloco_do_mapa(mapa_do_conhecimento(banco), ids=ids, limite_trecho=400, plano=plano)
@@ -862,8 +932,36 @@ def defeitos(script: dict, banco: dict, topic: str, min_pal: int, max_pal: int, 
             lista.append(str(d))
     # 20/11: o que o editor travaria (linha do tempo, fato repetido) já volta ao escritor nas tentativas dele
     lista += travas_editoriais(script)
-    lista += fato_em_duas_cenas(script) + narrativa_que_afirma(script)
+    lista += fato_em_duas_cenas(script) + narrativa_que_afirma(script) + abertura_e_fechamento(script)
     return script, lista, problemas
+
+
+_ABERTURA_GENERICA = re.compile(r"^\W*(oi|olá|ola|hoje (eu|vamos|você)|neste vídeo|nesse vídeo|você sabia|sabia que|"
+                                r"bem-vind|vamos falar)\b", re.I)
+_PEDE_LIKE = re.compile(r"\b(deixa (o|seu) like|deixe (o|seu) like|se inscrev|inscreva-se|ative o sininho|"
+                        r"ativa o sininho)\b", re.I)
+_COMENTA = re.compile(r"\b[Cc]omenta(r)? [A-ZÁÉÍÓÚÂÊÔÃÕÇ]{3,}\b")
+GANCHO_MAX_PALAVRAS = 16  # o pedido diz 12; folga para "Em 2008," e afins
+
+
+def abertura_e_fechamento(script: dict) -> list[str]:
+    """25/11 (grupo A): gancho curto e não genérico; fim com pergunta ao espectador ou "Comenta PALAVRA";
+    nunca pedido de like/inscrição no texto (o canal põe o dele)."""
+    frases = [f["texto"].strip() for _, _, f in frases_de(script)]
+    if not frases:
+        return []
+    out = []
+    primeira = frases[0]
+    if _ABERTURA_GENERICA.search(primeira):
+        out.append(f"a abertura \"{primeira[:80]}\" é genérica: comece pelo gancho (o fato mais estranho)")
+    elif len(primeira.split()) > GANCHO_MAX_PALAVRAS:
+        out.append(f"a 1ª frase tem {len(primeira.split())} palavras: o gancho tem até 12")
+    if not (frases[-1].endswith("?") or _COMENTA.search(frases[-1])):
+        out.append("o fim não chama o espectador: feche com uma pergunta a ele ou \"Comenta PALAVRA se…\"")
+    pede = next((f for f in frases if _PEDE_LIKE.search(f)), None)
+    if pede:
+        out.append(f"a frase \"{pede[:80]}\" pede like/inscrição: tire (o canal põe o dele)")
+    return out
 
 
 def fato_em_duas_cenas(script: dict) -> list[str]:
@@ -912,10 +1010,9 @@ começo curioso, tensão e resposta — sem inventar nada. Você escolhe as evid
   mantenha as ressalvas do fato ("ajuda a", "cerca de").
 - NUNCA ligue fatos com "por isso", "porque", "graças a", "o que garante", salvo se o fato diz a causa.
 - Narrativa (abertura, ligação, pergunta) não afirma: sem número, nome, "funciona", "garante", "já".
-- Uma ideia puxa a outra (o que, por que, como, o que aconteceu); a abertura não anuncia o que vem depois; o
-  fim responde à pergunta do começo com um fato das evidências.
-- Prefira o que faz história (o que aconteceu, por que ali, como funciona) ao institucional (quem administra,
-  acordos, portal).
+- 1ª frase = gancho (até 12 palavras, o fato mais estranho; nunca "você sabia"/"neste vídeo"). O fim volta ao
+  começo, diz o ponto de vista e fecha com pergunta ao espectador ou "Comenta PALAVRA se…"; sem pedir like.
+- Prefira o que faz história (o que aconteceu, por que ali, como funciona) ao institucional.
 REGRAS DE PRECISÃO (inegociáveis):
 - Evidência "contraditorio": diga os dois valores e que as fontes divergem, ou não use.
 - "estimado": diga como aproximação ("cerca de"). Valor medido/exato fica EXATO, mesmo de fonte única.
@@ -927,7 +1024,7 @@ REGRAS DE PRECISÃO (inegociáveis):
 - Decimal (−64,4 °C): o valor da evidência, ou o arredondamento dito e no lado certo ("mais de 64 graus
   negativos"). Mantenha o sinal (negativos, abaixo de zero) e diga o que o número é (recorde, média).
 - Número que nenhuma evidência traz: não diga. Nunca outro número no lugar do que a evidência traz.
-- Datas só as que mudam a história (sem linha do tempo).
+- Datas só as que mudam a história.
 {regra_precisao}
 - Sem saudação inicial e sem pedir like/inscrição (entram depois).
 {linha_canal}
@@ -1101,6 +1198,39 @@ def conferir_na_escrita(script: dict, banco: dict, topic: str) -> tuple[dict, li
     return {**script, "scenes": saida}, motivos
 
 
+RITMO_VIDEOS = 3
+RITMO_CARACTERES = 450
+
+
+def ritmo_de_referencia(canal: str) -> str:
+    """25/11 (grupo A; referência: projeto-canais auditoria.referencias_de_voz): as narrações dos vídeos do canal
+    com mais visualizações (data/queue.db video_performance + data/published_scripts) para o escritor imitar o
+    RITMO — nunca as frases nem os fatos (fato só do banco, conferido)."""
+    import sqlite3
+    raiz = Path(__file__).resolve().parent.parent / "data"
+    try:
+        con = sqlite3.connect(f"file:{raiz / 'queue.db'}?mode=ro", uri=True, timeout=5)
+        linhas = con.execute("SELECT job_id FROM video_performance WHERE channel = ? AND views_current > 0 "
+                             "ORDER BY views_current DESC LIMIT 12", (canal,)).fetchall()
+        con.close()
+    except sqlite3.Error:
+        return ""
+    trechos = []
+    for (job,) in linhas:
+        try:
+            narr = json.loads((raiz / "published_scripts" / canal / f"{job}.json").read_text()).get("narration") or ""
+        except (OSError, ValueError):
+            continue
+        if len(narr.split()) >= 40:
+            trechos.append(narr[:RITMO_CARACTERES].rsplit(" ", 1)[0] + "…")
+        if len(trechos) >= RITMO_VIDEOS:
+            break
+    if not trechos:
+        return ""
+    return ("\n\nRITMO DOS VÍDEOS QUE MAIS FUNCIONARAM NESTE CANAL (imite o ritmo e o tom; NUNCA as frases nem os "
+            "fatos — fato só das evidências acima):\n" + "\n".join(f"- {t}" for t in trechos))
+
+
 def escrever(channel, topic: str, banco: dict, *, min_minutes: float, max_minutes: float,
              cenas_ref: int, feedback: str = "", tentativas: int = 3) -> dict:
     """O roteirista conta a história a partir do banco; cada versão passa pela conferência contra os trechos
@@ -1114,7 +1244,10 @@ def escrever(channel, topic: str, banco: dict, *, min_minutes: float, max_minute
     cenas_min = max(5, min(cenas_ref - 4, round(min_minutes * 3)))
     cenas_max = max(cenas_ref + 4, round(max_minutes * 4))
     linha = str(getattr(channel, "niche", "") or "")
-    plano = planejar_historia(topic, banco, min_minutes=min_minutes, max_minutes=max_minutes)
+    plano = planejar_historia(topic, banco, min_minutes=min_minutes, max_minutes=max_minutes,
+                              canal=getattr(channel, "name", ""))
+    if plano and plano.get("gancho"):
+        registrar_gancho(getattr(channel, "name", ""), plano["gancho"]["formula"])
     material = (material_do_plano(plano, banco) if plano else
                 "EVIDÊNCIAS (fontes oficiais verificadas: cada item tem o trecho da fonte que o prova):\n"
                 + bloco_para_escritor(banco, 0))  # sem plano: o banco inteiro não cabe com trechos
@@ -1126,6 +1259,11 @@ def escrever(channel, topic: str, banco: dict, *, min_minutes: float, max_minute
         regra_precisao=_REGRA_PRECISAO_CURTA,
         feedback=(f"\nPARECER DA REVISÃO ANTERIOR (corrija):\n{feedback}\n" if feedback else ""))
     pedido += recent_mistakes(channel.name)
+    # 25/11 (grupo A): o ritmo dos vídeos que mais funcionaram no canal; sai se o pedido não couber no Groq
+    from .providers import _too_big_for
+    ritmo = ritmo_de_referencia(channel.name)
+    if ritmo and not _too_big_for("groq", [{"content": pedido + ritmo}], RESPOSTA_ESCRITOR):
+        pedido += ritmo
     from .providers import ProvedoresIndisponiveis, is_strong_model
     melhor, menos = None, 10**6
     correcao = ""

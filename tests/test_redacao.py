@@ -205,7 +205,7 @@ def test_2c_escritor_recebe_defeitos_e_tenta_de_novo(llm):
                     F("Os prédios ficam sobre estacas para não aquecer o solo congelado.", "explicativa", ["E3"])]},
         {"frases": [F("E as estacas descem até 15 metros.", evid=["E2"])]},
         {"frases": [F("Agora pense no inverno.", "narrativa")]},
-        {"frases": [F("É assim que a cidade continua de pé.", "narrativa")]}]}
+        {"frases": [F("E você, moraria lá?", "narrativa")]}]}  # 25/11: o fim chama o espectador
     falso = llm(lista, boa)
     from src.config import ChannelConfig
     s = rd.escrever(ChannelConfig.load("curiosidades"), TEMA_988, BANCO, min_minutes=0.1, max_minutes=5, cenas_ref=6)
@@ -1821,3 +1821,55 @@ def test_pagina_bloqueada_e_relida_pelo_tavily_extract(monkeypatch):
     assert pedidas == ["https://b.gov/x", "https://c.gov/z"]
     assert saida == ["conteúdo normal da página", "texto bom", ""]
     assert ws.fonte_fraca("https://tavily.com/knowledge/company/abc")
+
+
+def test_gancho_em_rodizio_e_plano_guarda_formula_e_ponto_de_vista(tmp_path, monkeypatch):
+    # 25/11 (grupo A): o plano escolhe uma fórmula de gancho que não seja a dos últimos vídeos do canal
+    monkeypatch.setattr(rd, "_GANCHOS_USADOS", tmp_path / "g.json")
+    for f in ("recorde", "inversao", "mito_derrubado", "proibido"):
+        rd.registrar_gancho("curiosidades", f)
+    rd.registrar_gancho("curiosidades", "inventada")  # fora da lista: ignorada
+    assert rd.ganchos_recentes("curiosidades") == ["inversao", "mito_derrubado", "proibido"]
+    bloco = rd.bloco_formulas(rd.ganchos_recentes("curiosidades"))
+    assert "- recorde:" in bloco and "- inversao:" not in bloco
+    validos = {"E1", "E2", "E3", "E4"}
+    d = {"gancho": {"formula": "numero_absurdo", "evidencia": "E2", "frase": "Quinze metros de estaca para um prédio."},
+         "angulo": {"pergunta": "p", "resposta": "r", "ponto_de_vista": "Morar ali é engenharia todo dia."},
+         "blocos": [{"funcao": f"b{k}", "conta": "c", "evidencias": [f"E{k}"]} for k in range(1, 5)],
+         "evidencias": {f"E{k}": {"comprova": "x", "nao_comprova": "y"} for k in range(1, 5)}}
+    plano = rd._plano_valido(d, validos)
+    assert plano["gancho"]["formula"] == "numero_absurdo"
+    mat = rd.material_do_plano(plano, BANCO)
+    assert "Gancho (1ª frase, fórmula numero_absurdo, fato E2)" in mat and "Ponto de vista" in mat
+    assert rd._plano_valido({**d, "gancho": {"formula": "x", "evidencia": "E2"}}, validos)["gancho"] is None
+
+
+def test_abertura_generica_fim_sem_chamada_e_pedido_de_like_voltam_ao_escritor():
+    ruim = _roteiro([[F("Você sabia que Yakutsk fica sobre gelo?", "narrativa")],
+                     [F("Yakutsk fica sobre permafrost.", evid=["E1"])],
+                     [F("Deixa o like se gostou.", "narrativa"), F("As estacas descem até 15 metros.", evid=["E2"])]])
+    m = rd.abertura_e_fechamento(ruim)
+    assert any("genérica" in x for x in m) and any("não chama" in x for x in m) and any("like" in x for x in m)
+    bom = _roteiro([[F("Quinze metros de estaca para um prédio não afundar.", evid=["E2"])],
+                    [F("Comenta GELO se você moraria lá.", "narrativa")]])
+    assert rd.abertura_e_fechamento(bom) == []
+    assert rd.abertura_e_fechamento(_roteiro([[F("Yakutsk fica sobre permafrost.", evid=["E1"])],
+                                              [F("E você, moraria lá?", "narrativa")]])) == []
+
+
+@pytest.mark.ritmo
+def test_ritmo_vem_dos_videos_mais_vistos_do_canal(tmp_path, monkeypatch):
+    import sqlite3
+    raiz = tmp_path / "data"
+    (raiz / "published_scripts" / "curiosidades").mkdir(parents=True)
+    con = sqlite3.connect(raiz / "queue.db")
+    con.execute("CREATE TABLE video_performance (job_id INT, channel TEXT, views_current INT)")
+    con.executemany("INSERT INTO video_performance VALUES (?,?,?)",
+                    [(1, "curiosidades", 50), (2, "curiosidades", 900), (3, "motivacional", 5000)])
+    con.commit(); con.close()
+    for job, txt in ((1, "pouco visto " * 30), (2, "muito visto " * 30)):
+        (raiz / "published_scripts" / "curiosidades" / f"{job}.json").write_text(json.dumps({"narration": txt}))
+    monkeypatch.setattr(rd, "__file__", str(tmp_path / "src" / "redacao.py"))
+    r = rd.ritmo_de_referencia("curiosidades")
+    assert r.index("muito visto") < r.index("pouco visto") and "NUNCA as frases" in r
+    assert rd.ritmo_de_referencia("sem_canal") == ""

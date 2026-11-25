@@ -16,7 +16,7 @@ def assunto_sem_rede(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def isolamento(tmp_path, monkeypatch):
+def isolamento(request, tmp_path, monkeypatch):
     """Teste não depende do cache real do projeto (data/cache) nem espera a pausa de 90 s que a
     cascata faz quando um provedor cai: sem isso, a suíte levava 9 s ou 157 s conforme o cache real
     tivesse ou não a busca guardada (11/11)."""
@@ -26,11 +26,16 @@ def isolamento(tmp_path, monkeypatch):
     from src import web_search
     monkeypatch.setattr(web_search, "referencias_da_wikipedia", lambda *a, **k: [])  # 25/11: abre dezenas de páginas
     monkeypatch.setattr(web_search, "textos_via_tavily", lambda urls: {})  # 25/11: reserva paga cota do Tavily
+    from src import redacao
+    monkeypatch.setattr(redacao, "_GANCHOS_USADOS", tmp_path / "ganchos_usados.json")  # 25/11: rodízio do gancho
+    if not request.node.get_closest_marker("ritmo"):
+        monkeypatch.setattr(redacao, "ritmo_de_referencia", lambda canal: "")  # 25/11: lê o queue.db real
 
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "plano: o teste usa o plano da história de verdade (redacao.planejar_historia)")
     config.addinivalue_line("markers", "conferencia: o teste usa a conferência na escrita de verdade (redacao.conferir_na_escrita)")
+    config.addinivalue_line("markers", "ritmo: o teste usa redacao.ritmo_de_referencia de verdade")
     config.addinivalue_line("markers", "revisao: o teste usa a revisão das afirmações de verdade (evidencias.revisar_afirmacoes)")
 
 
