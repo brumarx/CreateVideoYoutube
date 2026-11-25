@@ -26,6 +26,7 @@ import httpx
 
 from .config import COVERR_API_KEYS, PEXELS_API_KEYS, PIXABAY_API_KEYS, SMITHSONIAN_API_KEYS
 from .providers import _rotator_for
+from . import variedade
 from .visual_check import frames_from_clip
 
 log = logging.getLogger("stock_media")
@@ -54,7 +55,10 @@ def _load_recent() -> dict[str, list[str]]:
     return {}
 
 
-def _mark_recent(kind: str, item_id: str) -> None:
+def _mark_recent(kind: str, item_id: str, credito: str | None = None) -> None:
+    # 25/11: também no histórico do canal (src/variedade.py): bloqueia o item nos próximos 30 vídeos do
+    # canal e guarda o crédito pra descrição
+    variedade.registrar_midia(f"{kind}:{item_id}", credito)
     state = _load_recent()
     ids = state.get(kind, [])
     ids = [i for i in ids if i != item_id] + [item_id]
@@ -124,6 +128,9 @@ def _rank_candidates(query: str, items: list[dict], kind: str, describe, region:
     relevante), sem os de outro esporte/clube numa busca de esporte. Lista
     vazia se só sobrou candidato fora do tema."""
     recent = set(_load_recent().get(kind, []))
+    # 25/11: o que saiu nos últimos 30 vídeos do MESMO canal não volta (src/variedade.py) — o "recente"
+    # acima só prefere o inédito, e a mesma busca acabava devolvendo o mesmo clipe semana após semana
+    items = [i for i in items if not variedade.midia_bloqueada(f"{kind}:{i.get('id')}")]
     if region in _FOREIGN:
         items = [i for i in items if not _FOREIGN[region].search(describe(i) or "")]
     if _SPORTS_QUERY.search(query):
@@ -209,6 +216,8 @@ def _smithsonian_photo(query: str, width: int, height: int, check, region: str =
         if _SI_PERSON_RE.search(title):
             continue
         dn = (row.get("content") or {}).get("descriptiveNonRepeating") or {}
+        if variedade.midia_bloqueada(f"smithsonian:{row.get('id')}"):
+            continue  # 25/11: saiu num dos últimos 30 vídeos do canal
         for m in ((dn.get("online_media") or {}).get("media") or []):
             if m.get("type") != "Images" or "CC0" not in str(m.get("usage", "")) or not m.get("content"):
                 continue
@@ -221,6 +230,8 @@ def _smithsonian_photo(query: str, width: int, height: int, check, region: str =
                 log.warning("download smithsonian falhou: %s", exc)
                 continue
             if data and _passes(check, data, query):
+                variedade.registrar_midia(f"smithsonian:{row.get('id')}", variedade.credito(
+                    title[:80], "Smithsonian", "CC0", dn.get("record_link") or dn.get("guid")))
                 log.info("foto do Smithsonian (CC0) pra %r: %s", query, (row.get("title") or "")[:80])
                 return data
     return None
@@ -278,7 +289,8 @@ def _pixabay_clip(query: str, width: int, height: int, check, region: str = "") 
         if check is not None and (frames is None or not _passes(check, frames, query)):
             path.unlink(missing_ok=True)
             continue
-        _mark_recent("pixabay_video", str(hit.get("id")))
+        _mark_recent("pixabay_video", str(hit.get("id")),
+                     variedade.credito(hit.get("user"), "Pixabay", "licença Pixabay", hit.get("pageURL")))
         log.info("clipe real (pixabay) encontrado pra %r (%sx%s)", query, picked.get("width"), picked.get("height"))
         return path
     return None
@@ -343,7 +355,8 @@ def _coverr_clip(query: str, width: int, height: int, check, region: str = "") -
         if check is not None and (frames is None or not _passes(check, frames, query)):
             path.unlink(missing_ok=True)
             continue
-        _mark_recent("coverr_video", str(hit.get("id")))
+        _mark_recent("coverr_video", str(hit.get("id")),
+                     variedade.credito(hit.get("title"), "Coverr", "licença Coverr", "https://coverr.co"))
         log.info("clipe real (coverr) encontrado pra %r", query)
         return path
     return None
@@ -364,7 +377,8 @@ def _pixabay_photo(query: str, width: int, height: int, check, region: str = "")
             continue
         if not _passes(check, resp.content, query):
             continue
-        _mark_recent("pixabay_photo", str(hit.get("id")))
+        _mark_recent("pixabay_photo", str(hit.get("id")),
+                     variedade.credito(hit.get("user"), "Pixabay", "licença Pixabay", hit.get("pageURL")))
         log.info("foto real (pixabay) encontrada pra %r", query)
         return resp.content
     return None
@@ -426,7 +440,8 @@ def _pexels_clip(query: str, width: int, height: int, check: Callable[[bytes], b
                 if verdict is False or (verdict is None and _SPORTS_QUERY.search(query)):
                     path.unlink(missing_ok=True)
                     continue
-            _mark_recent("video", str(chosen.get("id")))
+            _mark_recent("video", str(chosen.get("id")), variedade.credito(
+                (chosen.get("user") or {}).get("name"), "Pexels", "licença Pexels", chosen.get("url")))
             log.info("clipe real encontrado pra %r (%sx%s)", query, picked.get("width"), picked.get("height"))
             return path
         log.info("pexels: nenhum clipe no contexto da cena pra %r", query)
@@ -485,7 +500,8 @@ def _pexels_photo(query: str, width: int, height: int, check: Callable[[bytes], 
                 verdict = check(photo_resp.content)
                 if verdict is False or (verdict is None and _SPORTS_QUERY.search(query)):
                     continue
-            _mark_recent("photo", str(chosen.get("id")))
+            _mark_recent("photo", str(chosen.get("id")), variedade.credito(
+                chosen.get("photographer"), "Pexels", "licença Pexels", chosen.get("url")))
             log.info("foto real encontrada pra %r", query)
             return photo_resp.content
         log.info("pexels: nenhuma foto no contexto da cena pra %r", query)
@@ -522,6 +538,8 @@ def _met_photo(query: str, width: int, height: int, check, region: str = "") -> 
         title = f"{obj.get('title', '')} {obj.get('objectName', '')}"
         if obj.get("isPublicDomain") is not True or not obj.get("primaryImageSmall") or _SI_PERSON_RE.search(title):
             continue
+        if variedade.midia_bloqueada(f"met:{oid}"):
+            continue  # 25/11: saiu num dos últimos 30 vídeos do canal
         if tried >= 6:
             return None
         tried += 1
@@ -531,6 +549,9 @@ def _met_photo(query: str, width: int, height: int, check, region: str = "") -> 
             log.warning("download met falhou: %s", exc)
             continue
         if data and _passes(check, data, query):
+            variedade.registrar_midia(f"met:{oid}", variedade.credito(
+                obj.get("artistDisplayName") or str(obj.get("title") or "")[:80], "The Met", "domínio público",
+                obj.get("objectURL")))
             log.info("foto do Met (domínio público) pra %r: %s", query, title[:80])
             return data
     return None

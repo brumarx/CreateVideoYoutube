@@ -933,11 +933,12 @@ def defeitos(script: dict, banco: dict, topic: str, min_pal: int, max_pal: int, 
     # 20/11: o que o editor travaria (linha do tempo, fato repetido) já volta ao escritor nas tentativas dele
     lista += travas_editoriais(script)
     lista += fato_em_duas_cenas(script) + narrativa_que_afirma(script) + abertura_e_fechamento(script)
+    # 25/11 (grupo B): chavões de "texto com cara de IA" e abertura genérica (src/qualidade_texto.py, em código)
+    from .qualidade_texto import defeitos_de_texto
+    lista += defeitos_de_texto(script)
     return script, lista, problemas
 
 
-_ABERTURA_GENERICA = re.compile(r"^\W*(oi|olá|ola|hoje (eu|vamos|você)|neste vídeo|nesse vídeo|você sabia|sabia que|"
-                                r"bem-vind|vamos falar)\b", re.I)
 _PEDE_LIKE = re.compile(r"\b(deixa (o|seu) like|deixe (o|seu) like|se inscrev|inscreva-se|ative o sininho|"
                         r"ativa o sininho)\b", re.I)
 _COMENTA = re.compile(r"\b[Cc]omenta(r)? [A-ZÁÉÍÓÚÂÊÔÃÕÇ]{3,}\b")
@@ -952,9 +953,8 @@ def abertura_e_fechamento(script: dict) -> list[str]:
         return []
     out = []
     primeira = frases[0]
-    if _ABERTURA_GENERICA.search(primeira):
-        out.append(f"a abertura \"{primeira[:80]}\" é genérica: comece pelo gancho (o fato mais estranho)")
-    elif len(primeira.split()) > GANCHO_MAX_PALAVRAS:
+    # abertura genérica: qualidade_texto.cara_de_ia (conhece o bordão de cada canal)
+    if len(primeira.split()) > GANCHO_MAX_PALAVRAS:
         out.append(f"a 1ª frase tem {len(primeira.split())} palavras: o gancho tem até 12")
     if not (frases[-1].endswith("?") or _COMENTA.search(frases[-1])):
         out.append("o fim não chama o espectador: feche com uma pergunta a ele ou \"Comenta PALAVRA se…\"")

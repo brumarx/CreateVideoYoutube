@@ -452,6 +452,16 @@ def _tema_do_publico(channel_name: str, niche: str, used: list[str], preferir_si
     return None
 
 
+def _publicados_recentes(canal: str) -> list[tuple[str, str]]:
+    """[(tema, data)] dos vídeos publicados do canal (data/queue.db), lido uma vez por sorteio."""
+    try:
+        from .orchestrator import published_jobs
+        return [(j.topic, j.updated_at or j.created_at or "") for j in published_jobs() if j.channel == canal]
+    except Exception as exc:  # noqa: BLE001 — sem a fila, o sorteio segue sem esse filtro
+        log.info("[%s] vídeos publicados indisponíveis para o filtro de subtema: %s", canal, exc)
+        return []
+
+
 def pick_topic(
     channel_name: str,
     pool: list[str],
@@ -470,9 +480,15 @@ def pick_topic(
     used = state.setdefault(channel_name, [])
     used_set = set(used)
 
-    unused = [t for t in pool if t not in used_set and not repeats_subject(t, used)]
+    # 25/11 (grupo B, variedade): o mesmo subtema de um vídeo publicado nos últimos 14 dias fica de fora
+    from .variedade import subtema_repetido
+    recentes = _publicados_recentes(channel_name)
+
+    def livre(t: str) -> bool:
+        return t not in used_set and not repeats_subject(t, used) and not subtema_repetido(t, recentes)
+    unused = [t for t in pool if livre(t)]
     all_ideas = idea_sources.load_ideas(channel_name)
-    ideas = [t for t in all_ideas if t not in used_set and not repeats_subject(t, used)]
+    ideas = [t for t in all_ideas if livre(t)]
     # série em teste (channel.active_priority_topics): na ordem, antes de tudo
     topic = next((t for t in priority or [] if t not in used_set), None)
     if topic is not None:

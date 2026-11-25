@@ -57,6 +57,7 @@ from src.script_gen import (
 )
 from src.spellcheck import fix_script, fix_text
 from src.stock_media import search_stock_clip, search_stock_photo
+from src.qualidade_texto import limitar_hashtags, titulo_e_descricao
 from src.thumbnail import make_thumbnail, photo_scene_frame, title_card
 from src.topics import pick_topic, topic_problem
 from src.trending_topics import get_trending_topics, topic_for_channel, filter_topics, record_trend_use
@@ -1713,6 +1714,11 @@ def run(
 
             squad = elenco()
         player_credits: set[str] = set()
+        # 25/11: vídeo em montagem para src/variedade.py — clipe/foto de banco usado nos últimos 30 vídeos do
+        # canal não volta, a música entra em rodízio e o crédito de cada item de banco vai pra descrição
+        from src import variedade
+
+        variedade.iniciar_video(channel_name, job_id)
         real_credits: list[str] = []  # Commons (src/real_media.py): crédito na descrição
         # cenas desenhadas por código (mapa, comparação, número, ano — ver
         # src/infographic.py): o roteiro pede no campo "grafico"
@@ -2129,7 +2135,8 @@ def run(
                 scene_videos, raw_video, crossfade=not long_form, sfx_path=SFX_DIR / "whoosh.mp3",
             )
             _, music_attribution = add_background_music(raw_video, final_video, mood=script.get("mood"),
-                                                        sem_risco=channel.musica_sem_risco)
+                                                        sem_risco=channel.musica_sem_risco,
+                                                        canal=channel_name, video=job_id)
             log.info("[%s] vídeo pronto: %s — revisando antes do upload", job_id, final_video)
             qa_problems = review_video(
                 [s["narration"] for s in script["scenes"]], scene_videos, visual_context,
@@ -2194,6 +2201,17 @@ def run(
         if qa_problems:
             # 15/11: problema que sobrou depois da troca de imagem não sobe nem privado (job 915)
             raise ScriptRejected("vídeo reprovado na revisão antes do upload: " + "; ".join(qa_problems))
+        # 25/11: controle técnico do MP4 final (src/qc_video.py, só ffmpeg, uma passada): tela preta > 0,4 s,
+        # silêncio > 1 s no meio, imagem congelada > 2,5 s com a narração rodando, volume fora de -20..-10
+        # LUFS, 1º quadro quase preto (capa do Short) e duração acima do máximo do canal (a mesma folga de 25%
+        # da checagem de duração abaixo). Mesmo destino da revisão acima: não sobe nem privado.
+        from src.qc_video import revisar_tecnica
+
+        tecnicos = revisar_tecnica(final_video, None if user_forced_format else max_minutes * 60 * 1.25)
+        if tecnicos:
+            for p in tecnicos:
+                log.warning("[%s] controle técnico: %s", job_id, p)
+            raise ScriptRejected("vídeo reprovado no controle técnico antes do upload: " + "; ".join(tecnicos))
         if channel.formato_pela_duracao and not user_forced_format:
             # QA do vídeo final: a duração do arquivo montado também fica na meta (e no formato certo)
             dur_final = _ffprobe_duration(final_video)
@@ -2340,6 +2358,14 @@ def run(
             description += "\nImagens de arquivo: " + "; ".join(dict.fromkeys(real_credits))
         if "grafico" in scene_sources:
             description += "\n" + INFOGRAPHIC_CREDIT
+        # 25/11: autor, banco, licença e link de cada clipe/foto de banco do vídeo (src/variedade.py). Junto
+        # dos outros créditos, antes de "Assista também" e das hashtags: a 1ª linha (o que aparece antes do
+        # "...mais") continua sendo o link do site/resumo, e as hashtags no fim não mudam (o YouTube mostra as
+        # 3 primeiras acima do título onde quer que estejam). Uma por linha, sem "- " no começo (fit_description
+        # corta só as linhas "- " das fontes quando a descrição passa de 5000) e sem vírgula (qualidade_texto).
+        creditos_banco = variedade.creditos_do_video()
+        if creditos_banco:
+            description += "\nImagens de banco:\n" + "\n".join(creditos_banco)
 
         if music_attribution:
             # a licença CC BY (assets/music/ATTRIBUTION.md) exige creditar a
@@ -2373,9 +2399,18 @@ def run(
                 f"https://www.youtube.com/{channel.youtube_handle}?sub_confirmation=1"
             )
 
+        # 25/11: sem repetida e no máximo 5 (src/qualidade_texto.limitar_hashtags) — o conserto automático
         hashtags = (["#Shorts"] if not long_form else []) + list(channel.hashtags)
+        hashtags = limitar_hashtags(hashtags)
         if hashtags:
             description += "\n\n" + " ".join(hashtags)
+        # 25/11: título > 60, palavra principal longe do começo ou não falada, 1ª linha da descrição > 125,
+        # hashtags fora de 3-5, vírgulas demais. Não reprova (o título já passou pelas travas do roteiro e
+        # mexer nele aqui sem IA quebraria a frase): fica no log e no upload_meta ("metadados") pro painel
+        problemas_metadados = titulo_e_descricao(
+            script["title"], description, " ".join(s["narration"] for s in script["scenes"]), hashtags)
+        for p in problemas_metadados:
+            log.warning("[%s] metadados: %s", job_id, p)
 
         # guardado antes do upload: se ele falhar (token OAuth expirado,
         # rede), scripts/retry_uploads.py reenvia o vídeo já renderizado sem
@@ -2387,6 +2422,7 @@ def run(
             "long": long_form,
             # com ressalva: sobe privado e espera o "Aprovar" do painel
             "ressalvas": ressalvas,
+            "metadados": problemas_metadados,
             # alguma cena com imagem gerada por IA: declarar ao YouTube
             "synthetic": "ia" in scene_sources,
             "title": script["title"],

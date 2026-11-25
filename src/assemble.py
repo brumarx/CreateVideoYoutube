@@ -953,7 +953,7 @@ CONTENT_ID_RISCO = {
 
 def add_background_music(
     video_path: Path, output_path: Path, mood: str | None = None, music_dir: Path = MUSIC_DIR,
-    sem_risco: bool = False,
+    sem_risco: bool = False, canal: str | None = None, video: str | int | None = None,
 ) -> tuple[Path, str | None]:
     """Mistura uma faixa de música de fundo (grátis, CC BY — ver
     assets/music/ATTRIBUTION.md) em volume bem baixo sob a narração já
@@ -983,7 +983,14 @@ def add_background_music(
     candidates = [t for t in tracks if TRACK_MOOD.get(t.name) == mood] if mood else []
     if not candidates and mood in MOOD_FALLBACK:
         candidates = [t for t in tracks if TRACK_MOOD.get(t.name) == MOOD_FALLBACK[mood]]
-    track = random.choice(candidates or tracks)
+    if canal and video is not None:
+        # 25/11: rodízio por canal (a faixa usada há mais tempo), não sorteio: a mesma música em vídeos
+        # seguidos é cara de canal "produzido em massa" (src/variedade.py)
+        from .variedade import escolher_musica
+
+        track = escolher_musica(canal, video, candidates or tracks)
+    else:
+        track = random.choice(candidates or tracks)
     attribution = TRACK_ATTRIBUTION.get(track.name)
     duration = _ffprobe_duration(video_path)
 
