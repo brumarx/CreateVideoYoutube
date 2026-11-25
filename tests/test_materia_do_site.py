@@ -72,8 +72,17 @@ def test_politica_sem_banco_cai_nos_rankings_e_nao_repete_materia():
         def execute(self, sql, params=()):
             from datetime import datetime, timezone
             agora = datetime(2026, 11, 24, tzinfo=timezone.utc)
-            return mock.Mock(fetchall=lambda: [(9, "Usada", "", "usada", "t" * 700, "", agora),
-                                               (8, "Nova", "sub", "nova", "t" * 700, "", agora)])
+            if "FROM public.users" in sql:
+                return mock.Mock(fetchall=lambda: [("marina-couto", "Marina Couto"), ("augusto-valente", "Augusto Valente")])
+            # 25/11: ordem do dono — Tiago, Bruno, Lúcia, Augusto, Marina por último; debate entre colunistas fora
+            return mock.Mock(fetchall=lambda: [(7, "Da Marina", "", "marina", "t" * 700, "", agora, "marina-couto"),
+                                               (5, "Resposta a Augusto Valente: x", "", "r", "t" * 700, "", agora,
+                                                "marina-couto"),
+                                               (4, "Sobre bets", "", "b", "Marina Couto erra " + "t" * 700, "", agora,
+                                                "tiago-rezende"),
+                                               (6, "Do Augusto", "", "augusto", "t" * 700, "", agora, "augusto-valente"),
+                                               (9, "Usada", "", "usada", "t" * 700, "", agora, "tiago-rezende"),
+                                               (8, "Nova", "sub", "nova", "t" * 700, "", agora, "bruno-marques")])
     salvo = {}
     with mock.patch.object(pd, "_connect", return_value=_C()), \
             mock.patch.object(pd, "_load_used", return_value={"materias": ["9"]}), \
@@ -81,3 +90,7 @@ def test_politica_sem_banco_cai_nos_rankings_e_nao_repete_materia():
         t = pd.materia_task()
     assert t["titulo"] == "Nova" and t["fontes"][0]["url"] == "https://politica-br.org/materias/nova"
     assert t["fotos"] == [] and salvo["materias"] == ["8", "9"]
+    from src import politica_data as pd2
+    assert pd2.debate_entre_colunistas("Resposta a Augusto Valente: x", "", "marina-couto", {}) == "resposta"
+    assert pd2.debate_entre_colunistas("Visita a Augusto Heleno", "o general Augusto Heleno",
+                                       "marina-couto", {"augusto-valente": "Augusto Valente"}) is None

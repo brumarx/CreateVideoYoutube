@@ -294,3 +294,6 @@ afiliado_amazon:
   texto: "📚 Livros na Amazon"
   busca: "livro política brasileira"
   fixo: false
+# 25/11: ordem de preferência das matérias do politica-br.org (slug do autor). A colunista da esquerda
+# (marina-couto) é sempre a última; debate entre colunistas (resposta / cita outro colunista pelo nome) não vira vídeo
+autores_preferidos: ["tiago-rezende", "bruno-marques", "lucia-ferraz", "augusto-valente"]

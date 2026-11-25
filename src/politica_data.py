@@ -1325,6 +1325,35 @@ def foto_pessoa_conhecida(texto: str) -> str | None:
 MATERIA_DIAS = 7  # matéria mais velha que isso não vira vídeo (o canal fala do que está acontecendo)
 
 
+AUTORES_PREFERIDOS = ("tiago-rezende", "bruno-marques", "lucia-ferraz", "augusto-valente")
+AUTORES_POR_ULTIMO = ("marina-couto",)  # 25/11 (dono): a colunista da esquerda é sempre a última da fila
+_RESPOSTA = re.compile(r"^\s*(resposta|réplica|replica|tréplica|treplica)\b", re.I)
+
+
+def debate_entre_colunistas(titulo: str, texto: str, autor: str, colunistas: dict[str, str]) -> str | None:
+    """25/11 (dono): colunistas discutindo entre si (direita x esquerda) não vira vídeo. Debate = título de
+    resposta/réplica ou o texto cita pelo NOME COMPLETO outro colunista do site. Devolve quem é citado."""
+    if _RESPOSTA.search(titulo or ""):
+        return "resposta"
+    corpo = f"{titulo}\n{texto}".lower()
+    for slug, nome in colunistas.items():
+        if slug != autor and nome and nome.lower() in corpo:
+            return nome
+    return None
+
+
+def autores_preferidos() -> list[str]:
+    """Slugs dos autores do politica-br.org na ordem de preferência: `autores_preferidos` do
+    channels/politica.yaml, ou AUTORES_PREFERIDOS."""
+    try:
+        import yaml
+        cfg = yaml.safe_load((Path(__file__).resolve().parent.parent / "channels" / "politica.yaml").read_text()) or {}
+        lista = [str(x).strip() for x in cfg.get("autores_preferidos") or [] if str(x).strip()]
+        return lista or list(AUTORES_PREFERIDOS)
+    except Exception:  # noqa: BLE001
+        return list(AUTORES_PREFERIDOS)
+
+
 def materia_task() -> dict | None:
     """24/11: o vídeo do canal é o RESUMO de um texto publicado no politica-br.org (matéria ou coluna,
     sem distinção): o mais recente dos últimos MATERIA_DIAS dias ainda não usado. Formato igual ao da
@@ -1333,17 +1362,41 @@ def materia_task() -> dict | None:
     try:
         with _connect() as conn:
             linhas = conn.execute(
-                "SELECT id, title, subtitle, slug, body_text, cover_image_url, published_at FROM public.articles "
-                "WHERE status = 'published' AND published_at >= now() - make_interval(days => ?) "
-                "AND length(coalesce(body_text, '')) >= 600 ORDER BY published_at DESC", (MATERIA_DIAS,)).fetchall()
+                "SELECT a.id, a.title, a.subtitle, a.slug, a.body_text, a.cover_image_url, a.published_at, u.slug "
+                "FROM public.articles a LEFT JOIN public.users u ON u.id = a.author_id "
+                "WHERE a.status = 'published' AND a.published_at >= now() - make_interval(days => ?) "
+                "AND length(coalesce(a.body_text, '')) >= 600 ORDER BY a.published_at DESC", (MATERIA_DIAS,)).fetchall()
     except Exception as exc:  # noqa: BLE001 — banco fora: cai nos rankings
         log.warning("matérias do politica-br.org indisponíveis: %s", exc)
         return None
     state = _load_used()
     usadas = set(state.get("materias", []))
-    for id_, titulo, subtitulo, slug, texto, capa, publicado in linhas:
+    # 25/11 (dono): preferência por autor — Tiago, Bruno, Lúcia (economia), Augusto (direita), outros, e a Marina
+    # (esquerda) sempre por último. Debate entre colunistas não vira vídeo. Dentro do mesmo autor, a mais recente
+    ordem = autores_preferidos()
+
+    def posicao(autor: str | None) -> int:
+        if autor in AUTORES_POR_ULTIMO:
+            return len(ordem) + 1
+        return ordem.index(autor) if autor in ordem else len(ordem)
+    try:
+        with _connect() as conn:
+            colunistas = {slug: nome for slug, nome in conn.execute(
+                "SELECT slug, name FROM public.users WHERE is_columnist").fetchall()}
+    except Exception:  # noqa: BLE001
+        colunistas = {}
+    candidatas = []
+    for l in linhas:
+        debate = debate_entre_colunistas(l[1], l[4], l[7], colunistas)
+        if debate:
+            log.info("matéria %s fora: debate entre colunistas (%s)", l[0], debate)
+        else:
+            candidatas.append(l)
+    linhas = sorted(candidatas, key=lambda l: posicao(l[7]))  # estável: dentro do autor, a mais recente
+    for id_, titulo, subtitulo, slug, texto, capa, publicado, autor in linhas:
         if str(id_) in usadas:
             continue
+        log.info("matéria do politica-br.org escolhida: %s (%s)", titulo[:80], autor)
         state["materias"] = sorted(usadas | {str(id_)})
         _save_used(state)
         noticia = {"titulo": titulo, "resumo": subtitulo or "", "texto": texto, "veiculo": "Política BR",
