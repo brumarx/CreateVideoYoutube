@@ -2324,9 +2324,45 @@ def _hash_versao(script: dict, banco: dict) -> str:
     return hashlib.sha1(json.dumps([corpo, _hash_banco(banco)], ensure_ascii=False).encode()).hexdigest()[:12]
 
 
+def limpar_em_codigo(script: dict) -> dict:
+    """25/11 (Svalbard 1022: editorial travado em sem_repeticao 4 — E26 nas cenas 3 e 8, "caixa-preta" de novo
+    na narrativa da cena 9 com "o permafrost garante o frio"): fato_em_duas_cenas e narrativa_que_afirma só
+    voltavam ao escritor; a melhor tentativa seguia com o defeito e a edição nem passava por eles. Antes de cada
+    auditoria, em código: sai a frase factual cujos fatos TODOS já foram contados numa cena anterior e a
+    narrativa (não pergunta, não abertura, não "Comenta PALAVRA") que afirma. Só sai se a cena continua com
+    outra frase factual — nunca some uma cena."""
+    vistos: set[str] = set()
+    cenas = []
+    tirou = []
+    for i, sc in enumerate(script.get("scenes") or []):
+        frases = list(sc.get("frases") or [])
+        da_cena: set[str] = set()
+        manter = []
+        for j, f in enumerate(frases):
+            t = f["texto"].strip()
+            evs = set(f.get("evidencias") or [])
+            repetida = f.get("tipo") != "narrativa" and evs and evs <= vistos
+            afirma = (f.get("tipo") == "narrativa" and (i or j) and not t.endswith("?")
+                      and not _COMENTA.search(t) and _ALEGA.search(t))
+            if repetida or afirma:
+                if any(g.get("tipo") != "narrativa" for g in manter + frases[j + 1:]):
+                    tirou.append((f, "fato já contado" if repetida else "narrativa que afirma"))
+                    continue
+            manter.append(f)
+            da_cena |= evs
+        vistos |= da_cena
+        cenas.append({**sc, "frases": manter, "narration": " ".join(f["texto"] for f in manter)}
+                     if len(manter) != len(frases) else sc)
+    if not tirou:
+        return script
+    log.info("limpeza em código: %d frase(s) saem: %s", len(tirou),
+             " | ".join(f"{m}: {f['texto'][:70]}" for f, m in tirou))
+    return {**script, "scenes": cenas}
+
+
 def _auditar_versao(script: dict, banco: dict, topic: str, previas: dict) -> tuple[dict, list[dict], dict]:
     """Auditoria completa de UMA versão: código + decisões por frase + leitura de espectador + editor."""
-    script = sincronizar(script)
+    script = limpar_em_codigo(sincronizar(script))
     script, problemas = auditar_codigo(script, banco, topic)
     # o descanso curto das chaves é esperado dentro da cascata (providers.complete); o longo sobe como
     # ProvedoresIndisponiveis (o pipeline guarda o trabalho e retoma). None aqui = resposta inválida

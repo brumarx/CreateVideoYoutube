@@ -90,3 +90,27 @@ def test_narrativa_trocada_nao_pode_afirmar(ambiente, monkeypatch):
     monkeypatch.setattr(rd, "conferir_contra_trechos", lambda itens, banco: {})
     novo, reg = rd.trocar_frases_apontadas(_script(), [p], {}, "Svalbard")
     assert novo is None and "narrativa afirma" in reg["recusadas"][0]["motivo"]
+
+
+def test_limpeza_tira_fato_ja_contado_e_narrativa_que_afirma():
+    s = {"scenes": [
+        {"frases": [{"texto": "E aí, mente curiosa!", "tipo": "narrativa", "evidencias": []},
+                    {"texto": "Svalbard fica entre os lugares mais frios.", "tipo": "factual", "evidencias": ["E6", "E26"]}]},
+        {"frases": [{"texto": "Ninguém mora no cofre.", "tipo": "factual", "evidencias": ["E100"]},
+                    {"texto": "Espera-se que Svalbard siga fria.", "tipo": "factual", "evidencias": ["E26"]}]},
+        {"frases": [{"texto": "E o permafrost garante o frio.", "tipo": "narrativa", "evidencias": []},
+                    {"texto": "O cofre faz parte do Tratado.", "tipo": "factual", "evidencias": ["E55"]},
+                    {"texto": "Comenta SEMENTE se você guardaria a sua?", "tipo": "narrativa", "evidencias": []}]},
+    ]}
+    limpo = rd.limpar_em_codigo(s)
+    assert [f["texto"] for sc in limpo["scenes"] for f in sc["frases"]] == [
+        "E aí, mente curiosa!", "Svalbard fica entre os lugares mais frios.", "Ninguém mora no cofre.",
+        "O cofre faz parte do Tratado.", "Comenta SEMENTE se você guardaria a sua?"]
+
+
+def test_limpeza_nunca_esvazia_cena():
+    s = {"scenes": [
+        {"frases": [{"texto": "A.", "tipo": "factual", "evidencias": ["E1"]}]},
+        {"frases": [{"texto": "B.", "tipo": "factual", "evidencias": ["E1"]}]},
+    ]}
+    assert rd.limpar_em_codigo(s) is s
