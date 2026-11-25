@@ -111,6 +111,9 @@ def afirmacao_escondida(texto: str, nomes_conhecidos: set[str]) -> str | None:
     """Motivo se a frase dita "narrativa" afirma algo verificável: número (algarismo ou por
     extenso), superlativo/absoluto, ou nome próprio. None se é construção narrativa pura
     ("Mas viver ali não é nada simples.")."""
+    # 25/11 (Svalbard 1020: "Comenta SEMENTE se…" reprovada como nome próprio): a palavra do chamado ao espectador
+    # não é afirmação
+    texto = _COMENTA.sub("Comenta", texto)
     t = extenso_para_algarismos(texto)
     if numeros(t):
         return "tem número"

@@ -1894,3 +1894,9 @@ def test_conferencia_revisa_so_as_afirmacoes_citadas_e_ve_a_revisada(monkeypatch
     rd.conferir_na_escrita(s, banco, TEMA_988)
     assert pedidos == [{"E2"}] and vistos == ["As estacas descem até 15 metros."]
     assert next(e for e in banco["evidencias"] if e["id"] == "E2")["afirmacao"] == "As estacas descem até 15 metros."
+
+
+def test_palavra_do_comenta_nao_e_nome_proprio():
+    # 25/11 (Svalbard 1020): "Comenta SEMENTE se você conhecia essa história." virou "frase factual sem evidência"
+    assert rd.afirmacao_escondida("Comenta SEMENTE se você conhecia essa história.", set()) is None
+    assert rd.afirmacao_escondida("Comenta SEMENTE se você já foi a Oslo.", set())  # o resto ainda é conferido
