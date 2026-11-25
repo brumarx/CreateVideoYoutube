@@ -39,7 +39,7 @@ class IAFalsa:
 
     def __call__(self, messages, **_kw):
         p = messages[-1]["content"]
-        etapa = ("historia" if "defina a HISTÓRIA" in p else "juiz" if "Você confere se o TRECHO" in p else "escritor" if "Você monta o roteiro" in p else
+        etapa = ("historia" if "defina a HISTÓRIA" in p else "juiz" if "Você confere se o TRECHO" in p else "escritor" if "Você é o roteirista" in p else
                  "auditor" if "Você é o auditor" in p else "juiz_final" if ("Você é o EDITOR" in p or "ESPECTADOR" in p)
                  else "extracao")
         self.chamadas[etapa] += 1

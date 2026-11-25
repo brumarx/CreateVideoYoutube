@@ -27,7 +27,7 @@ def isolamento(tmp_path, monkeypatch):
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "plano: o teste usa o plano da história de verdade (redacao.planejar_historia)")
-    config.addinivalue_line("markers", "frases_da_fonte: o teste usa as frases da fonte de verdade (redacao.frases_da_fonte)")
+    config.addinivalue_line("markers", "conferencia: o teste usa a conferência na escrita de verdade (redacao.conferir_na_escrita)")
 
 
 @pytest.fixture(autouse=True)
@@ -41,21 +41,11 @@ def sem_plano_da_historia(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def frases_da_fonte_simuladas(request, monkeypatch):
-    """24/11: o escritor monta o roteiro com FRASES DA FONTE já conferidas (redacao.frases_da_fonte: duas
-    chamadas de IA antes da montagem). Os testes antigos do escritor simulam só a resposta dele: aqui cada
-    evidência utilizável vira a própria frase, e a resposta no formato antigo (frases com texto) é aceita como
-    montagem. Quem testa as frases da fonte de verdade marca @pytest.mark.frases_da_fonte."""
-    if request.node.get_closest_marker("frases_da_fonte"):
+def conferencia_na_escrita_simulada(request, monkeypatch):
+    """25/11: cada versão do escritor passa pela conferência contra os trechos (redacao.conferir_na_escrita: até
+    3 chamadas de IA). Os testes do escritor simulam só as respostas dele: aqui a conferência aprova tudo.
+    Quem testa a conferência de verdade marca @pytest.mark.conferencia."""
+    if request.node.get_closest_marker("conferencia"):
         return
     from src import redacao
-    monkeypatch.setattr(redacao, "FRASES_FONTE_MIN", 1)
-    monkeypatch.setattr(redacao, "frases_da_fonte", lambda topic, banco, ids: [
-        {"ref": f"F{k}", "id": e["id"], "texto": e["afirmacao"]} for k, e in enumerate(redacao.usaveis(banco), 1)])
-    original = redacao.montar_de_frases
-
-    def montar(data, frases, banco, nomes):
-        formato_antigo = any(isinstance(x, dict) and "texto" in x
-                             for c in data.get("cenas") or [] if isinstance(c, dict) for x in c.get("frases") or [])
-        return redacao.de_json(data, banco) if formato_antigo else original(data, frases, banco, nomes)
-    monkeypatch.setattr(redacao, "montar_de_frases", montar)
+    monkeypatch.setattr(redacao, "conferir_na_escrita", lambda script, banco, topic: (script, []))

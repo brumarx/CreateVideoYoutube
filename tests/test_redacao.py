@@ -175,21 +175,10 @@ def test_trecho_existe_confere_no_texto_baixado(trecho, ok):
 
 
 # ======================================================================= 2. narrativa
-@pytest.mark.frases_da_fonte
-def test_2_escritor_so_monta_frases_da_fonte_e_nao_escreve_fato():
-    # 24/11: os fatos vêm das FRASES DA FONTE conferidas; a montagem só escolhe, ordena e liga
-    assert "pode dizer MENOS, nunca MAIS" in rd._PROMPT_FRASES
-    assert "Você NÃO escreve fatos" in rd._PROMPT_MONTAGEM and "nunca invente" in rd._PROMPT_MONTAGEM
-    frases = [{"ref": "F1", "id": "E1", "texto": "Yakutsk é uma das duas grandes cidades sobre permafrost contínuo."},
-              {"ref": "F2", "id": "E2", "texto": "As estacas descem até 15 metros."}]
-    s = rd.montar_de_frases({"titulo": "t", "cenas": [
-        {"frases": [{"narrativa": "Já imaginou morar ali?"}, "F1", "F9", {"narrativa": "O recorde foi de 64 graus."}]},
-        {"frases": [{"narrativa": "E por quê?"}]},
-        {"frases": ["F2", "F1", {"texto": "Frase inventada pelo modelo.", "tipo": "factual"}]}]}, frases, BANCO, set())
-    textos = [[f["texto"] for f in sc["frases"]] for sc in s["scenes"]]
-    # referência que não existe, narrativa com número, cena só narrativa, frase repetida e texto livre: fora
-    assert textos == [["Já imaginou morar ali?", frases[0]["texto"]], [frases[1]["texto"]]]
-    assert s["scenes"][1]["frases"][0]["evidencias"] == ["E2"]
+def test_2_escritor_conta_historia_e_sabe_que_cada_frase_e_conferida():
+    # 25/11: escrita livre com tom de história; cada frase factual é conferida contra o trecho citado
+    assert "CONTAR COMO HISTÓRIA" in rd._PROMPT_ESCRITOR and "nunca mais" in rd._PROMPT_ESCRITOR
+    assert "conferida contra o trecho" in rd._PROMPT_ESCRITOR and "nunca invente" in rd._PROMPT_ESCRITOR
 
 
 def test_2b_lista_de_fatos_e_detectada_e_historia_passa():
@@ -708,7 +697,7 @@ def test_sem_evidencia_de_temperatura_vale_descricao_qualitativa_sustentada_e_na
 
 def test_prompts_proibem_arredondar_decimal_sem_avisar_e_numero_substituto():
     # 24/11: as regras de número estão onde o fato é escrito — nas frases da fonte
-    p = rd._PROMPT_FRASES
+    p = rd._PROMPT_ESCRITOR
     assert "Decimal (−64,4 °C)" in p and "mais de 64 graus\n  negativos" in p
     assert "Nunca outro número no lugar" in p and "Mantenha o sinal" in p
 
@@ -867,7 +856,7 @@ def test_recorde_corroborado_nao_precisa_de_atribuicao():
 
 
 def test_prompt_separa_estimativa_de_fonte_unica():
-    p = rd._PROMPT_FRASES
+    p = rd._PROMPT_ESCRITOR
     assert "Valor medido/exato fica EXATO, mesmo de fonte única" in p
     assert '"fonte única" com recorde ou superlativo: diga de onde vem' in p
 
@@ -1619,13 +1608,37 @@ def test_site_oficial_do_assunto_conta_como_fonte_oficial():
     assert ev.classe_fonte(marcadas[0]) == "oficial" and ev.classe_fonte(marcadas[1]) != "oficial"
 
 
-@pytest.mark.frases_da_fonte
-def test_frase_da_fonte_que_excede_o_trecho_nao_entra_no_roteiro(llm):
-    # 24/11 (Svalbard 1011: "baixa umidade, sem atividade sísmica"): a frase que diz mais que o trecho sai na
-    # conferência; a que tem número fora da evidência sai nas travas em código; só a sustentada vira F1
-    llm({"frases": [{"id": "E1", "texto": "Yakutsk é uma das duas grandes cidades sobre permafrost contínuo."},
-                    {"id": "E2", "texto": "As estacas descem até 15 metros, em solo de baixa umidade e sem terremotos."},
-                    {"id": "E4", "texto": "O permafrost fica a 0 °C ou menos por pelo menos 7 anos seguidos."}]},
-        {"decisoes": [{"n": 1, "decisao": "sustentada"}, {"n": 2, "decisao": "excede", "o_que_excede": "umidade"}]})
-    frases = rd.frases_da_fonte(TEMA_988, BANCO, ["E1", "E2", "E4", "E99"])
-    assert [(f["ref"], f["id"]) for f in frases] == [("F1", "E1")]
+@pytest.mark.conferencia
+def test_frase_que_excede_o_trecho_e_reescrita_na_hora_ou_sai(llm):
+    # 24/11 (Svalbard 1011: "baixa umidade, sem atividade sísmica"): a frase que diz mais que o trecho volta para a
+    # IA reescrever no mesmo lugar; reescrita sustentada fica, a que ainda excede sai; narrativa não é conferida
+    script = rd.de_json({"titulo": "t", "cenas": [
+        {"frases": [{"texto": "Já imaginou morar ali?", "tipo": "narrativa", "evidencias": []},
+                    {"texto": "Yakutsk é uma das duas grandes cidades sobre permafrost contínuo.", "tipo": "factual",
+                     "evidencias": ["E1"]}]},
+        {"frases": [{"texto": "As estacas descem até 15 metros, em solo de baixa umidade.", "tipo": "factual",
+                     "evidencias": ["E2"]},
+                    {"texto": "O permafrost nunca derrete, nem no verão mais quente.", "tipo": "factual",
+                     "evidencias": ["E4"]}]}]}, BANCO)
+    llm({"decisoes": [{"n": 1, "decisao": "sustentada"}, {"n": 2, "decisao": "excede", "o_que_excede": "umidade"},
+                      {"n": 3, "decisao": "excede", "o_que_excede": "nunca derrete"}]},
+        {"frases": [{"n": 1, "texto": "As estacas descem até 15 metros."},
+                    {"n": 2, "texto": "O permafrost nunca derrete de jeito nenhum."}]},
+        {"decisoes": [{"n": 1, "decisao": "sustentada"}, {"n": 2, "decisao": "excede", "o_que_excede": "nunca"}]})
+    novo, cortadas = rd.conferir_na_escrita(script, BANCO, TEMA_988)
+    textos = [[f["texto"] for f in sc["frases"]] for sc in novo["scenes"]]
+    assert textos == [["Já imaginou morar ali?", "Yakutsk é uma das duas grandes cidades sobre permafrost contínuo."],
+                      ["As estacas descem até 15 metros."]]
+    assert len(cortadas) == 1 and "nunca derrete" in cortadas[0]
+    assert novo["scenes"][1]["narration"] == "As estacas descem até 15 metros."
+
+
+@pytest.mark.conferencia
+def test_conferencia_sem_resposta_nao_aprova_frase(monkeypatch):
+    from src import providers as pv
+
+    def cai(*a, **k):
+        raise RuntimeError("Nenhum provedor devolveu resposta válida")
+    monkeypatch.setattr(pv, "complete", cai)
+    r = rd.conferir_contra_trechos([{"texto": "As estacas descem até 15 metros.", "evidencias": ["E2"]}], BANCO)
+    assert r == {0: "não conferida"}

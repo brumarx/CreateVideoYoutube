@@ -65,9 +65,7 @@ class Canal:
 
 @pytest.mark.plano
 def test_escritor_recebe_o_plano_e_so_as_evidencias_dele(monkeypatch):
-    # 24/11: o plano escolhe as evidências que viram FRASES DA FONTE (as dele primeiro); a montagem recebe a
-    # pergunta e a resposta do plano
-    pedidos, ids_pedidos = [], []
+    pedidos = []
     roteiro = json.dumps({"titulo": "O cofre", "descricao": "d", "tags": [], "cenas": [
         {"frases": [{"texto": "Um banco de genes pode sumir.", "tipo": "narrativa", "evidencias": []}]}]})
 
@@ -76,19 +74,19 @@ def test_escritor_recebe_o_plano_e_so_as_evidencias_dele(monkeypatch):
         pedidos.append(p)
         return json.dumps(PLANO) if "Você planeja a HISTÓRIA" in p else roteiro
     monkeypatch.setattr(pv, "complete", complete)
-    monkeypatch.setattr(rd, "frases_da_fonte", lambda topic, banco, ids: ids_pedidos.extend(ids) or [
-        {"ref": "F1", "id": "E1", "texto": "O cofre guarda cópias."}])
     monkeypatch.setattr("src.script_gen.recent_mistakes", lambda *a: "")
     rd.escrever(Canal(), "Svalbard", BANCO, min_minutes=2.5, max_minutes=5, cenas_ref=12, tentativas=1)
-    plano_p, montagem = pedidos[0], pedidos[1]
+    plano_p, escrita = pedidos[0], pedidos[1]
     assert "MAPA DO CONHECIMENTO" in plano_p and "E7" not in plano_p                # não verificada fica fora
-    assert ids_pedidos[:4] == ["E6", "E1", "E3", "E4"]                              # as do plano primeiro, sem repetir
-    assert "o que acontece quando um banco de genes some?" in montagem and "F1 [E1] O cofre guarda cópias." in montagem
+    assert "PLANO DA HISTÓRIA" in escrita and "o que acontece quando um banco de genes some?" in escrita
+    assert "NÃO comprova: destruição total" in escrita
+    assert "E2 [" not in escrita and "E5 [" not in escrita                           # fora do plano: o escritor não vê
+    assert "E99" not in escrita                                                      # id inventado pelo plano sai
 
 
 @pytest.mark.plano
-def test_plano_invalido_vai_para_as_evidencias_utilizaveis(monkeypatch):
-    pedidos, ids_pedidos = [], []
+def test_plano_invalido_volta_ao_banco_inteiro(monkeypatch):
+    pedidos = []
 
     def complete(messages, **kw):
         p = messages[-1]["content"]
@@ -99,11 +97,9 @@ def test_plano_invalido_vai_para_as_evidencias_utilizaveis(monkeypatch):
         return json.dumps({"titulo": "t", "descricao": "d", "tags": [], "cenas": [
             {"frases": [{"texto": "Um banco de genes pode sumir.", "tipo": "narrativa", "evidencias": []}]}]})
     monkeypatch.setattr(pv, "complete", complete)
-    monkeypatch.setattr(rd, "frases_da_fonte", lambda topic, banco, ids: ids_pedidos.extend(ids) or [
-        {"ref": "F1", "id": "E1", "texto": "O cofre guarda cópias."}])
     monkeypatch.setattr("src.script_gen.recent_mistakes", lambda *a: "")
     rd.escrever(Canal(), "Svalbard", BANCO, min_minutes=2.5, max_minutes=5, cenas_ref=12, tentativas=1)
-    assert "PLANO:" not in pedidos[-1] and ids_pedidos == [e["id"] for e in rd.usaveis(BANCO)]
+    assert "EVIDÊNCIAS (fontes oficiais" in pedidos[-1] and "PLANO DA HISTÓRIA" not in pedidos[-1]
 
 
 # ======================================================================= precisão: dano parcial não é destruição

@@ -353,11 +353,10 @@ def test_escritor_pede_338_a_675_palavras(monkeypatch):
         pedidos.append(messages[-1]["content"])
         return json.dumps({"titulo": "t", "cenas": [{"frases": [{"texto": "Mas por quê?", "tipo": "narrativa"}]}]})
     monkeypatch.setattr(pv, "complete", falso)
-    monkeypatch.setattr(rd, "frases_da_fonte", lambda *a: [{"ref": "F1", "id": "E1", "texto": "Um fato."}])
     from src.config import ChannelConfig
     rd.escrever(ChannelConfig.load("curiosidades"), "tema", {"evidencias": [], "lacunas": []},
                 min_minutes=2.5, max_minutes=5, cenas_ref=12, tentativas=1)
-    assert "304 a 675 palavras" in pedidos[0] and "Entre 8 e 20 cenas" in pedidos[0]
+    assert "entre 304 e 675\npalavras" in pedidos[0] and "entre 8 e 20 cenas" in pedidos[0]
 
 
 # ======================================================================= regressão job 996

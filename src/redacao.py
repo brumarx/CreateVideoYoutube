@@ -801,7 +801,7 @@ def material_do_plano(plano: dict, banco: dict) -> str:
             f"Resposta da conclusão: {plano['angulo'].get('resposta', '')}\n{blocos}\n"
             + ("Não exagerar: " + "; ".join(plano["nao_exagerar"]) + "\n" if plano.get("nao_exagerar") else "")
             + "\nEVIDÊNCIAS DO PLANO (as únicas que você usa; cada uma com o trecho, o que comprova e o que NÃO comprova):\n"
-            + bloco_do_mapa(mapa_do_conhecimento(banco), ids=ids, limite_trecho=220, plano=plano))
+            + bloco_do_mapa(mapa_do_conhecimento(banco), ids=ids, limite_trecho=400, plano=plano))
 
 
 def _valido_escritor(raw: str) -> bool:
@@ -853,179 +853,195 @@ def defeitos(script: dict, banco: dict, topic: str, min_pal: int, max_pal: int, 
     return script, lista, problemas
 
 
-# ---------------------------------------------------------------- frases da fonte (24/11)
-# A IA, mesmo mandada "só resumir", completava com o que sabe ("baixa umidade", "sem atividade sísmica",
-# "transgênicas"): instrução no prompt é pedido, não trava. Agora o roteiro é montado em 2 passos:
-# (1) cada evidência vira UMA frase falada que diz só o que o trecho diz, conferida contra o trecho (IA + código);
-# (2) a montagem só ESCOLHE e ORDENA essas frases e acrescenta ligações narrativas curtas, sem fato.
-# Toda frase factual do roteiro é, por construção, uma das frases conferidas.
-_PROMPT_FRASES = """Tema: {tema}
-Para CADA evidência abaixo, escreva UMA frase falada em português do Brasil (até 30 palavras) que diga o que
-o TRECHO da fonte diz — pode dizer MENOS, nunca MAIS. Proibido acrescentar fato, causa, consequência, adjetivo
-de valor, comparação, generalização ou conclusão que o trecho não traga. Frase simples, natural de ouvir, sem
-citar o id. Trecho com dois fatos importantes: até 2 frases. As frases vão ser lidas em sequência num vídeo:
-NÃO comece pelo nome do assunto ("O cofre…", "O túnel…") — comece pelo dado mais interessante do trecho
-(o número, o lugar, quem fez, quando), e varie o começo de uma frase para outra.
+# ---------------------------------------------------------------- escrita livre + conferência na hora (25/11)
+# 24/11 dois extremos: IA escrevendo livre contava bem (editorial 7,0) mas completava com o que sabe ("baixa
+# umidade", "transgênicas"); montando só frases da fonte isoladas, os fatos ficavam limpos e a história virava
+# lista de fragmentos (editorial 4,1). Agora a IA escreve livre, com tom de história, e ANTES da auditoria cada
+# frase factual é conferida contra o TRECHO das evidências que cita: a que diz mais do que o trecho é reescrita
+# na hora pela IA com o motivo (só aquela frase, no lugar dela) e conferida de novo; a que ainda excede sai.
+_PROMPT_ESCRITOR = """Você é o roteirista do canal "{canal}" (YouTube, português do Brasil). Tema: {tema}
+
+{material}
+
+Sua tarefa: CONTAR COMO HISTÓRIA o que as evidências contam — tom de quem conta um caso a um amigo, com
+começo curioso, tensão e resposta — sem inventar nada. Você escolhe as evidências, a ordem e as palavras.
+- Cada frase factual/explicativa diz SÓ o que o TRECHO das evidências que ela cita diz (pode dizer menos,
+  nunca mais). Depois de escrever, cada frase é conferida contra o trecho: o que o trecho não diz é cortado.
+  Nada de causa, consequência, comparação, adjetivo de valor, generalização ou detalhe que você "sabe".
+- Narrativa (pergunta da abertura, ligações, pergunta final) não afirma fato: sem número, nome ou dado.
+- Uma ideia puxa a outra (o que, por que, como, o que aconteceu); cada fato UMA vez; a abertura não anuncia
+  o que vem depois; o fim responde à pergunta do começo com um fato das evidências.
+- Prefira o que faz história (o que aconteceu, por que ali, como funciona) ao institucional (quem administra,
+  acordos, portal); um fato institucional só se mudar a história.
 REGRAS DE PRECISÃO (inegociáveis):
-- Evidência "contraditória": diga os dois valores e que as fontes divergem, ou não escreva frase.
-- "estimativa": diga como aproximação ("cerca de"). Valor medido/exato fica EXATO, mesmo de fonte única.
-- "hipótese": diga como hipótese ("acredita-se", "uma das explicações"), nunca como fato.
+- Evidência "contraditorio": diga os dois valores e que as fontes divergem, ou não use.
+- "estimado": diga como aproximação ("cerca de"). Valor medido/exato fica EXATO, mesmo de fonte única.
+- "hipotese": diga como hipótese ("acredita-se", "uma das explicações"), nunca como fato.
 - "fonte única" com recorde ou superlativo: diga de onde vem ("segundo os registros", "a menor já
   registrada"); não apresente como consenso.
 - Números em algarismos; número grande (mil ou mais) arredondado com "cerca de" (303.863 → "cerca de
-  300 mil").
+  300 mil"). Cada número UMA vez.
 - Decimal (−64,4 °C): o valor da evidência, ou o arredondamento dito e no lado certo ("mais de 64 graus
   negativos"). Mantenha o sinal (negativos, abaixo de zero) e diga o que o número é (recorde, média).
-- Nunca outro número no lugar do que a evidência traz.
+- Número que nenhuma evidência traz: não diga. Nunca outro número no lugar do que a evidência traz.
+- Datas só as que mudam a história (sem linha do tempo).
 {regra_precisao}
-EVIDÊNCIAS:
-{bloco}
-Responda SÓ JSON: {{"frases": [{{"id": "E3", "texto": "..."}}]}}"""
+- Sem saudação inicial e sem pedir like/inscrição (entram depois).
+{linha_canal}
+FORMATO: entre {cenas_min} e {cenas_max} cenas (cada cena 1 a 3 frases), no total entre {min_pal} e {max_pal}
+palavras faladas; com evidência de menos, fique mais curto — nunca invente. Cada frase com:
+- "tipo": "factual" (afirma algo sobre o mundo), "explicativa" (explica causa ou funcionamento) ou
+  "narrativa" (abertura, transição, pergunta — sem afirmar fato);
+- "evidencias": ids cujo TRECHO sustenta a frase (obrigatório em factual e explicativa; vazio em narrativa).
+Os ids ficam SÓ no campo "evidencias", nunca no texto.
+{feedback}
+Responda SÓ JSON:
+{{"titulo": "até 60 caracteres, só com o que o roteiro diz", "descricao": "2 a 3 frases", "tags": ["..."],
+  "cenas": [{{"frases": [{{"texto": "...", "tipo": "narrativa", "evidencias": []}},
+                         {{"texto": "...", "tipo": "factual", "evidencias": ["E2"]}}]}}]}}"""
 
-_PROMPT_CONFERE = """Confira cada FRASE contra o TRECHO da evidência dela (só o trecho conta, não o que você sabe).
-"sustentada": tudo o que a frase diz está no trecho (tradução e arredondamento no sentido certo valem).
-"excede": a frase diz algo que o trecho não diz — diga o quê.
+_PROMPT_CONFERE = """Confira cada FRASE de um roteiro contra os TRECHOS das evidências que ela cita (só os trechos
+contam, não o que você sabe). A frase anterior aparece só para entender a quem a frase se refere.
+"sustentada": tudo o que a frase afirma está nos trechos (tradução, resumo e arredondamento no sentido certo valem).
+"excede": a frase afirma algo que os trechos não dizem — diga exatamente o quê.
 {itens}
 Responda SÓ JSON: {{"decisoes": [{{"n": 1, "decisao": "sustentada", "o_que_excede": ""}}]}}"""
 
-_PROMPT_MONTAGEM = """Você monta o roteiro de um vídeo do canal "{canal}" (YouTube, português do Brasil). Tema: {tema}
-Você NÃO escreve fatos. Os fatos são as FRASES PRONTAS abaixo, já conferidas contra as fontes oficiais: você
-ESCOLHE quais entram, pelo código (F1, F2...), e a ORDEM que conta a melhor história. Entre os fatos, frases
-NARRATIVAS curtas (até 12 palavras) fazem a história andar: a pergunta da abertura, uma pergunta ou ligação a
-cada um ou dois fatos ("E por que tão longe?", "Mas tem um detalhe.", "Agora, o mais curioso:") e a pergunta
-final ao público. Narrativa é SÓ pergunta ou transição — nunca afirmação ("A transparência é total" afirma:
-proibido) — e sem número, nome próprio ou fato. Prefira os fatos que fazem história (o que aconteceu, por que
-ali, como funciona) aos institucionais (quem administra, portal, acordos); não precisa usar todas as frases.
-História: abra com o fato mais curioso e a pergunta do tema; depois o que é, como funciona, por que, o que já
-aconteceu; feche respondendo a pergunta com uma frase da lista. Cada fato UMA vez; não anuncie no começo o que
-vai contar depois; datas só as que mudam a história (sem linha do tempo). Entre {cenas_min} e {cenas_max} cenas,
-{min_pal} a {max_pal} palavras no total; com frases de menos, fique mais curto — nunca invente.
-{plano}
-FRASES PRONTAS:
-{frases}
-{feedback}
-Responda SÓ JSON:
-{{"titulo": "até 60 caracteres, só com o que as frases dizem", "descricao": "2 a 3 frases só com fatos das frases",
-  "cenas": [{{"frases": ["F3", {{"narrativa": "E por que tão longe?"}}, "F7"]}}]}}"""
+_PROMPT_REESCREVE = """Estas frases de um roteiro de vídeo (tema: {tema}) dizem mais do que a fonte. Reescreva cada
+uma para dizer SÓ o que o TRECHO diz (pode dizer menos, nunca mais), no mesmo lugar da história: mantenha a
+ligação com a frase anterior e com a seguinte, o tom falado e o tamanho parecido. Se nada da frase cabe no
+trecho, responda texto vazio (a frase sai).
+{itens}
+Responda SÓ JSON: {{"frases": [{{"n": 1, "texto": "..."}}]}}"""
 
-FRASES_FONTE_MIN = 8   # com menos frases conferidas não há história de 2,5 min sem inventar
-FRASES_FONTE_MAX = 36  # evidências por roteiro (o plano escolhe; sem plano, as primeiras utilizáveis)
+CONFERE_POR_CHAMADA = 12  # frases por pedido (decisão + motivo de cada uma; mais que isso arrisca resposta cortada)
+TRECHO_CONFERE = 600
 
 
-def frases_da_fonte(topic: str, banco: dict, ids: list[str]) -> list[dict]:
-    """[{"ref": "F1", "id": "E3", "texto": ...}] — uma frase por evidência (ou duas), conferida contra o trecho
-    pela IA (juiz da conferência, sem raciocínio longo) e pelas travas em código. Só as sustentadas ficam."""
+def _trechos_das(ids: list[str], mapa: dict[str, dict]) -> str:
+    return "\n".join(f"   TRECHO {x}: \"{mapa[x]['trecho'][:TRECHO_CONFERE] or mapa[x]['afirmacao']}\""
+                     for x in ids[:3] if x in mapa) or "   (nenhuma evidência válida citada)"
+
+
+def conferir_contra_trechos(itens: list[dict], banco: dict) -> dict[int, str | None]:
+    """itens: [{"texto", "evidencias", "anterior"}]. Devolve {índice: None (sustentada) | o que excede}.
+    Sem resposta da conferência a frase conta como não conferida (nunca passa por falta de juiz)."""
     from .providers import complete, is_strong_model
     mapa = {m["id"]: m for m in mapa_do_conhecimento(banco)}
-    ids = [x for x in ids if x in mapa][:FRASES_FONTE_MAX]
-    if not ids:
-        return []
-    bloco = "\n".join(f"{x} [{mapa[x]['natureza']}]: {mapa[x]['afirmacao']}\n    trecho: \"{mapa[x]['trecho'][:600]}\""
-                      for x in ids)
+    saida: dict[int, str | None] = {}
+    for ini in range(0, len(itens), CONFERE_POR_CHAMADA):
+        lote = itens[ini:ini + CONFERE_POR_CHAMADA]
+        texto = "\n".join(f"{n}) " + (f"(anterior: {it['anterior'][:160]})\n   " if it.get("anterior") else "")
+                          + f"FRASE: {it['texto']}\n{_trechos_das(it['evidencias'], mapa)}"
+                          for n, it in enumerate(lote, 1))
+        decisoes: dict[int, dict] = {}
+        try:
+            raw = complete([{"role": "user", "content": _PROMPT_CONFERE.format(itens=texto)}], max_tokens=4000,
+                           temperature=0.1, validate=lambda r: '"decisoes"' in r, model_filter=is_strong_model)
+            decisoes = {int(d["n"]): d for d in _obj(raw).get("decisoes") or []
+                        if isinstance(d, dict) and str(d.get("n", "")).isdigit()}
+        except RuntimeError as exc:
+            log.warning("conferência contra os trechos indisponível (%s)", exc)
+        for n, it in enumerate(lote, 1):
+            d = decisoes.get(n) or {}
+            ok = str(d.get("decisao", "")).strip().lower() == "sustentada"
+            saida[ini + n - 1] = None if ok else (str(d.get("o_que_excede") or "").strip()
+                                                  or ("diz mais do que o trecho" if d else "não conferida"))
+    return saida
+
+
+def _itens_factuais(script: dict) -> list[tuple[int, int, dict]]:
+    out = []
+    for i, j, f in frases_de(script):
+        if f.get("tipo") == "narrativa":
+            continue
+        ant = script["scenes"][i]["frases"][j - 1]["texto"] if j else (
+            script["scenes"][i - 1]["frases"][-1]["texto"] if i and script["scenes"][i - 1].get("frases") else "")
+        out.append((i, j, {"texto": f["texto"], "evidencias": list(f.get("evidencias") or []), "anterior": ant}))
+    return out
+
+
+def conferir_na_escrita(script: dict, banco: dict, topic: str) -> tuple[dict, list[str]]:
+    """Confere cada frase factual contra os trechos; reescreve na hora as que excedem (uma vez) e confere de novo;
+    as que ainda excedem saem. Devolve (roteiro, motivos do que saiu)."""
+    from .providers import complete, is_strong_model
+    alvos = _itens_factuais(script)
+    if not alvos:
+        return script, []
+    veredito = conferir_contra_trechos([it for _, _, it in alvos], banco)
+    ruins = [(alvos[k], motivo) for k, motivo in veredito.items() if motivo]
+    if not ruins:
+        log.info("conferência na escrita: %d frases factuais, todas sustentadas", len(alvos))
+        return script, []
+    mapa = {m["id"]: m for m in mapa_do_conhecimento(banco)}
+    cenas = [dict(sc, frases=[dict(f) for f in sc["frases"]]) for sc in script["scenes"]]
+
+    def seguinte(i: int, j: int) -> str:
+        if j + 1 < len(cenas[i]["frases"]):
+            return cenas[i]["frases"][j + 1]["texto"]
+        return cenas[i + 1]["frases"][0]["texto"] if i + 1 < len(cenas) and cenas[i + 1]["frases"] else ""
+
+    itens = "\n".join(f"{n}) anterior: {it['anterior'][:160]}\n   FRASE: {it['texto']}\n   seguinte: {seguinte(i, j)[:160]}"
+                      f"\n   O QUE EXCEDE: {motivo}\n{_trechos_das(it['evidencias'], mapa)}"
+                      for n, ((i, j, it), motivo) in enumerate(ruins, 1))
+    novas: dict[int, str] = {}
     try:
-        raw = complete([{"role": "user", "content": _PROMPT_FRASES.format(tema=topic, bloco=bloco,
-                                                                         regra_precisao=_REGRA_PRECISAO_CURTA)}],
+        raw = complete([{"role": "user", "content": _PROMPT_REESCREVE.format(tema=topic, itens=itens)}],
                        max_tokens=4000, temperature=0.3, validate=lambda r: '"frases"' in r,
                        model_filter=is_strong_model)
+        novas = {int(d["n"]): str(d.get("texto") or "").strip() for d in _obj(raw).get("frases") or []
+                 if isinstance(d, dict) and str(d.get("n", "")).isdigit()}
     except RuntimeError as exc:
-        log.warning("frases da fonte: nenhum modelo respondeu (%s)", exc)
-        return []
-    candidatas = [{"id": str(f.get("id", "")).strip(), "texto": str(f.get("texto", "")).strip()}
-                  for f in _obj(raw).get("frases") or [] if isinstance(f, dict)]
-    candidatas = [c for c in candidatas if c["id"] in mapa and len(c["texto"].split()) >= 4]
-    if not candidatas:
-        return []
-    # 1) travas em código (número, unidade, nome, sinal…), cada frase sozinha com a evidência dela
-    teste = {"scenes": [{"narration": c["texto"], "frases": [{"texto": c["texto"], "tipo": "factual",
-                                                               "evidencias": [c["id"]]}]} for c in candidatas]}
-    teste, probs = auditar_codigo(teste, banco, topic)
-    ruins = {p["cena"] for p in probs}
-    candidatas = [{**c, "texto": teste["scenes"][k]["frases"][0]["texto"]} for k, c in enumerate(candidatas)
-                  if k not in ruins]
-    # 2) conferência da IA contra o trecho
-    itens = "\n".join(f"{n}) TRECHO ({c['id']}): \"{mapa[c['id']]['trecho'][:600]}\"\n   FRASE: {c['texto']}"
-                      for n, c in enumerate(candidatas, 1))
-    try:
-        raw = complete([{"role": "user", "content": _PROMPT_CONFERE.format(itens=itens)}], max_tokens=4000,
-                       temperature=0.1, validate=lambda r: '"decisoes"' in r, model_filter=is_strong_model)
-        decisoes = {int(d.get("n", 0)): str(d.get("decisao", "")).lower() for d in _obj(raw).get("decisoes") or []
-                    if isinstance(d, dict) and str(d.get("n", "")).isdigit()}
-    except RuntimeError as exc:
-        log.warning("conferência das frases da fonte indisponível (%s) — nenhuma frase aprovada", exc)
-        return []
-    aprovadas = [c for n, c in enumerate(candidatas, 1) if decisoes.get(n) == "sustentada"]
-    log.info("frases da fonte: %d escritas, %d barradas em código, %d aprovadas na conferência",
-             len(teste["scenes"]), len(ruins), len(aprovadas))
-    return [{**c, "ref": f"F{k}"} for k, c in enumerate(aprovadas, 1)]
-
-
-def montar_de_frases(data: dict, frases: list[dict], banco: dict, nomes: set[str]) -> dict:
-    """Resposta da montagem → roteiro. Referência desconhecida sai; narrativa com fato (número, nome próprio,
-    absoluto) ou longa sai; cena sem frase da lista sai. Cada frase da lista entra no máximo uma vez."""
-    por_ref = {f["ref"]: f for f in frases}
-    usadas: set[str] = set()
-    cenas = []
-    for c in data.get("cenas") or []:
-        saida = []
-        for item in (c.get("frases") if isinstance(c, dict) else None) or []:
-            if isinstance(item, str) and item.strip() in por_ref and item.strip() not in usadas:
-                f = por_ref[item.strip()]
-                usadas.add(f["ref"])
-                saida.append({"texto": f["texto"], "tipo": "factual", "evidencias": [f["id"]]})
-            elif isinstance(item, dict) and str(item.get("narrativa", "")).strip():
-                texto = str(item["narrativa"]).strip()
-                if len(texto.split()) <= 14 and not afirmacao_escondida(texto, nomes):
-                    saida.append({"texto": texto, "tipo": "narrativa", "evidencias": []})
-        if any(f["tipo"] == "factual" for f in saida):
-            cenas.append({"narration": " ".join(f["texto"] for f in saida), "frases": saida})
-    return {"title": str(data.get("titulo", "")).strip(), "description": str(data.get("descricao", "")).strip(),
-            "tags": [], "scenes": cenas, "_banco": banco, "_redacao": True,
-            "_frases_da_fonte": frases}
+        log.warning("reescrita das frases que excedem indisponível (%s)", exc)
+    reescritas = [(n, ruins[n - 1]) for n in range(1, len(ruins) + 1) if len(novas.get(n, "").split()) >= 3]
+    segunda = conferir_contra_trechos([{**it, "texto": novas[n]} for n, ((_, _, it), _) in reescritas], banco) \
+        if reescritas else {}
+    fora: set[tuple[int, int]] = {(i, j) for (i, j, _), _ in ruins}
+    for k, (n, ((i, j, it), _)) in enumerate(reescritas):
+        if segunda.get(k) is None:
+            cenas[i]["frases"][j]["texto"] = novas[n]
+            fora.discard((i, j))
+    motivos = [f"\"{it['texto'][:80]}\": {m}" for (i, j, it), m in ruins if (i, j) in fora]
+    saida = []
+    for i, sc in enumerate(cenas):
+        frases = [f for j, f in enumerate(sc["frases"]) if (i, j) not in fora]
+        if any(f.get("tipo") != "narrativa" for f in frases):
+            saida.append({**sc, "frases": frases, "narration": " ".join(f["texto"] for f in frases)})
+    log.info("conferência na escrita: %d frases factuais, %d excediam, %d corrigidas, %d cortadas",
+             len(alvos), len(ruins), len(ruins) - len(motivos), len(motivos))
+    return {**script, "scenes": saida}, motivos
 
 
 def escrever(channel, topic: str, banco: dict, *, min_minutes: float, max_minutes: float,
              cenas_ref: int, feedback: str = "", tentativas: int = 3) -> dict:
-    """O roteirista escreve a história a partir do banco. Até `tentativas` pedidos, cada um com
-    os defeitos do anterior; fica a versão com menos defeitos (os factuais seguem para a
-    auditoria e a edição por cena, que reformulam em vez de cortar)."""
+    """O roteirista conta a história a partir do banco; cada versão passa pela conferência contra os trechos
+    (corrige ou corta o que excede) e pelos defeitos em código. Até `tentativas` pedidos, cada um com os
+    defeitos do anterior (inclusive o que precisou ser cortado); fica a versão com menos defeitos."""
     from .providers import complete
     from .script_gen import current_date_rule, recent_mistakes
-    # 19/11: meta em palavras pela voz real (~135/min); a duração do áudio decide depois. O mínimo tem
-    # folga: história bem contada um pouco mais curta passa; enchimento para chegar lá, não
+    # 19/11: meta em palavras pela voz real (~135/min); a duração do áudio decide depois
     min_pal = round(min_minutes * PALAVRAS_POR_MINUTO * 0.9)
     max_pal = round(max_minutes * PALAVRAS_POR_MINUTO)
-    # cenas acompanham a duração (uma cena a cada 15-20 s); 12 do yaml é só referência
     cenas_min = max(5, min(cenas_ref - 4, round(min_minutes * 3)))
     cenas_max = max(cenas_ref + 4, round(max_minutes * 4))
     linha = str(getattr(channel, "niche", "") or "")
-    # 23/11: primeiro o plano da história (mapa do conhecimento → ângulo, blocos, limites de cada evidência)
     plano = planejar_historia(topic, banco, min_minutes=min_minutes, max_minutes=max_minutes)
     material = (material_do_plano(plano, banco) if plano else
-                "BANCO DE EVIDÊNCIAS (pesquisa verificada: cada item tem a frase da fonte que o prova):\n"
-                + bloco_para_escritor(banco, 0))
-    # 24/11: o roteiro é montado com FRASES DA FONTE já conferidas (sem liberdade de escrever fato)
-    ids = ([x for b in plano["blocos"] for x in b["evidencias"]] if plano else []) + [e["id"] for e in usaveis(banco)]
-    frases = frases_da_fonte(topic, banco, list(dict.fromkeys(ids)))
-    if len(frases) < FRASES_FONTE_MIN:
-        raise RoteiroReprovado(f"só {len(frases)} frase(s) da fonte conferida(s) (mínimo {FRASES_FONTE_MIN}): "
-                               "sem material oficial suficiente para contar a história sem inventar")
-    nomes = _nomes_conhecidos({"scenes": [{"narration": f["texto"], "frases": [
-        {"texto": f["texto"], "tipo": "factual", "evidencias": [f["id"]]}]} for f in frases]}, topic)
-    plano_txt = (f"PLANO: pergunta da abertura: {plano['angulo'].get('pergunta', '')} | resposta da conclusão: "
-                 f"{plano['angulo'].get('resposta', '')}\nBlocos: "
-                 + " → ".join(str(b.get("funcao", "")) for b in plano["blocos"])) if plano else ""
-    pedido = _PROMPT_MONTAGEM.format(
-        canal=getattr(channel, "channel_title", "") or channel.name, tema=topic, plano=plano_txt,
-        frases="\n".join(f"{f['ref']} [{f['id']}] {f['texto']}" for f in frases),
+                "EVIDÊNCIAS (fontes oficiais verificadas: cada item tem o trecho da fonte que o prova):\n"
+                + bloco_para_escritor(banco, 0))  # sem plano: o banco inteiro não cabe com trechos
+    pedido = _PROMPT_ESCRITOR.format(
+        canal=getattr(channel, "channel_title", "") or channel.name, tema=topic, material=material,
+        linha_canal=(f"Linha do canal: {linha}\n" if linha else "") + current_date_rule(),
         cenas_min=cenas_min, cenas_max=cenas_max, min_pal=min_pal, max_pal=max_pal,
+        regra_precisao=_REGRA_PRECISAO_CURTA,
         feedback=(f"\nPARECER DA REVISÃO ANTERIOR (corrija):\n{feedback}\n" if feedback else ""))
+    pedido += recent_mistakes(channel.name)
     from .providers import ProvedoresIndisponiveis, is_strong_model
     melhor, menos = None, 10**6
     correcao = ""
     infra: ProvedoresIndisponiveis | None = None
     for n in range(tentativas):
         try:
-            # 19/11 (job 997): só modelo forte escreve; sem ele, espera/retoma (não cai no Llama 70B)
             from . import metricas
             with metricas.etapa("escrita"):
                 raw = complete([{"role": "user", "content": pedido + correcao}], max_tokens=RESPOSTA_ESCRITOR,
@@ -1036,15 +1052,16 @@ def escrever(channel, topic: str, banco: dict, *, min_minutes: float, max_minute
         except RuntimeError as exc:
             log.warning("escritor indisponível (tentativa %d/%d): %s", n + 1, tentativas, exc)
             continue
-        script = montar_de_frases(_obj(raw), frases, banco, nomes)
+        script = de_json(_obj(raw), banco)
+        script, cortadas = conferir_na_escrita(script, banco, topic)
         script, lista, _ = defeitos(script, banco, topic, min_pal, max_pal, cenas_min, cenas_max)
+        lista += [f"a frase {m} — a fonte não diz isso (frase cortada)" for m in cortadas]
         log.info("redação, tentativa %d/%d: %d cenas, %d palavras, %d defeito(s)%s", n + 1, tentativas,
                  len(script["scenes"]), _palavras(script), len(lista), (": " + " | ".join(lista[:4])) if lista else "")
-        # forma (tamanho, cenas, lista, repetição) pesa 3x: frase sem prova a auditoria conserta depois;
-        # roteiro curto ou com cara de lista não se conserta frase a frase
+        # forma (tamanho, cenas, lista, repetição) pesa 3x; frase cortada pesa 1 (já saiu do roteiro)
         peso = sum(1 if x.startswith("a frase") else 3 for x in lista)
         if not min_pal <= _palavras(script) <= max_pal:
-            peso += 100  # fora da meta de duração só se nenhuma tentativa ficar dentro
+            peso += 100
         if peso < menos:
             melhor, menos = script, peso
         if not lista:
