@@ -40,6 +40,7 @@ def isolamento(request, tmp_path, monkeypatch):
 def pytest_configure(config):
     config.addinivalue_line("markers", "plano: o teste usa o plano da história de verdade (redacao.planejar_historia)")
     config.addinivalue_line("markers", "conferencia: o teste usa a conferência na escrita de verdade (redacao.conferir_na_escrita)")
+    config.addinivalue_line("markers", "troca: o teste usa a troca mínima de verdade (redacao.trocar_frases_apontadas)")
     config.addinivalue_line("markers", "ritmo: o teste usa redacao.ritmo_de_referencia de verdade")
     config.addinivalue_line("markers", "revisao: o teste usa a revisão das afirmações de verdade (evidencias.revisar_afirmacoes)")
 
@@ -64,6 +65,17 @@ def conferencia_na_escrita_simulada(request, monkeypatch):
     from src import redacao
     monkeypatch.setattr(redacao, "conferir_na_escrita", lambda script, banco, topic: (script, []))
     monkeypatch.setattr(redacao, "conferir_edicao", lambda *a, **k: None)  # 25/11: a mesma conferência na edição
+
+
+@pytest.fixture(autouse=True)
+def troca_minima_simulada(request, monkeypatch):
+    """25/11: no laço de auditoria a frase apontada pela IA passa antes pela troca mínima (redacao.
+    trocar_frases_apontadas: 1 chamada de escrita + conferência). Os testes do laço simulam só as outras
+    respostas: aqui a troca não muda nada (segue para o corte/edição). Quem testa a troca marca @pytest.mark.troca."""
+    if request.node.get_closest_marker("troca"):
+        return
+    from src import redacao
+    monkeypatch.setattr(redacao, "trocar_frases_apontadas", lambda *a, **k: (None, {"trocadas": [], "recusadas": []}))
 
 
 @pytest.fixture(autouse=True)

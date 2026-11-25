@@ -2725,14 +2725,17 @@ def auditar_e_corrigir(script: dict, banco: dict, topic: str, *, web_facts: list
 
     origem, mudou, de_versao = "escrita", [], None
     relatorio["cortes"] = 0
+    relatorio["trocas"] = 0
+    relatorio["registro_trocas"] = []
     # 25/11 (Svalbard 1020: dois cortes gastaram as 2 rodadas e a última frase enganosa, que só uma reescrita
     # resolvia — o corte deixaria 273 de 286 palavras —, ficou sem edição): corte e edição têm limites próprios
-    for _ in range(EDICOES_MAX + CORTES_MAX + 1):
+    for _ in range(EDICOES_MAX + CORTES_MAX + TROCAS_MAX + 1):
         script, problemas, qualidade = _auditar_versao(script, banco, topic, previas)
         atual = registrar(script, problemas, qualidade, origem, mudou, de_versao)
         if atual["aprovado"] and qualidade["nota"] >= NOTA_ALVO:
             break
-        if relatorio["edicoes"] >= EDICOES_MAX and relatorio["cortes"] >= CORTES_MAX:
+        if relatorio["edicoes"] >= EDICOES_MAX and relatorio["cortes"] >= CORTES_MAX \
+                and relatorio["trocas"] >= TROCAS_MAX:
             break
         # 23/11: a próxima edição parte da versão atual — a não ser que uma anterior tenha estritamente menos
         # problemas de fato e de leitura E história no mínimo tão boa (a edição que piorou os fatos sem melhorar
@@ -2751,6 +2754,17 @@ def auditar_e_corrigir(script: dict, banco: dict, topic: str, *, web_facts: list
         # (o problema que o CÓDIGO acha — número arredondado, sinal, atribuição — vai à edição: o conserto é conferido
         # pelo próprio código; o que só a IA julga — excede, sem suporte, leitura enganosa — sai)
         julgados = [p for p in problemas if p["tipo"] not in TIPOS_DO_CODIGO]
+        # 25/11 (Svalbard 1021): primeiro a troca mínima pela sugestão do leitor (conferida contra o fato) —
+        # o corte tirava a conclusão e derrubava a história; só o que a troca não resolve é cortado depois
+        if julgados and relatorio["trocas"] < TROCAS_MAX:
+            relatorio["trocas"] += 1
+            trocado, reg_troca = trocar_frases_apontadas(script, julgados, banco, topic)
+            reg_troca["da_versao"] = base["versao"]
+            relatorio["registro_trocas"].append(reg_troca)
+            if trocado and not roteiro_insuficiente(trocado, min_palavras) and _palavras(trocado) >= piso:
+                origem, mudou, de_versao = "troca", sorted({x["cena"] for x in reg_troca["trocadas"]}), base["versao"]
+                script = trocado
+                continue
         if julgados and relatorio["cortes"] < CORTES_MAX:
             cortado = cortar_frases_reprovadas(script, julgados)
             if cortado and not roteiro_insuficiente(cortado, min_palavras) and _palavras(cortado) >= piso:
@@ -2953,6 +2967,109 @@ def conferencia_final(script: dict, banco: dict, topic: str = "") -> dict:
         if frases:
             cenas.append({**sc, "frases": frases, "narration": " ".join(f["texto"] for f in frases)})
     return {**script, "scenes": cenas}
+
+
+_PROMPT_TROCA = """Um roteiro de vídeo (tema: {tema}) tem frases que um leitor apontou: elas dizem mais do que os
+fatos ou levam o público a concluir algo falso. Para CADA problema, troque a MENOR parte possível das frases
+indicadas, aplicando a correção sugerida pelo leitor. Regras:
+- use SÓ o que os FATOS dizem; nunca acrescente fato, número, causa, nome ou comparação;
+- prefira tirar ou suavizar a palavra que exagera ("garante" → "ajuda a", "sem energia" sai) a reescrever a frase;
+- não ligue fatos com causa ("por isso", "porque", "graças a") se o fato não diz a causa;
+- frase de opinião/conclusão (ponto de vista) continua opinião, dita como opinião ("para mim", "o que impressiona"),
+  e só retoma o que o vídeo já mostrou — nunca afirma fato novo;
+- mantenha o tom falado, a ligação com a frase anterior e a seguinte e o tamanho parecido;
+- se não há troca segura, texto vazio (a frase sai).
+ROTEIRO (frases numeradas):
+{roteiro}
+PROBLEMAS:
+{problemas}
+Responda SÓ JSON: {{"trocas": [{{"n": 7, "texto": "frase nova"}}]}}"""
+
+TROCAS_MAX = 2  # 25/11: rodadas de troca mínima pela sugestão do leitor (antes do corte e da edição)
+
+
+def trocar_frases_apontadas(script: dict, problemas: list[dict], banco: dict, topic: str) -> tuple[dict | None, dict]:
+    """25/11 (Svalbard 1021: cortar tirava a conclusão e o editorial caía 6,4 → 5,4; a edição de cena voltava
+    4 de 4): cada leitor que aponta o problema já diz como corrigir. A frase apontada (ou as frases da combinação
+    enganosa) recebe a troca MÍNIMA que aplica essa sugestão; a frase nova factual é conferida contra os FATOS
+    citados e só fica se passar. Devolve (roteiro trocado | None se nada mudou, registro)."""
+    from .providers import ProvedoresIndisponiveis, complete, is_strong_model
+    lista = frases_de(script)
+    pos = {(i, j): n for n, (i, j, _) in enumerate(lista, 1)}
+    mapa = {m["id"]: m for m in mapa_do_conhecimento(banco)}
+    registro: dict = {"trocadas": [], "recusadas": []}
+    permitidas: set[int] = set()
+    blocos = []
+    for k, p in enumerate(problemas, 1):
+        ns = sorted({pos[(x["cena"], x["frase"])] for x in p.get("sequencia") or [] if (x["cena"], x["frase"]) in pos}
+                    or ({pos[(p["cena"], p["frase"])]} if (p.get("cena"), p.get("frase")) in pos else set()))
+        if not ns:
+            continue
+        permitidas |= set(ns)
+        ids = sorted({e for n in ns for e in lista[n - 1][2].get("evidencias") or []})
+        blocos.append(f"{k}) frases {ns} — {p.get('motivo') or p.get('termo')}\n{_trechos_das(ids, mapa)}")
+    if not blocos:
+        return None, registro
+    roteiro = "\n".join(f"{n}) [{f.get('tipo') or 'fato'}] {f['texto']}" for n, (_, _, f) in enumerate(lista, 1))
+    try:
+        raw = complete([{"role": "user", "content": _PROMPT_TROCA.format(tema=topic, roteiro=roteiro,
+                                                                         problemas="\n".join(blocos))}],
+                       max_tokens=3000, temperature=0.2, validate=lambda r: '"trocas"' in r,
+                       model_filter=is_strong_model)
+    except ProvedoresIndisponiveis:
+        raise
+    except RuntimeError as exc:
+        log.warning("troca mínima indisponível (%s)", exc)
+        return None, registro
+    novas: dict[int, str] = {}
+    for d in _obj(raw).get("trocas") or []:
+        if isinstance(d, dict) and str(d.get("n", "")).isdigit() and int(d["n"]) in permitidas:
+            novas[int(d["n"])] = " ".join(str(d.get("texto") or "").split())
+    novas = {n: t for n, t in novas.items() if _norm(t) != _norm(lista[n - 1][2]["texto"])}
+    if not novas:
+        return None, registro
+    # frase nova (não vazia) conferida contra os fatos que a original citava; narrativa: sem afirmação escondida
+    conferir = []
+    for n, t in novas.items():
+        i, j, f = lista[n - 1]
+        if not t:
+            continue
+        if f.get("tipo") == "narrativa":
+            achado = afirmacao_escondida(t, _nomes_conhecidos(script, topic))
+            if achado:
+                registro["recusadas"].append({"n": n, "texto": t[:160], "motivo": f"narrativa afirma: {achado}"[:200]})
+                novas[n] = None
+            continue
+        ant = lista[n - 2][2]["texto"] if n > 1 else ""
+        conferir.append((n, {"texto": t, "evidencias": list(f.get("evidencias") or []), "anterior": ant}))
+    veredito = conferir_contra_trechos([it for _, it in conferir], banco) if conferir else {}
+    for k, (n, it) in enumerate(conferir):
+        if veredito.get(k):
+            registro["recusadas"].append({"n": n, "texto": it["texto"][:160], "motivo": veredito[k][:200]})
+            novas[n] = None
+    aceitas = {n: t for n, t in novas.items() if t is not None}
+    if not aceitas:
+        log.info("troca mínima: nenhuma troca passou na conferência (%d recusada(s))", len(registro["recusadas"]))
+        return None, registro
+    cenas = [dict(sc, frases=[dict(f) for f in sc.get("frases") or []]) for sc in script["scenes"]]
+    tirar: set[tuple[int, int]] = set()
+    for n, t in aceitas.items():
+        i, j, f = lista[n - 1]
+        registro["trocadas"].append({"n": n, "cena": i + 1, "antes": f["texto"][:160], "depois": t[:160]})
+        if t:
+            cenas[i]["frases"][j]["texto"] = t
+        else:
+            tirar.add((i, j))
+    saida = []
+    for i, sc in enumerate(cenas):
+        frases = [f for j, f in enumerate(sc["frases"]) if (i, j) not in tirar]
+        if any(f.get("tipo") != "narrativa" for f in frases):
+            saida.append({**sc, "frases": frases, "narration": " ".join(f["texto"] for f in frases)})
+    if not saida:
+        return None, registro
+    log.info("troca mínima: %d frase(s) trocada(s), %d recusada(s): %s", len(aceitas), len(registro["recusadas"]),
+             " | ".join(f"\"{x['antes'][:60]}\" → \"{x['depois'][:60]}\"" for x in registro["trocadas"]))
+    return {**script, "scenes": saida}, registro
 
 
 def cortar_frases_reprovadas(script: dict, problemas: list[dict]) -> dict | None:
