@@ -391,6 +391,25 @@ def _try_viral_topic(channel_name: str, niche: str, queries: list[str], used: li
     return topic
 
 
+CANDIDATOS_SITE_OFICIAL = 5
+
+
+def _com_site_oficial(channel_name: str, unused: list[str]) -> str:
+    """25/11: no modo redação, o tema com site oficial (Wikidata) rende o melhor material; entre até
+    CANDIDATOS_SITE_OFICIAL sorteados, o primeiro que tem; nenhum tem → o primeiro sorteado (vai às referências)."""
+    from .web_search import sites_oficiais
+    candidatos = random.sample(unused, min(CANDIDATOS_SITE_OFICIAL, len(unused)))
+    for t in candidatos:
+        try:
+            if sites_oficiais(t):
+                log.info("[%s] tema com site oficial: %s", channel_name, t)
+                return t
+        except Exception as exc:  # noqa: BLE001 — sem a consulta, sorteio normal
+            log.info("[%s] site oficial de %r não consultado: %s", channel_name, t[:50], exc)
+            break
+    return candidatos[0]
+
+
 def pick_topic(
     channel_name: str,
     pool: list[str],
@@ -398,6 +417,7 @@ def pick_topic(
     viral_queries: list[str] | None = None,
     viral_share: float = 0.5,
     priority: list[str] | None = None,
+    preferir_site_oficial: bool = False,
 ) -> str:
     """Escolhe um tema não usado ainda pra `channel_name` — fila única
     (curto e longo compartilham a mesma lista, já que só sai 1 vídeo/dia por
@@ -422,7 +442,7 @@ def pick_topic(
     elif viral_queries and (not unused or random.random() < viral_share):
         topic = _try_viral_topic(channel_name, niche, viral_queries, used)
     if topic is None and unused:
-        topic = random.choice(unused)
+        topic = _com_site_oficial(channel_name, unused) if preferir_site_oficial else random.choice(unused)
     elif topic is None:
         log.info("[%s] lista fixa de temas esgotada — pedindo tema novo ao LLM", channel_name)
         topic = _generate_new_topic(niche, used)

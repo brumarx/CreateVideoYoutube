@@ -816,13 +816,31 @@ def _auditar_redacao(channel, script: dict, banco: dict, topic: str, web_facts: 
 MIN_PAGINAS_OFICIAIS = 6
 
 
+def evidencias_do_roteiro(completo: dict | None, minimo: int) -> tuple[dict | None, str]:
+    """25/11 (hierarquia de fontes do dono): com evidência OFICIAL bastante, só ela; senão as verificadas de
+    referência (Wikipédia, as páginas que ela cita, órgão público, universidade, imprensa séria), nunca de fonte
+    fraca. Em todos os casos, cada frase do roteiro é conferida contra o trecho da evidência que cita."""
+    from src.evidencias import so_oficiais, usaveis
+    from src.web_search import fonte_fraca
+    if not completo:
+        return completo, "nenhuma"
+    oficial = so_oficiais(completo)
+    if len(usaveis(oficial)) >= minimo:
+        return oficial, "oficiais"
+    boas = [e for e in usaveis(completo)
+            if any(c.get("verificado") and not fonte_fraca(str(c.get("url", ""))) for c in e.get("citacoes") or [])]
+    return {**completo, "evidencias": boas}, "oficiais + referências"
+
+
 def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes: float = 2.5) -> dict:
     """Banco de evidências do tema (src/evidencias.py), com uma rodada de busca nas lacunas.
     Pesquisa sem base suficiente reprova com o motivo (nunca vira vídeo sobre premissa sem prova)."""
-    from src.evidencias import PesquisaInsuficiente, exigir_suficiente, minimo_para, montar_banco, so_oficiais
+    from src.evidencias import PesquisaInsuficiente, exigir_suficiente, minimo_para, montar_banco
     from src.web_search import (fontes_dos_sites_oficiais, marcar_oficiais, paginas_dos_sites_oficiais,
-                                search_topic_facts, sites_oficiais)
+                                referencias_da_wikipedia, search_topic_facts, sem_fontes_fracas, sites_oficiais)
 
+    minimo = minimo_para(max_minutes)
+    web_facts = sem_fontes_fracas(list(web_facts or []))
     # 24/11: o site oficial do assunto (e o de quem o opera/possui/mantém), pela Wikidata, conta como fonte
     # oficial — e as páginas dele entram no banco antes de tudo
     dominios = sites_oficiais(topic)
@@ -831,14 +849,20 @@ def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes:
         urls = {f["url"] for f in diretas}
         web_facts = diretas + [f for f in fontes_dos_sites_oficiais(topic, dominios) if f["url"] not in urls] \
             + marcar_oficiais(web_facts, dominios)
-        oficiais = [f for f in web_facts if f.get("oficial")]
-        # 25/11 (Svalbard 1015): só evidência oficial entra no roteiro, mas a Wikipédia e a Grokipedia ocupavam os
-        # lotes da extração (−18 °C e a página da instalação ficaram de fora) e ainda punham fato oficial em
-        # "contraditório" (fonte primária manda). Com páginas oficiais bastantes, só elas são lidas
-        if len(oficiais) >= MIN_PAGINAS_OFICIAIS:
-            log.info("[%s] %d página(s) oficial(is): a extração lê só elas (%d de outras fontes ficam fora)",
-                     job_id, len(oficiais), len(web_facts) - len(oficiais))
-            web_facts = oficiais
+    oficiais = [f for f in web_facts if f.get("oficial")]
+    # 25/11: tema sem site oficial bastante (Homem de Somerton, Mary Celeste): as páginas que a Wikipédia cita
+    if len(oficiais) < MIN_PAGINAS_OFICIAIS:
+        urls = {f["url"] for f in web_facts}
+        web_facts += [f for f in referencias_da_wikipedia(topic) if f["url"] not in urls]
+    todas = web_facts
+    # 25/11 (Svalbard 1015): a Wikipédia e a Grokipedia ocupavam os lotes da extração (−18 °C e a página da
+    # instalação ficaram de fora) e ainda punham fato oficial em "contraditório" (fonte primária manda). Com
+    # páginas oficiais bastantes, a extração lê só elas; se não renderem o mínimo, lê tudo de novo
+    so_oficial = len(oficiais) >= MIN_PAGINAS_OFICIAIS
+    if so_oficial:
+        log.info("[%s] %d página(s) oficial(is): a extração lê só elas (%d de outras fontes ficam fora)",
+                 job_id, len(oficiais), len(web_facts) - len(oficiais))
+        web_facts = oficiais
 
     def buscar(pergunta: str) -> list[dict]:
         # 24/11: a pergunta da história (lacuna) é buscada também DENTRO dos sites oficiais do assunto — a retirada
@@ -846,16 +870,21 @@ def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes:
         achados = search_topic_facts(pergunta, max_results=3, oficiais=True) or []
         for d in dominios[:2]:
             achados += search_topic_facts(f"site:{d} {pergunta}", max_results=2) or []
-        return marcar_oficiais(achados, dominios)
+        return sem_fontes_fracas(marcar_oficiais(achados, dominios))
     completo = montar_banco(topic, web_facts, buscar=buscar)
+    banco, origem = evidencias_do_roteiro(completo, minimo)
+    if so_oficial and len((banco or {}).get("evidencias", [])) < minimo and len(todas) > len(web_facts):
+        log.info("[%s] páginas oficiais renderam %d evidência(s) (mínimo %d): extração com todas as fontes",
+                 job_id, len((banco or {}).get("evidencias", [])), minimo)
+        completo = montar_banco(topic, todas, buscar=buscar)
+        banco, origem = evidencias_do_roteiro(completo, minimo)
     try:
-        # 24/11: só evidência oficial e verificada entra na redação; sem o mínimo delas, o tema não vira vídeo
-        banco = exigir_suficiente(so_oficiais(completo), minimo_para(max_minutes))
+        banco = exigir_suficiente(banco, minimo)
     except PesquisaInsuficiente as exc:
         total = len((completo or {}).get("evidencias", []))
-        raise ScriptRejected(f"{exc} — só evidência oficial conta ({total} no banco completo)") from exc
-    log.info("[%s] banco de evidências: %d oficiais e verificadas (de %d no banco completo)", job_id,
-             len(banco["evidencias"]), len((completo or {}).get("evidencias", [])))
+        raise ScriptRejected(f"{exc} — fontes: {origem} ({total} no banco completo)") from exc
+    log.info("[%s] banco de evidências: %d verificadas (%s) de %d no banco completo", job_id,
+             len(banco["evidencias"]), origem, len((completo or {}).get("evidencias", [])))
     return banco
 
 
@@ -1012,7 +1041,7 @@ def run(
         topic = pick_topic(
             channel_name, channel.topics, channel.niche,
             viral_queries=viral_queries, viral_share=channel.viral_share,
-            priority=channel.active_priority_topics,
+            priority=channel.active_priority_topics, preferir_site_oficial=channel.modo_roteiro == "redacao",
         )
     elif topic is None:
         raise SystemExit(f"channels/{channel_name}.yaml não tem topics configurado e --topic não foi passado")
@@ -1035,7 +1064,8 @@ def run(
             log.warning("[%s] tema recusado (%s): %s", channel_name, problem, topic)
             if user_provided_topic or not channel.topics:
                 raise ScriptRejected(f"tema recusado: {problem}")
-            topic = pick_topic(channel_name, channel.topics, channel.niche, priority=channel.active_priority_topics)
+            topic = pick_topic(channel_name, channel.topics, channel.niche, priority=channel.active_priority_topics,
+                               preferir_site_oficial=channel.modo_roteiro == "redacao")
         else:
             raise ScriptRejected(f"{MAX_TOPIC_CHECKS} temas seguidos recusados")
 

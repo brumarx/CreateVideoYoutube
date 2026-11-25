@@ -724,6 +724,8 @@ def paginas_dos_sites_oficiais(query: str, dominios: list[str], por_site: int = 
         # 25/11: página oficial longa (FAQ da NordGen, 9 mil caracteres) era lida só no melhor trecho de 3 mil —
         # −18 °C e o túnel ficavam de fora. Agora a página inteira, em partes seguidas, até PARTES_POR_PAGINA
         titulo = url.rstrip("/").rsplit("/", 1)[-1] or url
+        if pagina_de_bloqueio(texto or ""):
+            continue
         for k, trecho in enumerate(partes_da_pagina(texto or "", chaves)):
             paginas.append({"titulo": titulo + (f" ({k + 1})" if k else ""), "url": url, "trecho": trecho,
                             "oficial": True})
@@ -753,3 +755,91 @@ def partes_da_pagina(texto: str, chaves: set[str], limite: int = TRECHO_FATOS) -
 def dobrar_simples(texto: str) -> str:
     import unicodedata
     return unicodedata.normalize("NFKD", texto.lower()).encode("ascii", "ignore").decode()
+
+
+# ---------------------------------------------------------------- hierarquia de fontes (25/11)
+# Sem site oficial (Homem de Somerton, Mary Celeste, "IA no celular") o tema não tinha evidência e não virava vídeo.
+# Regra do dono: 1) site oficial; 2) Wikipédia (en e pt) + as páginas que ela cita nas referências; 3) órgão público,
+# universidade, imprensa séria da busca. Fontes fracas (Grokipedia, espelhos de wiki, blogs, redes) nunca entram:
+# na rodada de Svalbard a Grokipedia ainda punha fato oficial em "contraditório".
+_FONTE_FRACA = re.compile(
+    r"(^|\.)(grokipedia\.com|wikiwand\.com|everybodywiki\.com|wikizero\.com|dbpedia\.org|fandom\.com|quora\.com|"
+    r"reddit\.com|medium\.com|blogspot\.[a-z.]+|wordpress\.com|pinterest\.[a-z.]+|tiktok\.com|facebook\.com|"
+    r"instagram\.com|x\.com|twitter\.com|youtube\.com|youtu\.be|megacurioso\.com\.br|hypeness\.com\.br|"
+    r"brainly\.[a-z.]+|scribd\.com|slideshare\.net|amazon\.[a-z.]+|ebay\.[a-z.]+)$", re.I)
+
+
+def fonte_fraca(url: str) -> bool:
+    return bool(_FONTE_FRACA.search(_host(url)))
+
+
+def sem_fontes_fracas(itens: list[dict]) -> list[dict]:
+    fora = [f for f in itens if fonte_fraca(str(f.get("url", "")))]
+    if fora:
+        log.info("fontes fracas fora do banco: %s", ", ".join(sorted({_host(f['url']) for f in fora})))
+    return [f for f in itens if not fonte_fraca(str(f.get("url", "")))]
+
+
+_REF_IGNORAR = re.compile(r"(wikipedia\.org|wikimedia\.org|wikidata\.org|archive\.org|archive\.is|archive\.today|"
+                          r"doi\.org|books\.google|google\.com|worldcat\.org|jstor\.org|issn\.org|isni\.org|viaf\.org|"
+                          r"ghostarchive|webcitation|toolforge\.org|wmflabs|openstreetmap|geohack)", re.I)
+_REF_BOA = re.compile(r"(\.gov|\.gob|\.gouv|\.edu|\.ac\.|\.int\b|museum|museu|archives|arquivo|nla\.gov\.au|trove|"
+                      r"bbc\.|reuters|apnews|nytimes|theguardian|smithsonian|nationalgeographic|nature\.com|"
+                      r"science\.org|abc\.net\.au|britannica)", re.I)
+
+
+_PAGINA_BLOQUEADA = re.compile(r"not a bot|anubis|captcha|just a moment|enable javascript|access denied|"
+                               r"verify you are human|are you a robot|cloudflare ray id|request unsuccessful", re.I)
+
+
+def pagina_de_bloqueio(texto: str) -> bool:
+    """Página anti-robô no lugar do conteúdo (nla.gov.au devolve 'Making sure you're not a bot!')."""
+    return bool(_PAGINA_BLOQUEADA.search((texto or "")[:1500]))
+
+
+def referencias_da_wikipedia(query: str, max_paginas: int = 8) -> list[dict]:
+    """As páginas que o artigo da Wikipédia (en, depois pt) cita, abertas e reduzidas aos trechos do assunto.
+    Primeiro as de órgão público, universidade, museu/arquivo e imprensa séria. Fonte fraca e espelho ficam fora."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from . import disk_cache
+    guardado = disk_cache.get("referencias_wiki_v2", query)
+    if guardado is not None:
+        return guardado
+    titulos = _article_titles(query)
+    chaves = _keywords(" ".join((titulos.get("en") or [])[:1] + (titulos.get("pt") or [])[:1])) | _keywords(query)
+    links: list[str] = []
+    for lang in ("en", "pt"):
+        for titulo in (titulos.get(lang) or [])[:1]:
+            try:
+                r = httpx.get(_WIKI_API.format(lang=lang), timeout=15, headers=_WIKI_HEADERS, params={
+                    "action": "query", "prop": "extlinks", "titles": titulo, "ellimit": 500, "format": "json",
+                    "redirects": 1})
+                for pag in (r.json().get("query", {}).get("pages") or {}).values():
+                    links += [x.get("*") or x.get("url") or "" for x in pag.get("extlinks") or []]
+            except Exception as exc:  # noqa: BLE001 — sem a lista, fica sem referências
+                log.info("referências da Wikipédia (%s: %s) indisponíveis: %s", lang, titulo, exc)
+    links = list({re.sub(r"^https?://(www\.)?", "", u).rstrip("/"): u for u in links}.values())  # http/https iguais
+    links = [u for u in dict.fromkeys(links) if u.startswith("http") and not _REF_IGNORAR.search(u)
+             and not fonte_fraca(u) and not re.search(r"\.(pdf|jpg|png|zip)(\?|$)", u, re.I)]
+    links.sort(key=lambda u: 0 if _REF_BOA.search(_host(u) + "/") else 1)
+    links = links[:max_paginas * 2]
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        textos = list(pool.map(_page_text, links))
+    saida = []
+    por_dominio: dict[str, int] = {}
+    for url, texto in zip(links, textos):
+        if not texto or pagina_de_bloqueio(texto) or por_dominio.get(_host(url), 0) >= 2:
+            continue
+        partes = [p for p in partes_da_pagina(texto, chaves) if len(chaves & _keywords(p)) >= 2][:2]
+        if partes:
+            por_dominio[_host(url)] = por_dominio.get(_host(url), 0) + 1
+        for k, trecho in enumerate(partes):
+            saida.append({"titulo": (_host(url) + (f" ({k + 1})" if k else "")), "url": url, "trecho": trecho,
+                          "referencia_wiki": True})
+        if len({x["url"] for x in saida}) >= max_paginas:
+            break
+    log.info("referências da Wikipédia para %r: %d página(s) com o assunto de %d link(s)", query[:60],
+             len({x['url'] for x in saida}), len(links))
+    disk_cache.put("referencias_wiki_v2", query, saida)
+    return saida

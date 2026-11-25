@@ -1652,3 +1652,40 @@ def test_pagina_oficial_longa_e_lida_inteira_em_partes():
     partes = ws.partes_da_pagina(texto, {"vault", "seeds"}, limite=3000)
     assert 2 <= len(partes) <= ws.PARTES_POR_PAGINA and all(len(p) <= 3000 for p in partes)
     assert any("minus 18" in p for p in partes) or len(partes) == ws.PARTES_POR_PAGINA
+
+
+def test_hierarquia_oficial_primeiro_depois_referencias_nunca_fonte_fraca():
+    # 25/11: com oficial bastante, só ela; sem, as verificadas de referência — Grokipedia nunca
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("rp_hier", "scripts/run_pipeline.py")
+    rp = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rp)
+
+    def e(i, status, url):
+        return {"id": i, "afirmacao": "x", "status": status, "numeros": [], "conflitos": [],
+                "citacoes": [{"url": url, "verificado": True, "trecho": "x"}]}
+    banco = {"evidencias": [e("E1", "oficial", "https://seedvault.no/a"),
+                            e("E2", "fonte_unica", "https://en.wikipedia.org/wiki/X"),
+                            e("E3", "fonte_unica", "https://grokipedia.com/page/X"),
+                            e("E4", "contraditorio", "https://www.bbc.com/x")]}
+    b, origem = rp.evidencias_do_roteiro(banco, 1)
+    assert origem == "oficiais" and [x["id"] for x in b["evidencias"]] == ["E1"]
+    b, origem = rp.evidencias_do_roteiro(banco, 3)
+    assert origem == "oficiais + referências" and [x["id"] for x in b["evidencias"]] == ["E1", "E2"]
+
+
+def test_fonte_fraca_fica_fora():
+    from src import web_search as ws
+    assert ws.fonte_fraca("https://grokipedia.com/page/Svalbard") and ws.fonte_fraca("https://www.reddit.com/r/x")
+    assert not ws.fonte_fraca("https://en.wikipedia.org/wiki/Svalbard") and not ws.fonte_fraca("https://www.nla.gov.au/x")
+    assert [f["url"] for f in ws.sem_fontes_fracas([{"url": "https://grokipedia.com/a"}, {"url": "https://bbc.com/b"}])] \
+        == ["https://bbc.com/b"]
+
+
+def test_modo_redacao_prefere_tema_com_site_oficial(monkeypatch):
+    from src import topics, web_search
+    monkeypatch.setattr(web_search, "sites_oficiais", lambda t: ["carbfix.com"] if "CarbFix" in t else [])
+    monkeypatch.setattr(topics.random, "sample", lambda pool, n: list(pool)[:n])
+    assert topics._com_site_oficial("curiosidades", ["Mary Celeste", "Como o CarbFix guarda CO2", "Somerton"]) \
+        == "Como o CarbFix guarda CO2"
+    assert topics._com_site_oficial("curiosidades", ["Mary Celeste", "Somerton"]) == "Mary Celeste"

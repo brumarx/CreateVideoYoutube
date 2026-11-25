@@ -76,7 +76,7 @@ def ia(monkeypatch):
     monkeypatch.setattr(web_search, "_tavily", tavily)
     monkeypatch.setattr(web_search, "_duckduckgo", lambda _q, _n: None)
     monkeypatch.setattr(web_search, "_enrich", lambda facts, _q, _n: facts)
-    for nome in ("wikipedia_facts", "wikidata_facts", "openalex_facts", "sites_oficiais"):
+    for nome in ("wikipedia_facts", "wikidata_facts", "openalex_facts", "sites_oficiais", "referencias_da_wikipedia"):
         monkeypatch.setattr(web_search, nome, lambda _q: [])  # sem rede no teste
     return falsa
 

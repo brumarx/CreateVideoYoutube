@@ -23,6 +23,8 @@ def isolamento(tmp_path, monkeypatch):
     from src import disk_cache, providers
     monkeypatch.setattr(disk_cache, "BASE", tmp_path / "cache_teste")
     monkeypatch.setattr(providers.time, "sleep", lambda s: None)
+    from src import web_search
+    monkeypatch.setattr(web_search, "referencias_da_wikipedia", lambda *a, **k: [])  # 25/11: abre dezenas de páginas
 
 
 def pytest_configure(config):
