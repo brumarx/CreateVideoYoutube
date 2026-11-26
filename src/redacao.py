@@ -748,18 +748,22 @@ PLANEJE:
 1) O ÂNGULO: a pergunta que a abertura desperta e a resposta que a conclusão entrega — só com o que o material
    sustenta (sem apoio, escolha outro ângulo dentro do tema). E o PONTO DE VISTA: uma frase com a leitura do
    canal sobre a história, apoiada nos fatos (sem número novo, sem exagero), dita no fechamento.
-2) De 5 a 9 BLOCOS, em ordem, cada um com uma FUNÇÃO na história (por exemplo: abertura, o problema que existe,
-   como funciona, por que ali, como guarda e protege, o que guarda de fato, como entra e sai, o que já
-   aconteceu, os limites, conclusão — use só os que o material sustenta), o que o bloco conta e as evidências
-   de que ele precisa: NO MÁXIMO 3 por bloco. Um exemplo concreto vale mais que uma lista de países, datas,
-   números, siglas ou tratados — o bloco explica UMA coisa, não acumula tudo o que se sabe sobre ela.
+2) De {blocos_min} a {blocos_max} BLOCOS que formam UMA CADEIA, não um catálogo: cada bloco existe porque o
+   anterior deixou uma pergunta, e responde a ela ("então como…?", "mas e se…?", "e funcionou?"). Não monte a
+   lista de aspectos do assunto (onde fica, como funciona, quem administra, logística, regras, limites…): entra
+   só o bloco sem o qual a resposta da pergunta da abertura não se entende; o resto do material fica de fora.
+   Cada bloco: a FUNÇÃO dele na história, o que conta, a pergunta que deixa para o próximo ("deixa") e as
+   evidências de que precisa — NO MÁXIMO 3. Cada evidência e cada ideia em UM bloco só (dita uma vez; o
+   espectador lembra). Um exemplo concreto vale mais que uma lista de países, datas, números, siglas ou
+   tratados. O ÚLTIMO bloco é a resposta à pergunta da abertura com o que os anteriores já mostraram: SEM
+   evidência nova (o fechamento é escrito à parte).
 3) Para CADA evidência usada: o que ela comprova e o que NÃO comprova (a escala exata: parte ou todo, uma vez ou
    sempre, possível ou aconteceu, causa ou coincidência, de quem é a característica, que medida e unidade).
 Não use todas as evidências: escolha o que explica a história; o resto fica de fora.
 Responda SÓ JSON:
 {{"gancho": {{"formula": "nome_da_formula", "evidencia": "E3", "frase": "até 12 palavras"}},
   "angulo": {{"pergunta": "...", "resposta": "...", "ponto_de_vista": "..."}},
-  "blocos": [{{"funcao": "abertura", "conta": "...", "evidencias": ["E1"]}}],
+  "blocos": [{{"funcao": "abertura", "conta": "...", "deixa": "a pergunta para o próximo bloco", "evidencias": ["E1"]}}],
   "evidencias": {{"E1": {{"comprova": "...", "nao_comprova": "..."}}}},
   "nao_exagerar": ["..."]}}"""
 
@@ -823,9 +827,15 @@ def _plano_valido(d: dict, validos: set[str]) -> dict | None:
     blocos = [b for b in d.get("blocos") or [] if isinstance(b, dict) and str(b.get("conta", "")).strip()]
     if len(blocos) < 4 or not isinstance(d.get("angulo"), dict):
         return None
+    ja = set()
     for b in blocos:
         # 23/11 (1º plano de Svalbard: blocos com 11 evidências viraram cenas-lista): no máximo EVID_POR_BLOCO
-        b["evidencias"] = [x for x in b.get("evidencias") or [] if x in validos][:EVID_POR_BLOCO]
+        # 26/11 (Svalbard 1029: E35, E77, E27 em dois blocos → editorial "sem repetição" 5): evidência em um bloco só
+        b["evidencias"] = [x for x in dict.fromkeys(b.get("evidencias") or []) if x in validos and x not in ja][:EVID_POR_BLOCO]
+        ja |= set(b["evidencias"])
+    # 26/11 (1029: a conclusão trouxe 4 fatos novos — "135 depositantes e 130 bancos" virou leitura enganosa no fim):
+    # o último bloco responde com o que já foi mostrado
+    blocos[-1]["evidencias"] = []
     usados = {x for b in blocos for x in b["evidencias"]}
     lim = {k: v for k, v in (d.get("evidencias") or {}).items() if k in usados and isinstance(v, dict)}
     if len(usados) < 4 or len(lim) < len(usados) * 0.8:
@@ -847,8 +857,11 @@ def planejar_historia(topic: str, banco: dict, *, min_minutes: float, max_minute
     from .providers import ProvedoresIndisponiveis, complete, is_strong_model
     mapa = mapa_do_conhecimento(banco)
     validos = {m["id"] for m in mapa}
+    # 26/11 (1029: 9 blocos e ~30 fatos num vídeo de 3–5 min — o editorial leu "lista, não história")
+    blocos_max = max(5, min(9, round(max_minutes * 1.4)))
     pedido = _PROMPT_PLANO.format(tema=topic, mapa=bloco_do_mapa(mapa, limite_trecho=180),
                                   min_min=min_minutes, max_min=max_minutes,
+                                  blocos_min=max(4, blocos_max - 2), blocos_max=blocos_max,
                                   formulas=bloco_formulas(ganchos_recentes(canal)))
     chave = [1, hashlib.sha1(pedido.encode()).hexdigest()]
     salvo = disk_cache.get("plano_historia", chave, ttl_days=7)
@@ -874,9 +887,12 @@ def planejar_historia(topic: str, banco: dict, *, min_minutes: float, max_minute
 def material_do_plano(plano: dict, banco: dict) -> str:
     ids = {x for b in plano["blocos"] for x in b["evidencias"]}
     blocos = "\n".join(f"{k}. [{b.get('funcao', '')}] {b.get('conta', '')} (evidências: {', '.join(b['evidencias']) or '-'})"
+                       + (f" → deixa: {b['deixa']}" if b.get("deixa") else "")
                        for k, b in enumerate(plano["blocos"], 1))
     g = plano.get("gancho") or {}
-    return (f"PLANO DA HISTÓRIA (siga o ângulo e a ordem; cada bloco vira uma ou mais cenas com a FUNÇÃO dele):\n"
+    return (f"PLANO DA HISTÓRIA (siga o ângulo e a ordem; cada bloco vira uma ou mais cenas com a FUNÇÃO dele; a "
+            f"cena termina puxando a pergunta que o bloco \"deixa\" e a seguinte responde a ela — é isso que faz "
+            f"o espectador ficar; nenhum fato dito duas vezes):\n"
             + (f"Gancho (1ª frase, fórmula {g.get('formula')}, fato {g.get('evidencia')}): {g.get('frase', '')}\n"
                if g.get("frase") else "")
             + f"Pergunta da abertura: {plano['angulo'].get('pergunta', '')}\n"

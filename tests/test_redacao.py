@@ -1835,7 +1835,8 @@ def test_gancho_em_rodizio_e_plano_guarda_formula_e_ponto_de_vista(tmp_path, mon
     validos = {"E1", "E2", "E3", "E4"}
     d = {"gancho": {"formula": "numero_absurdo", "evidencia": "E2", "frase": "Quinze metros de estaca para um prédio."},
          "angulo": {"pergunta": "p", "resposta": "r", "ponto_de_vista": "Morar ali é engenharia todo dia."},
-         "blocos": [{"funcao": f"b{k}", "conta": "c", "evidencias": [f"E{k}"]} for k in range(1, 5)],
+         "blocos": [{"funcao": f"b{k}", "conta": "c", "evidencias": [f"E{k}"]} for k in range(1, 5)]
+         + [{"funcao": "conclusao", "conta": "c", "evidencias": []}],
          "evidencias": {f"E{k}": {"comprova": "x", "nao_comprova": "y"} for k in range(1, 5)}}
     plano = rd._plano_valido(d, validos)
     assert plano["gancho"]["formula"] == "numero_absurdo"
@@ -1932,3 +1933,17 @@ def test_corte_que_deixaria_curto_vai_para_a_edicao_mesmo_depois_de_dois_cortes(
     monkeypatch.setattr(rd, "comparar_versoes", lambda a, b: {})
     rd.auditar_e_corrigir(s, BANCO, TEMA_988, min_palavras=rd._palavras(s))  # cortar deixaria curto demais
     assert chamado == [[1]]
+
+
+
+def test_plano_sem_evidencia_repetida_e_conclusao_sem_fato_novo():
+    """Svalbard 1029: E35/E77/E27 em dois blocos (repetição 5) e 4 fatos novos na conclusão (leitura enganosa)."""
+    validos = {f"E{k}" for k in range(1, 8)}
+    d = {"angulo": {"pergunta": "p", "resposta": "r"},
+         "blocos": [{"funcao": "a", "conta": "c", "evidencias": ["E1", "E2"]},
+                    {"funcao": "b", "conta": "c", "evidencias": ["E2", "E3"]},
+                    {"funcao": "c", "conta": "c", "evidencias": ["E4", "E5"]},
+                    {"funcao": "conclusao", "conta": "c", "evidencias": ["E6", "E1"]}],
+         "evidencias": {f"E{k}": {"comprova": "x", "nao_comprova": "y"} for k in range(1, 8)}}
+    plano = rd._plano_valido(d, validos)
+    assert [b["evidencias"] for b in plano["blocos"]] == [["E1", "E2"], ["E3"], ["E4", "E5"], []]
