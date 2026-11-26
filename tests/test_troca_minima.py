@@ -322,3 +322,15 @@ def test_plano_com_absoluto_na_pergunta_pede_correcao_com_o_motivo(monkeypatch):
     p = rd.planejar_historia("Svalbard", {"evidencias": []}, min_minutes=2.5, max_minutes=5)
     assert p["angulo"]["pergunta"] == "Como uma montanha guarda as sementes?"
     assert "único" in pedidos[1][-1]["content"] and not p.get("pergunta_conferida")
+
+
+@pytest.mark.parametrize("raw,esperado", [
+    ('{"a": [1, 2}', {"a": [1, 2]}),                                   # fechamento trocado
+    ('{"cenas": [{"frases": [1]}, {"frases": [2] ], "x": 1}', {"cenas": [{"frases": [1]}, {"frases": [2]}], "x": 1}),
+    ('{"cenas": [{"frases": [1] ] ]', {"cenas": [{"frases": [1]}]}),   # 1033: "] ] ]" no fim
+    ('{"a": "texto com ] e } dentro"}', {"a": "texto com ] e } dentro"}),  # string não é estrutura
+    ('{"a": "cortad', {}),                                              # cortado no meio do texto: não inventa
+])
+def test_json_com_fechamento_trocado_e_reparado(raw, esperado):
+    """26/11 (1033): o escritor fechou a última cena com "]" e a resposta inteira foi descartada duas vezes."""
+    assert rd._obj(raw) == esperado

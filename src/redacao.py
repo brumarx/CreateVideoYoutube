@@ -58,15 +58,61 @@ _CONECTIVOS = re.compile(r"^(mas|só que|so que|por isso|então|entao|e foi|agor
                          r"para entender|o segredo|a resposta|e o|e a|aí|ai)\b", re.I)
 
 
+def _reparar_estrutura(texto: str) -> str | None:
+    """26/11 (1033: o escritor fechou a última cena com "]" em vez de "}" e a resposta inteira, perfeita no resto, foi
+    descartada duas vezes): percorre o JSON respeitando as strings e troca o fechamento que não corresponde ao que
+    está aberto pelo certo; fecha o que ficou aberto no fim (fora de string). Só mexe em sinais de estrutura, nunca
+    no conteúdo. None se não há objeto."""
+    ini = texto.find("{")
+    if ini < 0:
+        return None
+    par = {"{": "}", "[": "]"}
+    pilha, out, em_string, escape = [], [], False, False
+    for ch in texto[ini:]:
+        if em_string:
+            out.append(ch)
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                em_string = False
+            continue
+        if ch == '"':
+            em_string = True
+        elif ch in par:
+            pilha.append(par[ch])
+        elif ch in "}]":
+            if not pilha:
+                break
+            if ch != pilha[-1] and len(pilha) >= 2 and ch == pilha[-2]:
+                out.append(pilha.pop())   # faltou fechar o de cima ("]" fechando a lista sem fechar a cena)
+            ch = pilha.pop()              # e este: o certo para o que está aberto (trocado vira o certo)
+        out.append(ch)
+        if not pilha:
+            break
+    if em_string:
+        return None                   # resposta cortada no meio de um texto: não se inventa o resto
+    return "".join(out) + "".join(reversed(pilha))
+
+
 def _obj(raw: str | None) -> dict:
-    """O objeto JSON da resposta ({} se não houver)."""
+    """O objeto JSON da resposta ({} se não houver). Estrutura com fechamento trocado é reparada
+    (_reparar_estrutura) antes de desistir."""
     m = re.search(r"\{.*\}", raw or "", re.DOTALL)
-    if not m:
-        return {}
-    try:
-        data = json.loads(m.group(0))
-    except json.JSONDecodeError:
-        return {}
+    data = None
+    if m:
+        try:
+            data = json.loads(m.group(0))
+        except json.JSONDecodeError:
+            data = None
+    if data is None:
+        reparado = _reparar_estrutura(raw or "")
+        if reparado:
+            try:
+                data = json.loads(reparado)
+            except json.JSONDecodeError:
+                return {}
     return data if isinstance(data, dict) else {}
 
 
