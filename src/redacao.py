@@ -1033,7 +1033,7 @@ def defeitos(script: dict, banco: dict, topic: str, min_pal: int, max_pal: int, 
              ) -> tuple[dict, list[str], list[dict]]:
     """Defeitos que pedem nova tentativa ao escritor: factuais (auditoria em código), forma e
     estilo. Devolve (roteiro conferido, textos de defeito para o pedido, problemas factuais)."""
-    from .script_gen import _echo_problem, _ending_problem, _filler_phrase, _hype_problem, _repetition_problem
+    from .script_gen import _echo_problem, _filler_phrase, _hype_problem, _repetition_problem
     script, problemas = auditar_codigo(script, banco, topic)
     lista = [f"a frase \"{p['termo'][:90]}\": {p['motivo']}" for p in problemas]
     n_pal, n_cenas = _palavras(script), len(script["scenes"])
@@ -1042,7 +1042,9 @@ def defeitos(script: dict, banco: dict, topic: str, min_pal: int, max_pal: int, 
     if not cenas_min <= n_cenas <= cenas_max:
         lista.append(f"tem {n_cenas} cenas; use entre {cenas_min} e {cenas_max}")
     from .fatos import numero_repetido
-    for d in (parece_lista(script), _repetition_problem(script), _echo_problem(script), _ending_problem(script),
+    # 26/11 (varredura): o fim do escritor é trocado pelo fechamento escrito à parte (escrever_fechamento) —
+    # cobrar o fim aqui gastava tentativa com um trecho que vai embora; o fechamento tem a conferência dele
+    for d in (parece_lista(script), _repetition_problem(script), _echo_problem(script),
               _hype_problem(script, 2), _filler_phrase(script, topic), numero_repetido(script, 1)):
         if d:
             lista.append(str(d))
@@ -1072,8 +1074,6 @@ def abertura_e_fechamento(script: dict) -> list[str]:
     # abertura genérica: qualidade_texto.cara_de_ia (conhece o bordão de cada canal)
     if len(primeira.split()) > GANCHO_MAX_PALAVRAS:
         out.append(f"a 1ª frase tem {len(primeira.split())} palavras: o gancho tem até 12")
-    if not (frases[-1].endswith("?") or _COMENTA.search(frases[-1])):
-        out.append("o fim não chama o espectador: feche com uma pergunta a ele ou \"Comenta PALAVRA se…\"")
     pede = next((f for f in frases if _PEDE_LIKE.search(f)), None)
     if pede:
         out.append(f"a frase \"{pede[:80]}\" pede like/inscrição: tire (o canal põe o dele)")
@@ -1125,8 +1125,8 @@ começo curioso, tensão e resposta — sem inventar nada. Você escolhe as evid
   mantenha as ressalvas do fato ("ajuda a", "cerca de").
 - NUNCA ligue fatos com "por isso", "porque", "graças a", "o que garante", salvo se o fato diz a causa.
 - Narrativa (abertura, ligação, pergunta) não afirma: sem número, nome, "funciona", "garante", "já".
-- 1ª frase = gancho (até 12 palavras, o fato mais estranho; nunca "você sabia"/"neste vídeo"). O fim volta ao
-  começo, diz o ponto de vista e fecha com pergunta ao espectador ou "Comenta PALAVRA se…"; sem pedir like.
+- 1ª frase = gancho (até 12 palavras, o fato mais estranho; nunca "você sabia"/"neste vídeo"). Termine no
+  último fato: o fechamento é escrito à parte.
 - Prefira o que faz história (o que aconteceu, por que ali, como funciona) ao institucional.
 REGRAS DE PRECISÃO (inegociáveis):
 - Evidência "contraditorio": diga os dois valores e que as fontes divergem, ou não use.
@@ -1511,7 +1511,8 @@ _PROMPT_FECHAMENTO = """Escreva o FECHAMENTO de um vídeo (tema: {tema}). O rote
 São 2 ou 3 frases faladas, nesta ordem:
 1. volta à pergunta da abertura e a responde com o que o vídeo JÁ mostrou (sem fato novo);
 2. o ponto de vista, dito como opinião ("para mim", "o que mais me impressiona"), sobre o que o vídeo mostrou;
-3. uma pergunta direta ao espectador OU "Comenta PALAVRA se…" (PALAVRA em maiúsculas, uma palavra do tema).
+3. uma pergunta direta ao espectador, falando com ELE ("você confiaria…?", "o que você faria…?") OU "Comenta
+   PALAVRA se…" (PALAVRA em maiúsculas, uma palavra do tema).
 Proibido: número, data, nome que o roteiro não citou, pedir like ou inscrição, e estas palavras (mesmo que a
 pergunta da abertura use alguma delas — então responda com outro verbo): {proibidas}. A opinião fala do que VOCÊ sente diante do que o vídeo
 mostrou ("para mim, o que mais impressiona é a ideia de uma cópia de segurança para o mundo inteiro"), nunca
@@ -1527,6 +1528,11 @@ Responda SÓ JSON: {{"frases": ["...", "..."]}}"""
 # a pergunta da abertura usava "protege" e o fechamento foi recusado 3× pela mesma palavra)
 _PALAVRAS_ALEGA = ", ".join(f'"{p}"' for p in lexico.palavras_de_garantia())
 _OPINIAO = re.compile(r"\b(para mim|pra mim|me impressiona|eu acho|na minha opinião|o que mais me)\b", re.I)
+
+
+def _pergunta_ao_espectador(frase: str, script: dict) -> bool:
+    from .script_gen import _tokens_fora_da_frase, _viewer_question
+    return _viewer_question(frase, _tokens_fora_da_frase(script.get("scenes") or [], frase))
 
 
 def escrever_fechamento(script: dict, plano: dict | None, topic: str, max_pal: int, tentativas: int = 3) -> dict:
@@ -1566,8 +1572,11 @@ def escrever_fechamento(script: dict, plano: dict | None, topic: str, max_pal: i
         motivo = None
         if len(frases) < 2:
             motivo = "menos de 2 frases"
-        elif not (frases[-1].endswith("?") or _COMENTA.search(frases[-1])):
-            motivo = "não termina chamando o espectador"
+        elif not (_COMENTA.search(frases[-1]) or _pergunta_ao_espectador(frases[-1], script)):
+            # 26/11 (varredura): a MESMA regra do corte final (script_gen.trim_teaser_ending, que roda depois da
+            # auditoria) — pergunta sem "você" ("Qual outra estrutura…?") passava aqui e era cortada lá
+            motivo = ("não termina chamando o espectador: a última frase é \"Comenta PALAVRA se…\" ou uma pergunta "
+                      "a ELE (\"você…?\"), sem fato novo")
         for t in frases:
             achado = afirmacao_escondida(t, nomes)
             if achado and achado.startswith("afirmação absoluta") and _OPINIAO.search(t):

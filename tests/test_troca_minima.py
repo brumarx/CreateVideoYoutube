@@ -267,3 +267,22 @@ def test_escritor_recebe_cada_valor_com_seu_bloco():
     plano = {"blocos": [{"evidencias": ["E3"]}, {"evidencias": ["E1"]}]}
     texto = rd.bloco_de_medidas(plano, banco)
     assert "2008 → bloco 1" in texto and "-18 °C → bloco 2" in texto and "NÃO escreva o valor de novo" in texto
+
+
+@pytest.mark.fechamento
+@pytest.mark.parametrize("frases,aceito", [
+    (["No fim, o cofre é uma cópia de segurança.", "Para mim, impressiona.", "Qual outra estrutura faria isso?"], False),
+    (["No fim, o cofre é uma cópia de segurança.", "Para mim, impressiona.", "Você confiaria suas sementes a ele?"], True),
+    (["No fim, o cofre é uma cópia de segurança.", "Para mim, impressiona.", "Comenta SEMENTE se você guardaria uma."], True),
+])
+def test_fechamento_aceito_sobrevive_ao_corte_final(ambiente, frases, aceito):
+    """Varredura 26/11: o fechamento aceitava qualquer pergunta e o corte final (trim_teaser_ending, depois da
+    auditoria) apagava a que não fala com o espectador — o vídeo terminava sem chamar ninguém."""
+    from src.script_gen import trim_teaser_ending
+    responde, _ = ambiente
+    responde({"frases": frases})
+    s = _com_fim()
+    novo = rd.escrever_fechamento(s, None, "Svalbard", 500, tentativas=1)
+    assert (novo is not s) is aceito
+    if aceito:
+        assert trim_teaser_ending(novo) is novo

@@ -1850,7 +1850,7 @@ def test_abertura_generica_fim_sem_chamada_e_pedido_de_like_voltam_ao_escritor()
                      [F("Yakutsk fica sobre permafrost.", evid=["E1"])],
                      [F("Deixa o like se gostou.", "narrativa"), F("As estacas descem até 15 metros.", evid=["E2"])]])
     _, m, _ = rd.defeitos(ruim, BANCO, TEMA_988, 0, 10**4, 0, 99)  # a abertura genérica vem de qualidade_texto
-    assert any("genérica" in x for x in m) and any("não chama" in x for x in m) and any("like" in x for x in m)
+    assert any("genérica" in x for x in m) and any("like" in x for x in m)  # 26/11: o fim é do fechamento
     bom = _roteiro([[F("Quinze metros de estaca para um prédio não afundar.", evid=["E2"])],
                     [F("Comenta GELO se você moraria lá.", "narrativa")]])
     assert rd.abertura_e_fechamento(bom) == []
