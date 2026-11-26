@@ -99,8 +99,10 @@ def test_unica_sem_suporte_reprovada_na_escrita():
                              "citacoes": [{"trecho": "In 2015 ICARDA made the first withdrawal.", "verificado": True}]}]}
     def roteiro(t):
         return {"scenes": [{"frases": [{"texto": t, "tipo": "factual", "evidencias": ["E1"]}], "narration": t}]}
-    _, probs = rd.auditar_codigo(roteiro("Em 2015 o ICARDA fez a primeira e única retirada."), banco, "Svalbard")
-    assert [p["tipo"] for p in probs] == ["escala_sem_suporte"]
+    s2, probs = rd.auditar_codigo(roteiro("Em 2015 o ICARDA fez a primeira e única retirada."), banco, "Svalbard")
+    assert probs == [] and s2["scenes"][0]["frases"][0]["texto"] == "Em 2015 o ICARDA fez a primeira retirada."
+    _, probs = rd.auditar_codigo(roteiro("Em 2015 o ICARDA fez sempre a retirada."), banco, "Svalbard")
+    assert [p["tipo"] for p in probs] == ["escala_sem_suporte"]   # "sempre" não se remove: vai para o conserto
     _, probs = rd.auditar_codigo(roteiro("Em 2015 o ICARDA fez a primeira retirada."), banco, "Svalbard")
     assert probs == []
 
@@ -231,3 +233,19 @@ def test_cidades_em_qualquer_idioma():
     assert v.mesmo_lugar_no_texto("Alepo", "the genebank in Aleppo")
     assert not v.lugares_no_texto("o natal e a vitória")          # cidade só com maiúscula
     assert not any(f.isupper() for l in v._dados()["lugares"] if l["tipo"] == "cidade" for f in l["formas"])
+
+
+@pytest.mark.parametrize("texto,esperado,problema", [
+    ("Em 2015 o ICARDA fez a primeira e única retirada.", "Em 2015 o ICARDA fez a primeira retirada.", False),
+    ("Em 2015 o ICARDA reformou totalmente o banco.", "Em 2015 o ICARDA reformou o banco.", False),
+    ("Em 2015 o ICARDA nunca retirou sementes.", None, True),          # "nunca": não se remove (inverte)
+])
+def test_escala_removivel_corrigida_em_codigo(texto, esperado, problema):
+    from src import redacao as rd
+    banco = {"evidencias": [{"id": "E1", "afirmacao": "Em 2015 o ICARDA fez a primeira retirada e reformou o banco.",
+                             "status": "oficial", "numeros": ["2015"], "citacoes": []}]}
+    s = {"scenes": [{"frases": [{"texto": texto, "tipo": "factual", "evidencias": ["E1"]}], "narration": texto}]}
+    s2, probs = rd.auditar_codigo(s, banco, "x")
+    assert bool(probs) is problema
+    if esperado:
+        assert s2["scenes"][0]["frases"][0]["texto"] == esperado

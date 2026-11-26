@@ -287,8 +287,14 @@ def auditar_codigo(script: dict, banco: dict, topic: str = "") -> tuple[dict, li
                                             "recorde/extremo de uma fonte só dito como consenso: diga de onde vem "
                                             "(\"segundo os registros\", \"a menor temperatura já registrada\", \"de acordo "
                                             "com ...\") sem mudar o valor"))
-                    elif escala := {c: w for c, w in marcadores_sem_suporte(texto, validas).items()
-                                    if c in ESCALAS_NA_ESCRITA}:
+                    elif (escala := {c: w for c, w in marcadores_sem_suporte(texto, validas).items()
+                                     if c in ESCALAS_NA_ESCRITA}) and (enxuta := _sem_escala_removivel(texto, validas)):
+                        # 26/11: remover a palavra de escala faz a frase dizer MENOS e continua gramatical
+                        # ("a primeira e única retirada" → "a primeira retirada") — corrigido aqui, sem gastar edição
+                        log.info("escala sem apoio removida em código: %r → %r", texto, enxuta)
+                        texto = enxuta
+                        f["texto"] = texto
+                    elif escala:
                         # 26/11 (Svalbard 1029: "a primeira e única retirada" — a fonte dizia a primeira): palavra de
                         # escala absoluta que nenhuma evidência citada traz, conferida já na escrita (src/lexico.py)
                         problemas.append(_p("escala_sem_suporte", texto, i, j,
@@ -675,6 +681,26 @@ _PRECISAO: dict[str, tuple[re.Pattern, re.Pattern]] = lexico.precisao()
 ESCALAS_NA_ESCRITA = frozenset({"unicidade", "frequencia", "quantificador", "extensao", "mundial"})
 _DIVERGENCIA_DITA = re.compile(r"\b(segundo uma|uma fonte|outra fonte|outras fontes|as fontes divergem|divergem|"
                                r"varia conforme|dependendo da fonte|há registros de)\b", re.I)
+
+
+# remoções que só tiram escala (a frase diz menos e fica gramatical); "nunca"/"sempre" ficam de fora: tirar "nunca"
+# inverte o sentido e "sempre" pode quebrar a frase ("como sempre")
+_ESCALA_REMOVIVEL = (
+    (re.compile(r"\b(a primeira|o primeiro|as primeiras|os primeiros)\s+e\s+(únic[oa]s?|unic[oa]s?)\b", re.I), r"\1"),
+    (re.compile(r"\s+(totalmente|completamente|integralmente|inteiramente|exclusivamente|unicamente)\b", re.I), ""),
+)
+
+
+def _sem_escala_removivel(texto: str, validas: list[dict]) -> str | None:
+    """A frase sem as palavras de escala que nenhuma evidência sustenta, quando tirá-las basta (e não sobra
+    outra escala sem apoio); None se não dá para resolver só removendo."""
+    novo = texto
+    for padrao, troca in _ESCALA_REMOVIVEL:
+        novo = padrao.sub(troca, novo)
+    if novo == texto:
+        return None
+    resto = {c for c in marcadores_sem_suporte(novo, validas) if c in ESCALAS_NA_ESCRITA}
+    return None if resto else novo
 
 
 def marcadores_sem_suporte(texto: str, evidencias: list[dict]) -> dict[str, str]:
