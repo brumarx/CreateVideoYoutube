@@ -373,10 +373,61 @@ def auditar_codigo(script: dict, banco: dict, topic: str = "") -> tuple[dict, li
                     problemas.append(_p("ordem_nao_comprovada", f["texto"], i, j, motivo_ordem))
             frases.append(f)
         cenas.append({**sc, "frases": frases, "narration": " ".join(x["texto"] for x in frases)})
+    problemas += datas_estendidas(cenas, ev, {(p["cena"], p["frase"]) for p in problemas})
     return {**script, "scenes": cenas}, problemas
 
 
 _APROX = re.compile(r"\b(cerca de|aproximadamente|quase|mais de|menos de|em torno de|por volta de|perto de|uns|umas)\b", re.I)
+
+
+_ANO = re.compile(r"\b(1[5-9]\d{2}|20\d{2})\b")
+_EPOCA_PROPRIA = re.compile(r"\b(revisão|estudo|estimativa|levantamento|relatório|na época|anos atrás|anos antes|"
+                            r"anteriormente|antes disso|segundo uma)\b", re.I)
+_AMARRA = re.compile(r"\b(isso|isto|esse (número|total|acervo|volume)|essa (quantidade|marca)|o que representa|"
+                     r"representando|equivale|correspond)", re.I)
+_QUANTIDADE_SEM_NUMERO = re.compile(r"\b(um terço|dois terços|metade|um quarto|três quartos|a maioria|a maior parte)\b",
+                                    re.I)
+
+
+def _tem_quantidade(texto: str) -> bool:
+    t = extenso_para_algarismos(texto)
+    return bool({n for n in numeros(t) if not _ANO.fullmatch(n)} or _QUANTIDADE_SEM_NUMERO.search(texto))
+
+
+def datas_estendidas(cenas: list[dict], ev: dict, ja: set[tuple[int, int]]) -> list[dict]:
+    """26/11 (Svalbard 1029 e 1033: "Em 2026, mais de 1,4 milhão de amostras" ao lado de "cerca de um terço da
+    diversidade" — o terço é de uma revisão antiga, sem data; três leitores concluíram que era de 2026, e a troca
+    não desfez em duas tentativas). Frase com ano e quantidade, e na MESMA frase ou na seguinte da cena outra
+    quantidade cuja evidência não traz esse ano: o ouvinte estende a data. Vale para qualquer tema."""
+    out = []
+    for i, sc in enumerate(cenas):
+        frases = sc.get("frases") or []
+        for j, f in enumerate(frases):
+            if f.get("tipo") == "narrativa" or (i, j) in ja:
+                continue
+            anos = set(_ANO.findall(f["texto"]))
+            if not anos or not _tem_quantidade(_ANO.sub("", f["texto"])):
+                continue
+            candidatos = [(j, f)]
+            if j + 1 < len(frases) and frases[j + 1].get("tipo") != "narrativa" and not _ANO.search(frases[j + 1]["texto"]):
+                candidatos.append((j + 1, frases[j + 1]))
+            for k, g in candidatos:
+                if not _tem_quantidade(_ANO.sub("", g["texto"])):
+                    continue
+                # a frase seguinte que diz a própria época vale — salvo se ela se amarra à anterior ("isso cobria um
+                # terço": 1033 v2, os três leitores ainda ligaram o terço aos 1,4 milhão de 2026)
+                if k != j and _EPOCA_PROPRIA.search(g["texto"]) and not _AMARRA.search(g["texto"]):
+                    continue
+                sem_ano = [ev[x] for x in g.get("evidencias") or [] if x in ev and _tem_quantidade(ev[x].get("afirmacao", ""))
+                           and not anos & set(_ANO.findall(ev[x].get("afirmacao", "") + " " + " ".join(
+                               str(c.get("trecho") or "") for c in ev[x].get("citacoes") or [])))]
+                if sem_ano and (k != j or len(g.get("evidencias") or []) > 1):
+                    out.append(_p("data_estendida", g["texto"], i, k,
+                                  f"o dado de {sem_ano[0]['id']} não é de {'/'.join(sorted(anos))}, mas fica junto de uma "
+                                  f"frase com essa data e o ouvinte estende a data a ele: diga os dois em cenas separadas, "
+                                  f"ou diga de quando é este (\"segundo uma revisão\", \"numa estimativa anterior\")"))
+                    break
+    return out
 
 
 def _escala_de(x: str, valores: set[str]) -> bool:
@@ -3206,7 +3257,7 @@ def _registra_comparacao(c: dict) -> None:
 CORTES_MAX = 2  # 25/11: cortes antes da edição (sem chamada de escrita; cada um custa uma auditoria completa)
 TIPOS_DO_CODIGO = frozenset({"numero_arredondado", "numero_contraditorio", "numero_sem_evidencia", "divergencia_como_faixa",
                              "sinal_invertido", "hipotese_como_fato", "fonte_unica_sem_atribuicao", "ordem_nao_comprovada",
-                             "escala_sem_suporte"})
+                             "escala_sem_suporte", "data_estendida"})
 
 
 def auditar_e_corrigir(script: dict, banco: dict, topic: str, *, web_facts: list[dict] | None = None,

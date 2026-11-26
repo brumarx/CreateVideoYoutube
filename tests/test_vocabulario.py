@@ -249,3 +249,50 @@ def test_escala_removivel_corrigida_em_codigo(texto, esperado, problema):
     assert bool(probs) is problema
     if esperado:
         assert s2["scenes"][0]["frases"][0]["texto"] == esperado
+
+
+@pytest.mark.parametrize("frases,problema", [
+    (["Em 2026, o cofre passou de 1,4 milhão de amostras.", "Isso representa cerca de um terço da diversidade."], True),
+    (["Em 2026, o cofre passou de 1,4 milhão de amostras, cerca de um terço da diversidade."], True),
+    (["Em 2026, o cofre passou de 1,4 milhão de amostras.", "Segundo uma revisão, cerca de um terço da diversidade já estava lá em 2019."], False),
+    (["Em 2026, o cofre passou de 1,4 milhão de amostras.", "O cofre fica numa montanha."], False),
+])
+def test_data_estendida_a_dado_sem_data(frases, problema):
+    """Svalbard 1029/1033: o "um terço" (revisão antiga) lido como de 2026."""
+    from src import redacao as rd
+    banco = {"evidencias": [
+        {"id": "E2", "afirmacao": "Em 2026, o cofre ultrapassou 1,4 milhão de amostras.", "status": "oficial",
+         "numeros": ["2026", "1.4", "1400000"], "citacoes": []},
+        {"id": "E106", "afirmacao": "Aproximadamente um terço da diversidade está no cofre.", "status": "oficial",
+         "numeros": [], "citacoes": []},
+        {"id": "E5", "afirmacao": "Uma revisão de 2019 estimou um terço da diversidade no cofre.", "status": "oficial",
+         "numeros": ["2019"], "citacoes": []},
+        {"id": "E9", "afirmacao": "O cofre fica numa montanha.", "status": "oficial", "numeros": [], "citacoes": []}]}
+    evid = {0: ["E2"], 1: ["E106"]}
+    if len(frases) == 1:
+        evid = {0: ["E2", "E106"]}
+    elif "2019" in frases[1]:
+        evid = {0: ["E2"], 1: ["E5"]}
+    elif "montanha" in frases[1]:
+        evid = {0: ["E2"], 1: ["E9"]}
+    s = {"scenes": [{"frases": [{"texto": t, "tipo": "factual", "evidencias": evid[k]} for k, t in enumerate(frases)],
+                     "narration": " ".join(frases)}]}
+    tipos = [p["tipo"] for p in rd.auditar_codigo(s, banco, "Svalbard")[1]]
+    assert ("data_estendida" in tipos) is problema
+
+
+@pytest.mark.parametrize("segunda,problema", [
+    ("Uma revisão estimou cerca de um terço da diversidade no cofre.", False),           # diz a própria época
+    ("Uma revisão de anos atrás estimava que isso cobria um terço da diversidade.", True),  # 1033 v2: "isso" amarra
+])
+def test_data_estendida_epoca_propria_e_amarracao(segunda, problema):
+    from src import redacao as rd
+    banco = {"evidencias": [
+        {"id": "E2", "afirmacao": "Em 2026, o cofre ultrapassou 1,4 milhão de amostras.", "status": "oficial",
+         "numeros": ["2026", "1.4", "1400000"], "citacoes": []},
+        {"id": "E106", "afirmacao": "Aproximadamente um terço da diversidade está no cofre.", "status": "oficial",
+         "numeros": [], "citacoes": []}]}
+    fr = [{"texto": "Em 2026, o cofre passou de 1,4 milhão de amostras.", "tipo": "factual", "evidencias": ["E2"]},
+          {"texto": segunda, "tipo": "factual", "evidencias": ["E106"]}]
+    s = {"scenes": [{"frases": fr, "narration": " ".join(f["texto"] for f in fr)}]}
+    assert ("data_estendida" in [p["tipo"] for p in rd.auditar_codigo(s, banco, "x")[1]]) is problema
