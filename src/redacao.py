@@ -363,6 +363,13 @@ def auditar_codigo(script: dict, banco: dict, topic: str = "") -> tuple[dict, li
                 provas = [ev[x] for x in f["evidencias"] if x in ev and ev[x]["status"] in STATUS_USAVEIS]
                 motivo_ordem = ordem_da_frase(f["texto"], provas)
                 if motivo_ordem:
+                    # 26/11 (1033): tirar o "depois" sem prova faz a frase dizer menos e continua certa
+                    enxuta = _ORDEM_REMOVIVEL.sub("", f["texto"])
+                    if enxuta != f["texto"] and not ordem_da_frase(enxuta, provas):
+                        log.info("ordem sem prova removida em código: %r → %r", f["texto"], enxuta)
+                        f["texto"] = enxuta
+                        motivo_ordem = None
+                if motivo_ordem:
                     problemas.append(_p("ordem_nao_comprovada", f["texto"], i, j, motivo_ordem))
             frases.append(f)
         cenas.append({**sc, "frases": frases, "narration": " ".join(x["texto"] for x in frases)})
@@ -733,6 +740,10 @@ _DIVERGENCIA_DITA = re.compile(r"\b(segundo uma|uma fonte|outra fonte|outras fon
 
 # remoções que só tiram escala (a frase diz menos e fica gramatical); "nunca"/"sempre" ficam de fora: tirar "nunca"
 # inverte o sentido e "sempre" pode quebrar a frase ("como sempre")
+# ordem sem prova que sai sozinha: "…voltaram para Svalbard depois." → "…voltaram para Svalbard." ("depois de X"
+# não: sem o "de X" a frase quebra)
+_ORDEM_REMOVIVEL = re.compile(r",?\s+(depois|em seguida|mais tarde|por fim|posteriormente)(?=\s*[.;!?]|\s*,\s)"
+                              r"|(?<=\be)\s+(depois|em seguida|mais tarde|posteriormente)(?=\s)", re.I)
 _ESCALA_REMOVIVEL = (
     (re.compile(r"\b(a primeira|o primeiro|as primeiras|os primeiros)\s+e\s+(únic[oa]s?|unic[oa]s?)\b", re.I), r"\1"),
     (re.compile(r"\s+(totalmente|completamente|integralmente|inteiramente|exclusivamente|unicamente)\b", re.I), ""),
@@ -868,8 +879,8 @@ PLANEJE:
    anterior deixou uma pergunta, e responde a ela ("então como…?", "mas e se…?", "e funcionou?"). Não monte a
    lista de aspectos do assunto (onde fica, como funciona, quem administra, logística, regras, limites…): entra
    só o bloco sem o qual a resposta da pergunta da abertura não se entende; o resto do material fica de fora.
-   Cada bloco: a FUNÇÃO dele na história, o que conta, a tensão que deixa para o próximo ("deixa", dita como
-   afirmação — "mas o frio natural não bastava" —, não como pergunta retórica) e as
+   Cada bloco: a FUNÇÃO dele na história, o que conta, a tensão que deixa para o próximo ("deixa": anuncia sem
+   afirmar resultado — "só que havia um problema" —, não como pergunta retórica) e as
    evidências de que precisa — NO MÁXIMO 3. Cada evidência e cada ideia em UM bloco só (dita uma vez; o
    espectador lembra). Um exemplo concreto vale mais que uma lista de países, datas, números, siglas ou
    tratados. O ÚLTIMO bloco é a resposta à pergunta da abertura com o que os anteriores já mostraram: SEM
@@ -1086,9 +1097,10 @@ def material_do_plano(plano: dict, banco: dict) -> str:
     g = plano.get("gancho") or {}
     return (f"PLANO DA HISTÓRIA (siga o ângulo e a ordem; cada bloco vira uma ou mais cenas com a FUNÇÃO dele; a "
             f"cena termina puxando o que o bloco \"deixa\" e a seguinte responde — é isso que faz o espectador ficar; "
-            f"puxe com uma frase AFIRMATIVA de tensão (\"Mas o frio natural não bastava.\", \"Só que havia um "
-            f"problema.\"), nunca com pergunta retórica: no máximo UMA pergunta no meio do vídeo inteiro; nenhum "
-            f"fato dito duas vezes):\n"
+            f"puxe com uma frase curta que ANUNCIA sem afirmar (\"Só que havia um problema.\", \"E aí veio o "
+            f"teste.\", \"Mas isso não bastava.\") — sem resultado (\"funcionou\", \"foi testado\"), sem nome, "
+            f"lugar ou data (isso é fato e precisa de evidência); nunca com pergunta retórica: no máximo UMA pergunta no "
+            f"meio do vídeo inteiro; nenhum fato dito duas vezes):\n"
             + (f"Gancho (1ª frase, fórmula {g.get('formula')}, fato {g.get('evidencia')}): {g.get('frase', '')}\n"
                if g.get("frase") else "")
             + f"Pergunta da abertura: {plano['angulo'].get('pergunta', '')}\n"
@@ -3533,6 +3545,20 @@ EDICAO_EXTRA = 1  # 26/11: edição de história a mais para a versão limpa a m
 TROCAS_MAX = 2  # 25/11: rodadas de troca mínima pela sugestão do leitor (antes do corte e da edição)
 
 
+def _palavra_mais_forte(nova: str, original: str, evidencias: list[dict]) -> str | None:
+    """Palavra de garantia ou de escala absoluta (src/lexico.py) que a frase NOVA traz e que nem a original nem as
+    evidências citadas trazem."""
+    base = original + " " + " ".join([e.get("afirmacao", "") for e in evidencias]
+                                     + [c.get("trecho", "") for e in evidencias for c in e.get("citacoes") or []])
+    if (m := _ALEGA.search(nova)) and not re.search(r"\b" + re.escape(m.group(0)) + r"\b", base, re.I):
+        return m.group(0)
+    for c in ESCALAS_NA_ESCRITA:
+        marca, apoio = _PRECISAO[c]
+        if (m := marca.search(nova)) and not marca.search(original) and not apoio.search(base):
+            return m.group(0)
+    return None
+
+
 def trocar_frases_apontadas(script: dict, problemas: list[dict], banco: dict, topic: str) -> tuple[dict | None, dict]:
     """25/11 (Svalbard 1021: cortar tirava a conclusão e o editorial caía 6,4 → 5,4; a edição de cena voltava
     4 de 4): cada leitor que aponta o problema já diz como corrigir. A frase apontada (ou as frases da combinação
@@ -3585,6 +3611,15 @@ def trocar_frases_apontadas(script: dict, problemas: list[dict], banco: dict, to
             if achado:
                 registro["recusadas"].append({"n": n, "texto": t[:160], "motivo": f"narrativa afirma: {achado}"[:200]})
                 novas[n] = None
+            continue
+        # 26/11 (1033: a troca escreveu "O permafrost garante que…"): o conserto não traz palavra de garantia ou de
+        # escala (src/lexico.py) que a frase original e as evidências dela não tinham
+        mais_forte = _palavra_mais_forte(t, f["texto"], [por_id(banco)[x] for x in f.get("evidencias") or []
+                                                         if x in por_id(banco)])
+        if mais_forte:
+            registro["recusadas"].append({"n": n, "texto": t[:160],
+                                          "motivo": f"o conserto trouxe \"{mais_forte}\", mais forte que a original"})
+            novas[n] = None
             continue
         ant = lista[n - 2][2]["texto"] if n > 1 else ""
         conferir.append((n, {"texto": t, "evidencias": list(f.get("evidencias") or []), "anterior": ant}))

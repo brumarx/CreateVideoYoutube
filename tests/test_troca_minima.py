@@ -62,7 +62,7 @@ def test_troca_recusada_pela_conferencia_nao_muda_nada(ambiente, monkeypatch):
     responde({"trocas": [{"n": 2, "texto": "O permafrost garante o frio por séculos."}]})
     monkeypatch.setattr(rd, "conferir_contra_trechos", lambda itens, banco: {0: "termo mais forte"})
     novo, reg = rd.trocar_frases_apontadas(_script(), [_problema()], {}, "Svalbard")
-    assert novo is None and reg["recusadas"][0]["motivo"] == "termo mais forte"
+    assert novo is None and reg["recusadas"]  # 26/11: "garante" recusado já em código (léxico), antes do juiz
 
 
 def test_troca_so_mexe_nas_frases_apontadas(ambiente, monkeypatch):
@@ -334,3 +334,12 @@ def test_plano_com_absoluto_na_pergunta_pede_correcao_com_o_motivo(monkeypatch):
 def test_json_com_fechamento_trocado_e_reparado(raw, esperado):
     """26/11 (1033): o escritor fechou a última cena com "]" e a resposta inteira foi descartada duas vezes."""
     assert rd._obj(raw) == esperado
+
+
+def test_conserto_nao_traz_palavra_mais_forte_e_depois_sem_prova_sai():
+    """1033: a troca escreveu "O permafrost garante…"; "…voltaram para Svalbard depois." sem prova de ordem."""
+    ev = [{"afirmacao": "O permafrost manterá as sementes frias por muito tempo.", "citacoes": []}]
+    assert rd._palavra_mais_forte("O permafrost garante que fiquem frias.", "O frio não bastava.", ev) == "garante"
+    assert rd._palavra_mais_forte("O permafrost mantém as sementes frias.", "O frio não bastava.", ev) is None
+    assert rd._ORDEM_REMOVIVEL.sub("", "Duplicatas voltaram para Svalbard depois.") == "Duplicatas voltaram para Svalbard."
+    assert rd._ORDEM_REMOVIVEL.sub("", "Voltou depois de 2015.") == "Voltou depois de 2015."   # "depois de X" fica
