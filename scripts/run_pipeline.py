@@ -286,6 +286,20 @@ def _trocar_nomes_por_descricao(script, narrations, audio_names, pronunciations,
     return narrations if mudou else None
 
 
+ROTEIROS_APROVADOS = Path(__file__).resolve().parent.parent / "data" / "roteiros_aprovados"
+
+
+def _guardar_roteiro_aprovado(job_id, script: dict) -> None:
+    """Cópia do roteiro aprovado em data/roteiros_aprovados/job_N.json (sem o banco de evidências, que é grande e
+    fica em data/gravacoes/partida_N.json)."""
+    try:
+        ROTEIROS_APROVADOS.mkdir(parents=True, exist_ok=True)
+        leve = {k: v for k, v in script.items() if k != "_banco"}
+        (ROTEIROS_APROVADOS / f"job_{job_id}.json").write_text(json.dumps(leve, ensure_ascii=False, indent=2))
+    except (OSError, TypeError, ValueError) as exc:
+        log.warning("[%s] não consegui guardar a cópia do roteiro aprovado: %s", job_id, exc)
+
+
 def _foreign_terms(script: dict, pronunciations: dict[str, str]) -> tuple[dict[str, str], dict[str, str]]:
     """Termos do campo "idioma" do roteiro (voz nativa, src/tts.py) e as
     reescritas de "pronuncia" que sobram: nada de termo que está nos dois,
@@ -1558,6 +1572,9 @@ def run(
         # roteiro aprovado: se o vídeo reprovar depois (imagem, revisão
         # final), o daily_run refaz só o vídeo com ele (--script-file)
         (work_dir / "script.json").write_text(json.dumps(script, ensure_ascii=False, indent=2))
+        # 26/11 (Svalbard 1033: roteiro aprovado depois de 2 h de auditoria apagado junto com a pasta do job porque o
+        # vídeo teve 1 s de silêncio): cópia durável fora de output/, que a limpeza de vídeo rejeitado não toca
+        _guardar_roteiro_aprovado(job_id, script)
 
         if script_only:
             # roteiro aprovado nas revisões, salvo pra uma pessoa (ou um assistente)
@@ -2545,9 +2562,14 @@ def run(
         if isinstance(exc, ScriptRejected):
             if str(exc).startswith(("áudio reprovado", "nome falado errado")):
                 registrar(channel_name, "audio", str(exc).split(": ", 1)[-1][:300])
-            # 16/11: descartado = apagado. Vídeo rejeitado não fica em disco esperando uso
-            shutil.rmtree(Path(__file__).resolve().parent.parent / "output" / f"job_{job_id}", ignore_errors=True)
-            update(job_id, video_path=None, thumbnail_path=None)
+            if str(exc).startswith("vídeo reprovado no controle técnico"):
+                # 26/11: defeito técnico (silêncio, tela preta) não é conteúdo rejeitado — a pasta fica para
+                # diagnosticar e refazer só o vídeo com o roteiro aprovado (--script-file … --approved)
+                log.warning("[%s] vídeo reprovado só no controle técnico: pasta output/job_%s mantida", job_id, job_id)
+            else:
+                # 16/11: descartado = apagado. Vídeo rejeitado não fica em disco esperando uso
+                shutil.rmtree(Path(__file__).resolve().parent.parent / "output" / f"job_{job_id}", ignore_errors=True)
+                update(job_id, video_path=None, thumbnail_path=None)
         raise
 
 
