@@ -745,7 +745,8 @@ PLANEJE:
    anterior deixou uma pergunta, e responde a ela ("então como…?", "mas e se…?", "e funcionou?"). Não monte a
    lista de aspectos do assunto (onde fica, como funciona, quem administra, logística, regras, limites…): entra
    só o bloco sem o qual a resposta da pergunta da abertura não se entende; o resto do material fica de fora.
-   Cada bloco: a FUNÇÃO dele na história, o que conta, a pergunta que deixa para o próximo ("deixa") e as
+   Cada bloco: a FUNÇÃO dele na história, o que conta, a tensão que deixa para o próximo ("deixa", dita como
+   afirmação — "mas o frio natural não bastava" —, não como pergunta retórica) e as
    evidências de que precisa — NO MÁXIMO 3. Cada evidência e cada ideia em UM bloco só (dita uma vez; o
    espectador lembra). Um exemplo concreto vale mais que uma lista de países, datas, números, siglas ou
    tratados. O ÚLTIMO bloco é a resposta à pergunta da abertura com o que os anteriores já mostraram: SEM
@@ -926,8 +927,10 @@ def material_do_plano(plano: dict, banco: dict) -> str:
                        for k, b in enumerate(plano["blocos"], 1))
     g = plano.get("gancho") or {}
     return (f"PLANO DA HISTÓRIA (siga o ângulo e a ordem; cada bloco vira uma ou mais cenas com a FUNÇÃO dele; a "
-            f"cena termina puxando a pergunta que o bloco \"deixa\" e a seguinte responde a ela — é isso que faz "
-            f"o espectador ficar; nenhum fato dito duas vezes):\n"
+            f"cena termina puxando o que o bloco \"deixa\" e a seguinte responde — é isso que faz o espectador ficar; "
+            f"puxe com uma frase AFIRMATIVA de tensão (\"Mas o frio natural não bastava.\", \"Só que havia um "
+            f"problema.\"), nunca com pergunta retórica: no máximo UMA pergunta no meio do vídeo inteiro; nenhum "
+            f"fato dito duas vezes):\n"
             + (f"Gancho (1ª frase, fórmula {g.get('formula')}, fato {g.get('evidencia')}): {g.get('frase', '')}\n"
                if g.get("frase") else "")
             + f"Pergunta da abertura: {plano['angulo'].get('pergunta', '')}\n"

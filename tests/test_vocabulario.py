@@ -116,3 +116,13 @@ def test_comeco_de_frase_no_meio_do_texto_nao_e_nome():
     assert rd.afirmacao_escondida("Essa burocracia funciona na prática? Alguém precisou sacar o seguro?", set()) is None
     assert rd.afirmacao_escondida("Comenta SEMENTE se você achava que era gelo.", set()) is None
     assert rd.afirmacao_escondida("E foi assim que Svalbard virou notícia.", set()) == "nome próprio (Svalbard)"
+
+
+def test_plano_nao_pede_mais_perguntas_do_que_a_regra_permite():
+    """26/11: o plano em cadeia pedia uma pergunta por bloco; a regra anti-IA permite 1 no meio — 7 perguntas,
+    escritor cobrado em toda tentativa. O pedido tem de dizer o mesmo limite da regra."""
+    from src import redacao as rd
+    from src.script_gen import MAX_PERGUNTAS_MEIO
+    plano = {"angulo": {"pergunta": "p", "resposta": "r"}, "blocos": [{"funcao": "a", "conta": "c", "evidencias": []}]}
+    texto = rd.material_do_plano(plano, {"evidencias": []})
+    assert MAX_PERGUNTAS_MEIO == 1 and "no máximo UMA pergunta" in texto and "nunca com pergunta retórica" in texto
