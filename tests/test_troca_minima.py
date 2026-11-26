@@ -213,3 +213,37 @@ def test_fechamento_pedido_lista_todas_as_palavras_que_a_conferencia_recusa():
                                           proibidas=rd._PALAVRAS_ALEGA)
     palavras = rd._ALEGA.pattern.split("(", 1)[1].split(")", 1)[0].split("|")
     assert palavras and all(f'"{p}"' in pedido for p in palavras)
+
+
+@pytest.mark.parametrize("texto,esperado", [
+    ("with a stable temperature of between minus 3 and 4°C.", {("-3", "°C"), ("-4", "°C")}),
+    ("cerca de -3 a -4 °C", {("-3", "°C"), ("-4", "°C")}),
+    ("a constant minus 18C.", {("-18", "°C")}),
+    ("between -3 and -4 degrees Celsius", {("-3", "°C"), ("-4", "°C")}),
+    ("entre 3 e 4 graus negativos", {("-3", "°C"), ("-4", "°C")}),
+    ("de 10 a 15 graus", {("10", "°C"), ("15", "°C")}),
+    ("Em 2004 e 3 °C", {("3", "°C")}),
+])
+def test_temperaturas_em_faixa_e_em_ingles(texto, esperado):
+    """Svalbard 26/11: "minus 3 and 4°C" era lido como +4 e a frase certa "-3 a -4 °C" reprovou em toda versão."""
+    from src.fatos import temperaturas
+    assert temperaturas(texto) == esperado
+
+
+def test_sinal_certo_se_uma_evidencia_concorda():
+    ev = [{"id": "E1", "afirmacao": "O permafrost fica a 4 °C.", "citacoes": []},
+          {"id": "E2", "afirmacao": "O permafrost fica entre -3 e -4 °C.", "citacoes": []}]
+    assert rd._sinal_invertido("O permafrost mantém -3 a -4 °C.", ev) is None
+    assert rd._sinal_invertido("O permafrost mantém 4 °C.", ev[1:]) is not None
+
+
+def test_pergunta_do_plano_na_abertura_nao_vira_fato():
+    """Svalbard 1029: "…sem nunca plantar uma única semente?" reprovou como fato absoluto sem evidência."""
+    p = "Como uma estrutura fria protege a comida sem nunca plantar uma única semente?"
+    s = {"scenes": [{"frases": [{"texto": p, "tipo": "factual", "evidencias": []}], "narration": p}],
+         "_plano": {"angulo": {"pergunta": p}}}
+    s2, probs = rd.auditar_codigo(s, {"evidencias": []}, "Svalbard")
+    assert s2["scenes"][0]["frases"][0]["tipo"] == "narrativa"
+    assert not [x for x in probs if x["termo"] == p]
+    s.pop("_plano")
+    assert [x for x in rd.auditar_codigo(s, {"evidencias": []}, "Svalbard")[1] if x["termo"] == p]

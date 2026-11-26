@@ -129,6 +129,10 @@ def afirmacao_escondida(texto: str, nomes_conhecidos: set[str]) -> str | None:
     return None
 
 
+def _comparavel(texto: str) -> str:
+    return " ".join(re.findall(r"\w+", dobrar(texto or "")))
+
+
 def _nomes_conhecidos(script: dict, topic: str) -> set[str]:
     """Nomes que não precisam de evidência numa frase narrativa: os do tema, o nome do canal no
     bordão e os que já aparecem em frase factual sustentada do próprio roteiro."""
@@ -144,6 +148,7 @@ def auditar_codigo(script: dict, banco: dict, topic: str = "") -> tuple[dict, li
     {tipo, termo (a frase), motivo, cena, frase}."""
     ev = por_id(banco)
     nomes = _nomes_conhecidos(script, topic)
+    pergunta_do_plano = _comparavel(((script.get("_plano") or {}).get("angulo") or {}).get("pergunta") or "")
     problemas: list[dict] = []
     cenas = []
     for i, sc in enumerate(script.get("scenes", [])):
@@ -152,7 +157,11 @@ def auditar_codigo(script: dict, banco: dict, topic: str = "") -> tuple[dict, li
             f = {**f, "evidencias": [x for x in f.get("evidencias") or [] if isinstance(x, str)]}
             texto = f["texto"]
             nums = numeros(extenso_para_algarismos(texto))
-            if f.get("tipo") == "narrativa":
+            if pergunta_do_plano and _comparavel(texto) == pergunta_do_plano:
+                # 26/11 (Svalbard 1029): a pergunta da abertura é a do plano aprovado — retórica, não fato
+                # ("…sem nunca plantar uma semente?" reprovou como "afirmação absoluta sem evidência")
+                f["tipo"], f["evidencias"] = "narrativa", []
+            elif f.get("tipo") == "narrativa":
                 motivo = afirmacao_escondida(texto, nomes)
                 if motivo:
                     f["tipo"] = "factual"
@@ -538,23 +547,21 @@ def _sinal_invertido(texto: str, validas: list[dict]) -> str | None:
     exato ou arredondamento de menos de 1 grau) na mesma escala. Motivo ou None."""
     for valor, escala in temperaturas(extenso_para_algarismos(texto)):
         v = float(valor)
-        for e in validas:
-            for ve, ee in _temps_da_evidencia(e):
-                x = float(ve)
-                if ee != escala or abs(abs(x) - abs(v)) >= 1 or x == 0 or v == 0:
-                    continue
-                if (x < 0) == (v < 0):
-                    break  # sinal certo para esta grandeza
-                comparacao = re.search(r"\b(menos de|abaixo de)\s+" + re.escape(valor.lstrip("-").replace(".", ",")),
-                                       extenso_para_algarismos(texto), re.I)
-                aviso = (f" (\"{comparacao.group(1)} {valor.lstrip('-')}\" é comparação, não sinal negativo)"
-                         if comparacao else "")
-                return (f"sinal trocado{aviso}: a evidência {e['id']} diz {ve.replace('.', ',')} {ee} e a frase diz "
-                        f"{valor.replace('.', ',')} {escala}; diga \"negativos\", \"abaixo de zero\" ou o sinal de menos "
-                        "— nunca inverta o sinal nem troque o número")
-            else:
-                continue
-            break
+        if v == 0:
+            continue
+        mesma = [(e, ve) for e in validas for ve, ee in _temps_da_evidencia(e)
+                 if ee == escala and abs(abs(float(ve)) - abs(v)) < 1 and float(ve) != 0]
+        # 26/11: basta UMA evidência com o mesmo sinal (antes, a 1ª evidência com sinal oposto já reprovava)
+        if not mesma or any((float(ve) < 0) == (v < 0) for _, ve in mesma):
+            continue
+        e, ve = mesma[0]
+        comparacao = re.search(r"\b(menos de|abaixo de)\s+" + re.escape(valor.lstrip("-").replace(".", ",")),
+                               extenso_para_algarismos(texto), re.I)
+        aviso = (f" (\"{comparacao.group(1)} {valor.lstrip('-')}\" é comparação, não sinal negativo)"
+                 if comparacao else "")
+        return (f"sinal trocado{aviso}: a evidência {e['id']} diz {ve.replace('.', ',')} {escala} e a frase diz "
+                f"{valor.replace('.', ',')} {escala}; diga \"negativos\", \"abaixo de zero\" ou o sinal de menos "
+                "— nunca inverta o sinal nem troque o número")
     return None
 
 
@@ -1368,6 +1375,8 @@ def escrever(channel, topic: str, banco: dict, *, min_minutes: float, max_minute
             log.warning("escritor indisponível (tentativa %d/%d): %s", n + 1, tentativas, exc)
             continue
         script = de_json(_obj(raw), banco)
+        if plano:
+            script["_plano"] = plano
         script, cortadas = conferir_na_escrita(script, banco, topic)
         script, lista, _ = defeitos(script, banco, topic, min_pal, max_pal, cenas_min, cenas_max)
         lista += [f"a frase {m} — a fonte não diz isso (frase cortada)" for m in cortadas]

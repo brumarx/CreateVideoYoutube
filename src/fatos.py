@@ -174,9 +174,15 @@ _PARADAS = {"para", "pelo", "pela", "como", "mais", "este", "esta", "isso", "seu
 _PES = {"pé", "pés", "pes", "ft", "feet", "foot"}
 
 
-_TEMPERATURA = re.compile(r"(?<![\w.,])([−–-]\s?|menos\s+(?!de\b))?(?:(?:cerca de|aproximadamente|uns|umas|quase|"
-                          r"mais de|por volta de|em torno de)\s+)?(\d+(?:[.,]\d+)?)\s*(?:°|º(?=\s?[CF]\b)|graus?)(?:\s*(celsius|c|fahrenheit|f)\b)?"
-                          r"(\s+(?:negativos?|abaixo de zero))?", re.I)
+_SINAL = r"[−–-]\s?|menos\s+(?!de\b)|minus\s+"
+_TEMPERATURA = re.compile(r"(?<![\w.,])(" + _SINAL + r")?(?:(?:cerca de|aproximadamente|uns|umas|quase|"
+                          r"mais de|por volta de|em torno de|about|around)\s+)?(\d+(?:[.,]\d+)?)\s*"
+                          r"(?:°|º(?=\s?[CF]\b)|graus?|degrees?|(?<=\d)(?=[CF]\b))(?:\s*(celsius|c|fahrenheit|f)\b)?"
+                          r"(\s+(?:negativos?|abaixo de zero|below zero))?", re.I)
+# 26/11 (Svalbard, E143 "between minus 3 and 4°C"): numa faixa, o 1º número vem sem unidade e o sinal do 1º vale
+# para o 2º — "menos 3 e 4 °C" são −3 e −4, não −? e +4
+_FAIXA_ANTES = re.compile(r"(?<![\w.,])(" + _SINAL + r")?(\d{1,3}(?:[.,]\d+)?)\s*(?:°\s*C?\s*)?"
+                          r"(?:a|e|and|to|até|[−–-])\s*$", re.I)
 
 
 def temperaturas(texto: str) -> set[tuple[str, str]]:
@@ -191,6 +197,12 @@ def temperaturas(texto: str) -> set[tuple[str, str]]:
         for m in achados:
             escala = "°F" if (m.group(3) or "").lower().startswith("f") else "°C"
             negativo = bool(m.group(1)) or bool(m.group(4)) or bool(negativa_na_frase)
+            faixa = _FAIXA_ANTES.search(frase[:m.start()])
+            if faixa:
+                neg_1 = bool(faixa.group(1)) or bool(m.group(4)) or bool(negativa_na_frase)
+                negativo = negativo or bool(faixa.group(1))
+                v1 = canon(faixa.group(2))
+                out.add(("-" + v1 if neg_1 and v1 != "0" else v1, escala))
             valor = canon(m.group(2))
             if negativo and valor not in ("0",):
                 valor = "-" + valor
