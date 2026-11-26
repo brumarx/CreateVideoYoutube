@@ -46,6 +46,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "troca: o teste usa a troca mínima de verdade (redacao.trocar_frases_apontadas)")
     config.addinivalue_line("markers", "ritmo: o teste usa redacao.ritmo_de_referencia de verdade")
     config.addinivalue_line("markers", "revisao: o teste usa a revisão das afirmações de verdade (evidencias.revisar_afirmacoes)")
+    config.addinivalue_line("markers", "reconexao: o teste usa a reconexão do provedor depois de queda (esperas zeradas)")
     config.addinivalue_line("markers", "pronuncia: o teste usa a classificação de pronúncia de verdade (pronuncia.classificar)")
 
 
@@ -98,6 +99,14 @@ def siglas_isoladas(request, tmp_path, monkeypatch):
     monkeypatch.setattr(siglas, "ARQUIVO", tmp_path / "siglas_aprendidas.json")
     if not request.node.get_closest_marker("pronuncia"):
         monkeypatch.setattr(siglas, "classificar", lambda s: {})
+
+
+@pytest.fixture(autouse=True)
+def sem_espera_de_reconexao(request, monkeypatch):
+    """26/11: queda do servidor espera e tenta de novo (providers.QUEDA_ESPERAS, ~15 min). Nos testes não se espera:
+    sem reconexão, salvo marker "reconexao" (com esperas zeradas)."""
+    from src import providers
+    monkeypatch.setattr(providers, "QUEDA_ESPERAS", (0, 0, 0) if request.node.get_closest_marker("reconexao") else ())
 
 
 @pytest.fixture(autouse=True)

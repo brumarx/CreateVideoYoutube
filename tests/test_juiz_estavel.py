@@ -63,12 +63,13 @@ def test_juiz_nunca_passa_do_teto_de_saida(rede):
 def test_sem_fallback_silencioso_nenhum_outro_modelo_completa_a_avaliacao(rede, monkeypatch):
     """A falha do juiz chega à leitura de espectador como "não julgada"; a cascata (gpt-oss, Groq…) não é
     chamada (a fixture falha o teste se for)."""
-    pedidos = rede(*[(None, 200, 0)] * 2 * rd.LEITURAS)
+    pedidos = rede(*[(None, 200, 0)] * 2 * (rd.LEITURAS + rd.LEITURAS_REPOSICAO))
     monkeypatch.setattr(pv, "LLMKeys", lambda: CHAVES)
     s = {"scenes": [{"narration": "A. B.", "frases": [{"texto": "A frase um.", "tipo": "narrativa", "evidencias": []},
                                                       {"texto": "A frase dois.", "tipo": "narrativa", "evidencias": []}]}]}
     assert rd.leitura_espectador(s, {"evidencias": []}, "t") is None
-    assert {p["modelo"] for p in pedidos} == {MODELO} and len(pedidos) == 2 * rd.LEITURAS
+    # 26/11: as que falham são repostas (LEITURAS_REPOSICAO) antes de virar "não julgada"
+    assert {p["modelo"] for p in pedidos} == {MODELO} and len(pedidos) == 2 * (rd.LEITURAS + rd.LEITURAS_REPOSICAO)
 
 
 # ======================================================================= três avaliações por versão
@@ -103,7 +104,7 @@ def test_tres_notas_editoriais_ficam_com_a_mediana_de_cada_criterio(monkeypatch)
 
 def test_sem_tres_avaliacoes_editoriais_validas_a_versao_nao_e_aprovada(monkeypatch):
     complete, fila, _ = _editor({"titulo": 9}, {"titulo": 9})
-    fila.append(pv.JuizSemResposta("cortada"))
+    fila += [pv.JuizSemResposta("cortada")] * (1 + rd.LEITURAS_REPOSICAO)   # a falta e as reposições falham
     monkeypatch.setattr(pv, "complete", complete)
     q = rd.avaliar_editorial(S, "t")
     assert q["nota"] >= rd.NOTA_MINIMA and q["aprovado"] is False and "2 de 3" in q["nao_julgada"]
@@ -265,3 +266,44 @@ def test_nota_longe_do_minimo_fica_com_tres_leituras(monkeypatch):
     monkeypatch.setattr(pv, "complete", complete)
     rd.avaliar_editorial(S, "t")
     assert len(chamadas) == 3
+
+
+def test_leitura_que_cai_e_reposta_e_a_versao_e_julgada(monkeypatch):
+    """26/11 (Svalbard 1033 v5: 2 problemas, editorial 7,1 — "não julgada" porque a NVIDIA caiu numa leitura)."""
+    import json as _json
+    from src import providers, redacao as rd
+    chamadas = {"n": 0}
+    resposta = _json.dumps({"conclusoes_do_publico": ["a", "b"], "enganos": []})
+
+    def complete(msgs, **k):
+        chamadas["n"] += 1
+        if chamadas["n"] == 2:
+            raise RuntimeError("Server disconnected without sending a response")
+        return resposta
+    monkeypatch.setattr(providers, "complete", complete)
+    monkeypatch.setattr(rd, "complete", complete, raising=False)
+    s = {"scenes": [{"frases": [{"texto": "O cofre fica numa montanha.", "tipo": "factual", "evidencias": []}],
+                     "narration": "O cofre fica numa montanha."}]}
+    r = rd.leitura_espectador(s, {"evidencias": []}, "Svalbard")
+    assert r is not None and not r.get("nao_julgada") and chamadas["n"] == 4   # 3 válidas + 1 reposta
+
+
+@pytest.mark.reconexao
+def test_queda_do_servidor_tenta_o_mesmo_modelo_de_novo(monkeypatch):
+    """26/11 (o dono): "se nosso modelo cai com a NVIDIA, ele deve voltar a tentar e não abandonar"."""
+    from src import providers
+    respostas = [(None, None, None), (None, 502, None), ("ok", 200, None)]
+    chamadas = []
+    monkeypatch.setattr(providers, "_call_openai_compat", lambda *a, **k: chamadas.append(a[2]) or respostas.pop(0))
+    monkeypatch.setattr(providers.time, "sleep", lambda s: None)
+    r = providers._chamar_com_reconexao("url", "chave", "nemotron", [], 100, 0.1)
+    assert r[0] == "ok" and chamadas == ["nemotron"] * 3
+
+
+@pytest.mark.reconexao
+def test_resposta_errada_nao_e_queda(monkeypatch):
+    from src import providers
+    chamadas = []
+    monkeypatch.setattr(providers, "_call_openai_compat", lambda *a, **k: chamadas.append(1) or (None, 400, None))
+    providers._chamar_com_reconexao("url", "chave", "m", [], 100, 0.1)
+    assert chamadas == [1]   # 400 é erro do pedido: não adianta repetir

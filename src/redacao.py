@@ -2150,7 +2150,12 @@ def leitura_espectador(script: dict, banco: dict, topic: str) -> dict | None:
         return isinstance(d.get("conclusoes_do_publico"), list) and len(d["conclusoes_do_publico"]) >= 2 \
             and isinstance(d.get("enganos"), list)
     leituras: list[dict] = []
-    for _ in range(LEITURAS):  # 23/11: o mesmo pedido, o mesmo modelo (juiz fixo), independentes
+    # 26/11 (1033 v5: 2 problemas, editorial 7,1, nenhuma leitura enganosa — e "não julgada" porque a NVIDIA caiu numa
+    # das 3 leituras): a leitura que falha por queda é REPOSTA (até LEITURAS_REPOSICAO tentativas a mais); o critério
+    # continua sendo LEITURAS leituras válidas
+    for _ in range(LEITURAS + LEITURAS_REPOSICAO):  # 23/11: o mesmo pedido, o mesmo modelo (juiz fixo), independentes
+        if len(leituras) >= LEITURAS:
+            break
         try:
             d = _obj(complete([{"role": "user", "content": pedido}], max_tokens=SAIDA_ESPECTADOR, temperature=0.1,
                               validate=valido, juiz=True))
@@ -2193,7 +2198,7 @@ def leitura_espectador(script: dict, banco: dict, topic: str) -> dict | None:
     descartados = sum(1 for x in leituras for e in x["enganos"] if e["gravidade"] in ("improvavel", "estilo"))
     if descartados:
         log.info("leitura de espectador: %d ponto(s) improvável(is) ou de estilo fora da auditoria", descartados)
-    nao_julgada = "" if len(leituras) == LEITURAS else f"só {len(leituras)} de {LEITURAS} leituras de espectador válidas"
+    nao_julgada = "" if len(leituras) >= LEITURAS else f"só {len(leituras)} de {LEITURAS} leituras de espectador válidas"
     log.info("leitura de espectador: %d leitura(s); %d interpretação(ões) enganosa(s) em 2+ leituras (bloqueiam), "
              "%d em uma só (alerta para revisão humana)%s%s", len(leituras), len(bloqueantes), len(alertas),
              "".join(f" | BLOQUEIA {g['tipo']} {g['frases']} ({g['votos']}/{len(leituras)})" for g in bloqueantes)
@@ -2369,6 +2374,7 @@ def alvos_da_edicao(script: dict, qualidade: dict, problemas: list[dict] | None 
 
 
 LEITURAS = 3             # 23/11: avaliações independentes por versão (editorial e leitura de espectador)
+LEITURAS_REPOSICAO = 2  # 26/11: leitura que cai por falha do servidor é reposta (não anula a versão)
 SAIDA_EDITOR = 6000      # o Nemotron raciocina dentro da saída (+4096 em providers); cortada → o dobro, 1 vez
 SAIDA_ESPECTADOR = 16000  # job 1005: a leitura passou de 8 mil tokens e era cortada com 4 mil
 
@@ -2398,7 +2404,11 @@ def avaliar_editorial(script: dict, topic: str) -> dict | None:
     leituras = []
 
     def ler(n: int) -> None:
-        for _ in range(n):  # o mesmo pedido, o mesmo modelo, o mesmo roteiro — independentes
+        alvo = len(leituras) + n
+        # 26/11: leitura que cai por falha do servidor é reposta (até LEITURAS_REPOSICAO a mais)
+        for _ in range(n + LEITURAS_REPOSICAO):  # o mesmo pedido, o mesmo modelo, o mesmo roteiro — independentes
+            if len(leituras) >= alvo:
+                break
             try:
                 leituras.append(_obj(complete([{"role": "user", "content": pedido}], max_tokens=SAIDA_EDITOR,
                                               temperature=0.1, validate=valido, juiz=True)))

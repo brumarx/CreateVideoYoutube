@@ -782,7 +782,8 @@ def _complete_cascata(
                         log.info("%s: %s em descanso na chave %s até %s", name, model, _key_id(api_key),
                                  datetime.fromtimestamp(rotator.ate(api_key, model), timezone.utc).strftime("%H:%M:%S UTC"))
                         continue
-                    result, status, cooldown = _call_openai_compat(
+                    chamar = _chamar_com_reconexao if name in PROVEDOR_QUE_RECONECTA else _call_openai_compat
+                    result, status, cooldown = chamar(
                         chat_endpoint, api_key, model, messages, max_tokens, temperature,
                     )
                     if _ok(result):
@@ -906,6 +907,30 @@ class JuizSemResposta(RuntimeError):
     """O juiz fixo não deu resposta válida em JUIZ_TENTATIVAS pedidos: a avaliação fica NÃO JULGADA."""
 
 
+# 26/11 (o dono: "se nosso modelo cai com a NVIDIA, ele deve voltar a tentar e não abandonar"): queda do servidor
+# (conexão derrubada, tempo esgotado, HTTP 500/502/504) não é resposta do modelo — espera e tenta o MESMO modelo de
+# novo, cada vez esperando mais (~15 min no total), antes de desistir ou de ir para outro. Svalbard 1033 v5 (2
+# problemas, editorial 7,1) virou "não julgada" por duas quedas seguidas; a 1027 caiu no OpenRouter sem cota.
+QUEDA_ESPERAS: tuple[int, ...] = (30, 60, 120, 240, 480)
+PROVEDOR_QUE_RECONECTA = ("nvidia",)
+
+
+def _queda(result, status) -> bool:
+    return result is None and (status is None or status in (500, 502, 504))
+
+
+def _chamar_com_reconexao(endpoint, api_key, model, messages, max_tokens, temperature, **kw):
+    result, status, cooldown = _call_openai_compat(endpoint, api_key, model, messages, max_tokens, temperature, **kw)
+    for espera in QUEDA_ESPERAS:
+        if not _queda(result, status):
+            break
+        log.warning("%s caiu (%s) — tentando de novo o mesmo modelo em %d s", model,
+                    f"HTTP {status}" if status else "sem resposta", espera)
+        time.sleep(espera)
+        result, status, cooldown = _call_openai_compat(endpoint, api_key, model, messages, max_tokens, temperature, **kw)
+    return result, status, cooldown
+
+
 def _julgar_fixo(messages: list[dict], keys: LLMKeys, max_tokens: int, validate: Callable[[str], bool] | None,
                  temperature: float) -> str:
     nome, modelo = JUIZ
@@ -933,8 +958,8 @@ def _julgar_fixo(messages: list[dict], keys: LLMKeys, max_tokens: int, validate:
             break
         api_key = ordem[0]
         _ULTIMO_MODELO[0] = f"{nome}/{modelo}"
-        result, status, cooldown = _call_openai_compat(endpoint, api_key, modelo, messages, saida, temperature,
-                                                       _ampliado=True, pensar=True)  # a 2ª tentativa é decidida aqui
+        result, status, cooldown = _chamar_com_reconexao(endpoint, api_key, modelo, messages, saida, temperature,
+                                                         _ampliado=True, pensar=True)  # a 2ª tentativa é decidida aqui
         if result and (validate is None or validate(result)):
             log.info("juiz fixo %s/%s respondeu (tentativa %d, saída %d)", nome, modelo, tentativa + 1, saida)
             return result
