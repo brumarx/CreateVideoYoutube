@@ -91,7 +91,9 @@ def sincronizar(script: dict) -> dict:
     for sc in script.get("scenes", []):
         antigas = list(sc.get("frases") or [])
         novas = []
-        for texto in [t.strip() for t in _FRASE.split(str(sc.get("narration", ""))) if t.strip()]:
+        # 26/11: concordância de escala corrigida antes de toda auditoria ("100 milhão" → "100 milhões")
+        for texto in [vocabulario.concordar_escalas(t.strip()) for t in _FRASE.split(str(sc.get("narration", "")))
+                      if t.strip()]:
             n = _norm(texto)
             par = next((f for f in antigas if _norm(f.get("texto", "")) == n), None)
             if par is None and antigas:
@@ -1031,7 +1033,8 @@ def de_json(data: dict, banco: dict) -> dict:
         for f in c.get("frases") or []:
             if not isinstance(f, dict) or not str(f.get("texto", "")).strip():
                 continue
-            texto = re.sub(r"\s*\[\s*E\d+(\s*[,;]\s*E\d+)*\s*\]", "", str(f["texto"])).strip()
+            texto = vocabulario.concordar_escalas(
+                re.sub(r"\s*\[\s*E\d+(\s*[,;]\s*E\d+)*\s*\]", "", str(f["texto"])).strip())
             tipo = str(f.get("tipo", "")).strip().lower()
             frases.append({"texto": texto, "tipo": tipo if tipo in TIPOS else "factual",
                            "evidencias": [str(x).strip() for x in f.get("evidencias") or [] if str(x).strip()]})

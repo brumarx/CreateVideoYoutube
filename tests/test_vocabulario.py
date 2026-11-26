@@ -144,3 +144,16 @@ def test_comparacao_justa_com_numero_redondo(texto, ok):
                              "numeros": ["1417799"], "citacoes": []}]}
     s = {"scenes": [{"frases": [{"texto": texto, "tipo": "factual", "evidencias": ["E1"]}], "narration": texto}]}
     assert (rd.auditar_codigo(s, banco, "Svalbard")[1] == []) is ok
+
+
+@pytest.mark.parametrize("texto,certo", [
+    ("mais de 100 milhão de sementes", "mais de 100 milhões de sementes"),
+    ("1,5 milhões de amostras", "1,5 milhão de amostras"),
+    ("1 milhões", "1 milhão"),
+    ("2 milhão", "2 milhões"),
+    ("1,4 milhão", "1,4 milhão"),
+    ("1.200 bilhão", "1.200 bilhões"),
+    ("Mais de 300 Milhão", "Mais de 300 Milhões"),
+])
+def test_concordancia_de_escala(texto, certo):
+    assert v.concordar_escalas(texto) == certo

@@ -136,3 +136,24 @@ def palavras_de_lugares(texto: str) -> set[str]:
         for f in _indice()[1][i]:
             out |= set(re.findall(r"\w+", _dobrar(f)))
     return out
+
+
+# ------------------------------------------------------------------ concordância de escala (milhão/milhões)
+_ESCALA_SING_PLUR = {"milhão": "milhões", "bilhão": "bilhões", "trilhão": "trilhões"}
+_ESCALA_PLUR_SING = {v: k for k, v in _ESCALA_SING_PLUR.items()}
+_NUM_ESCALA = re.compile(r"(?<![\w.,])(\d+(?:\.\d{3})*)(,\d+)?\s+(milhão|milhões|bilhão|bilhões|trilhão|trilhões)\b",
+                         re.I)
+
+
+def concordar_escalas(texto: str) -> str:
+    """26/11 ("mais de 100 milhão"): parte inteira 1 fica no singular ("1 milhão", "1,4 milhão"); de 2 para cima,
+    plural ("2 milhões", "100 milhões"). Só a forma — o valor não muda."""
+    def troca(m: re.Match) -> str:
+        inteiro = int(m.group(1).replace(".", ""))
+        palavra = m.group(3)
+        base = palavra.lower()
+        certa = (_ESCALA_PLUR_SING.get(base, base) if inteiro < 2 else _ESCALA_SING_PLUR.get(base, base))
+        if palavra[:1].isupper():
+            certa = certa[:1].upper() + certa[1:]
+        return f"{m.group(1)}{m.group(2) or ''} {certa}"
+    return _NUM_ESCALA.sub(troca, texto or "")
