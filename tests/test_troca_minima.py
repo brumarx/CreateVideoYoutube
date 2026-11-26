@@ -299,3 +299,14 @@ def test_saudacao_do_canal_sai_do_texto_do_escritor():
         == "O cofre não é mina."
     original = s("O cofre não é mina.")
     assert rd.sem_saudacao(original, g) is original
+
+
+def test_plano_com_absoluto_na_pergunta_e_refeito():
+    validos = {f"E{k}" for k in range(1, 6)}
+    def d(pergunta):
+        return {"angulo": {"pergunta": pergunta, "resposta": "Uma cópia de segurança na montanha."},
+                "blocos": [{"funcao": f"b{k}", "conta": "c", "evidencias": [f"E{k}"]} for k in range(1, 5)]
+                + [{"funcao": "fim", "conta": "c", "evidencias": []}],
+                "evidencias": {f"E{k}": {"comprova": "x", "nao_comprova": "y"} for k in range(1, 5)}}
+    assert rd._plano_valido(d("Como ele se torna o único seguro da agricultura?"), validos) is None
+    assert rd._plano_valido(d("Como uma montanha guarda as sementes do mundo?"), validos) is not None

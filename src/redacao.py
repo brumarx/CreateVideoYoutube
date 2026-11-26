@@ -785,7 +785,8 @@ PLANEJE:
    material que a sustenta (verdadeiro e entregue no vídeo; o fato, não o contexto):
 {formulas}
 1) O ÂNGULO: a pergunta que a abertura desperta e a resposta que a conclusão entrega — só com o que o material
-   sustenta (sem apoio, escolha outro ângulo dentro do tema). E o PONTO DE VISTA: uma frase com a leitura do
+   sustenta (sem apoio, escolha outro ângulo dentro do tema); sem palavra absoluta ou de garantia (único,
+   nunca, sempre, todos, inteiro, garante, protege, funciona, porque, já). E o PONTO DE VISTA: uma frase com a leitura do
    canal sobre a história, apoiada nos fatos (sem número novo, sem exagero), dita no fechamento.
 2) De {blocos_min} a {blocos_max} BLOCOS que formam UMA CADEIA, não um catálogo: cada bloco existe porque o
    anterior deixou uma pergunta, e responde a ela ("então como…?", "mas e se…?", "e funcionou?"). Não monte a
@@ -863,10 +864,25 @@ def bloco_formulas(evitar: list[str]) -> str:
     return "\n".join(f"- {k}: {v}" for k, v in FORMULAS_GANCHO.items() if k not in evitar)
 
 
+def _absoluto_do_lexico(texto: str) -> str | None:
+    """Palavra de escala absoluta ou de garantia (src/lexico.py) no texto, ou None."""
+    for c in ESCALAS_NA_ESCRITA:
+        if m := _PRECISAO[c][0].search(texto):
+            return m.group(0)
+    m = _ALEGA.search(texto)
+    return m.group(0) if m else None
+
+
 def _plano_valido(d: dict, validos: set[str]) -> dict | None:
     blocos = [b for b in d.get("blocos") or [] if isinstance(b, dict) and str(b.get("conta", "")).strip()]
     if len(blocos) < 4 or not isinstance(d.get("angulo"), dict):
         return None
+    # 26/11 (1031: "…se torna o único seguro de vida da agricultura global…"): a pergunta da abertura vira frase
+    # narrativa sem conferência (é retórica); por isso ela e a resposta não podem trazer escala absoluta nem
+    # garantia (src/lexico.py) — o plano volta para ser refeito
+    for campo in ("pergunta", "resposta"):
+        if _absoluto_do_lexico(str(d["angulo"].get(campo) or "")):
+            return None
     ja = set()
     for b in blocos:
         # 23/11 (1º plano de Svalbard: blocos com 11 evidências viraram cenas-lista): no máximo EVID_POR_BLOCO
