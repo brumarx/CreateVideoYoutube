@@ -296,3 +296,16 @@ def test_data_estendida_epoca_propria_e_amarracao(segunda, problema):
           {"texto": segunda, "tipo": "factual", "evidencias": ["E106"]}]
     s = {"scenes": [{"frases": fr, "narration": " ".join(f["texto"] for f in fr)}]}
     assert ("data_estendida" in [p["tipo"] for p in rd.auditar_codigo(s, banco, "x")[1]]) is problema
+
+
+def test_foto_real_ordenada_pelo_que_a_cena_mostra(monkeypatch):
+    """26/11: fotos do próprio verbete; a que combina com a cena (caixas × entrada) vem primeiro."""
+    from src import real_media as rm
+    fotos = [{"title": "File:Entrance to Svalbard Global Seed Vault in 2008.jpg", "url": "u1", "credit": "c", "descricao": ""},
+             {"title": "File:Storage containers in Svalbard Global Seed Vault 01.jpg", "url": "u2", "credit": "c",
+              "descricao": "Seed boxes stored on shelves"}]
+    monkeypatch.setattr(rm, "_search", lambda s, k: list(fotos))
+    caixas = rm.real_photos("Svalbard Global Seed Vault", set(), contexto="seed boxes on shelves in a cold chamber")
+    entrada = rm.real_photos("Svalbard Global Seed Vault", set(), contexto="the entrance of the vault in the snow")
+    assert caixas[0]["url"] == "u2" and entrada[0]["url"] == "u1"
+    assert rm.real_photos("Svalbard Global Seed Vault", set())[0]["url"] == "u1"   # sem contexto: ordem de antes

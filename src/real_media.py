@@ -114,7 +114,8 @@ def _candidate(page: dict, kind: str) -> dict | None:
     if kind == "photo":
         if (info.get("width") or 0) < MIN_PHOTO_WIDTH or not info.get("thumburl"):
             return None
-        return {"title": title, "url": info["thumburl"], "credit": credit}
+        descricao = _strip_html((info.get("extmetadata") or {}).get("ImageDescription", {}).get("value", ""))[:400]
+        return {"title": title, "url": info["thumburl"], "credit": credit, "descricao": descricao}
     if float(info.get("duration") or 0) < MIN_CLIP_SECONDS:
         return None
     # transcodificação do próprio Commons (webm/mp4 ~720p): o original
@@ -171,17 +172,47 @@ def _lead_image(subject: str) -> list[dict]:
     return _commons_files({"titles": f"File:{name}"}, "photo")
 
 
+_FOTO = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp")
+
+
+def _article_images(subject: str) -> list[dict]:
+    """26/11 (o dono: "as páginas têm fotos que podem ser aproveitadas"): TODAS as fotos do verbete em inglês do
+    assunto — não só a principal — que estão no Commons (a foto só local da Wikipédia pode ser uso justo e não
+    entra: o Commons não a devolve). Mesmo teste de identidade da foto principal: o verbete tem de ser o do
+    próprio assunto."""
+    try:
+        from .wiki_cache import get_json
+
+        data = get_json(_ENWIKI_API, {
+            "action": "query", "format": "json", "redirects": 1, "generator": "search",
+            "gsrsearch": subject, "gsrlimit": 1, "prop": "images", "imlimit": 50,
+        })
+        page = next(iter(data["query"]["pages"].values()))
+    except Exception:  # noqa: BLE001
+        return []
+    if _fold_name(page.get("title") or "") != _fold_name(subject):
+        return []
+    nomes = [i["title"] for i in page.get("images") or [] if str(i.get("title", "")).lower().endswith(_FOTO)
+             and not _BAD_TITLE.search(i.get("title", ""))]
+    out: list[dict] = []
+    for k in range(0, len(nomes), 50):
+        out += _commons_files({"titles": "|".join(nomes[k:k + 50])}, "photo")
+    return out
+
+
 def _search(subject: str, kind: str) -> list[dict]:
     key = (subject.lower(), kind)
     if key not in _search_cache:
         filetype = "bitmap" if kind == "photo" else "video"
         found = _lead_image(subject) if kind == "photo" else []
+        do_verbete = _article_images(subject) if kind == "photo" else []
+        found += do_verbete
         found += _commons_files({
             "generator": "search", "gsrnamespace": 6, "gsrlimit": 12,
             "gsrsearch": f"{subject} filetype:{filetype}",
         }, kind)
-        # foto principal do verbete é do assunto por construção
-        lead = {c["title"] for c in found[:1]} if kind == "photo" else set()
+        # foto principal e fotos do próprio verbete são do assunto por construção
+        lead = ({c["title"] for c in found[:1]} | {c["title"] for c in do_verbete}) if kind == "photo" else set()
         found = [c for c in found if c["title"] in lead or _relevant(c["title"], subject)]
         seen: set[str] = set()
         _search_cache[key] = [c for c in found if not (c["title"] in seen or seen.add(c["title"]))]
@@ -240,13 +271,23 @@ def person_in_narration(text: str, topic: str | None = None) -> str | None:
     return None
 
 
-def real_photos(subject: str, used: set[str]) -> list[dict]:
+def _palavras_de(texto: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z]+", _fold_name(texto)) if len(w) >= 4 and w not in _STOP}
+
+
+def real_photos(subject: str, used: set[str], contexto: str = "") -> list[dict]:
     """Candidatos a foto real de `subject` ainda não usados neste vídeo,
     na ordem de preferência ({title, url, credit}). Quem chama baixa
-    (thumbnail.photo_scene_frame), checa na visão e marca `used`."""
+    (thumbnail.photo_scene_frame), checa na visão e marca `used`.
+    26/11: com `contexto` (o que a cena mostra, em inglês), a foto cuja descrição/nome mais combina com a cena vem
+    primeiro — a das câmaras na cena das câmaras, a da entrada na abertura; empate fica na ordem de antes."""
     if not subject:
         return []
-    return [c for c in _search(subject, "photo") if c["title"] not in used][:MAX_TRIES]
+    cands = [c for c in _search(subject, "photo") if c["title"] not in used]
+    alvo = _palavras_de(contexto) - _palavras_de(subject)
+    if alvo:
+        cands = sorted(cands, key=lambda c: -len(alvo & _palavras_de(c["title"] + " " + c.get("descricao", ""))))
+    return cands[:MAX_TRIES]
 
 
 def _nasa_clips(subject: str) -> list[dict]:

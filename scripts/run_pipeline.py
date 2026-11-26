@@ -2007,7 +2007,8 @@ def run(
                     # foto inédita de um assunto que já rendeu foto no vídeo,
                     # em vez de repetir a anterior
                     for subject in dict.fromkeys([real_subject, *list(dict.fromkeys(reversed(real_found)))[:2]]):
-                        for cand in real_photos(subject, real_used):
+                        # 26/11: a foto do verbete que combina com o que a cena mostra vem primeiro
+                        for cand in real_photos(subject, real_used, contexto=scene.get("image_prompt") or ""):
                             frame = photo_scene_frame(cand["url"], width, height)
                             if frame is not None and real_check(frame) is not False:
                                 real_used.add(cand["title"])
