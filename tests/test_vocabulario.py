@@ -309,3 +309,14 @@ def test_foto_real_ordenada_pelo_que_a_cena_mostra(monkeypatch):
     entrada = rm.real_photos("Svalbard Global Seed Vault", set(), contexto="the entrance of the vault in the snow")
     assert caixas[0]["url"] == "u2" and entrada[0]["url"] == "u1"
     assert rm.real_photos("Svalbard Global Seed Vault", set())[0]["url"] == "u1"   # sem contexto: ordem de antes
+
+
+@pytest.mark.parametrize("titulo,certo", [
+    ("1,4 milhão de sementes congeladas no Ártico", "1,4 milhão de amostras congeladas no Ártico"),
+    ("1,4 milhão de amostras numa montanha", "1,4 milhão de amostras numa montanha"),
+    ("O cofre do Ártico", "O cofre do Ártico"),
+    ("134 países guardam sementes", "134 instituições guardam sementes"),
+])
+def test_numero_do_titulo_conta_o_mesmo_que_a_narracao(titulo, certo):
+    narr = "Em 2026, o cofre passa de 1,4 milhão de amostras de 134 instituições."
+    assert v.contagem_trocada(titulo, narr) == certo

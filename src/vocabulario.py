@@ -285,3 +285,26 @@ def normalizar_valores(texto: str) -> str:
     t = concordar_escalas(t)
     t = _MOEDA_DUPLA.sub(_moeda_dupla, t)
     return _NUM_CONTAVEL.sub(_concordar_contavel, t)
+
+
+# ------------------------------------------------------------------ contagem no título × narração
+_CONTAGEM = re.compile(r"(?<![\w.,])(\d+(?:[.,]\d+)?)\s+(mil|milhão|milhões|bilhão|bilhões)?\s*(?:de\s+)?"
+                       r"([a-zà-ÿ]{4,})", re.I)
+
+
+def contagem_trocada(titulo: str, narracao: str) -> str:
+    """26/11 (Svalbard 1033/1034: a narração diz "1,4 milhão de amostras" e o título saiu duas vezes "1,4 milhão de
+    sementes" — cada amostra tem centenas de sementes): o número do título conta a MESMA coisa que a narração. O
+    substantivo trocado vira o da narração; título sem esse número, ou já certo, volta igual."""
+    def chave(m: re.Match) -> tuple[str, str]:
+        return (m.group(1).replace(".", ","), (m.group(2) or "").lower().replace("milhões", "milhão").replace("bilhões", "bilhão"))
+    na_narracao: dict[tuple[str, str], str] = {}
+    for m in _CONTAGEM.finditer(narracao or ""):
+        na_narracao.setdefault(chave(m), m.group(3))
+
+    def troca(m: re.Match) -> str:
+        certo = na_narracao.get(chave(m))
+        if not certo or certo.lower() == m.group(3).lower():
+            return m.group(0)
+        return m.group(0)[:m.start(3) - m.start(0)] + certo
+    return _CONTAGEM.sub(troca, titulo or "")

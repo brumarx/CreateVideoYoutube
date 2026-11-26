@@ -1748,7 +1748,12 @@ def packaging_from_final(script: dict, channel: ChannelConfig, topic: str = "", 
     if script.get("_fatos_verificados"):
         from .fatos import titulo_com_assunto
         titulo_gerado = titulo_com_assunto(titulo_gerado, _assunto_do_tema(topic))
-    novo = {**script, "title": titulo_gerado, "thumbnail_text": data["thumbnail_text"].strip(),
+    # 26/11: o número do título conta a mesma coisa que a narração ("1,4 milhão de amostras", não "de sementes")
+    from .vocabulario import contagem_trocada
+    narracao_final = " ".join(str(sc.get("narration", "")) for sc in script.get("scenes") or [])
+    titulo_gerado = contagem_trocada(titulo_gerado, narracao_final)
+    novo = {**script, "title": titulo_gerado,
+            "thumbnail_text": contagem_trocada(data["thumbnail_text"].strip(), narracao_final),
             "thumbnail_image_prompt": data["thumbnail_image_prompt"].strip()}
     if script.get("_fatos_verificados") and not _retry:
         # canal de fatos: o título e a miniatura novos são conferidos contra a narração final —
