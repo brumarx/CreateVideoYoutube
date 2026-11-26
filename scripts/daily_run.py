@@ -521,8 +521,14 @@ def main() -> None:
     cleanup_output()
 
     reservas: list[tuple[str, list[str]]] = []
+    # 26/11: --canal NOME (repetível) roda só esses canais — o Fractal voltou ao automático sozinho; os outros
+    # entram quando forem validados com as mudanças de 26/11
+    so = {a.split("=", 1)[1] if "=" in a else sys.argv[i + 2]
+          for i, a in enumerate(sys.argv[1:]) if a.startswith("--canal")}
     for yaml_path in sorted(channels_dir.glob("*.yaml")):
         channel_name = yaml_path.stem
+        if so and channel_name not in so:
+            continue
         try:
             cfg = yaml.safe_load(yaml_path.read_text())
             reservas += run_channel(channel_name, cfg) or []
