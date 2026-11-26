@@ -126,3 +126,13 @@ def mesmo_lugar_no_texto(nome: str, texto: str) -> bool:
     """O lugar `nome` aparece em `texto` em qualquer idioma ("Síria" × "...in Syria...")."""
     i = lugar(nome)
     return bool(i) and i in lugares_no_texto(texto)
+
+
+def palavras_de_lugares(texto: str) -> set[str]:
+    """Palavras (dobradas) de todas as formas, em todos os idiomas, dos lugares citados no texto — "Syria" no
+    trecho faz "siria" contar como já dito."""
+    out = set()
+    for i in lugares_no_texto(texto):
+        for f in _indice()[1][i]:
+            out |= set(re.findall(r"\w+", _dobrar(f)))
+    return out

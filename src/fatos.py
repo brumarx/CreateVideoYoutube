@@ -320,7 +320,8 @@ _FRONTEIRAS = (": ", "; ", ", e ", ", mas ", ", enquanto ")
 # aceitá-lo aqui, cada auditoria punha outro "cerca de" ("a cerca de cerca de cerca de -18 °C")
 _JA_APROXIMADO = re.compile(r"(cerca de|aproximadamente|em torno de|por volta de|quase|mais de|menos de|estima|calcula|aponta)"
                             r"\s*(?:[−–+-]|menos\s+|mais\s+)?$", re.I)
-_MESES = r"janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro"
+from .vocabulario import re_mes as _re_mes
+_MESES = _re_mes()  # 26/11: tabela única de meses (pt/en/es), src/vocabulario.py
 # variar para não repetir: quantidade ganha a aproximação antes do número; data e outros casos, a oração
 _APROXIMACOES = ("cerca de", "aproximadamente", "em torno de")
 _ORACOES = ("estima-se que", "calcula-se que", "aponta-se que")

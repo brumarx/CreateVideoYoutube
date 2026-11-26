@@ -30,6 +30,7 @@ from typing import Callable
 from .evidencias import FORCA, STATUS_USAVEIS, adicionar_fontes, bloco_para_escritor, numeros_da_evidencia, por_id, usaveis
 from .fatos import _pares, estima_antes, extenso_para_algarismos, numeros, temperaturas
 from .fontes import dobrar
+from . import vocabulario
 from .ordem import ordem_da_frase
 
 log = logging.getLogger("redacao")
@@ -138,7 +139,9 @@ def _nomes_conhecidos(script: dict, topic: str) -> set[str]:
     bordão e os que já aparecem em frase factual sustentada do próprio roteiro."""
     base = " ".join([topic] + [f["texto"] for _, _, f in frases_de(script) if f.get("tipo") != "narrativa"
                                and f.get("evidencias")])
-    return {dobrar(w) for w in re.findall(r"[\wÀ-ÿ-]+", base)} | {"e", "ai", "mente"}
+    # 26/11: lugar já dito vale em qualquer idioma/forma ("Noruega" no tema, "Norway" na frase)
+    return ({dobrar(w) for w in re.findall(r"[\wÀ-ÿ-]+", base)} | {"e", "ai", "mente"}
+            | {dobrar(w) for w in vocabulario.palavras_de_lugares(base)})
 
 
 # ---------------------------------------------------------------- auditoria em código
@@ -2355,7 +2358,9 @@ def nome_novo_na_correcao(frases: list[dict], originais: list[dict], motivos: li
         fonte = dobrar(" ".join(evs[x]["afirmacao"] + " " + " ".join(str(c.get("trecho") or "") for c in evs[x].get("citacoes") or [])
                                 for x in f.get("evidencias") or [] if x in evs)).lower()
         # a 1ª palavra da frase fica de fora (maiúscula de começo de frase não é nome)
-        novos += [n for n in _nomes(f["texto"]) if n not in antes and n not in fonte]
+        # 26/11: o lugar em outro idioma conta ("Síria" na frase, "Syria" no trecho)
+        ja = {dobrar(w) for w in vocabulario.palavras_de_lugares(antes + " " + fonte)}
+        novos += [n for n in _nomes(f["texto"]) if n not in antes and n not in fonte and n not in ja]
     if novos:
         return ("a correção pôs nome que nem a cena nem as evidências citadas trazem (" + ", ".join(sorted(set(novos))[:5])
                 + "): corrigir é restringir ou tirar o que excede, sem completar a frase com detalhe novo")

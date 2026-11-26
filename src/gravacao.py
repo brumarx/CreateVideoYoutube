@@ -31,7 +31,9 @@ class SemGravacao(RuntimeError):
     """Repetição: o pedido não está na gravação (o prompt mudou)."""
 
 
-_MESES = "janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro"
+from .vocabulario import re_mes
+
+_MESES = re_mes()
 _DATA = re.compile(rf"\b\d{{1,2}}/\d{{1,2}}/\d{{4}}\b|\b\d{{4}}-\d{{2}}-\d{{2}}\b|\b\d{{1,2}} de ({_MESES})( de \d{{4}})?\b",
                    re.I)
 

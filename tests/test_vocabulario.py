@@ -35,3 +35,14 @@ def test_lugar_em_qualquer_idioma():
 ])
 def test_leitor_unico_de_quantidades(texto, esperado):
     assert [q["valor"] for q in quantidades(texto)] == esperado
+
+
+def test_nome_de_lugar_traduzido_nao_e_nome_novo_na_correcao():
+    from src import redacao as rd
+    banco = {"evidencias": [{"id": "E1", "afirmacao": "The war prevented access.", "status": "oficial",
+                             "citacoes": [{"trecho": "The civil war in Syria prevented ICARDA from accessing Aleppo."}]}]}
+    orig = [{"texto": "A guerra impediu o acesso.", "evidencias": ["E1"]}]
+    nova = [{"texto": "A guerra na Síria impediu o acesso.", "evidencias": ["E1"]}]
+    assert rd.nome_novo_na_correcao(nova, orig, ["FACTUAL x"], banco) is None
+    nova2 = [{"texto": "A guerra no Líbano impediu o acesso.", "evidencias": ["E1"]}]
+    assert rd.nome_novo_na_correcao(nova2, orig, ["FACTUAL x"], banco)

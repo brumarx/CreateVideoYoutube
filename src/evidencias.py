@@ -44,7 +44,7 @@ from typing import Callable
 from .fatos import _algum_igual, _mesma_coisa, _pares, _palavras, dominio, dominio_raiz, numeros, numeros_fonte, temperaturas
 from .fontes import MARCA_CORTE, dobrar, palavras_chave, selecionar
 from .ordem import travar_ordem
-from . import unidades
+from . import unidades, vocabulario
 from .termos import travar_termos
 
 log = logging.getLogger("evidencias")
@@ -616,8 +616,8 @@ _SEQUENCIA = re.compile(
     r"primeir[oa]s?|depois|em seguida|a seguir|posteriormente|mais tarde|(?:n)?o mesmo dia|no dia seguinte|"
     r"inicialmente|finalmente|por fim|antes|após|anteriormente|logo depois|"
     r"primer[oa]?|después|luego|más tarde|el mismo día)\b", re.I)
-_MESES = (r"jan\w*|feb\w*|fev\w*|mar\w*|apr\w*|abr\w*|may|mai\w*|jun\w*|jul\w*|aug\w*|ago\w*|sep\w*|set\w*|"
-          r"oct\w*|out\w*|nov\w*|dec\w*|dez\w*|dic\w*|ene\w*")
+# 26/11: tabela única de meses (src/vocabulario.py); a antiga era por prefixo ("mar\\w*" casava "maritime")
+_MESES = vocabulario.re_mes()
 _DATA = re.compile(rf"\b(\d{{1,2}}(?:º|st|nd|rd|th)?\s+(?:de\s+)?(?:{_MESES})(?:\s+(?:de\s+)?\d{{4}})?|"
                    rf"(?:{_MESES})\s+\d{{1,2}}(?:st|nd|rd|th)?,?(?:\s+\d{{4}})?|"
                    r"(?:on )?day (?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)|(?:no )?dia \d+|"
