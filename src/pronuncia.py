@@ -41,6 +41,9 @@ Para CADA nome, diga como ela deve falar:
 - "en", "es", "fr", "de", "it" ou "nl": nome desse idioma, que deve ser falado com a pronúncia nativa;
 - uma GRAFIA À PORTUGUESA com acento na sílaba tônica, para nome de outro idioma/alfabeto (norueguês, russo,
   japonês, árabe…) que a voz leria errado — ex.: "Longyearbyen": "Lóngüierbüen", "Dyatlov": "Diátlov".
+Só existem esses códigos: para catalão, russo, dinamarquês, croata, japonês etc., escreva a GRAFIA (nunca
+"ca", "ru", "da"…). A grafia tem as MESMAS palavras do nome, na mesma ordem ("Hospital Xiaotangshan" →
+"Hospital Xiáotángshan"): troque só a escrita, nunca tire nem acrescente palavra.
 Sigla que se soletra (ICARDA, ONU) é "pt".
 Nomes:
 {nomes}
@@ -80,11 +83,19 @@ def nomes_da_narracao(texto: str, comuns: set[str] | None = None) -> list[str]:
     return out
 
 
-def _valida(classe) -> str | None:
+def _valida(nome: str, classe) -> str | None:
+    """A classe aceita para o nome, ou None. 26/11 (corpus): o modelo devolveu códigos fora da lista ("ca", "ru",
+    "hr" — "Gaudí" viraria "cá" na voz) e grafias que perdiam palavras ("Hospital Xiaotangshan" → "Shiáotángshan")."""
     c = str(classe or "").strip().strip("\"'")
-    if not c or len(c) > 40 or "\n" in c:
+    if not c or len(c) > 60 or "\n" in c:
         return None
-    return c.lower() if c.lower() in ("pt",) + IDIOMAS_NATIVOS else c
+    if c.lower() in ("pt",) + IDIOMAS_NATIVOS:
+        return c.lower()
+    if re.fullmatch(r"[a-z]{2,3}(-[a-z]{2})?", c):
+        return None  # código de idioma sem voz nativa aqui: não é grafia de fala
+    if len(c.split()) != len(nome.split()):
+        return None  # a grafia de fala troca palavra por palavra; nada some, nada entra
+    return c
 
 
 def classificar(nomes: list[str]) -> dict[str, str]:
@@ -105,7 +116,7 @@ def classificar(nomes: list[str]) -> dict[str, str]:
     except RuntimeError as exc:
         log.warning("pronúncia: classificação indisponível (%s) — nomes vão sem orientação", exc)
         respostas = {}
-    aprendidas = {n: c for n in novos if (c := _valida(respostas.get(n)))}
+    aprendidas = {n: c for n in novos if (c := _valida(n, respostas.get(n)))}
     if aprendidas:
         with _trava:
             dados = _carregar()

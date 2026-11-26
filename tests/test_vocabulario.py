@@ -81,3 +81,11 @@ def test_unidades_achadas_no_corpus(texto, unidade):
 def test_palavra_de_comeco_de_frase_nao_e_nome():
     from src.pronuncia import nomes_da_narracao
     assert nomes_da_narracao("Imagine um cofre. Primeira coisa: imagine a Noruega. primeira vez.") == ["Noruega"]
+
+
+def test_classe_de_pronuncia_invalida_nao_entra():
+    from src.pronuncia import _valida
+    assert _valida("Gaudí", "ca") is None
+    assert _valida("Hospital Xiaotangshan", "Shiáotángshan") is None
+    assert _valida("Longyearbyen", "Lóngüierbüen") == "Lóngüierbüen"
+    assert _valida("Crop Trust", "EN") == "en"
