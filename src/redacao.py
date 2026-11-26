@@ -1503,7 +1503,14 @@ def escrever(channel, topic: str, banco: dict, *, min_minutes: float, max_minute
         script = sem_saudacao(de_json(_obj(raw), banco), getattr(channel, "greetings", None) or [])
         if plano:
             script["_plano"] = plano
-        script, cortadas = conferir_na_escrita(script, banco, topic)
+        fora_do_tamanho = (not min_pal <= _palavras(script) <= max_pal
+                           or not cenas_min <= len(script.get("scenes") or []) <= cenas_max)
+        if fora_do_tamanho and n + 1 < tentativas:
+            # 26/11 (1031: 1ª tentativa com 226 palavras para mínimo de 304 passou pela conferência inteira, ~7 min):
+            # tentativa fora do tamanho vai ser refeita de qualquer jeito — a conferência fica para a que pode ficar
+            cortadas = []
+        else:
+            script, cortadas = conferir_na_escrita(script, banco, topic)
         script, lista, _ = defeitos(script, banco, topic, min_pal, max_pal, cenas_min, cenas_max)
         lista += [f"a frase {m} — a fonte não diz isso (frase cortada)" for m in cortadas]
         log.info("redação, tentativa %d/%d: %d cenas, %d palavras, %d defeito(s)%s", n + 1, tentativas,

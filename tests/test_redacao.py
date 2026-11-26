@@ -1947,3 +1947,21 @@ def test_plano_sem_evidencia_repetida_e_conclusao_sem_fato_novo():
          "evidencias": {f"E{k}": {"comprova": "x", "nao_comprova": "y"} for k in range(1, 8)}}
     plano = rd._plano_valido(d, validos)
     assert [b["evidencias"] for b in plano["blocos"]] == [["E1", "E2"], ["E3"], ["E4", "E5"], []]
+
+
+def test_tentativa_fora_do_tamanho_nao_passa_pela_conferencia(llm, monkeypatch):
+    """26/11 (1031): a 1ª tentativa, curta demais, passou pela conferência inteira (~7 min) e foi refeita."""
+    curta = {"titulo": "t", "cenas": [{"frases": [F("Yakutsk fica sobre permafrost.", evid=["E1"])]}]}
+    boa = {"titulo": "t", "descricao": "d", "tags": [], "cenas": [
+        {"frases": [F("Imagine morar num lugar assim.", "narrativa"),
+                    F("Yakutsk é uma das duas grandes cidades sobre permafrost contínuo.", evid=["E1"])]},
+        {"frases": [F("Os prédios ficam sobre estacas para não aquecer o solo congelado.", "explicativa", ["E3"])]},
+        {"frases": [F("E as estacas descem até 15 metros.", evid=["E2"])]},
+        {"frases": [F("Agora pense no inverno.", "narrativa")]},
+        {"frases": [F("E você, moraria lá?", "narrativa")]}]}
+    llm(curta, boa)
+    conferidas = []
+    monkeypatch.setattr(rd, "conferir_na_escrita", lambda s, b, t: conferidas.append(len(s["scenes"])) or (s, []))
+    from src.config import ChannelConfig
+    rd.escrever(ChannelConfig.load("curiosidades"), TEMA_988, BANCO, min_minutes=0.1, max_minutes=5, cenas_ref=6)
+    assert conferidas == [5]   # só a tentativa dentro do tamanho foi conferida
