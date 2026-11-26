@@ -146,8 +146,10 @@ _NUM_ESCALA = re.compile(r"(?<![\w.,])(\d+(?:\.\d{3})*)(,\d+)?\s+(milhão|milhõ
 
 
 def concordar_escalas(texto: str) -> str:
-    """26/11 ("mais de 100 milhão"): parte inteira 1 fica no singular ("1 milhão", "1,4 milhão"); de 2 para cima,
-    plural ("2 milhões", "100 milhões"). Só a forma — o valor não muda."""
+    """26/11 ("mais de 100 milhão" e as variantes do mesmo erro): parte inteira 1 no singular ("1 milhão",
+    "1,4 milhão"), de 2 para cima no plural ("2 milhões", "100 milhões"); por extenso também, com o número no
+    masculino ("duzentas milhões de pessoas" → "duzentos milhões"); "100 mi de"/"2 bi de" por extenso; ponto
+    decimal em inglês antes da escala ("1.5 milhões" → "1,5 milhão"). Só a forma — o valor não muda."""
     def troca(m: re.Match) -> str:
         inteiro = int(m.group(1).replace(".", ""))
         palavra = m.group(3)
@@ -156,4 +158,38 @@ def concordar_escalas(texto: str) -> str:
         if palavra[:1].isupper():
             certa = certa[:1].upper() + certa[1:]
         return f"{m.group(1)}{m.group(2) or ''} {certa}"
-    return _NUM_ESCALA.sub(troca, texto or "")
+    texto = _DECIMAL_PONTO.sub(r"\1,\2", texto or "")          # "1.5 milhões" → "1,5 milhões"
+    texto = _ABREV_ESCALA.sub(_escala_por_extenso, texto)       # "100 mi de" → "100 milhão de" (concorda abaixo)
+    texto = _EXTENSO_ESCALA.sub(_concordar_extenso, texto)      # "duzentas milhão" → "duzentos milhões"
+    return _NUM_ESCALA.sub(troca, texto)
+
+
+# por extenso: o número antes de milhão/bilhão é masculino e concorda ("duzentas milhões" → "duzentos milhões")
+_MASCULINO = {"uma": "um", "duas": "dois", "duzentas": "duzentos", "trezentas": "trezentos",
+              "quatrocentas": "quatrocentos", "quinhentas": "quinhentos", "seiscentas": "seiscentos",
+              "setecentas": "setecentos", "oitocentas": "oitocentos", "novecentas": "novecentos"}
+_PALAVRA_NUM = (r"um|uma|dois|duas|três|tres|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|quatorze|catorze|"
+                r"quinze|dezesseis|dezessete|dezoito|dezenove|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|"
+                r"noventa|cem|cento|duzentos|duzentas|trezentos|trezentas|quatrocentos|quatrocentas|quinhentos|"
+                r"quinhentas|seiscentos|seiscentas|setecentos|setecentas|oitocentos|oitocentas|novecentos|novecentas")
+_EXTENSO_ESCALA = re.compile(rf"\b((?:{_PALAVRA_NUM})(?:\s+e\s+(?:{_PALAVRA_NUM}))*)\s+"
+                             r"(milhão|milhões|bilhão|bilhões|trilhão|trilhões)\b", re.I)
+# "100 mi de pessoas", "2 bi de reais" (só com "de": "500 mi" sozinho pode ser milha)
+_ABREV_ESCALA = re.compile(r"(?<![\w.,])(\d+(?:[.,]\d+)?)\s?(mi|bi|tri)\b(?=\s+de\b)", re.I)
+_DECIMAL_PONTO = re.compile(r"(?<![\d.,])(\d{1,3})\.(\d{1,2})(?=\s+(?:milh|bilh|trilh))", re.I)
+
+
+def _concordar_extenso(m: re.Match) -> str:
+    palavras = re.split(r"(\s+e\s+)", m.group(1))
+    masc = [_MASCULINO.get(p.lower(), p) if not p.strip().lower() == "e" else p for p in palavras]
+    um = len(palavras) == 1 and palavras[0].lower() in ("um", "uma")
+    base = m.group(2).lower()
+    certa = _ESCALA_PLUR_SING.get(base, base) if um else _ESCALA_SING_PLUR.get(base, base)
+    if m.group(2)[:1].isupper():
+        certa = certa[:1].upper() + certa[1:]
+    return "".join(masc) + " " + certa
+
+
+def _escala_por_extenso(m: re.Match) -> str:
+    nome = {"mi": "milhão", "bi": "bilhão", "tri": "trilhão"}[m.group(2).lower()]
+    return f"{m.group(1)} {nome}"

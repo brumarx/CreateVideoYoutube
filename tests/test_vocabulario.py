@@ -157,3 +157,24 @@ def test_comparacao_justa_com_numero_redondo(texto, ok):
 ])
 def test_concordancia_de_escala(texto, certo):
     assert v.concordar_escalas(texto) == certo
+
+
+@pytest.mark.parametrize("texto,certo", [
+    ("cem milhão de pessoas", "cem milhões de pessoas"),
+    ("dois milhão", "dois milhões"),
+    ("um milhões", "um milhão"),
+    ("uma milhões", "um milhão"),
+    ("vinte e um milhão", "vinte e um milhões"),
+    ("duzentas milhões de pessoas", "duzentos milhões de pessoas"),
+    ("duzentas e duas milhões", "duzentos e dois milhões"),
+    ("três bilhão", "três bilhões"),
+    ("1.5 milhões", "1,5 milhão"),
+    ("1.200 milhão", "1.200 milhões"),          # ponto de milhar, não decimal
+    ("100 mi de pessoas", "100 milhões de pessoas"),
+    ("2 bi de reais", "2 bilhões de reais"),
+    ("500 mi", "500 mi"),                       # sem "de" pode ser milha: fica
+    ("duzentas mil pessoas", "duzentas mil pessoas"),  # "mil" concorda com o substantivo: certo
+])
+def test_variantes_do_erro_de_escala(texto, certo):
+    """26/11: o dono deu "mais de 100 milhão" como exemplo — a família inteira do erro, não só o caso."""
+    assert v.concordar_escalas(texto) == certo
