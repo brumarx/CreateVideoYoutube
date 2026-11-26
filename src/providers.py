@@ -793,9 +793,19 @@ def _complete_cascata(
                         return result  # type: ignore[return-value]
                     if result and validate is not None:
                         # 26/11: sem a amostra não dava para saber que etapa recusou nem por quê
-                        log.warning("resposta de %s/%s não passou na validação, tentando próximo modelo "
-                                    "(%d caracteres; início: %r; fim: %r)", name, model, len(result),
-                                    result[:160], result[-160:])
+                        log.warning("resposta de %s/%s não passou na validação (%d caracteres; início: %r; "
+                                    "fim: %r) — novo pedido ao mesmo modelo com o aviso de formato", name, model,
+                                    len(result), result[:160], result[-160:])
+                        # 26/11 (Svalbard 1027: a NVIDIA respondeu fora do formato 2 vezes, a cascata caiu no
+                        # OpenRouter sem cota e a rodada parou): o mesmo modelo tenta de novo, avisado
+                        result, status, cooldown = _call_openai_compat(
+                            chat_endpoint, api_key, model, messages + [AVISO_DE_FORMATO], max_tokens, temperature,
+                        )
+                        if _ok(result):
+                            log.info("resposta via %s/%s (2º pedido, com o aviso de formato)", name, model)
+                            _ULTIMO_MODELO[0] = f"{name}/{model}"
+                            return result  # type: ignore[return-value]
+                        log.warning("2º pedido a %s/%s também fora do formato — tentando o próximo modelo", name, model)
                     if result is None and (status is None or status >= 500):
                         transitoria = True
                     if status == 413:
@@ -885,6 +895,11 @@ _ULTIMO_MODELO = ["?"]
 JUIZ = ("nvidia", "nvidia/nemotron-3-ultra-550b-a55b")
 JUIZ_SAIDA_MAX = 32000  # 23/11: a NVIDIA aceitou 60 mil de saída no Nemotron; o juiz nunca pede mais que isto
 JUIZ_TENTATIVAS = 2
+AVISO_DE_FORMATO = {"role": "user", "content": (
+    "ATENÇÃO: a resposta anterior a este pedido não veio no formato pedido. Responda de novo SÓ com o JSON "
+    "pedido acima, completo, sem texto fora dele; nomes de campo e valores EXATAMENTE como no pedido (por "
+    "exemplo \"decisao\": \"sustentada\", nunca \"factual: sustentada\"); numere os itens com os mesmos números "
+    "do pedido.")}
 
 
 class JuizSemResposta(RuntimeError):
@@ -932,6 +947,10 @@ def _julgar_fixo(messages: list[dict], keys: LLMKeys, max_tokens: int, validate:
         tentativa += 1
         if result:
             motivos.append(f"resposta inválida (tentativa {tentativa})")
+            log.warning("juiz fixo: resposta fora do formato (%d caracteres; início: %r; fim: %r)", len(result),
+                        result[:160], result[-160:])
+            if AVISO_DE_FORMATO not in messages:
+                messages = messages + [AVISO_DE_FORMATO]  # 26/11: a 2ª tentativa vai avisada
         elif status == 200:
             motivos.append(f"resposta cortada com saída {saida} (tentativa {tentativa})")
             saida = min(saida * 2, JUIZ_SAIDA_MAX)
@@ -948,16 +967,31 @@ def complete(messages: list[dict], keys: LLMKeys | None = None, max_tokens: int 
     """A cascata (ver _complete_cascata) com o registro de custo do job: modelo que respondeu e tempo de
     cada chamada, na etapa corrente (src/metricas). `juiz=True`: sem cascata — o JUIZ fixo (mesmo provedor e
     modelo sempre, ver _julgar_fixo), ou JuizSemResposta."""
-    from . import metricas
+    from . import gravacao, metricas
     t0 = time.time()
     _ULTIMO_MODELO[0] = "?"
+    # 26/11: toda chamada fica gravada (data/gravacoes) — aceita ou recusada — e uma rodada gravada pode ser
+    # repetida sem chamar ninguém (GRAVACAO_REPETIR); ver src/gravacao.py
+    k = gravacao.chave(messages, max_tokens, temperature, juiz)
+    gravada = gravacao.repetir(k)
+    if gravada is not None:
+        metricas.chamada("gravacao", 0.0)
+        return gravada
+    etapa = metricas._etapa_atual()
+
+    def validar(r: str) -> bool:
+        ok = validate is None or validate(r)
+        if not ok:
+            gravacao.gravar(k, messages, r, _ULTIMO_MODELO[0], False, etapa, juiz)
+        return ok
     try:
-        r = (_julgar_fixo(messages, keys or LLMKeys(), max_tokens, validate, temperature) if juiz
-             else _complete_cascata(messages, keys, max_tokens, validate, model_filter, temperature))
+        r = (_julgar_fixo(messages, keys or LLMKeys(), max_tokens, validar, temperature) if juiz
+             else _complete_cascata(messages, keys, max_tokens, validar, model_filter, temperature))
     except Exception:
         metricas.chamada(_ULTIMO_MODELO[0], time.time() - t0, ok=False)
         raise
     metricas.chamada(_ULTIMO_MODELO[0], time.time() - t0)
+    gravacao.gravar(k, messages, r, _ULTIMO_MODELO[0], True, etapa, juiz)
     return r
 
 

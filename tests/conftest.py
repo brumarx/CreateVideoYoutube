@@ -41,6 +41,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "plano: o teste usa o plano da história de verdade (redacao.planejar_historia)")
     config.addinivalue_line("markers", "conferencia: o teste usa a conferência na escrita de verdade (redacao.conferir_na_escrita)")
     config.addinivalue_line("markers", "fechamento: o teste usa o fechamento escrito à parte de verdade (redacao.escrever_fechamento)")
+    config.addinivalue_line("markers", "aprende: o teste usa o aprendizado de decisões de verdade (decisoes.aprender)")
     config.addinivalue_line("markers", "troca: o teste usa a troca mínima de verdade (redacao.trocar_frases_apontadas)")
     config.addinivalue_line("markers", "ritmo: o teste usa redacao.ritmo_de_referencia de verdade")
     config.addinivalue_line("markers", "revisao: o teste usa a revisão das afirmações de verdade (evidencias.revisar_afirmacoes)")
@@ -66,6 +67,16 @@ def conferencia_na_escrita_simulada(request, monkeypatch):
     from src import redacao
     monkeypatch.setattr(redacao, "conferir_na_escrita", lambda script, banco, topic: (script, []))
     monkeypatch.setattr(redacao, "conferir_edicao", lambda *a, **k: None)  # 25/11: a mesma conferência na edição
+
+
+@pytest.fixture(autouse=True)
+def decisoes_isoladas(request, tmp_path, monkeypatch):
+    """26/11: palavra de decisão desconhecida é perguntada ao modelo (decisoes.aprender) e guardada em
+    data/decisoes_aprendidas.json. Nos testes: arquivo temporário e, salvo marker "aprende", nada é perguntado."""
+    from src import decisoes
+    monkeypatch.setattr(decisoes, "ARQUIVO", tmp_path / "decisoes_aprendidas.json")
+    if not request.node.get_closest_marker("aprende"):
+        monkeypatch.setattr(decisoes, "aprender", lambda *a, **k: {})
 
 
 @pytest.fixture(autouse=True)

@@ -825,7 +825,13 @@ def _julgar_lote(itens: list[dict], topic: str) -> dict[int, dict]:
         log.warning("juiz de sustentação indisponível: %s", exc)
         return {}
     out = {}
-    for j in _json_seguro(raw).get("julgamentos") or []:
+    julgs = [j for j in _json_seguro(raw).get("julgamentos") or [] if isinstance(j, dict)]
+    # 26/11: decisão com rótulo/variação lida (e aprendida) em src/decisoes.py antes da validação
+    from .decisoes import ler_lote
+    for j, d in zip(julgs, ler_lote([j.get("decisao") for j in julgs], DECISOES, ("sustenta",), "sustentacao")):
+        if d:
+            j["decisao"] = d
+    for j in julgs:
         try:
             n = int(j.get("n"))
         except (TypeError, ValueError, AttributeError):
@@ -2129,8 +2135,9 @@ def _revisao_valida(d, trecho: str) -> dict | None:
     vazia) não vale — fica a afirmação original (devolve None)."""
     if not isinstance(d, dict):
         return None
-    # 26/11: "fiel: corrigir" / "Corrigir" — o modelo às vezes repete rótulo antes da decisão
-    decisao = re.sub(r"\s+", "_", str(d.get("decisao", "")).strip().strip("\"'").lower().rsplit(":", 1)[-1].strip())
+    # 26/11: "fiel: corrigir" / "Corrigir" — forma e palavras aprendidas em src/decisoes.py
+    from .decisoes import ler_lote
+    decisao = ler_lote([d.get("decisao")], DECISOES_REVISAO, ("fiel",), "revisao")[0] or ""
     if decisao not in DECISOES_REVISAO:
         return None
     motivo = re.sub(r"\s+", " ", str(d.get("motivo") or "")).strip()[:300]

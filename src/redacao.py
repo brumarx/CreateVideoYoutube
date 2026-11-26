@@ -1130,9 +1130,12 @@ def conferir_contra_trechos(itens: list[dict], banco: dict) -> dict[int, str | N
                         if isinstance(d, dict) and str(d.get("n", "")).isdigit()}
         except RuntimeError as exc:
             log.warning("conferência contra os trechos indisponível (%s)", exc)
+        from .decisoes import ler_lote
+        lidas = dict(zip(decisoes, ler_lote([d.get("decisao") for d in decisoes.values()], ("sustentada", "excede"),
+                                            ("sustentada",), "conferencia")))
         for n, it in enumerate(lote, 1):
             d = decisoes.get(n) or {}
-            ok = _decisao_normalizada(d.get("decisao")) == "sustentada"
+            ok = lidas.get(n) == "sustentada"
             saida[ini + n - 1] = (causa_sem_trecho(it["texto"], it.get("evidencias") or [], mapa) if ok
                                   else (str(d.get("o_que_excede") or "").strip()
                                         or ("diz mais do que o trecho" if d else "não conferida")))
@@ -1502,10 +1505,9 @@ def _valido_auditor(raw: str) -> bool:
 
 def _decisao_normalizada(valor) -> str:
     """26/11 (Svalbard 1026: "factual: sustentada" em todas as frases — 4 pedidos perdidos e o job parado):
-    o modelo às vezes repete o tipo da frase antes da decisão, ou escreve com espaço/aspas."""
-    d = str(valor or "").strip().strip("\"'").lower()
-    d = d.rsplit(":", 1)[-1].strip()
-    return re.sub(r"\s+", "_", d)
+    só a forma (ver src/decisoes.py, que também aprende as palavras desconhecidas)."""
+    from .decisoes import normalizar
+    return normalizar(valor)
 
 
 def _decisoes_validas(data: dict, esperados: set[int]) -> dict[int, dict]:
@@ -1520,6 +1522,9 @@ def _decisoes_validas(data: dict, esperados: set[int]) -> dict[int, dict]:
     except (TypeError, ValueError):
         ns = []
     renumera = bool(ns) and not set(ns) & esperados and set(ns) <= set(range(1, len(ordem) + 1))
+    from .decisoes import ler_lote
+    lidas = dict(zip(map(id, itens), ler_lote([r.get("decisao") for r in itens], DECISOES_AUDITOR,
+                                              ("sustentada", "narrativa_ok"), "auditor")))
     for r in itens:
         try:
             n = int(r.get("n"))
@@ -1527,7 +1532,7 @@ def _decisoes_validas(data: dict, esperados: set[int]) -> dict[int, dict]:
             continue
         if renumera:
             n = ordem[n - 1]
-        decisao = _decisao_normalizada(r.get("decisao"))
+        decisao = lidas[id(r)]
         just = str(r.get("justificativa", "")).strip()
         if n in esperados and decisao in DECISOES_AUDITOR and len(just.split()) >= 3:
             out[n] = {"decisao": decisao, "justificativa": just[:300],

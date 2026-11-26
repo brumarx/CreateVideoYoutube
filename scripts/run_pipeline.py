@@ -23,6 +23,7 @@ import math
 import random
 import re
 import shutil
+import os
 import sys
 import subprocess
 import time
@@ -774,6 +775,12 @@ def _escrever_redacao(channel, topic: str, web_facts: list[dict], job_id, min_mi
                                      minutos_reserva=reserva[1] if reserva else None)
     if banco.get("_so_curto") and reserva:
         min_minutes, max_minutes, scenes = reserva
+    # 26/11: o ponto de partida da redação fica guardado com a gravação das chamadas — scripts/repetir_redacao.py
+    # repete escrita + auditoria com as respostas gravadas, sem chamar ninguém (ver src/gravacao.py)
+    from src import gravacao
+    gravacao.guardar_partida(job_id, {"canal": channel.name, "tema": topic, "min_minutes": min_minutes,
+                                      "max_minutes": max_minutes, "scenes": scenes or channel.scenes_per_video,
+                                      "banco": banco})
     script = rascunho(topic, banco)
     if script:
         metricas.anotar("roteiro_do_cache", True)
@@ -1112,6 +1119,7 @@ def run(
             facts = {**facts, "linha_editorial": channel.editorial_line}
 
     job_id = enqueue(channel_name, topic)
+    os.environ["JOB_ID"] = str(job_id)  # 26/11: cada chamada gravada leva o job (src/gravacao.py)
     work_dir = Path(__file__).resolve().parent.parent / "output" / f"job_{job_id}"
     work_dir.mkdir(parents=True, exist_ok=True)
     if source_facts is not None:
