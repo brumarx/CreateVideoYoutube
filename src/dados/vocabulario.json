@@ -1,0 +1,3274 @@
+{
+"meses": {
+"abr": 4,
+"abril": 4,
+"ago": 8,
+"agosto": 8,
+"apr": 4,
+"april": 4,
+"aug": 8,
+"august": 8,
+"dec": 12,
+"december": 12,
+"dez": 12,
+"dezembro": 12,
+"dic": 12,
+"diciembre": 12,
+"ene": 1,
+"enero": 1,
+"feb": 2,
+"febrero": 2,
+"february": 2,
+"fev": 2,
+"fevereiro": 2,
+"jan": 1,
+"janeiro": 1,
+"january": 1,
+"jul": 7,
+"julho": 7,
+"julio": 7,
+"july": 7,
+"jun": 6,
+"june": 6,
+"junho": 6,
+"junio": 6,
+"mai": 5,
+"maio": 5,
+"mar": 3,
+"march": 3,
+"marzo": 3,
+"março": 3,
+"may": 5,
+"mayo": 5,
+"nov": 11,
+"november": 11,
+"novembro": 11,
+"noviembre": 11,
+"oct": 10,
+"october": 10,
+"octubre": 10,
+"out": 10,
+"outubro": 10,
+"sep": 9,
+"sept": 9,
+"september": 9,
+"septiembre": 9,
+"set": 9,
+"setembro": 9
+},
+"lugares": [
+{
+"id": "001",
+"tipo": "regiao",
+"formas": [
+"Mundo",
+"world"
+]
+},
+{
+"id": "002",
+"tipo": "regiao",
+"formas": [
+"Africa",
+"África"
+]
+},
+{
+"id": "003",
+"tipo": "regiao",
+"formas": [
+"América del Norte",
+"América do Norte",
+"North America"
+]
+},
+{
+"id": "005",
+"tipo": "regiao",
+"formas": [
+"América do Sul",
+"South America",
+"Sudamérica"
+]
+},
+{
+"id": "009",
+"tipo": "regiao",
+"formas": [
+"Oceania",
+"Oceanía"
+]
+},
+{
+"id": "011",
+"tipo": "regiao",
+"formas": [
+"Western Africa",
+"África Ocidental",
+"África occidental"
+]
+},
+{
+"id": "013",
+"tipo": "regiao",
+"formas": [
+"América Central",
+"Central America",
+"Centroamérica"
+]
+},
+{
+"id": "014",
+"tipo": "regiao",
+"formas": [
+"Eastern Africa",
+"África Oriental",
+"África oriental"
+]
+},
+{
+"id": "015",
+"tipo": "regiao",
+"formas": [
+"Northern Africa",
+"África Setentrional",
+"África septentrional"
+]
+},
+{
+"id": "017",
+"tipo": "regiao",
+"formas": [
+"Middle Africa",
+"África Central",
+"África central"
+]
+},
+{
+"id": "018",
+"tipo": "regiao",
+"formas": [
+"Southern Africa",
+"África Meridional",
+"África meridional"
+]
+},
+{
+"id": "019",
+"tipo": "regiao",
+"formas": [
+"Americas",
+"América",
+"Américas"
+]
+},
+{
+"id": "021",
+"tipo": "regiao",
+"formas": [
+"América Setentrional",
+"Norteamérica",
+"Northern America"
+]
+},
+{
+"id": "029",
+"tipo": "regiao",
+"formas": [
+"Caribbean",
+"Caribe"
+]
+},
+{
+"id": "030",
+"tipo": "regiao",
+"formas": [
+"Asia oriental",
+"Eastern Asia",
+"Ásia Oriental"
+]
+},
+{
+"id": "034",
+"tipo": "regiao",
+"formas": [
+"Asia meridional",
+"Southern Asia",
+"Ásia Meridional"
+]
+},
+{
+"id": "035",
+"tipo": "regiao",
+"formas": [
+"Southeast Asia",
+"Sudeste Asiático",
+"Sudeste asiático"
+]
+},
+{
+"id": "039",
+"tipo": "regiao",
+"formas": [
+"Europa Meridional",
+"Europa meridional",
+"Southern Europe"
+]
+},
+{
+"id": "053",
+"tipo": "regiao",
+"formas": [
+"Australasia",
+"Australásia"
+]
+},
+{
+"id": "054",
+"tipo": "regiao",
+"formas": [
+"Melanesia",
+"Melanésia"
+]
+},
+{
+"id": "057",
+"tipo": "regiao",
+"formas": [
+"Micronesian Region",
+"Região da Micronésia",
+"Región de Micronesia"
+]
+},
+{
+"id": "061",
+"tipo": "regiao",
+"formas": [
+"Polinesia",
+"Polinésia",
+"Polynesia"
+]
+},
+{
+"id": "142",
+"tipo": "regiao",
+"formas": [
+"Asia",
+"Ásia"
+]
+},
+{
+"id": "143",
+"tipo": "regiao",
+"formas": [
+"Asia central",
+"Central Asia",
+"Ásia Central"
+]
+},
+{
+"id": "145",
+"tipo": "regiao",
+"formas": [
+"Asia occidental",
+"Western Asia",
+"Ásia Ocidental"
+]
+},
+{
+"id": "150",
+"tipo": "regiao",
+"formas": [
+"Europa",
+"Europe"
+]
+},
+{
+"id": "151",
+"tipo": "regiao",
+"formas": [
+"Eastern Europe",
+"Europa Oriental",
+"Europa oriental"
+]
+},
+{
+"id": "154",
+"tipo": "regiao",
+"formas": [
+"Europa Setentrional",
+"Europa septentrional",
+"Northern Europe"
+]
+},
+{
+"id": "155",
+"tipo": "regiao",
+"formas": [
+"Europa Ocidental",
+"Europa occidental",
+"Western Europe"
+]
+},
+{
+"id": "202",
+"tipo": "regiao",
+"formas": [
+"Sub-Saharan Africa",
+"África Subsaariana",
+"África subsahariana"
+]
+},
+{
+"id": "419",
+"tipo": "regiao",
+"formas": [
+"América Latina",
+"Latin America",
+"Latinoamérica"
+]
+},
+{
+"id": "AC",
+"tipo": "pais",
+"formas": [
+"Ascension Island",
+"Ilha de Ascensão",
+"Isla de la Ascensión"
+]
+},
+{
+"id": "AD",
+"tipo": "pais",
+"formas": [
+"Andorra"
+]
+},
+{
+"id": "AE",
+"tipo": "pais",
+"formas": [
+"Emirados Árabes Unidos",
+"Emiratos Árabes Unidos",
+"United Arab Emirates"
+]
+},
+{
+"id": "AF",
+"tipo": "pais",
+"formas": [
+"Afeganistão",
+"Afganistán",
+"Afghanistan"
+]
+},
+{
+"id": "AG",
+"tipo": "pais",
+"formas": [
+"Antigua & Barbuda",
+"Antigua y Barbuda",
+"Antígua e Barbuda"
+]
+},
+{
+"id": "AI",
+"tipo": "pais",
+"formas": [
+"Anguila",
+"Anguilla"
+]
+},
+{
+"id": "AL",
+"tipo": "pais",
+"formas": [
+"Albania",
+"Albânia"
+]
+},
+{
+"id": "AM",
+"tipo": "pais",
+"formas": [
+"Armenia",
+"Armênia"
+]
+},
+{
+"id": "AO",
+"tipo": "pais",
+"formas": [
+"Angola"
+]
+},
+{
+"id": "AQ",
+"tipo": "pais",
+"formas": [
+"Antarctica",
+"Antártida"
+]
+},
+{
+"id": "AR",
+"tipo": "pais",
+"formas": [
+"Argentina"
+]
+},
+{
+"id": "AS",
+"tipo": "pais",
+"formas": [
+"American Samoa",
+"Samoa Americana"
+]
+},
+{
+"id": "AT",
+"tipo": "pais",
+"formas": [
+"Austria",
+"Áustria"
+]
+},
+{
+"id": "AU",
+"tipo": "pais",
+"formas": [
+"Australia",
+"Austrália"
+]
+},
+{
+"id": "AW",
+"tipo": "pais",
+"formas": [
+"Aruba"
+]
+},
+{
+"id": "AX",
+"tipo": "pais",
+"formas": [
+"Ilhas Aland",
+"Islas Aland",
+"Åland Islands"
+]
+},
+{
+"id": "AZ",
+"tipo": "pais",
+"formas": [
+"Azerbaijan",
+"Azerbaijão",
+"Azerbaiyán"
+]
+},
+{
+"id": "BA",
+"tipo": "pais",
+"formas": [
+"Bosnia & Herzegovina",
+"Bosnia y Herzegovina",
+"Bósnia e Herzegovina"
+]
+},
+{
+"id": "BB",
+"tipo": "pais",
+"formas": [
+"Barbados"
+]
+},
+{
+"id": "BD",
+"tipo": "pais",
+"formas": [
+"Bangladesh",
+"Bangladés"
+]
+},
+{
+"id": "BE",
+"tipo": "pais",
+"formas": [
+"Belgium",
+"Bélgica"
+]
+},
+{
+"id": "BF",
+"tipo": "pais",
+"formas": [
+"Burkina Faso",
+"Burquina Faso"
+]
+},
+{
+"id": "BG",
+"tipo": "pais",
+"formas": [
+"Bulgaria",
+"Bulgária"
+]
+},
+{
+"id": "BH",
+"tipo": "pais",
+"formas": [
+"Bahrain",
+"Barein",
+"Baréin"
+]
+},
+{
+"id": "BI",
+"tipo": "pais",
+"formas": [
+"Burundi"
+]
+},
+{
+"id": "BJ",
+"tipo": "pais",
+"formas": [
+"Benin",
+"Benín"
+]
+},
+{
+"id": "BL",
+"tipo": "pais",
+"formas": [
+"San Bartolomé",
+"St. Barthélemy",
+"São Bartolomeu"
+]
+},
+{
+"id": "BM",
+"tipo": "pais",
+"formas": [
+"Bermuda",
+"Bermudas"
+]
+},
+{
+"id": "BN",
+"tipo": "pais",
+"formas": [
+"Brunei",
+"Brunéi"
+]
+},
+{
+"id": "BO",
+"tipo": "pais",
+"formas": [
+"Bolivia",
+"Bolívia"
+]
+},
+{
+"id": "BQ",
+"tipo": "pais",
+"formas": [
+"Caribbean Netherlands",
+"Caribe neerlandés",
+"Países Baixos Caribenhos"
+]
+},
+{
+"id": "BR",
+"tipo": "pais",
+"formas": [
+"Brasil",
+"Brazil"
+]
+},
+{
+"id": "BS",
+"tipo": "pais",
+"formas": [
+"Bahamas"
+]
+},
+{
+"id": "BT",
+"tipo": "pais",
+"formas": [
+"Bhutan",
+"Bután",
+"Butão"
+]
+},
+{
+"id": "BV",
+"tipo": "pais",
+"formas": [
+"Bouvet Island",
+"Ilha Bouvet",
+"Isla Bouvet"
+]
+},
+{
+"id": "BW",
+"tipo": "pais",
+"formas": [
+"Botsuana",
+"Botswana"
+]
+},
+{
+"id": "BY",
+"tipo": "pais",
+"formas": [
+"Belarus",
+"Bielorrusia",
+"Bielorrússia"
+]
+},
+{
+"id": "BZ",
+"tipo": "pais",
+"formas": [
+"Belice",
+"Belize"
+]
+},
+{
+"id": "CA",
+"tipo": "pais",
+"formas": [
+"Canada",
+"Canadá"
+]
+},
+{
+"id": "CC",
+"tipo": "pais",
+"formas": [
+"Cocos (Keeling) Islands",
+"Ilhas Cocos (Keeling)",
+"Islas Cocos"
+]
+},
+{
+"id": "CD",
+"tipo": "pais",
+"formas": [
+"Congo - Kinshasa",
+"República Democrática del Congo"
+]
+},
+{
+"id": "CF",
+"tipo": "pais",
+"formas": [
+"Central African Republic",
+"República Centro-Africana",
+"República Centroafricana"
+]
+},
+{
+"id": "CG",
+"tipo": "pais",
+"formas": [
+"Congo",
+"Congo - Brazzaville",
+"República do Congo"
+]
+},
+{
+"id": "CH",
+"tipo": "pais",
+"formas": [
+"Suiza",
+"Suíça",
+"Switzerland"
+]
+},
+{
+"id": "CI",
+"tipo": "pais",
+"formas": [
+"Costa do Marfim",
+"Côte d’Ivoire"
+]
+},
+{
+"id": "CK",
+"tipo": "pais",
+"formas": [
+"Cook Islands",
+"Ilhas Cook",
+"Islas Cook"
+]
+},
+{
+"id": "CL",
+"tipo": "pais",
+"formas": [
+"Chile"
+]
+},
+{
+"id": "CM",
+"tipo": "pais",
+"formas": [
+"Camarões",
+"Cameroon",
+"Camerún"
+]
+},
+{
+"id": "CN",
+"tipo": "pais",
+"formas": [
+"China"
+]
+},
+{
+"id": "CO",
+"tipo": "pais",
+"formas": [
+"Colombia",
+"Colômbia"
+]
+},
+{
+"id": "CP",
+"tipo": "pais",
+"formas": [
+"Clipperton Island",
+"Ilha de Clipperton",
+"Isla Clipperton"
+]
+},
+{
+"id": "CQ",
+"tipo": "pais",
+"formas": [
+"Sark"
+]
+},
+{
+"id": "CR",
+"tipo": "pais",
+"formas": [
+"Costa Rica"
+]
+},
+{
+"id": "CU",
+"tipo": "pais",
+"formas": [
+"Cuba"
+]
+},
+{
+"id": "CV",
+"tipo": "pais",
+"formas": [
+"Cabo Verde",
+"Cape Verde"
+]
+},
+{
+"id": "CW",
+"tipo": "pais",
+"formas": [
+"Curazao",
+"Curaçao"
+]
+},
+{
+"id": "CX",
+"tipo": "pais",
+"formas": [
+"Christmas Island",
+"Ilha Christmas",
+"Isla de Navidad"
+]
+},
+{
+"id": "CY",
+"tipo": "pais",
+"formas": [
+"Chipre",
+"Cyprus"
+]
+},
+{
+"id": "CZ",
+"tipo": "pais",
+"formas": [
+"Chequia",
+"Czechia",
+"Tchéquia"
+]
+},
+{
+"id": "DE",
+"tipo": "pais",
+"formas": [
+"Alemanha",
+"Alemania",
+"Germany"
+]
+},
+{
+"id": "DG",
+"tipo": "pais",
+"formas": [
+"Diego Garcia",
+"Diego García"
+]
+},
+{
+"id": "DJ",
+"tipo": "pais",
+"formas": [
+"Djibouti",
+"Djibuti",
+"Yibuti"
+]
+},
+{
+"id": "DK",
+"tipo": "pais",
+"formas": [
+"Denmark",
+"Dinamarca"
+]
+},
+{
+"id": "DM",
+"tipo": "pais",
+"formas": [
+"Dominica"
+]
+},
+{
+"id": "DO",
+"tipo": "pais",
+"formas": [
+"Dominican Republic",
+"República Dominicana"
+]
+},
+{
+"id": "DZ",
+"tipo": "pais",
+"formas": [
+"Algeria",
+"Argelia",
+"Argélia"
+]
+},
+{
+"id": "EA",
+"tipo": "pais",
+"formas": [
+"Ceuta & Melilla",
+"Ceuta e Melilla",
+"Ceuta y Melilla"
+]
+},
+{
+"id": "EC",
+"tipo": "pais",
+"formas": [
+"Ecuador",
+"Equador"
+]
+},
+{
+"id": "EE",
+"tipo": "pais",
+"formas": [
+"Estonia",
+"Estônia"
+]
+},
+{
+"id": "EG",
+"tipo": "pais",
+"formas": [
+"Egipto",
+"Egito",
+"Egypt"
+]
+},
+{
+"id": "EH",
+"tipo": "pais",
+"formas": [
+"Saara Ocidental",
+"Sáhara Occidental",
+"Western Sahara"
+]
+},
+{
+"id": "ER",
+"tipo": "pais",
+"formas": [
+"Eritrea",
+"Eritreia"
+]
+},
+{
+"id": "ES",
+"tipo": "pais",
+"formas": [
+"Espanha",
+"España",
+"Spain"
+]
+},
+{
+"id": "ET",
+"tipo": "pais",
+"formas": [
+"Ethiopia",
+"Etiopía",
+"Etiópia"
+]
+},
+{
+"id": "FI",
+"tipo": "pais",
+"formas": [
+"Finland",
+"Finlandia",
+"Finlândia"
+]
+},
+{
+"id": "FJ",
+"tipo": "pais",
+"formas": [
+"Fiji",
+"Fiyi"
+]
+},
+{
+"id": "FK",
+"tipo": "pais",
+"formas": [
+"Falkland Islands",
+"Ilhas Malvinas",
+"Islas Malvinas"
+]
+},
+{
+"id": "FM",
+"tipo": "pais",
+"formas": [
+"Micronesia",
+"Micronésia"
+]
+},
+{
+"id": "FO",
+"tipo": "pais",
+"formas": [
+"Faroe Islands",
+"Ilhas Faroé",
+"Islas Feroe"
+]
+},
+{
+"id": "FR",
+"tipo": "pais",
+"formas": [
+"France",
+"Francia",
+"França"
+]
+},
+{
+"id": "GA",
+"tipo": "pais",
+"formas": [
+"Gabon",
+"Gabão",
+"Gabón"
+]
+},
+{
+"id": "GB",
+"tipo": "pais",
+"formas": [
+"Reino Unido",
+"United Kingdom"
+]
+},
+{
+"id": "GD",
+"tipo": "pais",
+"formas": [
+"Granada",
+"Grenada"
+]
+},
+{
+"id": "GE",
+"tipo": "pais",
+"formas": [
+"Georgia",
+"Geórgia"
+]
+},
+{
+"id": "GF",
+"tipo": "pais",
+"formas": [
+"French Guiana",
+"Guayana Francesa",
+"Guiana Francesa"
+]
+},
+{
+"id": "GG",
+"tipo": "pais",
+"formas": [
+"Guernesey",
+"Guernsey"
+]
+},
+{
+"id": "GH",
+"tipo": "pais",
+"formas": [
+"Gana",
+"Ghana"
+]
+},
+{
+"id": "GI",
+"tipo": "pais",
+"formas": [
+"Gibraltar"
+]
+},
+{
+"id": "GL",
+"tipo": "pais",
+"formas": [
+"Greenland",
+"Groenlandia",
+"Groenlândia"
+]
+},
+{
+"id": "GM",
+"tipo": "pais",
+"formas": [
+"Gambia",
+"Gâmbia"
+]
+},
+{
+"id": "GN",
+"tipo": "pais",
+"formas": [
+"Guinea",
+"Guiné"
+]
+},
+{
+"id": "GP",
+"tipo": "pais",
+"formas": [
+"Guadalupe",
+"Guadeloupe"
+]
+},
+{
+"id": "GQ",
+"tipo": "pais",
+"formas": [
+"Equatorial Guinea",
+"Guinea Ecuatorial",
+"Guiné Equatorial"
+]
+},
+{
+"id": "GR",
+"tipo": "pais",
+"formas": [
+"Grecia",
+"Greece",
+"Grécia"
+]
+},
+{
+"id": "GS",
+"tipo": "pais",
+"formas": [
+"Ilhas Geórgia do Sul e Sandwich do Sul",
+"Islas Georgia del Sur y Sandwich del Sur",
+"South Georgia & South Sandwich Islands"
+]
+},
+{
+"id": "GT",
+"tipo": "pais",
+"formas": [
+"Guatemala"
+]
+},
+{
+"id": "GU",
+"tipo": "pais",
+"formas": [
+"Guam"
+]
+},
+{
+"id": "GW",
+"tipo": "pais",
+"formas": [
+"Guinea-Bissau",
+"Guinea-Bisáu",
+"Guiné-Bissau"
+]
+},
+{
+"id": "GY",
+"tipo": "pais",
+"formas": [
+"Guiana",
+"Guyana"
+]
+},
+{
+"id": "HK",
+"tipo": "pais",
+"formas": [
+"Hong Kong SAR China",
+"Hong Kong, RAE da China",
+"RAE de Hong Kong (China)"
+]
+},
+{
+"id": "HM",
+"tipo": "pais",
+"formas": [
+"Heard & McDonald Islands",
+"Ilhas Heard e McDonald",
+"Islas Heard y McDonald"
+]
+},
+{
+"id": "HN",
+"tipo": "pais",
+"formas": [
+"Honduras"
+]
+},
+{
+"id": "HR",
+"tipo": "pais",
+"formas": [
+"Croacia",
+"Croatia",
+"Croácia"
+]
+},
+{
+"id": "HT",
+"tipo": "pais",
+"formas": [
+"Haiti",
+"Haití"
+]
+},
+{
+"id": "HU",
+"tipo": "pais",
+"formas": [
+"Hungary",
+"Hungria",
+"Hungría"
+]
+},
+{
+"id": "IC",
+"tipo": "pais",
+"formas": [
+"Canarias",
+"Canary Islands",
+"Ilhas Canárias"
+]
+},
+{
+"id": "ID",
+"tipo": "pais",
+"formas": [
+"Indonesia",
+"Indonésia"
+]
+},
+{
+"id": "IE",
+"tipo": "pais",
+"formas": [
+"Ireland",
+"Irlanda"
+]
+},
+{
+"id": "IL",
+"tipo": "pais",
+"formas": [
+"Israel"
+]
+},
+{
+"id": "IM",
+"tipo": "pais",
+"formas": [
+"Ilha de Man",
+"Isla de Man",
+"Isle of Man"
+]
+},
+{
+"id": "IN",
+"tipo": "pais",
+"formas": [
+"India",
+"Índia"
+]
+},
+{
+"id": "IO",
+"tipo": "pais",
+"formas": [
+"British Indian Ocean Territory",
+"Territorio Británico del Océano Índico",
+"Território Britânico do Oceano Índico"
+]
+},
+{
+"id": "IQ",
+"tipo": "pais",
+"formas": [
+"Irak",
+"Iraq",
+"Iraque"
+]
+},
+{
+"id": "IR",
+"tipo": "pais",
+"formas": [
+"Iran",
+"Irán",
+"Irã"
+]
+},
+{
+"id": "IS",
+"tipo": "pais",
+"formas": [
+"Iceland",
+"Islandia",
+"Islândia"
+]
+},
+{
+"id": "IT",
+"tipo": "pais",
+"formas": [
+"Italia",
+"Italy",
+"Itália"
+]
+},
+{
+"id": "JE",
+"tipo": "pais",
+"formas": [
+"Jersey"
+]
+},
+{
+"id": "JM",
+"tipo": "pais",
+"formas": [
+"Jamaica"
+]
+},
+{
+"id": "JO",
+"tipo": "pais",
+"formas": [
+"Jordan",
+"Jordania",
+"Jordânia"
+]
+},
+{
+"id": "JP",
+"tipo": "pais",
+"formas": [
+"Japan",
+"Japão",
+"Japón"
+]
+},
+{
+"id": "KE",
+"tipo": "pais",
+"formas": [
+"Kenia",
+"Kenya",
+"Quênia"
+]
+},
+{
+"id": "KG",
+"tipo": "pais",
+"formas": [
+"Kirguistán",
+"Kyrgyzstan",
+"Quirguistão"
+]
+},
+{
+"id": "KH",
+"tipo": "pais",
+"formas": [
+"Cambodia",
+"Camboja",
+"Camboya"
+]
+},
+{
+"id": "KI",
+"tipo": "pais",
+"formas": [
+"Kiribati",
+"Quiribati"
+]
+},
+{
+"id": "KM",
+"tipo": "pais",
+"formas": [
+"Comoras",
+"Comores",
+"Comoros"
+]
+},
+{
+"id": "KN",
+"tipo": "pais",
+"formas": [
+"San Cristóbal y Nieves",
+"St. Kitts & Nevis",
+"São Cristóvão e Névis"
+]
+},
+{
+"id": "KP",
+"tipo": "pais",
+"formas": [
+"Corea del Norte",
+"Coreia do Norte",
+"North Korea"
+]
+},
+{
+"id": "KR",
+"tipo": "pais",
+"formas": [
+"Corea del Sur",
+"Coreia do Sul",
+"South Korea"
+]
+},
+{
+"id": "KW",
+"tipo": "pais",
+"formas": [
+"Kuwait"
+]
+},
+{
+"id": "KY",
+"tipo": "pais",
+"formas": [
+"Cayman Islands",
+"Ilhas Cayman",
+"Islas Caimán"
+]
+},
+{
+"id": "KZ",
+"tipo": "pais",
+"formas": [
+"Cazaquistão",
+"Kazajistán",
+"Kazakhstan"
+]
+},
+{
+"id": "LA",
+"tipo": "pais",
+"formas": [
+"Laos"
+]
+},
+{
+"id": "LB",
+"tipo": "pais",
+"formas": [
+"Lebanon",
+"Líbano"
+]
+},
+{
+"id": "LC",
+"tipo": "pais",
+"formas": [
+"Santa Lucía",
+"Santa Lúcia",
+"St. Lucia"
+]
+},
+{
+"id": "LI",
+"tipo": "pais",
+"formas": [
+"Liechtenstein"
+]
+},
+{
+"id": "LK",
+"tipo": "pais",
+"formas": [
+"Sri Lanka"
+]
+},
+{
+"id": "LR",
+"tipo": "pais",
+"formas": [
+"Liberia",
+"Libéria"
+]
+},
+{
+"id": "LS",
+"tipo": "pais",
+"formas": [
+"Lesotho",
+"Lesoto"
+]
+},
+{
+"id": "LT",
+"tipo": "pais",
+"formas": [
+"Lithuania",
+"Lituania",
+"Lituânia"
+]
+},
+{
+"id": "LU",
+"tipo": "pais",
+"formas": [
+"Luxembourg",
+"Luxemburgo"
+]
+},
+{
+"id": "LV",
+"tipo": "pais",
+"formas": [
+"Latvia",
+"Letonia",
+"Letônia"
+]
+},
+{
+"id": "LY",
+"tipo": "pais",
+"formas": [
+"Libia",
+"Libya",
+"Líbia"
+]
+},
+{
+"id": "MA",
+"tipo": "pais",
+"formas": [
+"Marrocos",
+"Marruecos",
+"Morocco"
+]
+},
+{
+"id": "MC",
+"tipo": "pais",
+"formas": [
+"Monaco",
+"Mónaco",
+"Mônaco"
+]
+},
+{
+"id": "MD",
+"tipo": "pais",
+"formas": [
+"Moldavia",
+"Moldova",
+"Moldávia"
+]
+},
+{
+"id": "ME",
+"tipo": "pais",
+"formas": [
+"Montenegro"
+]
+},
+{
+"id": "MF",
+"tipo": "pais",
+"formas": [
+"San Martín",
+"St. Martin",
+"São Martinho"
+]
+},
+{
+"id": "MG",
+"tipo": "pais",
+"formas": [
+"Madagascar"
+]
+},
+{
+"id": "MH",
+"tipo": "pais",
+"formas": [
+"Ilhas Marshall",
+"Islas Marshall",
+"Marshall Islands"
+]
+},
+{
+"id": "MK",
+"tipo": "pais",
+"formas": [
+"Macedonia del Norte",
+"Macedônia do Norte",
+"North Macedonia"
+]
+},
+{
+"id": "ML",
+"tipo": "pais",
+"formas": [
+"Mali"
+]
+},
+{
+"id": "MM",
+"tipo": "pais",
+"formas": [
+"Mianmar (Birmânia)",
+"Myanmar (Birmania)",
+"Myanmar (Burma)"
+]
+},
+{
+"id": "MN",
+"tipo": "pais",
+"formas": [
+"Mongolia",
+"Mongólia"
+]
+},
+{
+"id": "MO",
+"tipo": "pais",
+"formas": [
+"Macao SAR China",
+"Macau, RAE da China",
+"RAE de Macao (China)"
+]
+},
+{
+"id": "MP",
+"tipo": "pais",
+"formas": [
+"Ilhas Marianas do Norte",
+"Islas Marianas del Norte",
+"Northern Mariana Islands"
+]
+},
+{
+"id": "MQ",
+"tipo": "pais",
+"formas": [
+"Martinica",
+"Martinique"
+]
+},
+{
+"id": "MR",
+"tipo": "pais",
+"formas": [
+"Mauritania",
+"Mauritânia"
+]
+},
+{
+"id": "MS",
+"tipo": "pais",
+"formas": [
+"Montserrat"
+]
+},
+{
+"id": "MT",
+"tipo": "pais",
+"formas": [
+"Malta"
+]
+},
+{
+"id": "MU",
+"tipo": "pais",
+"formas": [
+"Mauricio",
+"Mauritius",
+"Maurício"
+]
+},
+{
+"id": "MV",
+"tipo": "pais",
+"formas": [
+"Maldivas",
+"Maldives"
+]
+},
+{
+"id": "MW",
+"tipo": "pais",
+"formas": [
+"Malaui",
+"Malawi"
+]
+},
+{
+"id": "MX",
+"tipo": "pais",
+"formas": [
+"Mexico",
+"México"
+]
+},
+{
+"id": "MY",
+"tipo": "pais",
+"formas": [
+"Malasia",
+"Malaysia",
+"Malásia"
+]
+},
+{
+"id": "MZ",
+"tipo": "pais",
+"formas": [
+"Mozambique",
+"Moçambique"
+]
+},
+{
+"id": "NA",
+"tipo": "pais",
+"formas": [
+"Namibia",
+"Namíbia"
+]
+},
+{
+"id": "NC",
+"tipo": "pais",
+"formas": [
+"New Caledonia",
+"Nova Caledônia",
+"Nueva Caledonia"
+]
+},
+{
+"id": "NE",
+"tipo": "pais",
+"formas": [
+"Niger",
+"Níger"
+]
+},
+{
+"id": "NF",
+"tipo": "pais",
+"formas": [
+"Ilha Norfolk",
+"Isla Norfolk",
+"Norfolk Island"
+]
+},
+{
+"id": "NG",
+"tipo": "pais",
+"formas": [
+"Nigeria",
+"Nigéria"
+]
+},
+{
+"id": "NI",
+"tipo": "pais",
+"formas": [
+"Nicaragua",
+"Nicarágua"
+]
+},
+{
+"id": "NL",
+"tipo": "pais",
+"formas": [
+"Netherlands",
+"Países Baixos",
+"Países Bajos"
+]
+},
+{
+"id": "NO",
+"tipo": "pais",
+"formas": [
+"Noruega",
+"Norway"
+]
+},
+{
+"id": "NP",
+"tipo": "pais",
+"formas": [
+"Nepal"
+]
+},
+{
+"id": "NR",
+"tipo": "pais",
+"formas": [
+"Nauru"
+]
+},
+{
+"id": "NU",
+"tipo": "pais",
+"formas": [
+"Niue"
+]
+},
+{
+"id": "NZ",
+"tipo": "pais",
+"formas": [
+"New Zealand",
+"Nova Zelândia",
+"Nueva Zelanda"
+]
+},
+{
+"id": "OM",
+"tipo": "pais",
+"formas": [
+"Oman",
+"Omán",
+"Omã"
+]
+},
+{
+"id": "PA",
+"tipo": "pais",
+"formas": [
+"Panama",
+"Panamá"
+]
+},
+{
+"id": "PE",
+"tipo": "pais",
+"formas": [
+"Peru",
+"Perú"
+]
+},
+{
+"id": "PF",
+"tipo": "pais",
+"formas": [
+"French Polynesia",
+"Polinesia Francesa",
+"Polinésia Francesa"
+]
+},
+{
+"id": "PG",
+"tipo": "pais",
+"formas": [
+"Papua New Guinea",
+"Papua-Nova Guiné",
+"Papúa Nueva Guinea"
+]
+},
+{
+"id": "PH",
+"tipo": "pais",
+"formas": [
+"Filipinas",
+"Philippines"
+]
+},
+{
+"id": "PK",
+"tipo": "pais",
+"formas": [
+"Pakistan",
+"Pakistán",
+"Paquistão"
+]
+},
+{
+"id": "PL",
+"tipo": "pais",
+"formas": [
+"Poland",
+"Polonia",
+"Polônia"
+]
+},
+{
+"id": "PM",
+"tipo": "pais",
+"formas": [
+"San Pedro y Miquelón",
+"St. Pierre & Miquelon",
+"São Pedro e Miquelão"
+]
+},
+{
+"id": "PN",
+"tipo": "pais",
+"formas": [
+"Ilhas Pitcairn",
+"Islas Pitcairn",
+"Pitcairn Islands"
+]
+},
+{
+"id": "PR",
+"tipo": "pais",
+"formas": [
+"Porto Rico",
+"Puerto Rico"
+]
+},
+{
+"id": "PS",
+"tipo": "pais",
+"formas": [
+"Palestinian Territories",
+"Territorios Palestinos",
+"Territórios palestinos"
+]
+},
+{
+"id": "PT",
+"tipo": "pais",
+"formas": [
+"Portugal"
+]
+},
+{
+"id": "PW",
+"tipo": "pais",
+"formas": [
+"Palaos",
+"Palau"
+]
+},
+{
+"id": "PY",
+"tipo": "pais",
+"formas": [
+"Paraguai",
+"Paraguay"
+]
+},
+{
+"id": "QA",
+"tipo": "pais",
+"formas": [
+"Catar",
+"Qatar"
+]
+},
+{
+"id": "RE",
+"tipo": "pais",
+"formas": [
+"Reunião",
+"Reunión",
+"Réunion"
+]
+},
+{
+"id": "RO",
+"tipo": "pais",
+"formas": [
+"Romania",
+"Romênia",
+"Rumanía"
+]
+},
+{
+"id": "RS",
+"tipo": "pais",
+"formas": [
+"Serbia",
+"Sérvia"
+]
+},
+{
+"id": "RU",
+"tipo": "pais",
+"formas": [
+"Rusia",
+"Russia",
+"Rússia"
+]
+},
+{
+"id": "RW",
+"tipo": "pais",
+"formas": [
+"Ruanda",
+"Rwanda"
+]
+},
+{
+"id": "SA",
+"tipo": "pais",
+"formas": [
+"Arabia Saudí",
+"Arábia Saudita",
+"Saudi Arabia"
+]
+},
+{
+"id": "SB",
+"tipo": "pais",
+"formas": [
+"Ilhas Salomão",
+"Islas Salomón",
+"Solomon Islands"
+]
+},
+{
+"id": "SC",
+"tipo": "pais",
+"formas": [
+"Seicheles",
+"Seychelles"
+]
+},
+{
+"id": "SD",
+"tipo": "pais",
+"formas": [
+"Sudan",
+"Sudán",
+"Sudão"
+]
+},
+{
+"id": "SE",
+"tipo": "pais",
+"formas": [
+"Suecia",
+"Suécia",
+"Sweden"
+]
+},
+{
+"id": "SG",
+"tipo": "pais",
+"formas": [
+"Singapore",
+"Singapur",
+"Singapura"
+]
+},
+{
+"id": "SH",
+"tipo": "pais",
+"formas": [
+"Santa Elena",
+"Santa Helena",
+"St. Helena"
+]
+},
+{
+"id": "SI",
+"tipo": "pais",
+"formas": [
+"Eslovenia",
+"Eslovênia",
+"Slovenia"
+]
+},
+{
+"id": "SJ",
+"tipo": "pais",
+"formas": [
+"Svalbard & Jan Mayen",
+"Svalbard e Jan Mayen",
+"Svalbard y Jan Mayen"
+]
+},
+{
+"id": "SK",
+"tipo": "pais",
+"formas": [
+"Eslovaquia",
+"Eslováquia",
+"Slovakia"
+]
+},
+{
+"id": "SL",
+"tipo": "pais",
+"formas": [
+"Serra Leoa",
+"Sierra Leona",
+"Sierra Leone"
+]
+},
+{
+"id": "SM",
+"tipo": "pais",
+"formas": [
+"San Marino"
+]
+},
+{
+"id": "SN",
+"tipo": "pais",
+"formas": [
+"Senegal"
+]
+},
+{
+"id": "SO",
+"tipo": "pais",
+"formas": [
+"Somalia",
+"Somália"
+]
+},
+{
+"id": "SR",
+"tipo": "pais",
+"formas": [
+"Surinam",
+"Suriname"
+]
+},
+{
+"id": "SS",
+"tipo": "pais",
+"formas": [
+"South Sudan",
+"Sudán del Sur",
+"Sudão do Sul"
+]
+},
+{
+"id": "ST",
+"tipo": "pais",
+"formas": [
+"Santo Tomé y Príncipe",
+"São Tomé & Príncipe",
+"São Tomé e Príncipe"
+]
+},
+{
+"id": "SV",
+"tipo": "pais",
+"formas": [
+"El Salvador"
+]
+},
+{
+"id": "SX",
+"tipo": "pais",
+"formas": [
+"Sint Maarten"
+]
+},
+{
+"id": "SY",
+"tipo": "pais",
+"formas": [
+"Siria",
+"Syria",
+"Síria"
+]
+},
+{
+"id": "SZ",
+"tipo": "pais",
+"formas": [
+"Essuatíni",
+"Esuatini",
+"Eswatini"
+]
+},
+{
+"id": "TA",
+"tipo": "pais",
+"formas": [
+"Tristan da Cunha",
+"Tristán de Acuña",
+"Tristão da Cunha"
+]
+},
+{
+"id": "TC",
+"tipo": "pais",
+"formas": [
+"Ilhas Turcas e Caicos",
+"Islas Turcas y Caicos",
+"Turks & Caicos Islands"
+]
+},
+{
+"id": "TD",
+"tipo": "pais",
+"formas": [
+"Chad",
+"Chade"
+]
+},
+{
+"id": "TF",
+"tipo": "pais",
+"formas": [
+"French Southern Territories",
+"Territorios Australes Franceses",
+"Territórios Franceses do Sul"
+]
+},
+{
+"id": "TG",
+"tipo": "pais",
+"formas": [
+"Togo"
+]
+},
+{
+"id": "TH",
+"tipo": "pais",
+"formas": [
+"Tailandia",
+"Tailândia",
+"Thailand"
+]
+},
+{
+"id": "TJ",
+"tipo": "pais",
+"formas": [
+"Tadjiquistão",
+"Tajikistan",
+"Tayikistán"
+]
+},
+{
+"id": "TK",
+"tipo": "pais",
+"formas": [
+"Tokelau"
+]
+},
+{
+"id": "TL",
+"tipo": "pais",
+"formas": [
+"Timor-Leste"
+]
+},
+{
+"id": "TM",
+"tipo": "pais",
+"formas": [
+"Turcomenistão",
+"Turkmenistan",
+"Turkmenistán"
+]
+},
+{
+"id": "TN",
+"tipo": "pais",
+"formas": [
+"Tunisia",
+"Tunísia",
+"Túnez"
+]
+},
+{
+"id": "TO",
+"tipo": "pais",
+"formas": [
+"Tonga"
+]
+},
+{
+"id": "TR",
+"tipo": "pais",
+"formas": [
+"Turquia",
+"Turquía",
+"Türkiye"
+]
+},
+{
+"id": "TT",
+"tipo": "pais",
+"formas": [
+"Trinidad & Tobago",
+"Trinidad e Tobago",
+"Trinidad y Tobago"
+]
+},
+{
+"id": "TV",
+"tipo": "pais",
+"formas": [
+"Tuvalu"
+]
+},
+{
+"id": "TW",
+"tipo": "pais",
+"formas": [
+"Taiwan",
+"Taiwán"
+]
+},
+{
+"id": "TZ",
+"tipo": "pais",
+"formas": [
+"Tanzania",
+"Tanzânia"
+]
+},
+{
+"id": "UA",
+"tipo": "pais",
+"formas": [
+"Ucrania",
+"Ucrânia",
+"Ukraine"
+]
+},
+{
+"id": "UG",
+"tipo": "pais",
+"formas": [
+"Uganda"
+]
+},
+{
+"id": "UM",
+"tipo": "pais",
+"formas": [
+"Ilhas Menores Distantes dos EUA",
+"Islas menores alejadas de EE. UU.",
+"U.S. Outlying Islands"
+]
+},
+{
+"id": "US",
+"tipo": "pais",
+"formas": [
+"Estados Unidos",
+"United States"
+]
+},
+{
+"id": "UY",
+"tipo": "pais",
+"formas": [
+"Uruguai",
+"Uruguay"
+]
+},
+{
+"id": "UZ",
+"tipo": "pais",
+"formas": [
+"Uzbekistan",
+"Uzbekistán",
+"Uzbequistão"
+]
+},
+{
+"id": "VA",
+"tipo": "pais",
+"formas": [
+"Cidade do Vaticano",
+"Ciudad del Vaticano",
+"Vatican City"
+]
+},
+{
+"id": "VC",
+"tipo": "pais",
+"formas": [
+"San Vicente y las Granadinas",
+"St. Vincent & Grenadines",
+"São Vicente e Granadinas"
+]
+},
+{
+"id": "VE",
+"tipo": "pais",
+"formas": [
+"Venezuela"
+]
+},
+{
+"id": "VG",
+"tipo": "pais",
+"formas": [
+"British Virgin Islands",
+"Ilhas Virgens Britânicas",
+"Islas Vírgenes Británicas"
+]
+},
+{
+"id": "VI",
+"tipo": "pais",
+"formas": [
+"Ilhas Virgens Americanas",
+"Islas Vírgenes de EE. UU.",
+"U.S. Virgin Islands"
+]
+},
+{
+"id": "VN",
+"tipo": "pais",
+"formas": [
+"Vietnam",
+"Vietnã"
+]
+},
+{
+"id": "VU",
+"tipo": "pais",
+"formas": [
+"Vanuatu"
+]
+},
+{
+"id": "WF",
+"tipo": "pais",
+"formas": [
+"Wallis & Futuna",
+"Wallis e Futuna",
+"Wallis y Futuna"
+]
+},
+{
+"id": "WS",
+"tipo": "pais",
+"formas": [
+"Samoa"
+]
+},
+{
+"id": "XK",
+"tipo": "pais",
+"formas": [
+"Kosovo"
+]
+},
+{
+"id": "YE",
+"tipo": "pais",
+"formas": [
+"Iêmen",
+"Yemen"
+]
+},
+{
+"id": "YT",
+"tipo": "pais",
+"formas": [
+"Mayotte"
+]
+},
+{
+"id": "ZA",
+"tipo": "pais",
+"formas": [
+"South Africa",
+"Sudáfrica",
+"África do Sul"
+]
+},
+{
+"id": "ZM",
+"tipo": "pais",
+"formas": [
+"Zambia",
+"Zâmbia"
+]
+},
+{
+"id": "ZW",
+"tipo": "pais",
+"formas": [
+"Zimbabue",
+"Zimbabwe",
+"Zimbábue"
+]
+},
+{
+"id": "BR-Acre",
+"tipo": "estado",
+"formas": [
+"Acre"
+]
+},
+{
+"id": "BR-Alagoas",
+"tipo": "estado",
+"formas": [
+"Alagoas"
+]
+},
+{
+"id": "BR-Amapá",
+"tipo": "estado",
+"formas": [
+"Amapá"
+]
+},
+{
+"id": "BR-Amazonas",
+"tipo": "estado",
+"formas": [
+"Amazonas"
+]
+},
+{
+"id": "BR-Bahia",
+"tipo": "estado",
+"formas": [
+"Bahia"
+]
+},
+{
+"id": "BR-Ceará",
+"tipo": "estado",
+"formas": [
+"Ceará"
+]
+},
+{
+"id": "BR-Distrito Federal",
+"tipo": "estado",
+"formas": [
+"Distrito Federal"
+]
+},
+{
+"id": "BR-Espírito Santo",
+"tipo": "estado",
+"formas": [
+"Espírito Santo"
+]
+},
+{
+"id": "BR-Goiás",
+"tipo": "estado",
+"formas": [
+"Goiás"
+]
+},
+{
+"id": "BR-Maranhão",
+"tipo": "estado",
+"formas": [
+"Maranhão"
+]
+},
+{
+"id": "BR-Mato Grosso",
+"tipo": "estado",
+"formas": [
+"Mato Grosso"
+]
+},
+{
+"id": "BR-Mato Grosso do Sul",
+"tipo": "estado",
+"formas": [
+"Mato Grosso do Sul"
+]
+},
+{
+"id": "BR-Minas Gerais",
+"tipo": "estado",
+"formas": [
+"Minas Gerais"
+]
+},
+{
+"id": "BR-Pará",
+"tipo": "estado",
+"formas": [
+"Pará"
+]
+},
+{
+"id": "BR-Paraíba",
+"tipo": "estado",
+"formas": [
+"Paraíba"
+]
+},
+{
+"id": "BR-Paraná",
+"tipo": "estado",
+"formas": [
+"Paraná"
+]
+},
+{
+"id": "BR-Pernambuco",
+"tipo": "estado",
+"formas": [
+"Pernambuco"
+]
+},
+{
+"id": "BR-Piauí",
+"tipo": "estado",
+"formas": [
+"Piauí"
+]
+},
+{
+"id": "BR-Rio de Janeiro",
+"tipo": "estado",
+"formas": [
+"Rio de Janeiro"
+]
+},
+{
+"id": "BR-Rio Grande do Norte",
+"tipo": "estado",
+"formas": [
+"Rio Grande do Norte"
+]
+},
+{
+"id": "BR-Rio Grande do Sul",
+"tipo": "estado",
+"formas": [
+"Rio Grande do Sul"
+]
+},
+{
+"id": "BR-Rondônia",
+"tipo": "estado",
+"formas": [
+"Rondônia"
+]
+},
+{
+"id": "BR-Roraima",
+"tipo": "estado",
+"formas": [
+"Roraima"
+]
+},
+{
+"id": "BR-Santa Catarina",
+"tipo": "estado",
+"formas": [
+"Santa Catarina"
+]
+},
+{
+"id": "BR-São Paulo",
+"tipo": "estado",
+"formas": [
+"São Paulo"
+]
+},
+{
+"id": "BR-Sergipe",
+"tipo": "estado",
+"formas": [
+"Sergipe"
+]
+},
+{
+"id": "BR-Tocantins",
+"tipo": "estado",
+"formas": [
+"Tocantins"
+]
+},
+{
+"id": "US-Alabama",
+"tipo": "estado",
+"formas": [
+"Alabama"
+]
+},
+{
+"id": "US-Alaska",
+"tipo": "estado",
+"formas": [
+"Alasca",
+"Alaska"
+]
+},
+{
+"id": "US-Arizona",
+"tipo": "estado",
+"formas": [
+"Arizona"
+]
+},
+{
+"id": "US-Arkansas",
+"tipo": "estado",
+"formas": [
+"Arkansas"
+]
+},
+{
+"id": "US-California",
+"tipo": "estado",
+"formas": [
+"California",
+"Califórnia"
+]
+},
+{
+"id": "US-North Carolina",
+"tipo": "estado",
+"formas": [
+"Carolina do Norte",
+"North Carolina"
+]
+},
+{
+"id": "US-South Carolina",
+"tipo": "estado",
+"formas": [
+"Carolina do Sul",
+"South Carolina"
+]
+},
+{
+"id": "US-Colorado",
+"tipo": "estado",
+"formas": [
+"Colorado"
+]
+},
+{
+"id": "US-Connecticut",
+"tipo": "estado",
+"formas": [
+"Connecticut"
+]
+},
+{
+"id": "US-North Dakota",
+"tipo": "estado",
+"formas": [
+"Dakota do Norte",
+"North Dakota"
+]
+},
+{
+"id": "US-South Dakota",
+"tipo": "estado",
+"formas": [
+"Dakota do Sul",
+"South Dakota"
+]
+},
+{
+"id": "US-Delaware",
+"tipo": "estado",
+"formas": [
+"Delaware"
+]
+},
+{
+"id": "US-Florida",
+"tipo": "estado",
+"formas": [
+"Florida",
+"Flórida"
+]
+},
+{
+"id": "US-Georgia",
+"tipo": "estado",
+"formas": [
+"Georgia",
+"Geórgia"
+]
+},
+{
+"id": "US-Hawaii",
+"tipo": "estado",
+"formas": [
+"Havaí",
+"Hawaii"
+]
+},
+{
+"id": "US-Idaho",
+"tipo": "estado",
+"formas": [
+"Idaho"
+]
+},
+{
+"id": "US-Illinois",
+"tipo": "estado",
+"formas": [
+"Illinois"
+]
+},
+{
+"id": "US-Indiana",
+"tipo": "estado",
+"formas": [
+"Indiana"
+]
+},
+{
+"id": "US-Iowa",
+"tipo": "estado",
+"formas": [
+"Iowa"
+]
+},
+{
+"id": "US-Kansas",
+"tipo": "estado",
+"formas": [
+"Kansas"
+]
+},
+{
+"id": "US-Kentucky",
+"tipo": "estado",
+"formas": [
+"Kentucky"
+]
+},
+{
+"id": "US-Louisiana",
+"tipo": "estado",
+"formas": [
+"Louisiana",
+"Luisiana"
+]
+},
+{
+"id": "US-Maine",
+"tipo": "estado",
+"formas": [
+"Maine"
+]
+},
+{
+"id": "US-Maryland",
+"tipo": "estado",
+"formas": [
+"Maryland"
+]
+},
+{
+"id": "US-Massachusetts",
+"tipo": "estado",
+"formas": [
+"Massachusetts"
+]
+},
+{
+"id": "US-Michigan",
+"tipo": "estado",
+"formas": [
+"Michigan"
+]
+},
+{
+"id": "US-Minnesota",
+"tipo": "estado",
+"formas": [
+"Minnesota"
+]
+},
+{
+"id": "US-Mississippi",
+"tipo": "estado",
+"formas": [
+"Mississippi"
+]
+},
+{
+"id": "US-Missouri",
+"tipo": "estado",
+"formas": [
+"Missouri"
+]
+},
+{
+"id": "US-Montana",
+"tipo": "estado",
+"formas": [
+"Montana"
+]
+},
+{
+"id": "US-Nebraska",
+"tipo": "estado",
+"formas": [
+"Nebraska"
+]
+},
+{
+"id": "US-Nevada",
+"tipo": "estado",
+"formas": [
+"Nevada"
+]
+},
+{
+"id": "US-New Hampshire",
+"tipo": "estado",
+"formas": [
+"New Hampshire",
+"Nova Hampshire"
+]
+},
+{
+"id": "US-New Jersey",
+"tipo": "estado",
+"formas": [
+"New Jersey",
+"Nova Jersey"
+]
+},
+{
+"id": "US-New York",
+"tipo": "estado",
+"formas": [
+"New York",
+"Nova Iorque",
+"Nova York"
+]
+},
+{
+"id": "US-New Mexico",
+"tipo": "estado",
+"formas": [
+"New Mexico",
+"Novo México"
+]
+},
+{
+"id": "US-Ohio",
+"tipo": "estado",
+"formas": [
+"Ohio"
+]
+},
+{
+"id": "US-Oklahoma",
+"tipo": "estado",
+"formas": [
+"Oklahoma"
+]
+},
+{
+"id": "US-Oregon",
+"tipo": "estado",
+"formas": [
+"Oregon"
+]
+},
+{
+"id": "US-Pennsylvania",
+"tipo": "estado",
+"formas": [
+"Pennsylvania",
+"Pensilvânia"
+]
+},
+{
+"id": "US-Rhode Island",
+"tipo": "estado",
+"formas": [
+"Rhode Island"
+]
+},
+{
+"id": "US-Tennessee",
+"tipo": "estado",
+"formas": [
+"Tennessee"
+]
+},
+{
+"id": "US-Texas",
+"tipo": "estado",
+"formas": [
+"Texas"
+]
+},
+{
+"id": "US-Utah",
+"tipo": "estado",
+"formas": [
+"Utah"
+]
+},
+{
+"id": "US-Vermont",
+"tipo": "estado",
+"formas": [
+"Vermont"
+]
+},
+{
+"id": "US-Virginia",
+"tipo": "estado",
+"formas": [
+"Virginia",
+"Virgínia"
+]
+},
+{
+"id": "US-West Virginia",
+"tipo": "estado",
+"formas": [
+"Virgínia Ocidental",
+"West Virginia"
+]
+},
+{
+"id": "US-Washington",
+"tipo": "estado",
+"formas": [
+"Washington"
+]
+},
+{
+"id": "US-Wisconsin",
+"tipo": "estado",
+"formas": [
+"Wisconsin"
+]
+},
+{
+"id": "US-Wyoming",
+"tipo": "estado",
+"formas": [
+"Wyoming"
+]
+},
+{
+"id": "G-Arctic",
+"tipo": "geografia",
+"formas": [
+"Arctic",
+"Ártico"
+]
+},
+{
+"id": "G-Antarctic",
+"tipo": "geografia",
+"formas": [
+"Antarctic",
+"Antártico"
+]
+},
+{
+"id": "G-Antarctica",
+"tipo": "geografia",
+"formas": [
+"Antarctica",
+"Antártica",
+"Antártida"
+]
+},
+{
+"id": "G-Arctic Circle",
+"tipo": "geografia",
+"formas": [
+"Arctic Circle",
+"Círculo Polar Ártico"
+]
+},
+{
+"id": "G-Antarctic Circle",
+"tipo": "geografia",
+"formas": [
+"Antarctic Circle",
+"Círculo Polar Antártico"
+]
+},
+{
+"id": "G-North Pole",
+"tipo": "geografia",
+"formas": [
+"North Pole",
+"Polo Norte"
+]
+},
+{
+"id": "G-South Pole",
+"tipo": "geografia",
+"formas": [
+"Polo Sul",
+"South Pole"
+]
+},
+{
+"id": "G-Atlantic Ocean",
+"tipo": "geografia",
+"formas": [
+"Atlantic",
+"Atlantic Ocean",
+"Atlántico",
+"Atlântico",
+"Oceano Atlântico",
+"Océano Atlántico"
+]
+},
+{
+"id": "G-Pacific Ocean",
+"tipo": "geografia",
+"formas": [
+"Oceano Pacífico",
+"Océano Pacífico",
+"Pacific",
+"Pacific Ocean",
+"Pacífico"
+]
+},
+{
+"id": "G-Indian Ocean",
+"tipo": "geografia",
+"formas": [
+"Indian Ocean",
+"Oceano Índico",
+"Océano Índico"
+]
+},
+{
+"id": "G-Arctic Ocean",
+"tipo": "geografia",
+"formas": [
+"Arctic Ocean",
+"Oceano Ártico",
+"Océano Ártico"
+]
+},
+{
+"id": "G-Southern Ocean",
+"tipo": "geografia",
+"formas": [
+"Oceano Antártico",
+"Oceano Austral",
+"Océano Austral",
+"Southern Ocean"
+]
+},
+{
+"id": "G-Mediterranean Sea",
+"tipo": "geografia",
+"formas": [
+"Mar Mediterrâneo",
+"Mediterranean",
+"Mediterranean Sea",
+"Mediterráneo",
+"Mediterrâneo"
+]
+},
+{
+"id": "G-Caribbean Sea",
+"tipo": "geografia",
+"formas": [
+"Caribbean Sea",
+"Mar Caribe",
+"Mar das Caraíbas",
+"Mar do Caribe"
+]
+},
+{
+"id": "G-Red Sea",
+"tipo": "geografia",
+"formas": [
+"Mar Rojo",
+"Mar Vermelho",
+"Red Sea"
+]
+},
+{
+"id": "G-Black Sea",
+"tipo": "geografia",
+"formas": [
+"Black Sea",
+"Mar Negro"
+]
+},
+{
+"id": "G-North Sea",
+"tipo": "geografia",
+"formas": [
+"Mar del Norte",
+"Mar do Norte",
+"North Sea"
+]
+},
+{
+"id": "G-Baltic Sea",
+"tipo": "geografia",
+"formas": [
+"Baltic Sea",
+"Mar Báltico"
+]
+},
+{
+"id": "G-Barents Sea",
+"tipo": "geografia",
+"formas": [
+"Barents Sea",
+"Mar de Barents"
+]
+},
+{
+"id": "G-Equator",
+"tipo": "geografia",
+"formas": [
+"Ecuador (línea)",
+"Equador (linha)",
+"Equator",
+"Linha do Equador"
+]
+},
+{
+"id": "G-Scandinavia",
+"tipo": "geografia",
+"formas": [
+"Escandinavia",
+"Escandinávia",
+"Scandinavia"
+]
+},
+{
+"id": "G-Siberia",
+"tipo": "geografia",
+"formas": [
+"Siberia",
+"Sibéria"
+]
+},
+{
+"id": "G-Middle East",
+"tipo": "geografia",
+"formas": [
+"Middle East",
+"Médio Oriente",
+"Oriente Medio",
+"Oriente Médio"
+]
+},
+{
+"id": "G-Amazon",
+"tipo": "geografia",
+"formas": [
+"Amazon",
+"Amazonia",
+"Amazonía",
+"Amazônia"
+]
+},
+{
+"id": "G-Sahara",
+"tipo": "geografia",
+"formas": [
+"Saara",
+"Sahara",
+"Sáhara"
+]
+},
+{
+"id": "G-Himalayas",
+"tipo": "geografia",
+"formas": [
+"Himalaia",
+"Himalaya",
+"Himalayas"
+]
+},
+{
+"id": "G-Andes",
+"tipo": "geografia",
+"formas": [
+"Andes"
+]
+},
+{
+"id": "G-Alps",
+"tipo": "geografia",
+"formas": [
+"Alpes",
+"Alps"
+]
+}
+]
+}

@@ -39,8 +39,11 @@ UNIDADES: dict[str, tuple[str, float, float, tuple[str, ...]]] = {
     "lb": ("massa", 0.45359237, 0.0, ("lbs?", "libras?", "pounds?")),
     "oz": ("massa", 0.028349523125, 0.0, ("oz", "onças?", "ounces?", "onzas?")),
     # temperatura (base: kelvin)
-    "°C": ("temperatura", 1.0, 273.15, ("°\\s?C", "º\\s?C", "graus celsius", "degrees celsius", "grados celsius", "celsius")),
-    "°F": ("temperatura", 5 / 9, 273.15 - 32 * 5 / 9, ("°\\s?F", "º\\s?F", "deg\\s?F", "graus fahrenheit", "degrees fahrenheit", "fahrenheit")),
+    # 26/11: "graus"/"degrees" sem escala é Celsius; "°" sozinho também (salvo coordenada "78° N"); "18C" colado
+    "°C": ("temperatura", 1.0, 273.15, ("°\\s?C", "º\\s?C", "graus celsius", "degrees celsius", "grados celsius", "celsius",
+                                         "graus?", "degrees?", "grados?", "°(?!\\s?[NSLOEWF]\\b)", "(?<=\\d)C")),
+    "°F": ("temperatura", 5 / 9, 273.15 - 32 * 5 / 9, ("°\\s?F", "º\\s?F", "deg\\s?F", "graus fahrenheit", "degrees fahrenheit",
+                                                       "fahrenheit", "(?<=\\d)F")),
     "K": ("temperatura", 1.0, 0.0, ("K", "kelvin")),
     # velocidade (base: m/s)
     "km/h": ("velocidade", 1000 / 3600, 0.0, ("km/h", "kph", "quilômetros por hora", "quilometros por hora", "kilometers per hour", "kilómetros por hora")),
@@ -70,9 +73,16 @@ _FORMAS = sorted(((forma, u) for u, (_, _, _, fs) in UNIDADES.items() for forma 
 _RE_UNIDADE = "|".join(f"(?P<u{k}>{f})" for k, (f, _) in enumerate(_FORMAS))
 _RE_ESCALA = "|".join(e for e, _ in _ESCALAS)
 _RE_COMP = "|".join(c for _, c in _COMPARADOR)
+# sinal: "−3", "menos 3" (não "menos de 3", que é comparação), "minus 3"; depois: "3 graus negativos"
+_RE_SINAL = r"(?<![\w.,])[−–-]\s?|\bmenos\s+(?!de\b)|\bminus\s+"
+_RE_NEGATIVO = r"\s+(?:negativos?|abaixo de zero|below zero|bajo cero|below freezing)\b"
 _QUANTIDADE = re.compile(
-    rf"(?:(?P<comp>{_RE_COMP})\s+)?(?P<sinal>[−–-])?(?P<num>\d+(?:[.,]\d+|[\s  ]\d{3}(?!\d))*)\s*"
-    rf"(?:(?P<escala>{_RE_ESCALA})(?![^\W\d_])\s*(?:de\s+)?)?(?:{_RE_UNIDADE})(?![^\W\d_²³/])", re.I)
+    rf"(?:(?P<comp>{_RE_COMP})\s+)?(?P<sinal>{_RE_SINAL})?(?:(?:cerca de|aproximadamente|uns|umas|quase|por volta de|em torno de|about|around)\s+)?(?P<num>\d+(?:[.,]\d+|[\s  ]\d{3}(?!\d))*)\s*"
+    rf"(?:(?P<escala>{_RE_ESCALA})(?![^\W\d_])\s*(?:de\s+)?)?(?:{_RE_UNIDADE})(?![^\W\d_²³/])(?P<neg>{_RE_NEGATIVO})?", re.I)
+# 26/11 (Svalbard, "between minus 3 and 4°C"): numa faixa o 1º número vem sem unidade; a unidade (e, na
+# temperatura, o sinal) do 2º valem para ele — e o sinal do 1º vale para o 2º quando o 2º não tem sinal
+_FAIXA_ANTES = re.compile(rf"(?P<sinal>{_RE_SINAL})?(?<![\w.,])(?P<num>\d{{1,3}}(?:[.,]\d+)?)\s*(?:°\s*C?\s*)?"
+                          r"(?:a|e|and|to|até|y|[−–-])\s*$", re.I)
 _INGLES = re.compile(r"\b(the|and|of|was|were|is|are|with|from|than|it|its|weighs?|about|over|under)\b", re.I)
 _PT_ES = re.compile(r"\b(de|do|da|dos|das|que|com|em|no|na|um|uma|el|los|las|del|con|una|é|foi|são|tem)\b", re.I)
 
@@ -112,19 +122,33 @@ def quantidades(texto: str) -> list[dict]:
         if m.group("escala"):
             escala = next(f for e, f in _ESCALAS if re.fullmatch(e, m.group("escala"), re.I))
         valor *= escala
-        if m.group("sinal"):
-            valor = -valor
         unidade = next(_FORMAS[int(k[1:])][1] for k, v in m.groupdict().items() if k.startswith("u") and v)
-        grandeza, fator, desloc, _ = UNIDADES[unidade]
+        grandeza = UNIDADES[unidade][0]
         comp = "="
         if m.group("comp"):
             comp = next(c for c, r in _COMPARADOR if re.fullmatch(r, m.group("comp"), re.I))
-        expoente = math.floor(math.log10(abs(valor))) if valor else 0
-        resolucao = 10 ** (expoente - sig + 1)                   # passo do último algarismo significativo
-        out.append({"valor": valor, "unidade": unidade, "grandeza": grandeza, "base": valor * fator + desloc,
-                    "comparador": comp, "sig": sig, "resolucao_base": resolucao * fator, "texto": m.group(0).strip(),
-                    "numero": m.group("num")})
+        negativo = bool(m.group("sinal")) or bool(m.group("neg"))
+        faixa = None if m.group("comp") or m.group("escala") else _FAIXA_ANTES.search(texto[:m.start()])
+        if faixa:
+            lido1 = _ler_numero(faixa.group("num"), ingles)
+            if lido1:
+                temperatura = grandeza == "temperatura"
+                neg1 = temperatura and (bool(faixa.group("sinal")) or bool(m.group("neg")))
+                negativo = negativo or (temperatura and bool(faixa.group("sinal")))
+                out.append(_quantidade(-lido1[0] if neg1 else lido1[0], lido1[1], unidade, "=",
+                                       faixa.group(0).strip(), faixa.group("num")))
+        if negativo:
+            valor = -valor
+        out.append(_quantidade(valor, sig, unidade, comp, m.group(0).strip(), m.group("num")))
     return out
+
+
+def _quantidade(valor: float, sig: int, unidade: str, comp: str, texto: str, numero: str) -> dict:
+    grandeza, fator, desloc, _ = UNIDADES[unidade]
+    expoente = math.floor(math.log10(abs(valor))) if valor else 0
+    resolucao = 10 ** (expoente - sig + 1)                       # passo do último algarismo significativo
+    return {"valor": valor, "unidade": unidade, "grandeza": grandeza, "base": valor * fator + desloc,
+            "comparador": comp, "sig": sig, "resolucao_base": resolucao * fator, "texto": texto, "numero": numero}
 
 
 def _comparadores_casam(a: str, f: str) -> bool:
