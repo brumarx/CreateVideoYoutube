@@ -205,3 +205,11 @@ def test_conferencia_retirada_na_segunda_opiniao_ainda_passa_pela_trava_de_causa
     v = rd.conferir_contra_trechos([{"texto": "O permafrost ajuda a manter o frio.", "evidencias": ["E2"]},
                                     {"texto": "Por isso o cofre nunca esquenta.", "evidencias": ["E2"]}], {})
     assert v[0] is None and v[1]  # a 2ª tem conector de causa sem causa no fato: a trava em código segura
+
+
+def test_fechamento_pedido_lista_todas_as_palavras_que_a_conferencia_recusa():
+    """Svalbard 26/11: "protege" era recusado pela regex e não estava no pedido — 3 recusas iguais."""
+    pedido = rd._PROMPT_FECHAMENTO.format(tema="t", pergunta="Como ela protege?", ponto="p", roteiro="r",
+                                          proibidas=rd._PALAVRAS_ALEGA)
+    palavras = rd._ALEGA.pattern.split("(", 1)[1].split(")", 1)[0].split("|")
+    assert palavras and all(f'"{p}"' in pedido for p in palavras)

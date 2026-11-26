@@ -1396,8 +1396,8 @@ São 2 ou 3 frases faladas, nesta ordem:
 1. volta à pergunta da abertura e a responde com o que o vídeo JÁ mostrou (sem fato novo);
 2. o ponto de vista, dito como opinião ("para mim", "o que mais me impressiona"), sobre o que o vídeo mostrou;
 3. uma pergunta direta ao espectador OU "Comenta PALAVRA se…" (PALAVRA em maiúsculas, uma palavra do tema).
-Proibido: número, data, nome que o roteiro não citou, "já", "sempre", "garante", "funciona", "prova", "total",
-"porque", "por isso", "graças", pedir like ou inscrição. A opinião fala do que VOCÊ sente diante do que o vídeo
+Proibido: número, data, nome que o roteiro não citou, pedir like ou inscrição, e estas palavras (mesmo que a
+pergunta da abertura use alguma delas — então responda com outro verbo): {proibidas}. A opinião fala do que VOCÊ sente diante do que o vídeo
 mostrou ("para mim, o que mais impressiona é a ideia de uma cópia de segurança para o mundo inteiro"), nunca
 explica causa nem avalia resultado.
 Pergunta da abertura: {pergunta}
@@ -1407,6 +1407,9 @@ ROTEIRO:
 Responda SÓ JSON: {{"frases": ["...", "..."]}}"""
 
 
+# a lista do pedido sai da MESMA regex que confere (Svalbard 26/11: "protege" estava na regex e fora do pedido;
+# a pergunta da abertura usava "protege" e o fechamento foi recusado 3× pela mesma palavra)
+_PALAVRAS_ALEGA = ", ".join(f'"{p}"' for p in _ALEGA.pattern.split("(", 1)[1].split(")", 1)[0].split("|"))
 _OPINIAO = re.compile(r"\b(para mim|pra mim|me impressiona|eu acho|na minha opinião|o que mais me)\b", re.I)
 
 
@@ -1424,14 +1427,15 @@ def escrever_fechamento(script: dict, plano: dict | None, topic: str, max_pal: i
     roteiro = "\n".join(f"{i + 1}. {sc.get('narration') or ' '.join(f['texto'] for f in sc.get('frases') or [])}"
                         for i, sc in enumerate(cenas))
     pedido = _PROMPT_FECHAMENTO.format(tema=topic, pergunta=angulo.get("pergunta") or "-",
-                                       ponto=angulo.get("ponto_de_vista") or "-", roteiro=roteiro)
+                                       ponto=angulo.get("ponto_de_vista") or "-", roteiro=roteiro,
+                                       proibidas=_PALAVRAS_ALEGA)
     ultima = list(cenas[-1].get("frases") or [])
     while ultima and ultima[-1].get("tipo") == "narrativa":
         ultima.pop()
     if not ultima:
         return script
     nomes = _nomes_conhecidos(script, topic)
-    correcao = ""
+    correcao, recusadas = "", []
     for _ in range(tentativas):
         try:
             raw = complete([{"role": "user", "content": pedido + correcao}], max_tokens=800, temperature=0.5,
@@ -1463,7 +1467,9 @@ def escrever_fechamento(script: dict, plano: dict | None, topic: str, max_pal: i
             log.info("fechamento escrito à parte: %s", " | ".join(frases))
             return novo
         log.warning("fechamento recusado (%s)", motivo)
-        correcao = f"\n\nO fechamento anterior foi recusado — {motivo}. Escreva de novo sem isso."
+        recusadas.append(motivo)
+        correcao = ("\n\nFechamentos anteriores recusados:\n" + "\n".join(f"- {m}" for m in recusadas)
+                    + "\nEscreva de novo sem nenhum desses problemas: troque a palavra apontada por outra, não a repita.")
     log.warning("fechamento sem versão válida — fica o fim do roteiro")
     return script
 
