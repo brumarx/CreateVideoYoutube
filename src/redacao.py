@@ -36,8 +36,8 @@ log = logging.getLogger("redacao")
 
 TIPOS = ("factual", "explicativa", "narrativa")
 PALAVRAS_POR_MINUTO = 135  # ritmo medido da voz (edge-tts Antonio)
-NOTA_MINIMA = 7           # qualidade narrativa (0-10) abaixo disso o roteiro não sai
-FAIXA_DUVIDA = (6.5, 7.3)  # 26/11: nota editorial nesta faixa ganha LEITURAS_EXTRA (mediana de 5, não de 3)
+NOTA_MINIMA = 6.5           # qualidade narrativa (0-10) abaixo disso o roteiro não sai
+FAIXA_DUVIDA = (NOTA_MINIMA - 0.5, NOTA_MINIMA + 0.3)  # 26/11: nota editorial nesta faixa ganha LEITURAS_EXTRA (mediana de 5, não de 3)
 LEITURAS_EXTRA = 2
 NOTA_ALVO = 8             # abaixo disso: uma passada de edição com o parecer (fica a melhor versão)
 # tokens reservados para a resposta: com o pedido, cabe nos ~8 mil por pedido do Groq grátis

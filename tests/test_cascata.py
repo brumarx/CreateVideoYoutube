@@ -460,7 +460,7 @@ def test_997_edicao_que_piora_fica_a_versao_anterior(monkeypatch):
 
 
 def test_997_nota_abaixo_do_minimo_reprova(monkeypatch):
-    monkeypatch.setattr(rd, "auditar_ia", lambda s, b, t, *_: ([], {"nota": 6.5, "problemas": ["rasa"]}))
+    monkeypatch.setattr(rd, "auditar_ia", lambda s, b, t, *_: ([], {"nota": 6.0, "problemas": ["rasa"]}))
     with pytest.raises(rd.RoteiroReprovado, match="qualidade narrativa"):
         rd.auditar_e_corrigir(_roteiro_simples("x."), {"evidencias": []}, "t")
 
