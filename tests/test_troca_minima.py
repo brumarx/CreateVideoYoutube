@@ -247,3 +247,23 @@ def test_pergunta_do_plano_na_abertura_nao_vira_fato():
     assert not [x for x in probs if x["termo"] == p]
     s.pop("_plano")
     assert [x for x in rd.auditar_codigo(s, {"evidencias": []}, "Svalbard")[1] if x["termo"] == p]
+
+
+def test_medida_tem_dono_no_plano_e_os_outros_blocos_sao_avisados():
+    """Svalbard 26/11: −18 °C nas câmaras (bloco 2) e de novo nas sementes recalcitrantes (bloco 5)."""
+    banco = {"evidencias": [
+        {"id": "E1", "afirmacao": "As câmaras ficam a -18 °C.", "status": "oficial", "citacoes": []},
+        {"id": "E2", "afirmacao": "Sementes recalcitrantes morrem a -18 °C.", "status": "oficial", "citacoes": []},
+        {"id": "E3", "afirmacao": "O cofre abriu em 2008.", "status": "oficial", "citacoes": []}]}
+    plano = {"blocos": [{"evidencias": ["E3"]}, {"evidencias": ["E1"]}, {"evidencias": ["E2"]}]}
+    avisos = rd.donos_de_medida(plano, banco)
+    assert list(avisos) == [3] and avisos[3][0][1] == 2
+
+
+def test_escritor_recebe_cada_valor_com_seu_bloco():
+    banco = {"evidencias": [
+        {"id": "E1", "afirmacao": "As câmaras ficam a -18 °C.", "status": "oficial", "citacoes": []},
+        {"id": "E3", "afirmacao": "O cofre abriu em 2008.", "status": "oficial", "citacoes": []}]}
+    plano = {"blocos": [{"evidencias": ["E3"]}, {"evidencias": ["E1"]}]}
+    texto = rd.bloco_de_medidas(plano, banco)
+    assert "2008 → bloco 1" in texto and "-18 °C → bloco 2" in texto and "NÃO escreva o valor de novo" in texto

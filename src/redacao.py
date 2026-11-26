@@ -884,10 +884,52 @@ def planejar_historia(topic: str, banco: dict, *, min_minutes: float, max_minute
     return plano
 
 
+def donos_de_medida(plano: dict, banco: dict) -> dict[int, list[tuple[str, int]]]:
+    """26/11 (Svalbard: "−18 °C" na cena das câmaras e de novo em "café e cacau morrem a 18 graus negativos" —
+    duas evidências diferentes com o mesmo valor; a trava de repetição segurou a nota em 6,5). Cada ano/medida
+    é do PRIMEIRO bloco cujas evidências o trazem; os blocos seguintes recebem {bloco: [(medida, dono)]} para
+    o escritor se referir sem repetir o valor. Mesma chave da trava (chaves_de_fato)."""
+    return _donos(plano, banco)[1]
+
+
+def _donos(plano: dict, banco: dict) -> tuple[dict[str, int], dict[int, list[tuple[str, int]]]]:
+    ev = por_id(banco)
+    dono: dict[str, int] = {}
+    avisos: dict[int, list[tuple[str, int]]] = {}
+    for k, b in enumerate(plano.get("blocos") or [], 1):
+        chaves = set()
+        for x in b.get("evidencias") or []:
+            if x in ev:
+                chaves |= chaves_de_fato(ev[x].get("afirmacao", ""))
+        for c in sorted(chaves):
+            if c in dono and dono[c] != k:
+                avisos.setdefault(k, []).append((c, dono[c]))
+            else:
+                dono.setdefault(c, k)
+    return dono, avisos
+
+
+def bloco_de_medidas(plano: dict, banco: dict) -> str:
+    """A lista "valor → o único bloco onde ele é dito" para o escritor: no teste de 26/11 o "−18 °C" voltou numa
+    frase cuja evidência (café e cacau morrem no cofre) nem tinha número — o escritor repetiu por conta própria."""
+    dono = _donos(plano, banco)[0]
+    # "1300" sozinho some quando "1300 km" está na lista; decimal à brasileira
+    dono = {c: k for c, k in dono.items() if not any(o != c and o.startswith(c + " ") for o in dono)}
+    if not dono:
+        return ""
+    return ("\nCADA VALOR NUM BLOCO SÓ (ano, medida, temperatura): " + "; ".join(f"{c.replace('.', ',')} → bloco {k}" for c, k in
+            sorted(dono.items(), key=lambda x: (x[1], x[0])))
+            + ". Fora do bloco dele, NÃO escreva o valor de novo (nem arredondado, nem por extenso): refira-se a ele "
+              "(\"nesse frio\", \"naquela data\") ou deixe de fora.\n")
+
+
 def material_do_plano(plano: dict, banco: dict) -> str:
     ids = {x for b in plano["blocos"] for x in b["evidencias"]}
     blocos = "\n".join(f"{k}. [{b.get('funcao', '')}] {b.get('conta', '')} (evidências: {', '.join(b['evidencias']) or '-'})"
                        + (f" → deixa: {b['deixa']}" if b.get("deixa") else "")
+                       + "".join(f"\n   ⚠ {c} já foi dito no bloco {d}: aqui NÃO repita o valor — refira-se a ele "
+                                 f"(\"nesse frio\", \"essa mesma temperatura\", \"naquele ano\") ou deixe de fora"
+                                 for c, d in donos_de_medida(plano, banco).get(k, []))
                        for k, b in enumerate(plano["blocos"], 1))
     g = plano.get("gancho") or {}
     return (f"PLANO DA HISTÓRIA (siga o ângulo e a ordem; cada bloco vira uma ou mais cenas com a FUNÇÃO dele; a "
@@ -900,6 +942,7 @@ def material_do_plano(plano: dict, banco: dict) -> str:
             + (f"Ponto de vista (dito no fechamento): {plano['angulo']['ponto_de_vista']}\n"
                if plano["angulo"].get("ponto_de_vista") else "")
             + f"{blocos}\n"
+            + bloco_de_medidas(plano, banco)
             + ("Não exagerar: " + "; ".join(plano["nao_exagerar"]) + "\n" if plano.get("nao_exagerar") else "")
             + "\nEVIDÊNCIAS DO PLANO (a base da história; cada uma com o trecho, o que comprova e o que NÃO comprova):\n"
             + bloco_do_mapa(mapa_do_conhecimento(banco), ids=ids, limite_trecho=400, plano=plano)
@@ -1935,28 +1978,30 @@ def agrupar_enganos(leituras: list[list[dict]]) -> list[dict]:
     return saida
 
 
-def _anos_e_medidas_por_cena(script: dict) -> dict[str, set[int]]:
+def chaves_de_fato(texto: str) -> set[str]:
+    """Anos e medidas da frase — a mesma chave para a trava de repetição e para o dono de cada medida no plano."""
     from .fatos import _pares
+    t = extenso_para_algarismos(texto or "")
+    return set(re.findall(r"\b(1\d{3}|20\d{2})\b", t)) | {f"{v} {u}" for v, u in _pares(t) if u != "ano"}
+
+
+def _anos_e_medidas_por_cena(script: dict) -> dict[str, set[int]]:
     onde: dict[str, set[int]] = {}
     for i, _, f in frases_de(script):
         if f.get("tipo") == "narrativa":
             continue
-        t = extenso_para_algarismos(f["texto"])
-        chaves = set(re.findall(r"\b(1\d{3}|20\d{2})\b", t)) | {f"{v} {u}" for v, u in _pares(t) if u != "ano"}
-        for c in chaves:
+        for c in chaves_de_fato(f["texto"]):
             onde.setdefault(c, set()).add(i)
     return onde
 
 
 def _repetidos_em_frases(script: dict) -> set[str]:
     """Anos e medidas ditos em mais de uma frase não narrativa do roteiro (na mesma cena ou em cenas diferentes)."""
-    from .fatos import _pares
     contagem: dict[str, int] = {}
     for _, _, f in frases_de(script):
         if f.get("tipo") == "narrativa":
             continue
-        t = extenso_para_algarismos(f["texto"])
-        for c in set(re.findall(r"\b(1\d{3}|20\d{2})\b", t)) | {f"{v} {u}" for v, u in _pares(t) if u != "ano"}:
+        for c in chaves_de_fato(f["texto"]):
             contagem[c] = contagem.get(c, 0) + 1
     return {c for c, n in contagem.items() if n > 1}
 
