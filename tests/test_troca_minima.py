@@ -164,3 +164,10 @@ def test_decisoes_numeradas_de_um_sao_lidas_pela_posicao():
     d2 = {"frases": [{"n": 13, "decisao": "sustentada", "justificativa": "a fonte diz isso"},
                      {"n": 2, "decisao": "sustentada", "justificativa": "a fonte diz isso"}]}
     assert sorted(rd._decisoes_validas(d2, {13, 14, 15})) == [13]
+
+
+@pytest.mark.parametrize("bruto", ["factual: sustentada", "Sustentada", '"sustentada"', "narrativa: narrativa_ok"])
+def test_decisao_com_rotulo_e_lida(bruto):
+    assert rd._decisao_normalizada(bruto) in ("sustentada", "narrativa_ok")
+    d = {"frases": [{"n": 1, "decisao": bruto, "justificativa": "a fonte diz isso"}]}
+    assert rd._decisoes_validas(d, {1})

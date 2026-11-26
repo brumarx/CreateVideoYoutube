@@ -2129,7 +2129,8 @@ def _revisao_valida(d, trecho: str) -> dict | None:
     vazia) não vale — fica a afirmação original (devolve None)."""
     if not isinstance(d, dict):
         return None
-    decisao = str(d.get("decisao", "")).strip().lower()
+    # 26/11: "fiel: corrigir" / "Corrigir" — o modelo às vezes repete rótulo antes da decisão
+    decisao = re.sub(r"\s+", "_", str(d.get("decisao", "")).strip().strip("\"'").lower().rsplit(":", 1)[-1].strip())
     if decisao not in DECISOES_REVISAO:
         return None
     motivo = re.sub(r"\s+", " ", str(d.get("motivo") or "")).strip()[:300]

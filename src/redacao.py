@@ -1132,7 +1132,7 @@ def conferir_contra_trechos(itens: list[dict], banco: dict) -> dict[int, str | N
             log.warning("conferência contra os trechos indisponível (%s)", exc)
         for n, it in enumerate(lote, 1):
             d = decisoes.get(n) or {}
-            ok = str(d.get("decisao", "")).strip().lower() == "sustentada"
+            ok = _decisao_normalizada(d.get("decisao")) == "sustentada"
             saida[ini + n - 1] = (causa_sem_trecho(it["texto"], it.get("evidencias") or [], mapa) if ok
                                   else (str(d.get("o_que_excede") or "").strip()
                                         or ("diz mais do que o trecho" if d else "não conferida")))
@@ -1500,6 +1500,14 @@ def _valido_auditor(raw: str) -> bool:
     return isinstance(data.get("frases"), list) and isinstance(data.get("qualidade"), dict)
 
 
+def _decisao_normalizada(valor) -> str:
+    """26/11 (Svalbard 1026: "factual: sustentada" em todas as frases — 4 pedidos perdidos e o job parado):
+    o modelo às vezes repete o tipo da frase antes da decisão, ou escreve com espaço/aspas."""
+    d = str(valor or "").strip().strip("\"'").lower()
+    d = d.rsplit(":", 1)[-1].strip()
+    return re.sub(r"\s+", "_", d)
+
+
 def _decisoes_validas(data: dict, esperados: set[int]) -> dict[int, dict]:
     """{n: decisão} das frases do bloco com decisão conhecida e justificativa de verdade.
     26/11 (Svalbard 1025: bloco 13-24 sem decisão 4 vezes): resposta numerada de 1 a len(bloco), sem nenhum
@@ -1519,7 +1527,7 @@ def _decisoes_validas(data: dict, esperados: set[int]) -> dict[int, dict]:
             continue
         if renumera:
             n = ordem[n - 1]
-        decisao = str(r.get("decisao", "")).strip().lower()
+        decisao = _decisao_normalizada(r.get("decisao"))
         just = str(r.get("justificativa", "")).strip()
         if n in esperados and decisao in DECISOES_AUDITOR and len(just.split()) >= 3:
             out[n] = {"decisao": decisao, "justificativa": just[:300],
