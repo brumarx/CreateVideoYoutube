@@ -286,3 +286,16 @@ def test_fechamento_aceito_sobrevive_ao_corte_final(ambiente, frases, aceito):
     assert (novo is not s) is aceito
     if aceito:
         assert trim_teaser_ending(novo) is novo
+
+
+def test_saudacao_do_canal_sai_do_texto_do_escritor():
+    def s(*textos):
+        fr = [{"texto": t, "tipo": "narrativa", "evidencias": []} for t in textos]
+        return {"scenes": [{"frases": fr, "narration": " ".join(textos)}, {"frases": [], "narration": "x"}]}
+    g = ["E aí, mente curiosa!"]
+    assert [f["texto"] for f in rd.sem_saudacao(s("E aí, mente curiosa!", "O cofre não é mina."), g)["scenes"][0]["frases"]] \
+        == ["O cofre não é mina."]
+    assert rd.sem_saudacao(s("E aí, mente curiosa! O cofre não é mina."), g)["scenes"][0]["frases"][0]["texto"] \
+        == "O cofre não é mina."
+    original = s("O cofre não é mina.")
+    assert rd.sem_saudacao(original, g) is original

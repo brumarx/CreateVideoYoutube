@@ -1481,7 +1481,7 @@ def escrever(channel, topic: str, banco: dict, *, min_minutes: float, max_minute
         except RuntimeError as exc:
             log.warning("escritor indisponível (tentativa %d/%d): %s", n + 1, tentativas, exc)
             continue
-        script = de_json(_obj(raw), banco)
+        script = sem_saudacao(de_json(_obj(raw), banco), getattr(channel, "greetings", None) or [])
         if plano:
             script["_plano"] = plano
         script, cortadas = conferir_na_escrita(script, banco, topic)
@@ -1533,6 +1533,31 @@ _OPINIAO = re.compile(r"\b(para mim|pra mim|me impressiona|eu acho|na minha opin
 def _pergunta_ao_espectador(frase: str, script: dict) -> bool:
     from .script_gen import _tokens_fora_da_frase, _viewer_question
     return _viewer_question(frase, _tokens_fora_da_frase(script.get("scenes") or [], frase))
+
+
+def sem_saudacao(script: dict, saudacoes: list[str]) -> dict:
+    """26/11 (varredura): o bordão do canal ("E aí, mente curiosa!") entra sozinho depois da auditoria
+    (ChannelConfig.with_greeting); o escritor, imitando os vídeos de referência, o escrevia na frente do gancho —
+    o gancho deixava de ser a 1ª frase e o juiz editorial descontava "clichê". Sai do texto do escritor."""
+    alvos = {_comparavel(g) for g in saudacoes if g}
+    cenas = script.get("scenes") or []
+    if not alvos or not cenas or not cenas[0].get("frases"):
+        return script
+    frases = list(cenas[0]["frases"])
+    texto = frases[0]["texto"]
+    for g in saudacoes:
+        if _comparavel(texto).startswith(_comparavel(g)):
+            # a saudação é a frase inteira, ou o começo dela ("E aí, mente curiosa! O cofre…")
+            resto = re.sub(r"^\W*" + r"\W+".join(map(re.escape, re.findall(r"\w+", g))) + r"\W*", "", texto,
+                           flags=re.I).strip()
+            frases = ([{**frases[0], "texto": resto[:1].upper() + resto[1:]}] if resto else []) + frases[1:]
+            break
+    else:
+        return script
+    if not frases:
+        return {**script, "scenes": cenas[1:]}
+    return {**script, "scenes": [{**cenas[0], "frases": frases, "narration": " ".join(f["texto"] for f in frases)}]
+            + cenas[1:]}
 
 
 def escrever_fechamento(script: dict, plano: dict | None, topic: str, max_pal: int, tentativas: int = 3) -> dict:
