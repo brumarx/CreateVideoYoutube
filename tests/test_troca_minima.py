@@ -171,3 +171,37 @@ def test_decisao_com_rotulo_e_lida(bruto):
     assert rd._decisao_normalizada(bruto) in ("sustentada", "narrativa_ok")
     d = {"frases": [{"n": 1, "decisao": bruto, "justificativa": "a fonte diz isso"}]}
     assert rd._decisoes_validas(d, {1})
+
+
+@pytest.mark.segunda_opiniao
+def test_segunda_opiniao_retira_so_com_justificativa(ambiente):
+    responde, pedidos = ambiente
+    responde({"revisao": [{"n": 1, "decisao": "retira", "justificativa": "a frase diz ajuda a manter, o fato diz ajuda"},
+                          {"n": 2, "decisao": "confirma", "justificativa": "garante é mais forte que ajuda"},
+                          {"n": 3, "decisao": "retira", "justificativa": "curta"}]})
+    itens = [{"texto": f"frase {k}", "evidencias": ["E2"], "motivo": "excede"} for k in range(3)]
+    assert rd.segunda_opiniao(itens, {}) == {0: "a frase diz ajuda a manter, o fato diz ajuda"}
+    assert "MOTIVO DA REPROVAÇÃO: excede" in pedidos[0] and "FATO E2" in pedidos[0]
+
+
+@pytest.mark.segunda_opiniao
+def test_segunda_opiniao_sem_resposta_nao_retira(monkeypatch):
+    def falha(*a, **k):
+        raise RuntimeError("fora do ar")
+    monkeypatch.setattr(providers, "complete", falha)
+    monkeypatch.setattr(rd, "mapa_do_conhecimento", lambda banco: [])
+    assert rd.segunda_opiniao([{"texto": "x", "evidencias": [], "motivo": "excede"}], {}) == {}
+
+
+@pytest.mark.segunda_opiniao
+def test_conferencia_retirada_na_segunda_opiniao_ainda_passa_pela_trava_de_causa(monkeypatch):
+    monkeypatch.setattr(rd, "mapa_do_conhecimento", lambda banco: [
+        {"id": "E2", "afirmacao": "O permafrost ajuda a manter o frio.", "trecho": ""}])
+    respostas = iter([json.dumps({"decisoes": [{"n": 1, "decisao": "excede", "o_que_excede": "x"},
+                                               {"n": 2, "decisao": "excede", "o_que_excede": "y"}]}),
+                      json.dumps({"revisao": [{"n": 1, "decisao": "retira", "justificativa": "diz o mesmo que o fato E2"},
+                                              {"n": 2, "decisao": "retira", "justificativa": "diz o mesmo que o fato E2"}]})])
+    monkeypatch.setattr(providers, "complete", lambda msgs, **k: next(respostas))
+    v = rd.conferir_contra_trechos([{"texto": "O permafrost ajuda a manter o frio.", "evidencias": ["E2"]},
+                                    {"texto": "Por isso o cofre nunca esquenta.", "evidencias": ["E2"]}], {})
+    assert v[0] is None and v[1]  # a 2ª tem conector de causa sem causa no fato: a trava em código segura

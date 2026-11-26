@@ -246,3 +246,22 @@ def test_juiz_reveza_chaves_e_espera_o_descanso_como_o_groq(rede, monkeypatch):
     r = pv.complete([{"role": "user", "content": "x"}], keys=chaves, max_tokens=8000, temperature=0.1, juiz=True)
     assert r == '{"ok": 1}' and len(pedidos) == 3
     assert esperas and all(0 < s <= pv.ESPERA_CURTA_MAX for s in esperas) and sum(esperas) <= pv.ESPERA_TOTAL_MAX
+
+
+def test_nota_perto_do_minimo_ganha_mais_duas_leituras(monkeypatch):
+    # 26/11: 3 leituras dão 6,8 (faixa de dúvida) → mais 2, mediana de 5
+    baixo = {k: 7 for k in rd.CRITERIOS_EDITORIAIS}
+    baixo["conclusao"] = 5
+    baixo["novidade"] = 6
+    complete, fila, chamadas = _editor(baixo, baixo, baixo, {}, {})
+    monkeypatch.setattr(pv, "complete", complete)
+    q = rd.avaliar_editorial(S, "t")
+    assert len(chamadas) == 5 and len(q["leituras"]) == 5
+    assert q["criterios"]["conclusao"] == 5 and not q["nao_julgada"]
+
+
+def test_nota_longe_do_minimo_fica_com_tres_leituras(monkeypatch):
+    complete, _, chamadas = _editor({}, {}, {})  # 8 em tudo
+    monkeypatch.setattr(pv, "complete", complete)
+    rd.avaliar_editorial(S, "t")
+    assert len(chamadas) == 3

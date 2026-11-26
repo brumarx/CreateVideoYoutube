@@ -42,6 +42,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "conferencia: o teste usa a conferência na escrita de verdade (redacao.conferir_na_escrita)")
     config.addinivalue_line("markers", "fechamento: o teste usa o fechamento escrito à parte de verdade (redacao.escrever_fechamento)")
     config.addinivalue_line("markers", "aprende: o teste usa o aprendizado de decisões de verdade (decisoes.aprender)")
+    config.addinivalue_line("markers", "segunda_opiniao: o teste usa a 2ª opinião de verdade (redacao.segunda_opiniao)")
     config.addinivalue_line("markers", "troca: o teste usa a troca mínima de verdade (redacao.trocar_frases_apontadas)")
     config.addinivalue_line("markers", "ritmo: o teste usa redacao.ritmo_de_referencia de verdade")
     config.addinivalue_line("markers", "revisao: o teste usa a revisão das afirmações de verdade (evidencias.revisar_afirmacoes)")
@@ -77,6 +78,16 @@ def decisoes_isoladas(request, tmp_path, monkeypatch):
     monkeypatch.setattr(decisoes, "ARQUIVO", tmp_path / "decisoes_aprendidas.json")
     if not request.node.get_closest_marker("aprende"):
         monkeypatch.setattr(decisoes, "aprender", lambda *a, **k: {})
+
+
+@pytest.fixture(autouse=True)
+def segunda_opiniao_simulada(request, monkeypatch):
+    """26/11: cada reprovação do auditor e da conferência volta ao juiz (redacao.segunda_opiniao). Os testes
+    simulam só as outras respostas: aqui nada é retirado (a reprovação vale). Marker "segunda_opiniao" usa a real."""
+    if request.node.get_closest_marker("segunda_opiniao"):
+        return
+    from src import redacao
+    monkeypatch.setattr(redacao, "segunda_opiniao", lambda itens, banco: {})
 
 
 @pytest.fixture(autouse=True)

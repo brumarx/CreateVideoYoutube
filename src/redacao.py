@@ -37,6 +37,8 @@ log = logging.getLogger("redacao")
 TIPOS = ("factual", "explicativa", "narrativa")
 PALAVRAS_POR_MINUTO = 135  # ritmo medido da voz (edge-tts Antonio)
 NOTA_MINIMA = 7           # qualidade narrativa (0-10) abaixo disso o roteiro não sai
+FAIXA_DUVIDA = (6.5, 7.3)  # 26/11: nota editorial nesta faixa ganha LEITURAS_EXTRA (mediana de 5, não de 3)
+LEITURAS_EXTRA = 2
 NOTA_ALVO = 8             # abaixo disso: uma passada de edição com o parecer (fica a melhor versão)
 # tokens reservados para a resposta: com o pedido, cabe nos ~8 mil por pedido do Groq grátis
 RESPOSTA_AUDITOR = 3000      # decisões de até FRASES_POR_BLOCO frases (com justificativa) + nota
@@ -1100,6 +1102,62 @@ def causa_sem_trecho(texto: str, ids: list[str], mapa: dict[str, dict]) -> str |
     return f'DEDUÇÃO: "{m.group(0)}" liga dois fatos numa causa que nenhum trecho citado afirma'
 
 
+_PROMPT_SEGUNDA_OPINIAO = """Um auditor REPROVOU as frases abaixo de um roteiro de vídeo. Antes de a reprovação valer,
+releia com calma cada uma: a FRASE, o MOTIVO da reprovação e os FATOS que ela cita (afirmações já conferidas
+contra a fonte; o trecho original vem junto só para tirar dúvida de sentido). Só os fatos e trechos contam.
+Para cada frase decida:
+- "confirma": a reprovação está certa — a frase afirma algo que os fatos não dizem (dedução, causa, finalidade,
+  termo mais forte, tempo trocado, número ou sujeito diferente), ou é narrativa que esconde um fato verificável;
+- "retira": o auditor errou — a frase diz o mesmo que os fatos, com outras palavras ou resumindo (ou é narrativa
+  pura, sem fato), e o motivo aponta algo que não está na frase ou que o próprio fato diz.
+Na dúvida, "confirma". Na justificativa cite a palavra da frase e a do fato que decidem.
+{itens}
+Responda SÓ JSON: {{"revisao": [{{"n": 1, "decisao": "confirma", "justificativa": "..."}}]}}"""
+
+
+def segunda_opiniao(itens: list[dict], banco: dict) -> dict[int, str]:
+    """26/11 (pedido do dono: "o auditor pode parar e pensar — opa, isso está certo? — antes de reprovar"): a
+    leitura do público já tem 3 leituras com votação, mas a auditoria frase a frase e a conferência julgavam UMA
+    vez. Cada reprovação volta ao juiz fixo (com raciocínio) com o motivo e os fatos; ele confirma ou retira.
+    itens: [{"texto", "evidencias", "motivo", "anterior"?}]. Devolve {índice: justificativa} das RETIRADAS.
+    Sem resposta, nada é retirado (a reprovação vale)."""
+    from .decisoes import ler_lote
+    from .providers import ProvedoresIndisponiveis, complete, is_strong_model
+    if not itens:
+        return {}
+    mapa = {m["id"]: m for m in mapa_do_conhecimento(banco)}
+    retiradas: dict[int, str] = {}
+    for ini in range(0, len(itens), CONFERE_POR_CHAMADA):
+        lote = itens[ini:ini + CONFERE_POR_CHAMADA]
+        texto = "\n".join(f"{n}) " + (f"(anterior: {it['anterior'][:160]})\n   " if it.get("anterior") else "")
+                          + f"FRASE: {it['texto']}\n   MOTIVO DA REPROVAÇÃO: {it['motivo'][:300]}\n"
+                          + _trechos_das(it.get("evidencias") or [], mapa)
+                          for n, it in enumerate(lote, 1))
+        pedido = [{"role": "user", "content": _PROMPT_SEGUNDA_OPINIAO.format(itens=texto)}]
+        valido = lambda r: isinstance(_obj(r).get("revisao"), list)  # noqa: E731
+        try:
+            try:
+                raw = complete(pedido, max_tokens=4000, temperature=0.1, validate=valido, juiz=True)
+            except ProvedoresIndisponiveis:
+                raise
+            except RuntimeError as exc:
+                log.warning("juiz da 2ª opinião sem resposta (%s) — a cascata", str(exc)[:120])
+                raw = complete(pedido, max_tokens=4000, temperature=0.1, validate=valido, model_filter=is_strong_model)
+        except ProvedoresIndisponiveis:
+            raise
+        except RuntimeError as exc:
+            log.warning("2ª opinião indisponível (%s) — as reprovações valem", exc)
+            continue
+        revs = [r for r in _obj(raw).get("revisao") or [] if isinstance(r, dict) and str(r.get("n", "")).isdigit()]
+        for r, d in zip(revs, ler_lote([r.get("decisao") for r in revs], ("confirma", "retira"), ("retira",),
+                                       "segunda_opiniao")):
+            n = int(r["n"])
+            just = str(r.get("justificativa") or "").strip()
+            if d == "retira" and 1 <= n <= len(lote) and len(just.split()) >= 4:
+                retiradas[ini + n - 1] = just[:300]
+    return retiradas
+
+
 def conferir_contra_trechos(itens: list[dict], banco: dict) -> dict[int, str | None]:
     """itens: [{"texto", "evidencias", "anterior"}]. Devolve {índice: None (sustentada) | o que excede}.
     Sem resposta da conferência a frase conta como não conferida (nunca passa por falta de juiz).
@@ -1109,6 +1167,7 @@ def conferir_contra_trechos(itens: list[dict], banco: dict) -> dict[int, str | N
     from .providers import ProvedoresIndisponiveis, complete, is_strong_model
     mapa = {m["id"]: m for m in mapa_do_conhecimento(banco)}
     saida: dict[int, str | None] = {}
+    do_juiz: list[int] = []
     for ini in range(0, len(itens), CONFERE_POR_CHAMADA):
         lote = itens[ini:ini + CONFERE_POR_CHAMADA]
         texto = "\n".join(f"{n}) " + (f"(anterior: {it['anterior'][:160]})\n   " if it.get("anterior") else "")
@@ -1139,6 +1198,15 @@ def conferir_contra_trechos(itens: list[dict], banco: dict) -> dict[int, str | N
             saida[ini + n - 1] = (causa_sem_trecho(it["texto"], it.get("evidencias") or [], mapa) if ok
                                   else (str(d.get("o_que_excede") or "").strip()
                                         or ("diz mais do que o trecho" if d else "não conferida")))
+            if not ok and d:
+                do_juiz.append(ini + n - 1)
+    # 26/11: a reprovação do juiz passa pela 2ª opinião; retirada, só a trava de causa em código continua valendo
+    if do_juiz:
+        retiradas = segunda_opiniao([{**itens[k], "motivo": saida[k]} for k in do_juiz], banco)
+        for pos, just in retiradas.items():
+            k = do_juiz[pos]
+            log.info("conferência: reprovação retirada na 2ª opinião — %s (%s)", itens[k]["texto"][:80], just[:120])
+            saida[k] = causa_sem_trecho(itens[k]["texto"], itens[k].get("evidencias") or [], mapa)
     return saida
 
 
@@ -1648,6 +1716,22 @@ def auditar_ia(script: dict, banco: dict, topic: str, previas: dict | None = Non
     if sem:
         log.warning("auditor: frase(s) %s sem decisão depois de perguntar de novo — o roteiro não sai assim", sem)
         return None
+    # 26/11: cada reprovação NOVA do auditor passa pela 2ª opinião do juiz fixo antes de valer
+    reprovadas = [k for k in pendentes if DECISOES_AUDITOR.get(decisoes[k + 1]["decisao"])]
+    if reprovadas:
+        with metricas.etapa("segunda_opiniao"):
+            itens = [{"texto": lista[k][2]["texto"], "evidencias": list(lista[k][2].get("evidencias") or []),
+                      "anterior": lista[k - 1][2]["texto"] if k else "",
+                      "motivo": f"{decisoes[k + 1]['decisao']}: {decisoes[k + 1]['justificativa']}"} for k in reprovadas]
+            retiradas = segunda_opiniao(itens, banco)
+        for pos, just in retiradas.items():
+            k = reprovadas[pos]
+            narrativa = lista[k][2].get("tipo") == "narrativa"
+            log.info("auditor: reprovação retirada na 2ª opinião (%s) — %s (%s)", decisoes[k + 1]["decisao"],
+                     lista[k][2]["texto"][:80], just[:120])
+            decisoes[k + 1] = {**decisoes[k + 1], "decisao": "narrativa_ok" if narrativa else "sustentada",
+                               "justificativa": f"2ª opinião: {just}", "retirada_de": decisoes[k + 1]["decisao"]}
+        log.info("auditor: %d reprovação(ões), %d retirada(s) na 2ª opinião", len(reprovadas), len(retiradas))
     for k in range(len(lista)):
         previas[chaves[k]] = decisoes[k + 1]
     log.info("auditoria factual: %d frase(s) julgadas em %d bloco(s), %d reaproveitada(s) (frase, evidências, "
@@ -1970,18 +2054,31 @@ def avaliar_editorial(script: dict, topic: str) -> dict | None:
         c = _obj(raw).get("criterios")
         return isinstance(c, dict) and all(isinstance(c.get(k), (int, float)) for k in CRITERIOS_EDITORIAIS)
     leituras = []
-    for _ in range(LEITURAS):  # o mesmo pedido, o mesmo modelo, o mesmo roteiro — independentes
-        try:
-            leituras.append(_obj(complete([{"role": "user", "content": pedido}], max_tokens=SAIDA_EDITOR,
-                                          temperature=0.1, validate=valido, juiz=True)))
-        except ProvedoresIndisponiveis:
-            raise
-        except RuntimeError as exc:
-            log.warning("leitura editorial sem resposta válida: %s", exc)
+
+    def ler(n: int) -> None:
+        for _ in range(n):  # o mesmo pedido, o mesmo modelo, o mesmo roteiro — independentes
+            try:
+                leituras.append(_obj(complete([{"role": "user", "content": pedido}], max_tokens=SAIDA_EDITOR,
+                                              temperature=0.1, validate=valido, juiz=True)))
+            except ProvedoresIndisponiveis:
+                raise
+            except RuntimeError as exc:
+                log.warning("leitura editorial sem resposta válida: %s", exc)
+
+    def criterios() -> tuple[list[dict], dict]:
+        notas = [{k: max(0.0, min(10.0, float(d["criterios"][k]))) for k in CRITERIOS_EDITORIAIS} for d in leituras]
+        return notas, {k: _mediana([n[k] for n in notas]) for k in CRITERIOS_EDITORIAIS}
+    ler(LEITURAS)
     if not leituras:
         return None
-    notas_leitura = [{k: max(0.0, min(10.0, float(d["criterios"][k]))) for k in CRITERIOS_EDITORIAIS} for d in leituras]
-    crit = {k: _mediana([n[k] for n in notas_leitura]) for k in CRITERIOS_EDITORIAIS}
+    notas_leitura, crit = criterios()
+    # 26/11 (Svalbard 1024: v4 limpa com 6,8 / 6,4 / 7,1): o mesmo texto varia ±0,5 entre leituras; perto do
+    # mínimo, 3 leituras deixam a sorte decidir. Na faixa de dúvida, mais LEITURAS_EXTRA — mediana de 5
+    perto = FAIXA_DUVIDA[0] <= round(sum(crit.values()) / len(crit), 1) < FAIXA_DUVIDA[1]
+    if perto and len(leituras) >= LEITURAS and not travas_editoriais(script):
+        log.info("editorial perto do mínimo (%.1f): mais %d leituras", sum(crit.values()) / len(crit), LEITURAS_EXTRA)
+        ler(LEITURAS_EXTRA)
+        notas_leitura, crit = criterios()
     problemas, alvos, vistos = [], [], set()
     for d in leituras:
         for p in d.get("problemas") or []:
@@ -1999,7 +2096,7 @@ def avaliar_editorial(script: dict, topic: str) -> dict | None:
     if travas:
         nota = min(nota, NOTA_COM_TRAVA)
     medias = [round(sum(n.values()) / len(n), 1) for n in notas_leitura]
-    nao_julgada = "" if len(leituras) == LEITURAS else f"só {len(leituras)} de {LEITURAS} avaliações editoriais válidas"
+    nao_julgada = "" if len(leituras) >= LEITURAS else f"só {len(leituras)} de {LEITURAS} avaliações editoriais válidas"
     log.info("editorial: %d leitura(s) %s → mediana por critério %s = %.1f%s", len(leituras),
              " / ".join(f"{m:.1f}" for m in medias), {k: v for k, v in crit.items()}, nota,
              f" — NÃO JULGADA ({nao_julgada})" if nao_julgada else "")
