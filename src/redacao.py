@@ -1359,6 +1359,10 @@ def escrever(channel, topic: str, banco: dict, *, min_minutes: float, max_minute
     linha = str(getattr(channel, "niche", "") or "")
     plano = planejar_historia(topic, banco, min_minutes=min_minutes, max_minutes=max_minutes,
                               canal=getattr(channel, "name", ""))
+    if plano:
+        # 26/11 (teste da cadeia: plano de 7 blocos × mínimo de 8 cenas — o escritor foi cobrado 3 vezes por uma
+        # contradição nossa): cada bloco vira ao menos uma cena, então o mínimo não passa do número de blocos
+        cenas_min = min(cenas_min, len(plano["blocos"]))
     if plano and plano.get("gancho"):
         registrar_gancho(getattr(channel, "name", ""), plano["gancho"]["formula"])
     material = (material_do_plano(plano, banco) if plano else
