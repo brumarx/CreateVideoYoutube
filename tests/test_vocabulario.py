@@ -126,3 +126,21 @@ def test_plano_nao_pede_mais_perguntas_do_que_a_regra_permite():
     plano = {"angulo": {"pergunta": "p", "resposta": "r"}, "blocos": [{"funcao": "a", "conta": "c", "evidencias": []}]}
     texto = rd.material_do_plano(plano, {"evidencias": []})
     assert MAX_PERGUNTAS_MEIO == 1 and "no máximo UMA pergunta" in texto and "nunca com pergunta retórica" in texto
+
+
+@pytest.mark.parametrize("texto,ok", [
+    ("O cofre guarda mais de um milhão de amostras.", True),     # o próprio tema diz assim; a fonte, 1.417.799
+    ("O cofre guarda mais de 1,4 milhão de amostras.", True),
+    ("O cofre guarda quase 1,5 milhão de amostras.", True),
+    ("O cofre guarda mais de 100 mil amostras.", False),         # folgada
+    ("O cofre guarda mais de 2 milhões de amostras.", False),    # falsa
+    ("O cofre guarda quase 2 milhões de amostras.", False),      # enganosa
+    ("O cofre guarda 1 milhão de amostras.", False),             # seco e errado
+])
+def test_comparacao_justa_com_numero_redondo(texto, ok):
+    """Varredura 26/11 pedido × código: o pedido manda arredondar, o código reprovava "mais de um milhão"."""
+    from src import redacao as rd
+    banco = {"evidencias": [{"id": "E1", "afirmacao": "O cofre guarda 1.417.799 amostras.", "status": "oficial",
+                             "numeros": ["1417799"], "citacoes": []}]}
+    s = {"scenes": [{"frases": [{"texto": texto, "tipo": "factual", "evidencias": ["E1"]}], "narration": texto}]}
+    assert (rd.auditar_codigo(s, banco, "Svalbard")[1] == []) is ok

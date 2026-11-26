@@ -195,6 +195,19 @@ def auditar_codigo(script: dict, banco: dict, topic: str = "") -> tuple[dict, li
                         # "300 mil" é lido como 300 e 300000: casado o valor com escala, o 300 sem escala também
                         faltam -= casados | {x for x in faltam if _escala_de(x, casados)}
                     if faltam:
+                        # 26/11 (varredura pedido × código: o tema diz "mais de um milhão de amostras", a fonte diz
+                        # 1.417.799 e "mais de um milhão" era reprovado): comparação verdadeira e justa com número
+                        # redondo — "mais de N" com o valor entre N e o próximo redondo da mesma precisão
+                        casados = set()
+                        for n in sorted(faltam):
+                            dona = _comparacao_justa(n, texto, validas) or _comparacao_justa(n, texto, usaveis(banco))
+                            if dona:
+                                casados.add(n)
+                                if dona["id"] not in f["evidencias"]:
+                                    f["evidencias"].append(dona["id"])
+                                    validas.append(dona)
+                        faltam -= casados | {x for x in faltam if _escala_de(x, casados)}
+                    if faltam:
                         # o número existe em outra evidência verificada: liga a frase a ela — 20/11: só se for a
                         # MESMA medida (unidade e sinal) e se a evidência citada não for a divergente daquele valor
                         # ("8 graus negativos" citando a E34 contraditória era ligado a outra evidência com um 8)
@@ -382,6 +395,39 @@ def _outra_forma(n: str, texto: str, evidencias: list[dict]) -> dict | None:
                 fator = _CONVERSOES.get((ue, u))
                 if fator and round(float(ve) * fator, casas) == round(v, casas):
                     return e
+    return None
+
+
+def _comparacao_justa(n: str, texto: str, evidencias: list[dict]) -> dict | None:
+    """Evidência cujo valor torna justa a comparação dita com `n`: "mais de 1 milhão" para 1.417.799 (entre 1 e
+    2 milhões), "mais de 1,4 milhão" (entre 1,4 e 1,5), "quase 1,5 milhão" (entre 1,4 e 1,5). O passo é o do último
+    algarismo significativo de `n`; comparação folgada ("mais de 100" para 1,4 milhão) não vale."""
+    t = extenso_para_algarismos(texto)
+    try:
+        alvo = float(n)
+    except ValueError:
+        return None
+    if alvo < 10:
+        return None  # "mais de 1": o algarismo sozinho de "1 milhão" — casado pelo valor com escala
+    if any(abs(float(v)) == alvo for v, _ in temperaturas(t)):
+        return None  # temperatura tem regra própria (_aproximacao_coerente: sinal, "menos de 65 graus negativos")
+    rels = set()
+    for m in re.finditer(r"\d+(?:[.,]\d+)*(?:\s+(?:milhões|milhão|bilhões|bilhão|mil)\b)?", t):
+        if alvo in {float(x) for x in numeros(m.group())}:
+            rels.add(relacao_do_numero(t, m.start())[0])
+    if not rels & {">", "<"}:
+        return None
+    digitos = re.sub(r"0+$", "", str(int(alvo))) if alvo == int(alvo) else str(alvo).replace(".", "")
+    passo = 10 ** (len(str(int(alvo))) - len(digitos.lstrip("0") or "1"))
+    for e in evidencias:
+        for x in numeros_da_evidencia(e):
+            try:
+                v = abs(float(x))
+            except ValueError:
+                continue
+            # "quase N" pede o valor colado em N (até 10% abaixo): 1,42 milhão não é "quase 2 milhões"
+            if (">" in rels and alvo < v < alvo + passo) or ("<" in rels and max(alvo - passo, alvo * 0.9) <= v < alvo):
+                return e
     return None
 
 
