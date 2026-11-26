@@ -1631,6 +1631,11 @@ def run(
         except Exception as exc:  # noqa: BLE001 — sem a tabela, segue com o que o roteiro trouxer
             log.warning("[%s] pronúncia central indisponível: %s", job_id, exc)
             central_fala, central_idioma = {}, {}
+        try:
+            from src import siglas as siglas_centrais
+            siglas_centrais.preparar(script)  # 26/11: soletra × palavra, aprendida uma vez por sigla
+        except Exception as exc:  # noqa: BLE001
+            log.warning("[%s] siglas indisponíveis: %s", job_id, exc)
         if central_idioma:
             script["idioma"] = {**central_idioma, **(script.get("idioma") if isinstance(script.get("idioma"), dict) else {})}
         from_script = {**central_fala, **from_script}

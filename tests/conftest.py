@@ -92,6 +92,15 @@ def pronuncia_isolada(request, tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def siglas_isoladas(request, tmp_path, monkeypatch):
+    """26/11: tabela central de siglas (src/siglas.py) — arquivo temporário e nenhuma sigla classificada."""
+    from src import siglas
+    monkeypatch.setattr(siglas, "ARQUIVO", tmp_path / "siglas_aprendidas.json")
+    if not request.node.get_closest_marker("pronuncia"):
+        monkeypatch.setattr(siglas, "classificar", lambda s: {})
+
+
+@pytest.fixture(autouse=True)
 def segunda_opiniao_simulada(request, monkeypatch):
     """26/11: cada reprovação do auditor e da conferência volta ao juiz (redacao.segunda_opiniao). Os testes
     simulam só as outras respostas: aqui nada é retirado (a reprovação vale). Marker "segunda_opiniao" usa a real."""

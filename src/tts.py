@@ -192,8 +192,35 @@ ACRONYM_SPOKEN = {
 _ACRONYM_RE = re.compile(r"\b(" + "|".join(sorted(ACRONYM_SPOKEN, key=len, reverse=True)) + r")\b")
 
 
+def _siglas_com_regra_propria() -> set[str]:
+    """O que a tabela central de siglas NÃO toca (26/11, conferido na voz: "US$ 5" virava "u ésse5", "PT-BA"
+    "pê tê-bê á", "QUE SE VIREM" "Que ésse é", "SAF" "ésse á éfe", "CEO" perdia a voz inglesa): pronúncia fixa,
+    sigla de estado (Atlético-MG, PT-BA), sigla que também é palavra ("SE"), nome com pronúncia na tabela central."""
+    from . import pronuncia
+    aprendidas = {k for k, v in pronuncia._carregar().items() if v != "pt"}
+    return set(PRONUNCIATIONS) | set(_BRAZILIAN_STATES) | {"SE", "AS", "AO", "DE", "DO", "DA"} | aprendidas
+
+
+def _siglas_faladas() -> dict[str, str]:
+    """26/11: as fixas daqui + as soletradas da tabela central (src/siglas.py); as fixas vencem."""
+    from . import siglas
+    fora = _siglas_com_regra_propria()
+    return {**{k: v for k, v in siglas.falas_soletradas().items() if k not in fora}, **ACRONYM_SPOKEN}
+
+
 def _acronyms_for_speech(text: str) -> str:
-    return _ACRONYM_RE.sub(lambda m: ACRONYM_SPOKEN[m[1]], text)
+    from . import siglas
+    tabela = {k for k in siglas.falas_soletradas()} - set(ACRONYM_SPOKEN)
+    faladas = _siglas_faladas()
+
+    def troca(m: re.Match) -> str:
+        sigla = m[1]
+        # da tabela central: colada em "$" (US$) ou em hífen (PT-BA, Atlético-MG) fica para a regra própria
+        if sigla in tabela and (text[m.end():m.end() + 1] in ("$", "-") or text[max(0, m.start() - 1):m.start()] == "-"):
+            return sigla
+        return faladas[sigla]
+    regex = re.compile(r"\b(" + "|".join(sorted(map(re.escape, faladas), key=len, reverse=True)) + r")\b")
+    return regex.sub(troca, text)
 
 
 def _apply_pronunciations(text: str, extra: dict[str, str] | None, skip: set[str] | None = None) -> str:
@@ -279,8 +306,14 @@ def _for_speech(text: str, extra: dict[str, str] | None = None, skip: set[str] |
     o roteiro também citou o jornal "LANCE!"."""
     trocas: list[tuple[str, str]] = []
 
+    from . import siglas
+    como_palavra = siglas.lidas_como_palavra() - _siglas_com_regra_propria()
+
     def caps(m: re.Match) -> str:
         word = m[0]
+        if word in como_palavra:  # 26/11: tabela central (ONU, ENEM, FIFA; "TORCEDOR" de ênfase)
+            trocas.append((word.capitalize().lower(), word))
+            return word.capitalize()
         if word in _SPELLED_ACRONYMS or (len(word) < 5 and word not in _SHORT_WORDS):
             return word  # sigla (CBF, STF, ESPN): soletrar é o certo
         trocas.append((word.capitalize().lower(), word))
@@ -291,6 +324,11 @@ def _for_speech(text: str, extra: dict[str, str] | None = None, skip: set[str] |
     text = clean_markup(text)  # última barreira: nada de "asterisco" falado
     text = _ABREVIACAO.sub(lambda m: _ABREVIACOES[m[0]], text)
     text = _spoken_swaps(text)
+    # 26/11 (erro antigo, canal Política: "PT-BA" saía "pê tê-BA"): a pronúncia com hífen (partido/clube-UF) vem
+    # ANTES das siglas — depois que "PT" virava "pê tê", "PT-BA" não era mais achado
+    for chave, fala in (extra or {}).items():
+        if "-" in chave:
+            text = re.sub(r"(?<![\w-])" + re.escape(chave) + r"(?![\w-])", fala, text)
     text = _acronyms_for_speech(text)
     text = _apply_pronunciations(text, extra, skip)
     text = _units_for_speech(text)
@@ -538,14 +576,20 @@ def _join_multiword(word_boundaries: list[dict], extra: dict[str, str] | None) -
     # sem isso a legenda mostrava "ésse tê efe" picado em palavras
     multi = {
         tuple(re.findall(r"\w+", v.lower())): k
-        for k, v in {**ACRONYM_SPOKEN, **PRONUNCIATIONS, **(extra or {})}.items() if len(re.findall(r"\w+", v)) > 1
+        for k, v in {**_siglas_faladas(), **PRONUNCIATIONS, **(extra or {})}.items() if len(re.findall(r"\w+", v)) > 1
     }
+    # 26/11: "PT-BA" → "PT Bahia" → (siglas) "pê tê Bahia": a legenda junta pela forma FINAL falada
+    for k, v in (extra or {}).items():
+        final = tuple(re.findall(r"\w+", _acronyms_for_speech(v).lower()))
+        if len(final) > 1:
+            multi.setdefault(final, k)
     if not multi:
         return word_boundaries
     out: list[dict] = []
     i = 0
+    ordem = sorted(multi.items(), key=lambda x: -len(x[0]))  # a forma mais longa primeiro ("pê tê Bahia" antes de "pê tê")
     while i < len(word_boundaries):
-        for spoken, original in multi.items():
+        for spoken, original in ordem:
             # a voz pode devolver "I-A" como 1 palavra ou 2: junta palavras
             # até completar as do trecho falado
             tokens: list[str] = []

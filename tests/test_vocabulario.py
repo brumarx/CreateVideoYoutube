@@ -204,3 +204,20 @@ def test_voz_fala_moeda_da_tabela_unica():
     from src.tts import _for_speech
     assert _for_speech(v.normalizar_valores("¥ 100 milhões"))[0] == "100 milhões de ienes"
     assert _for_speech(v.normalizar_valores("US$ 1,000,000"))[0] == "1 milhão de dólares"
+
+
+def test_siglas_da_tabela_central_na_voz_e_na_legenda(monkeypatch):
+    """26/11: tabela de siglas — e os conflitos achados na voz antes de ligar (US$, PT-BA, SE, SAF, CEO)."""
+    from src import siglas, tts
+    monkeypatch.setattr(siglas, "_carregar", lambda: {"TCU": "soletra", "ONU": "palavra", "US": "soletra",
+                                                      "SE": "soletra", "SAF": "soletra", "BA": "soletra"})
+    def fala(t):
+        return tts._for_speech(t, tts._state_abbreviation_pronunciations(t))[0]
+    assert fala("o TCU e a ONU") == "o tê cê u e a Onu"
+    assert fala("US$ 5 milhões") == "5 milhões de dólares"
+    assert fala("QUE SE VIREM") == "Que Se Virem"
+    assert fala("a SAF do Botafogo") == "a Sáfi do Botafogo"
+    assert fala("o deputado do PT-BA") == "o deputado do pê tê Bahia"     # erro antigo: "pê tê-BA"
+    assert fala("o Atlético-MG venceu") == "o Atlético Mineiro venceu"
+    wb = [{"text": w, "start": i, "end": i + 1} for i, w in enumerate("do pê tê Bahia e o tê cê u".split())]
+    assert [w["text"] for w in tts._join_multiword(wb, {"PT-BA": "PT Bahia"})] == ["do", "PT-BA", "e", "o", "TCU"]
