@@ -60,6 +60,21 @@ UNIDADES: dict[str, tuple[str, float, float, tuple[str, ...]]] = {
     "m³": ("volume", 1.0, 0.0, ("m³", "m3", "metros cúbicos", "cubic meters?", "cubic metres?")),
     "L": ("volume", 0.001, 0.0, ("litros?", "liters?", "litres?", "L")),
     "gal": ("volume", 0.003785411784, 0.0, ("galões", "galão", "gallons?", "galones?", "gal")),
+    # 26/11 (corpus de todos os vídeos: "24h", "%", "megawatts" não eram lidos)
+    # tempo (base: segundo) — duração; ano/dia ficam fora (idade, data e prazo têm leitura própria)
+    "h": ("tempo", 3600.0, 0.0, ("horas?", "hours?", "(?<=\\d)h")),
+    "min": ("tempo", 60.0, 0.0, ("minutos?", "minutes?", "min")),
+    "s": ("tempo", 1.0, 0.0, ("segundos?", "seconds?", "(?<=\\d)s")),
+    # potência (base: watt) e energia (base: watt-hora)
+    "W": ("potencia", 1.0, 0.0, ("watts?", "W")),
+    "kW": ("potencia", 1e3, 0.0, ("quilowatts?", "kilowatts?", "kW")),
+    "MW": ("potencia", 1e6, 0.0, ("megawatts?", "MW")),
+    "GW": ("potencia", 1e9, 0.0, ("gigawatts?", "GW")),
+    "kWh": ("energia", 1e3, 0.0, ("quilowatts?[- ]hora", "kilowatt[- ]hours?", "kWh")),
+    "MWh": ("energia", 1e6, 0.0, ("megawatts?[- ]hora", "megawatt[- ]hours?", "MWh")),
+    "GWh": ("energia", 1e9, 0.0, ("gigawatts?[- ]hora", "gigawatt[- ]hours?", "GWh")),
+    # proporção (base: fração)
+    "%": ("proporcao", 0.01, 0.0, ("%", "por cento", "percent", "por ciento")),
 }
 
 _ESCALAS = (("trilhões|trilhão|trillion|billones|billón", 1e12), ("bilhões|bilhão|billion|mil millones", 1e9),

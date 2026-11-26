@@ -62,8 +62,10 @@ def _salvar(dados: dict) -> None:
         pass
 
 
-def nomes_da_narracao(texto: str) -> list[str]:
-    """Nomes próprios candidatos (sem palavra comum de começo de frase), na ordem em que aparecem."""
+def nomes_da_narracao(texto: str, comuns: set[str] | None = None) -> list[str]:
+    """Nomes próprios candidatos (sem palavra comum de começo de frase), na ordem em que aparecem. Palavra
+    que aparece em minúscula no próprio texto (ou em `comuns`) é palavra comum ("Imagine", "Primeira")."""
+    minusculas = set(re.findall(r"\b[a-zà-ÿ][\w-]*", texto or "")) | (comuns or set())
     out = []
     for m in _NOME.finditer(texto or ""):
         nome = m.group(0).strip("'’- ")
@@ -71,6 +73,8 @@ def nomes_da_narracao(texto: str) -> list[str]:
         while palavras and palavras[0].lower() in _COMUNS:
             palavras = palavras[1:]
         nome = " ".join(palavras)
+        if len(palavras) == 1 and nome.lower() in minusculas:
+            continue
         if len(nome) >= 3 and not nome.isdigit() and nome not in out:
             out.append(nome)
     return out

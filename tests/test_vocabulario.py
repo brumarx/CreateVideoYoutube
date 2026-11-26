@@ -69,3 +69,15 @@ def test_pronuncia_central_aprende_e_reaproveita(monkeypatch):
     assert len(chamadas) == 1                      # 2ª vez sai da tabela, sem chamada
     pronuncia.confirmar_fala("Longyearbyen", "Lôngierbíen")
     assert pronuncia.preparar(s)[0] == {"Longyearbyen": "Lôngierbíen"}
+
+
+@pytest.mark.parametrize("texto,unidade", [("funciona 24h por dia", "h"), ("cresceu 35%", "%"),
+                                           ("usina de 300 megawatts", "MW"), ("gera 4,5 GWh", "GWh")])
+def test_unidades_achadas_no_corpus(texto, unidade):
+    """26/11: scripts/minerar_corpus.py passou todos os vídeos pelo leitor — horas, %, potência não eram lidos."""
+    assert [q["unidade"] for q in quantidades(texto)] == [unidade]
+
+
+def test_palavra_de_comeco_de_frase_nao_e_nome():
+    from src.pronuncia import nomes_da_narracao
+    assert nomes_da_narracao("Imagine um cofre. Primeira coisa: imagine a Noruega. primeira vez.") == ["Noruega"]
