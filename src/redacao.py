@@ -156,7 +156,9 @@ def auditar_codigo(script: dict, banco: dict, topic: str = "") -> tuple[dict, li
     {tipo, termo (a frase), motivo, cena, frase}."""
     ev = por_id(banco)
     nomes = _nomes_conhecidos(script, topic)
-    pergunta_do_plano = _comparavel(((script.get("_plano") or {}).get("angulo") or {}).get("pergunta") or "")
+    plano_s = script.get("_plano") or {}
+    pergunta_do_plano = ("" if plano_s.get("pergunta_conferida")
+                         else _comparavel((plano_s.get("angulo") or {}).get("pergunta") or ""))
     problemas: list[dict] = []
     cenas = []
     for i, sc in enumerate(script.get("scenes", [])):
@@ -905,12 +907,7 @@ def _plano_valido(d: dict, validos: set[str]) -> dict | None:
     blocos = [b for b in d.get("blocos") or [] if isinstance(b, dict) and str(b.get("conta", "")).strip()]
     if len(blocos) < 4 or not isinstance(d.get("angulo"), dict):
         return None
-    # 26/11 (1031: "…se torna o único seguro de vida da agricultura global…"): a pergunta da abertura vira frase
-    # narrativa sem conferência (é retórica); por isso ela e a resposta não podem trazer escala absoluta nem
-    # garantia (src/lexico.py) — o plano volta para ser refeito
-    for campo in ("pergunta", "resposta"):
-        if _absoluto_do_lexico(str(d["angulo"].get(campo) or "")):
-            return None
+
     ja = set()
     for b in blocos:
         # 23/11 (1º plano de Svalbard: blocos com 11 evidências viraram cenas-lista): no máximo EVID_POR_BLOCO
@@ -961,6 +958,31 @@ def planejar_historia(topic: str, banco: dict, *, min_minutes: float, max_minute
         log.warning("plano da história indisponível: %s — o escritor lê o banco inteiro", exc)
         return None
     plano = _plano_valido(_obj(raw), validos)
+    # 26/11 (1031/1032): a pergunta da abertura vira narrativa sem conferência (é retórica) — sem escala absoluta nem
+    # garantia (src/lexico.py). Recusar em silêncio travava o plano (o modelo só ouvia "fora do formato" e repetia
+    # "o único lugar"/"funciona porque"): agora o pedido de correção diz a palavra; sem correção, a pergunta perde
+    # a isenção e passa pela conferência como qualquer frase
+    for _ in range(2):
+        achados = {c: w for c in ("pergunta", "resposta") if (w := _absoluto_do_lexico(str(plano["angulo"].get(c) or "")))}
+        if not achados:
+            break
+        log.warning("plano: %s — pedindo a correção", "; ".join(f"{c} com \"{w}\"" for c, w in achados.items()))
+        aviso = ("Reescreva o MESMO JSON mudando só o ângulo: " + "; ".join(
+            f"a {c} usa \"{w}\" — tire essa palavra (absoluta ou de garantia), sem trocar por sinônimo" for c, w in achados.items())
+            + ". Responda SÓ o JSON completo.")
+        try:
+            with metricas.etapa("plano_historia"):
+                raw2 = complete([{"role": "user", "content": pedido}, {"role": "assistant", "content": raw},
+                                 {"role": "user", "content": aviso}], max_tokens=6000, temperature=0.3,
+                                validate=lambda r: _plano_valido(_obj(r), validos) is not None,
+                                model_filter=is_strong_model)
+        except ProvedoresIndisponiveis:
+            raise
+        except RuntimeError:
+            break
+        raw, plano = raw2, _plano_valido(_obj(raw2), validos)
+    if _absoluto_do_lexico(str(plano["angulo"].get("pergunta") or "")):
+        plano["pergunta_conferida"] = True  # sem isenção: a pergunta passa pela conferência como frase comum
     disk_cache.put("plano_historia", chave, plano)
     log.info("plano da história: %s → %s; %d blocos: %s", plano["angulo"].get("pergunta", "")[:120],
              plano["angulo"].get("resposta", "")[:120], len(plano["blocos"]),

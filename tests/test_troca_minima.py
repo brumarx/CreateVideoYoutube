@@ -301,12 +301,24 @@ def test_saudacao_do_canal_sai_do_texto_do_escritor():
     assert rd.sem_saudacao(original, g) is original
 
 
-def test_plano_com_absoluto_na_pergunta_e_refeito():
-    validos = {f"E{k}" for k in range(1, 6)}
-    def d(pergunta):
-        return {"angulo": {"pergunta": pergunta, "resposta": "Uma cópia de segurança na montanha."},
-                "blocos": [{"funcao": f"b{k}", "conta": "c", "evidencias": [f"E{k}"]} for k in range(1, 5)]
-                + [{"funcao": "fim", "conta": "c", "evidencias": []}],
-                "evidencias": {f"E{k}": {"comprova": "x", "nao_comprova": "y"} for k in range(1, 5)}}
-    assert rd._plano_valido(d("Como ele se torna o único seguro da agricultura?"), validos) is None
-    assert rd._plano_valido(d("Como uma montanha guarda as sementes do mundo?"), validos) is not None
+@pytest.mark.plano
+def test_plano_com_absoluto_na_pergunta_pede_correcao_com_o_motivo(monkeypatch):
+    """1031/1032: recusar em silêncio travava o plano; agora o pedido diz a palavra, e sem correção a pergunta
+    perde a isenção (passa pela conferência)."""
+    def plano(pergunta):
+        return json.dumps({"angulo": {"pergunta": pergunta, "resposta": "Uma cópia de segurança na montanha."},
+                           "blocos": [{"funcao": f"b{k}", "conta": "c", "evidencias": [f"E{k}"]} for k in range(1, 5)]
+                           + [{"funcao": "fim", "conta": "c", "evidencias": []}],
+                           "evidencias": {f"E{k}": {"comprova": "x", "nao_comprova": "y"} for k in range(1, 5)}})
+    respostas = [plano("Como ele virou o único seguro?"), plano("Como uma montanha guarda as sementes?")]
+    pedidos = []
+    monkeypatch.setattr(providers, "complete", lambda msgs, **k: pedidos.append(msgs) or respostas.pop(0))
+    monkeypatch.setattr(rd, "mapa_do_conhecimento", lambda b: [{"id": f"E{k}", "afirmacao": "a", "trecho": ""}
+                                                                for k in range(1, 6)])
+    monkeypatch.setattr(rd, "bloco_do_mapa", lambda *a, **k: "")
+    from src import disk_cache
+    monkeypatch.setattr(disk_cache, "get", lambda *a, **k: None)
+    monkeypatch.setattr(disk_cache, "put", lambda *a, **k: None)
+    p = rd.planejar_historia("Svalbard", {"evidencias": []}, min_minutes=2.5, max_minutes=5)
+    assert p["angulo"]["pergunta"] == "Como uma montanha guarda as sementes?"
+    assert "único" in pedidos[1][-1]["content"] and not p.get("pergunta_conferida")
