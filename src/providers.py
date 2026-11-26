@@ -792,7 +792,10 @@ def _complete_cascata(
                             _registra_pago_ok(result)
                         return result  # type: ignore[return-value]
                     if result and validate is not None:
-                        log.warning("resposta de %s/%s não passou na validação, tentando próximo modelo", name, model)
+                        # 26/11: sem a amostra não dava para saber que etapa recusou nem por quê
+                        log.warning("resposta de %s/%s não passou na validação, tentando próximo modelo "
+                                    "(%d caracteres; início: %r; fim: %r)", name, model, len(result),
+                                    result[:160], result[-160:])
                     if result is None and (status is None or status >= 500):
                         transitoria = True
                     if status == 413:
