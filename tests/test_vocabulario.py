@@ -46,3 +46,26 @@ def test_nome_de_lugar_traduzido_nao_e_nome_novo_na_correcao():
     assert rd.nome_novo_na_correcao(nova, orig, ["FACTUAL x"], banco) is None
     nova2 = [{"texto": "A guerra no Líbano impediu o acesso.", "evidencias": ["E1"]}]
     assert rd.nome_novo_na_correcao(nova2, orig, ["FACTUAL x"], banco)
+
+
+def test_nomes_da_narracao_sem_palavra_de_comeco_de_frase():
+    from src.pronuncia import nomes_da_narracao
+    t = "Em 2015, o ICARDA retirou sementes. Lá dentro, Dyveke Sanne fez a obra em Longyearbyen, no Rio de Janeiro."
+    assert nomes_da_narracao(t) == ["ICARDA", "Dyveke Sanne", "Longyearbyen", "Rio de Janeiro"]
+
+
+@pytest.mark.pronuncia
+def test_pronuncia_central_aprende_e_reaproveita(monkeypatch):
+    from src import pronuncia, providers
+    chamadas = []
+
+    def falso(messages, **k):
+        chamadas.append(messages)
+        return '{"nomes": {"Longyearbyen": "Lóngüierbüen", "Crop Trust": "en", "Noruega": "pt"}}'
+    monkeypatch.setattr(providers, "complete", falso)
+    s = {"scenes": [{"narration": "A Noruega e o Crop Trust levam caixas a Longyearbyen."}]}
+    assert pronuncia.preparar(s) == ({"Longyearbyen": "Lóngüierbüen"}, {"Crop Trust": "en"})
+    assert pronuncia.preparar(s) == ({"Longyearbyen": "Lóngüierbüen"}, {"Crop Trust": "en"})
+    assert len(chamadas) == 1                      # 2ª vez sai da tabela, sem chamada
+    pronuncia.confirmar_fala("Longyearbyen", "Lôngierbíen")
+    assert pronuncia.preparar(s)[0] == {"Longyearbyen": "Lôngierbíen"}

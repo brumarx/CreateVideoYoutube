@@ -1623,6 +1623,17 @@ def run(
         from_script = {
             k: v for k, v in (script.get("pronuncia") or {}).items()
         } if isinstance(script.get("pronuncia"), dict) else {}
+        # 26/11: tabela central de pronúncia (src/pronuncia.py) — vale para todo canal e aprende; o roteiro da
+        # redação não preenche "pronuncia"/"idioma", e "Longyearbyen" ia para a voz sem orientação
+        from src import pronuncia as pronuncia_central
+        try:
+            central_fala, central_idioma = pronuncia_central.preparar(script)
+        except Exception as exc:  # noqa: BLE001 — sem a tabela, segue com o que o roteiro trouxer
+            log.warning("[%s] pronúncia central indisponível: %s", job_id, exc)
+            central_fala, central_idioma = {}, {}
+        if central_idioma:
+            script["idioma"] = {**central_idioma, **(script.get("idioma") if isinstance(script.get("idioma"), dict) else {})}
+        from_script = {**central_fala, **from_script}
         pronunciations = {
             k: v for k, v in {**channel.pronunciations, **from_script}.items()
             if isinstance(k, str) and isinstance(v, str) and 2 < len(k) <= 40 and 0 < len(v) <= 50
@@ -1673,10 +1684,16 @@ def run(
             # nome falado errado: corrige sozinho (grafia de fala + refala só as cenas com o nome) e confere de novo
             fixed = _fix_spoken_names(script, narrations, audio_names, pronunciations, foreign, tts_voice, work_dir, job_id)
             if fixed is not None:
+                trocadas = {k: v for k, v in fixed[1].items() if pronunciations.get(k) != v}
                 narrations, pronunciations = fixed
                 audio_problems, audio_names = review_audio_full(
                     [s["narration"] for s in script["scenes"]], [n[0] for n in narrations], pronunciations,
                 )
+                # 26/11: a grafia que a revisão ouviu certo fica na tabela central — não erra de novo em canal nenhum
+                ainda_errados = " ".join(audio_names)
+                for nome, grafia in trocadas.items():
+                    if nome not in ainda_errados:
+                        pronuncia_central.confirmar_fala(nome, grafia)
         if audio_names and not audio_problems:
             trocado = _trocar_nomes_por_descricao(
                 script, narrations, audio_names, pronunciations, foreign, tts_voice, work_dir, job_id)

@@ -46,6 +46,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "troca: o teste usa a troca mínima de verdade (redacao.trocar_frases_apontadas)")
     config.addinivalue_line("markers", "ritmo: o teste usa redacao.ritmo_de_referencia de verdade")
     config.addinivalue_line("markers", "revisao: o teste usa a revisão das afirmações de verdade (evidencias.revisar_afirmacoes)")
+    config.addinivalue_line("markers", "pronuncia: o teste usa a classificação de pronúncia de verdade (pronuncia.classificar)")
 
 
 @pytest.fixture(autouse=True)
@@ -78,6 +79,16 @@ def decisoes_isoladas(request, tmp_path, monkeypatch):
     monkeypatch.setattr(decisoes, "ARQUIVO", tmp_path / "decisoes_aprendidas.json")
     if not request.node.get_closest_marker("aprende"):
         monkeypatch.setattr(decisoes, "aprender", lambda *a, **k: {})
+
+
+@pytest.fixture(autouse=True)
+def pronuncia_isolada(request, tmp_path, monkeypatch):
+    """26/11: a tabela central de pronúncia (src/pronuncia.py) pergunta ao modelo os nomes novos. Nos testes:
+    arquivo temporário e, salvo marker "pronuncia", nenhum nome é classificado."""
+    from src import pronuncia
+    monkeypatch.setattr(pronuncia, "ARQUIVO", tmp_path / "pronuncias_aprendidas.json")
+    if not request.node.get_closest_marker("pronuncia"):
+        monkeypatch.setattr(pronuncia, "classificar", lambda nomes: {})
 
 
 @pytest.fixture(autouse=True)
