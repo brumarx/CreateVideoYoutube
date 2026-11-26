@@ -114,3 +114,44 @@ def test_limpeza_nunca_esvazia_cena():
         {"frases": [{"texto": "B.", "tipo": "factual", "evidencias": ["E1"]}]},
     ]}
     assert rd.limpar_em_codigo(s) is s
+
+
+def test_troca_tira_etiqueta_copiada(ambiente, monkeypatch):
+    responde, _ = ambiente
+    responde({"trocas": [{"n": 2, "texto": "[factual] O permafrost ajuda a manter as sementes congeladas."}]})
+    monkeypatch.setattr(rd, "conferir_contra_trechos", lambda itens, banco: {k: None for k in range(len(itens))})
+    novo, _ = rd.trocar_frases_apontadas(_script(), [_problema()], {}, "Svalbard")
+    assert novo["scenes"][1]["frases"][0]["texto"] == "O permafrost ajuda a manter as sementes congeladas."
+
+
+def _com_fim():
+    s = _script()
+    s["scenes"][1]["narration"] = " ".join(f["texto"] for f in s["scenes"][1]["frases"])
+    return s
+
+
+@pytest.mark.fechamento
+def test_fechamento_substitui_a_narrativa_final(ambiente):
+    responde, _ = ambiente
+    responde({"frases": ["No fim, o cofre é uma cópia de segurança dentro da montanha.",
+                         "Para mim, o mais bonito é ninguém morar lá dentro.",
+                         "Comenta SEMENTE se você guardaria uma da sua cidade."]})
+    novo = rd.escrever_fechamento(_com_fim(), {"angulo": {"pergunta": "Como?", "ponto_de_vista": "x"}}, "Svalbard", 500)
+    fim = novo["scenes"][1]["frases"]
+    assert [f["texto"] for f in fim][0] == "O permafrost mantém o frio sem energia nenhuma."
+    assert "E isso muda tudo." not in [f["texto"] for f in fim]
+    assert fim[-1]["fechamento"] and fim[-1]["tipo"] == "narrativa"
+
+
+@pytest.mark.fechamento
+@pytest.mark.parametrize("frases", [
+    ["O cofre guarda 1,3 milhão de amostras.", "Você guardaria uma?"],          # número
+    ["O cofre garante o futuro.", "Você guardaria uma?"],                       # afirma
+    ["Para mim, é lindo.", "Para mim, é muito lindo."],                         # não chama o espectador
+    ["Para mim, é lindo.", "Deixa o like e me diz: você guardaria?"],           # pede like
+])
+def test_fechamento_recusado_fica_o_roteiro(ambiente, frases):
+    responde, _ = ambiente
+    responde({"frases": frases})
+    s = _com_fim()
+    assert rd.escrever_fechamento(s, None, "Svalbard", 500) is s

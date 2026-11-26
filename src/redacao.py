@@ -1317,7 +1317,75 @@ def escrever(channel, topic: str, banco: dict, *, min_minutes: float, max_minute
         raise RoteiroReprovado("escritor indisponível: nenhum modelo capaz respondeu com o roteiro")
     if plano:
         melhor["_plano"] = plano
-    return melhor
+    return escrever_fechamento(melhor, plano, topic, max_pal)
+
+
+_PROMPT_FECHAMENTO = """Escreva o FECHAMENTO de um vídeo (tema: {tema}). O roteiro abaixo já contou os fatos.
+São 2 ou 3 frases faladas, nesta ordem:
+1. volta à pergunta da abertura e a responde com o que o vídeo JÁ mostrou (sem fato novo);
+2. o ponto de vista, dito como opinião ("para mim", "o que mais me impressiona"), sobre o que o vídeo mostrou;
+3. uma pergunta direta ao espectador OU "Comenta PALAVRA se…" (PALAVRA em maiúsculas, uma palavra do tema).
+Proibido: número, data, nome que o roteiro não citou, "sempre", "garante", "total", "porque", "por isso",
+pedir like ou inscrição.
+Pergunta da abertura: {pergunta}
+Ponto de vista do plano: {ponto}
+ROTEIRO:
+{roteiro}
+Responda SÓ JSON: {{"frases": ["...", "..."]}}"""
+
+
+_OPINIAO = re.compile(r"\b(para mim|pra mim|me impressiona|eu acho|na minha opinião|o que mais me)\b", re.I)
+
+
+def escrever_fechamento(script: dict, plano: dict | None, topic: str, max_pal: int) -> dict:
+    """26/11 (Svalbard 1021–1023: conclusão 4–5 em toda versão; o roteiro terminava num dado de capacidade):
+    o fechamento é escrito à parte, só narrativa — retoma a pergunta da abertura, ponto de vista como opinião,
+    pergunta ao espectador. Conferido em código (sem número, sem nome novo, sem afirmação); reprovado ou sem
+    resposta, fica o roteiro como veio. A narrativa final antiga da última cena sai."""
+    from .providers import ProvedoresIndisponiveis, complete, is_strong_model
+    cenas = script.get("scenes") or []
+    if not cenas:
+        return script
+    angulo = (plano or {}).get("angulo") or {}
+    roteiro = "\n".join(f"{i + 1}. {sc.get('narration') or ' '.join(f['texto'] for f in sc.get('frases') or [])}"
+                        for i, sc in enumerate(cenas))
+    try:
+        raw = complete([{"role": "user", "content": _PROMPT_FECHAMENTO.format(
+            tema=topic, pergunta=angulo.get("pergunta") or "-", ponto=angulo.get("ponto_de_vista") or "-",
+            roteiro=roteiro)}], max_tokens=800, temperature=0.5,
+            validate=lambda r: isinstance(_obj(r).get("frases"), list), model_filter=is_strong_model)
+    except ProvedoresIndisponiveis:
+        raise
+    except RuntimeError as exc:
+        log.warning("fechamento indisponível (%s) — fica o fim do roteiro", exc)
+        return script
+    frases = [" ".join(str(t).split()) for t in _obj(raw).get("frases") or [] if str(t).strip()][:3]
+    nomes = _nomes_conhecidos(script, topic)
+    motivo = None
+    if len(frases) < 2:
+        motivo = "menos de 2 frases"
+    elif not (frases[-1].endswith("?") or _COMENTA.search(frases[-1])):
+        motivo = "não termina chamando o espectador"
+    for t in frases:
+        achado = afirmacao_escondida(t, nomes)
+        if achado and achado.startswith("afirmação absoluta") and _OPINIAO.search(t):
+            achado = None  # "para mim, o mais bonito…" é opinião dita como opinião
+        achado = achado or (f"afirma ({m.group(0)})" if (m := _ALEGA.search(_COMENTA.sub("", t)))
+                                                   else None) or ("pede like" if _PEDE_LIKE.search(t) else None)
+        motivo = motivo or (f"\"{t[:60]}\": {achado}" if achado else None)
+    ultima = list(cenas[-1].get("frases") or [])
+    while ultima and ultima[-1].get("tipo") == "narrativa":
+        ultima.pop()
+    novas = ultima + [{"texto": t, "tipo": "narrativa", "evidencias": [], "fechamento": True} for t in frases]
+    novo = {**script, "scenes": cenas[:-1] + [{**cenas[-1], "frases": novas,
+                                               "narration": " ".join(f["texto"] for f in novas)}]}
+    if not motivo and _palavras(novo) > max_pal * 1.1:
+        motivo = f"passaria do tamanho ({_palavras(novo)} palavras)"
+    if motivo or not ultima:
+        log.warning("fechamento recusado (%s) — fica o fim do roteiro", motivo or "última cena sem fato")
+        return script
+    log.info("fechamento escrito à parte: %s", " | ".join(frases))
+    return novo
 
 
 # ---------------------------------------------------------------- auditoria por IA
@@ -2342,7 +2410,7 @@ def limpar_em_codigo(script: dict) -> dict:
             t = f["texto"].strip()
             evs = set(f.get("evidencias") or [])
             repetida = f.get("tipo") != "narrativa" and evs and evs <= vistos
-            afirma = (f.get("tipo") == "narrativa" and (i or j) and not t.endswith("?")
+            afirma = (f.get("tipo") == "narrativa" and (i or j) and not f.get("fechamento") and not t.endswith("?")
                       and not _COMENTA.search(t) and _ALEGA.search(t))
             if repetida or afirma:
                 if any(g.get("tipo") != "narrativa" for g in manter + frases[j + 1:]):
@@ -2792,6 +2860,12 @@ def auditar_e_corrigir(script: dict, banco: dict, topic: str, *, web_facts: list
         julgados = [p for p in problemas if p["tipo"] not in TIPOS_DO_CODIGO]
         # 25/11 (Svalbard 1021): primeiro a troca mínima pela sugestão do leitor (conferida contra o fato) —
         # o corte tirava a conclusão e derrubava a história; só o que a troca não resolve é cortado depois
+        # 26/11 (Svalbard 1023: as duas trocas foram gastas na v1, história 5,5; a v4 chegou a 6,9 com 1 leitura
+        # enganosa e não sobrou troca): história abaixo do mínimo vai primeiro à edição (que também recebe os
+        # problemas); troca e corte consertam a versão de história boa
+        historia_fraca = qualidade["nota"] < NOTA_MINIMA and relatorio["edicoes"] < EDICOES_MAX
+        if historia_fraca:
+            julgados = []
         if julgados and relatorio["trocas"] < TROCAS_MAX:
             relatorio["trocas"] += 1
             trocado, reg_troca = trocar_frases_apontadas(script, julgados, banco, topic)
@@ -3014,13 +3088,17 @@ indicadas, aplicando a correção sugerida pelo leitor. Regras:
 - frase de opinião/conclusão (ponto de vista) continua opinião, dita como opinião ("para mim", "o que impressiona"),
   e só retoma o que o vídeo já mostrou — nunca afirma fato novo;
 - mantenha o tom falado, a ligação com a frase anterior e a seguinte e o tamanho parecido;
-- se não há troca segura, texto vazio (a frase sai).
+- combinação enganosa (duas frases juntas levam à conclusão falsa): a troca mais segura costuma ser tirar a
+  frase que sustenta a conclusão errada (texto vazio) ou dizer na outra o limite que o fato dá;
+- se não há troca segura, texto vazio (a frase sai);
+- devolva só o texto falado, sem a etiqueta entre colchetes.
 ROTEIRO (frases numeradas):
 {roteiro}
 PROBLEMAS:
 {problemas}
 Responda SÓ JSON: {{"trocas": [{{"n": 7, "texto": "frase nova"}}]}}"""
 
+_ETIQUETA = re.compile(r"^(\[[^\]]{1,20}\]\s*)+")
 TROCAS_MAX = 2  # 25/11: rodadas de troca mínima pela sugestão do leitor (antes do corte e da edição)
 
 
@@ -3060,7 +3138,8 @@ def trocar_frases_apontadas(script: dict, problemas: list[dict], banco: dict, to
     novas: dict[int, str] = {}
     for d in _obj(raw).get("trocas") or []:
         if isinstance(d, dict) and str(d.get("n", "")).isdigit() and int(d["n"]) in permitidas:
-            novas[int(d["n"])] = " ".join(str(d.get("texto") or "").split())
+            # 26/11 (Svalbard 1023): o modelo copiava a etiqueta do roteiro numerado ("[factual] Sistemas…")
+            novas[int(d["n"])] = _ETIQUETA.sub("", " ".join(str(d.get("texto") or "").split()))
     novas = {n: t for n, t in novas.items() if _norm(t) != _norm(lista[n - 1][2]["texto"])}
     if not novas:
         return None, registro
