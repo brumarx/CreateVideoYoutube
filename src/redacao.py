@@ -30,7 +30,7 @@ from typing import Callable
 from .evidencias import FORCA, STATUS_USAVEIS, adicionar_fontes, bloco_para_escritor, numeros_da_evidencia, por_id, usaveis
 from .fatos import _pares, estima_antes, extenso_para_algarismos, numeros, temperaturas
 from .fontes import dobrar
-from . import vocabulario
+from . import lexico, vocabulario
 from .ordem import ordem_da_frase
 
 log = logging.getLogger("redacao")
@@ -269,6 +269,14 @@ def auditar_codigo(script: dict, banco: dict, topic: str = "") -> tuple[dict, li
                                             "recorde/extremo de uma fonte só dito como consenso: diga de onde vem "
                                             "(\"segundo os registros\", \"a menor temperatura já registrada\", \"de acordo "
                                             "com ...\") sem mudar o valor"))
+                    elif escala := {c: w for c, w in marcadores_sem_suporte(texto, validas).items()
+                                    if c in ESCALAS_NA_ESCRITA}:
+                        # 26/11 (Svalbard 1029: "a primeira e única retirada" — a fonte dizia a primeira): palavra de
+                        # escala absoluta que nenhuma evidência citada traz, conferida já na escrita (src/lexico.py)
+                        problemas.append(_p("escala_sem_suporte", texto, i, j,
+                                            "a frase diz " + ", ".join(f'"{w}" ({c})' for c, w in escala.items())
+                                            + " e nenhuma evidência citada diz isso: tire a palavra ou diga a escala "
+                                              "que a fonte dá"))
                 if validas:
                     f["confianca"] = max((e["status"] for e in validas), key=lambda st: FORCA.get(st, -1))
                 if not validas and not (nums and contra and _apresenta_divergencia(texto, nums, ev)):
@@ -609,29 +617,11 @@ _REGRA_PRECISAO_CURTA = """- Escala como na fonte (todos/alguns, sempre/uma vez,
 
 # marcadores de escala que a evidência citada precisa trazer (em português ou no idioma da fonte); usados na
 # conferência em código da edição: escala → (marcadores na frase, sustentação na evidência)
-_PRECISAO: dict[str, tuple[re.Pattern, re.Pattern]] = {
-    "quantificador": (re.compile(r"\b(tod[oa]s (os|as)|nenhum[a]?|ninguém|a maioria|a maior parte)\b", re.I),
-                      re.compile(r"\b(all|every|none|no one|nobody|most|majority|tod[oa]s|nenhum|maioria|maior parte)\b", re.I)),
-    "frequencia": (re.compile(r"\b(sempre|nunca|jamais|frequentemente|constantemente|regularmente|recorrentes?|"
-                              r"repetidamente|toda vez|todo ano|todos os anos|ano após ano|anualmente|com frequência|muitas vezes|"
-                              r"várias vezes|seguidamente|crônic[oa]s?|permanentemente|permanentes?)\b", re.I),
-                   re.compile(r"\b(always|never|frequent\w*|constant\w*|regular\w*|recurr\w*|repeated\w*|every (year|time|"
-                              r"spring|summer|winter)|each year|annual\w*|sempre|nunca|frequente\w*|recorrent\w*|todo ano|anual\w*|"
-                              r"chronic\w*|permanent\w*|crônic\w*)\b", re.I)),
-    "certeza": (re.compile(r"\b(comprovadamente|certamente|com certeza|sem dúvida|garantidamente|definitivamente|"
-                           r"está provado|provou que)\b", re.I),
-                re.compile(r"\b(proven|proved|confirmed|certain\w*|guarantee\w*|definitely|comprovad\w*|confirmad\w*|garant\w*)\b", re.I)),
-    # 23/11 (job 1006): "parcialmente danificado" virou "destruído"
-    "extensao": (re.compile(r"\b(inteir[oa]s?|totalmente|completamente|por completo|integralmente|destru[íi]d[oa]s?|"
-                            r"destruiu|destruíram|destruição|arrasad[oa]s?|aniquilad[oa]s?)\b", re.I),
-                 re.compile(r"\b(entire\w*|whole|complete\w*|total\w*|fully|wholly|inteir\w*|complet\w*|integral\w*|"
-                            r"destr\w*|wiped out|razed|annihilat\w*)\b", re.I)),
-    "natureza": (re.compile(r"\bnaturalmente\b", re.I), re.compile(r"\b(natural\w*)\b", re.I)),
-    "causa": (re.compile(r"\b(causou|causaram|provocou|provocaram|por causa d[eoa]s?|graças a|fez com que|levou a|"
-                         r"resultou)\b", re.I),
-              re.compile(r"\b(caus\w*|because|due to|led to|lead to|result\w*|owing to|provoc\w*|por causa|levou|graças|"
-                         r"devido|em razão|por conta|em consequência|consequência)\b", re.I)),
-}
+# 26/11: a tabela é src/lexico.py (fonte única: pedido, conferência da escrita, da edição e do fechamento)
+_PRECISAO: dict[str, tuple[re.Pattern, re.Pattern]] = lexico.precisao()
+# escalas absolutas conferidas já na escrita (causa, certeza e natureza ficam para a edição e o auditor: a
+# palavra sozinha não distingue o uso legítimo)
+ESCALAS_NA_ESCRITA = frozenset({"unicidade", "frequencia", "quantificador", "extensao", "mundial"})
 _DIVERGENCIA_DITA = re.compile(r"\b(segundo uma|uma fonte|outra fonte|outras fontes|as fontes divergem|divergem|"
                                r"varia conforme|dependendo da fonte|há registros de)\b", re.I)
 
@@ -1049,8 +1039,7 @@ def fato_em_duas_cenas(script: dict) -> list[str]:
     return [f"o fato {e} aparece nas cenas {', '.join(map(str, c))}: conte uma vez só" for e, c in onde.items() if len(c) > 1]
 
 
-_ALEGA = re.compile(r"\b(funciona|funcionou|garante|garantiu|assegura|assegurou|prova|provou|total|totalmente|sempre|"
-                    r"já|porque|por isso|graças|salvou|protege|resolve|resolveu)\b", re.I)
+_ALEGA = lexico.garantia()  # 26/11: src/lexico.py
 
 
 def narrativa_que_afirma(script: dict) -> list[str]:
@@ -1484,7 +1473,7 @@ Responda SÓ JSON: {{"frases": ["...", "..."]}}"""
 
 # a lista do pedido sai da MESMA regex que confere (Svalbard 26/11: "protege" estava na regex e fora do pedido;
 # a pergunta da abertura usava "protege" e o fechamento foi recusado 3× pela mesma palavra)
-_PALAVRAS_ALEGA = ", ".join(f'"{p}"' for p in _ALEGA.pattern.split("(", 1)[1].split(")", 1)[0].split("|"))
+_PALAVRAS_ALEGA = ", ".join(f'"{p}"' for p in lexico.palavras_de_garantia())
 _OPINIAO = re.compile(r"\b(para mim|pra mim|me impressiona|eu acho|na minha opinião|o que mais me)\b", re.I)
 
 
@@ -2998,7 +2987,8 @@ def _registra_comparacao(c: dict) -> None:
 # problemas achados pela conferência em código: a edição que os conserta passa de novo por ela (ver editar_cenas)
 CORTES_MAX = 2  # 25/11: cortes antes da edição (sem chamada de escrita; cada um custa uma auditoria completa)
 TIPOS_DO_CODIGO = frozenset({"numero_arredondado", "numero_contraditorio", "numero_sem_evidencia", "divergencia_como_faixa",
-                             "sinal_invertido", "hipotese_como_fato", "fonte_unica_sem_atribuicao", "ordem_nao_comprovada"})
+                             "sinal_invertido", "hipotese_como_fato", "fonte_unica_sem_atribuicao", "ordem_nao_comprovada",
+                             "escala_sem_suporte"})
 
 
 def auditar_e_corrigir(script: dict, banco: dict, topic: str, *, web_facts: list[dict] | None = None,

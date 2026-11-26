@@ -89,3 +89,23 @@ def test_classe_de_pronuncia_invalida_nao_entra():
     assert _valida("Hospital Xiaotangshan", "Shiáotángshan") is None
     assert _valida("Longyearbyen", "Lóngüierbüen") == "Lóngüierbüen"
     assert _valida("Crop Trust", "EN") == "en"
+
+
+def test_unica_sem_suporte_reprovada_na_escrita():
+    """Svalbard 1029: "Foi a primeira e única retirada" — a fonte dizia só "the first withdrawal"."""
+    from src import redacao as rd
+    banco = {"evidencias": [{"id": "E1", "afirmacao": "Em 2015 o ICARDA fez a primeira retirada de sementes.",
+                             "status": "oficial", "numeros": ["2015"],
+                             "citacoes": [{"trecho": "In 2015 ICARDA made the first withdrawal.", "verificado": True}]}]}
+    def roteiro(t):
+        return {"scenes": [{"frases": [{"texto": t, "tipo": "factual", "evidencias": ["E1"]}], "narration": t}]}
+    _, probs = rd.auditar_codigo(roteiro("Em 2015 o ICARDA fez a primeira e única retirada."), banco, "Svalbard")
+    assert [p["tipo"] for p in probs] == ["escala_sem_suporte"]
+    _, probs = rd.auditar_codigo(roteiro("Em 2015 o ICARDA fez a primeira retirada."), banco, "Svalbard")
+    assert probs == []
+
+
+def test_pedido_do_fechamento_e_conferencia_usam_o_mesmo_lexico():
+    from src import lexico, redacao as rd
+    assert rd._ALEGA.pattern == lexico.garantia().pattern
+    assert all(f'"{p}"' in rd._PALAVRAS_ALEGA for p in lexico.palavras_de_garantia())

@@ -250,7 +250,7 @@ def test_exagero_novo_sem_historico_tambem_e_recusado(monkeypatch):
     ed = Editor(ED((2, [F("Todos os bancos de genes do mundo foram danificados pela guerra.", evid=["E1"])])))
     monkeypatch.setattr(providers, "complete", ed)
     novo, reg = rd.editar_cenas(s, {1: ["FACTUAL — teste"]}, BANCO, "Svalbard", historico=[])
-    assert reg["revertidas"] and "exagero novo" in reg["revertidas"][0]["motivo"]
+    assert reg["revertidas"]  # 26/11: recusada já pela conferência da escrita (src/lexico.py) ou pela da edição
     assert "quantificador" in reg["revertidas"][0]["motivo"]
 
 
