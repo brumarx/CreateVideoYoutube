@@ -987,8 +987,8 @@ def fato_em_duas_cenas(script: dict) -> list[str]:
     return [f"o fato {e} aparece nas cenas {', '.join(map(str, c))}: conte uma vez só" for e, c in onde.items() if len(c) > 1]
 
 
-_ALEGA = re.compile(r"\b(funciona|funcionou|garante|garantiu|prova|provou|total|totalmente|sempre|já|porque|por isso|"
-                    r"graças|salvou|protege|resolve|resolveu)\b", re.I)
+_ALEGA = re.compile(r"\b(funciona|funcionou|garante|garantiu|assegura|assegurou|prova|provou|total|totalmente|sempre|"
+                    r"já|porque|por isso|graças|salvou|protege|resolve|resolveu)\b", re.I)
 
 
 def narrativa_que_afirma(script: dict) -> list[str]:
@@ -1443,7 +1443,8 @@ def escrever_fechamento(script: dict, plano: dict | None, topic: str, max_pal: i
         ultima.pop()
     if not ultima:
         return script
-    nomes = _nomes_conhecidos(script, topic)
+    # a pergunta da abertura (do plano) já foi dita no vídeo: os nomes dela não são "nome novo"
+    nomes = _nomes_conhecidos(script, f"{topic} {angulo.get('pergunta') or ''}")
     correcao, recusadas = "", []
     for _ in range(tentativas):
         try:
