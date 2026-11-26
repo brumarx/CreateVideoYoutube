@@ -100,7 +100,7 @@ def _indice() -> tuple[dict[str, str], dict[str, set[str]]]:
 
 
 def lugar(nome: str) -> str | None:
-    """Id do lugar (código de país, "BR-…", "US-…", "G-…") ou None."""
+    """Id do lugar (código de país, "BR-…", "US-…", "G-…", cidade "C-…") ou None."""
     return _indice()[0].get(_dobrar(nome))
 
 
@@ -110,15 +110,42 @@ def formas_do_lugar(nome: str) -> set[str]:
     return set(_indice()[1][i]) if i else {nome}
 
 
+@lru_cache(maxsize=1)
+def _ngramas() -> tuple[dict[tuple[str, ...], str], dict[tuple[str, ...], str], int]:
+    """(forma dobrada em palavras → id) para países/regiões/estados (qualquer caixa) e para cidades (só com a
+    caixa original: "Natal" a cidade, não "natal"), e o maior número de palavras de uma forma."""
+    livres, cidades, maior = {}, {}, 1
+    for lugar in _dados()["lugares"]:
+        todas = set(lugar["formas"]) | set(_APELIDOS.get(lugar["id"], []))
+        for f in todas:
+            if lugar.get("tipo") == "cidade":
+                chave = tuple(re.findall(r"[\w'’]+", f))
+                cidades.setdefault(chave, lugar["id"])
+            else:
+                chave = tuple(re.findall(r"\w+", _dobrar(f)))
+                livres.setdefault(chave, lugar["id"])
+            maior = max(maior, len(chave))
+    return livres, cidades, maior
+
+
 def lugares_no_texto(texto: str) -> set[str]:
-    """Ids dos lugares citados no texto (a forma mais longa vence: "Rio Grande do Sul" antes de "Rio")."""
-    alvo = " " + re.sub(r"[^\w]+", " ", _dobrar(texto)) + " "
-    achados = set()
-    for forma in sorted(_indice()[0], key=len, reverse=True):
-        chave = " " + re.sub(r"[^\w]+", " ", forma).strip() + " "
-        if len(chave.strip()) >= 3 and chave in alvo:
-            achados.add(_indice()[0][forma])
-            alvo = alvo.replace(chave, " ")
+    """Ids dos lugares citados no texto (a forma mais longa vence: "Rio Grande do Sul" antes de "Rio").
+    26/11: consulta direta por sequência de palavras (milhares de cidades do GeoNames)."""
+    livres, cidades, maior = _ngramas()
+    orig = re.findall(r"[\w'’]+", texto or "")
+    dob = [_dobrar(w) for w in orig]
+    achados, k = set(), 0
+    while k < len(orig):
+        for n in range(min(maior, len(orig) - k), 0, -1):
+            i = livres.get(tuple(dob[k:k + n]))
+            if i is None and orig[k][:1].isupper():
+                i = cidades.get(tuple(orig[k:k + n]))
+            if i is not None and len("".join(dob[k:k + n])) >= 3:
+                achados.add(i)
+                k += n
+                break
+        else:
+            k += 1
     return achados
 
 

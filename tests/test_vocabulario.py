@@ -221,3 +221,13 @@ def test_siglas_da_tabela_central_na_voz_e_na_legenda(monkeypatch):
     assert fala("o Atlético-MG venceu") == "o Atlético Mineiro venceu"
     wb = [{"text": w, "start": i, "end": i + 1} for i, w in enumerate("do pê tê Bahia e o tê cê u".split())]
     assert [w["text"] for w in tts._join_multiword(wb, {"PT-BA": "PT Bahia"})] == ["do", "PT-BA", "e", "o", "TCU"]
+
+
+def test_cidades_em_qualquer_idioma():
+    """26/11: cidades do GeoNames (100 mil+ e capitais) — o corpus tinha Tóquio, Marrakech, Natal fora da tabela."""
+    assert v.mesmo_lugar_no_texto("Tóquio", "The trains in Tokyo")
+    assert v.mesmo_lugar_no_texto("Pequim", "Beijing hosted the games")
+    assert v.mesmo_lugar_no_texto("Marrakech", "in Marrakesh")
+    assert v.mesmo_lugar_no_texto("Alepo", "the genebank in Aleppo")
+    assert not v.lugares_no_texto("o natal e a vitória")          # cidade só com maiúscula
+    assert not any(f.isupper() for l in v._dados()["lugares"] if l["tipo"] == "cidade" for f in l["formas"])

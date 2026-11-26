@@ -1,7 +1,9 @@
 """Gera src/dados/vocabulario.json: meses e lugares (países, regiões) em pt/en/es a partir do CLDR (Babel),
-mais estados do Brasil e dos EUA, oceanos e regiões polares escritos aqui. Rodar de novo só para atualizar;
+mais estados do Brasil e dos EUA, oceanos e regiões polares escritos aqui, e cidades do GeoNames.
+Uso: scripts/gerar_vocabulario.py [caminho/cities15000.txt] Rodar de novo só para atualizar;
 o sistema lê o JSON (Babel não é dependência em tempo de execução)."""
 import json
+import re
 from pathlib import Path
 
 from babel import Locale
@@ -45,7 +47,33 @@ GEOGRAFIA = [("Arctic", "Ártico", "Ártico"), ("Antarctic", "Antártico", "Ant�
              ("Himalayas", "Himalaia", "Himalaya"), ("Andes",), ("Alps", "Alpes")]
 
 
+_FORMA_LATINA = re.compile(r"^[A-ZÀ-Ý][A-Za-zÀ-ÿ'’\- ]{2,39}$")
+
+
+def cidades(arquivo: Path | None) -> list[dict]:
+    """GeoNames cities15000 (CC-BY 4.0, download.geonames.org/export/dump): cidades com 100 mil habitantes ou mais,
+    capitais nacionais (PPLC) e estaduais (PPLA, 50 mil ou mais); formas em alfabeto latino com maiúscula (os
+    nomes alternativos trazem romanizações de outros alfabetos em minúscula, que ficam de fora)."""
+    if not arquivo or not arquivo.exists():
+        return []
+    out = []
+    for linha in arquivo.read_text(encoding="utf-8").splitlines():
+        c = linha.split("\t")
+        if len(c) < 15:
+            continue
+        pop, feature = int(c[14] or 0), c[7]
+        if not (pop >= 100_000 or feature == "PPLC" or (feature == "PPLA" and pop >= 50_000)):
+            continue
+        formas = {c[1], c[2]} | set(c[3].split(","))
+        # código de aeroporto ("TYO", "NAT", "LYR") não é nome: colidiria com sigla
+        formas = sorted(f.strip() for f in formas if _FORMA_LATINA.match(f.strip()) and not f.strip().isupper())
+        if formas:
+            out.append({"id": "C-" + c[0], "tipo": "cidade", "pais": c[8], "formas": formas})
+    return out
+
+
 def main():
+    import sys
     nomes = {l: Locale.parse(l).territories for l in IDIOMAS}
     lugares = []
     for codigo in nomes["en"]:
@@ -59,6 +87,7 @@ def main():
         lugares.append({"id": "US-" + t[0], "tipo": "estado", "formas": sorted(set(t))})
     for t in GEOGRAFIA:
         lugares.append({"id": "G-" + t[0], "tipo": "geografia", "formas": sorted(set(t))})
+    lugares += cidades(Path(sys.argv[1]) if len(sys.argv) > 1 else None)
     meses = {}
     for l in IDIOMAS:
         loc = Locale.parse(l)
