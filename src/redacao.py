@@ -116,15 +116,18 @@ def afirmacao_escondida(texto: str, nomes_conhecidos: set[str]) -> str | None:
     ("Mas viver ali não é nada simples.")."""
     # 25/11 (Svalbard 1020: "Comenta SEMENTE se…" reprovada como nome próprio): a palavra do chamado ao espectador
     # não é afirmação
-    texto = _COMENTA.sub("Comenta", texto)
+    texto = _COMENTA.sub("comenta", texto)
     t = extenso_para_algarismos(texto)
     if numeros(t):
         return "tem número"
     m = _ABSOLUTO.search(texto)
     if m:
         return f"afirmação absoluta ({m.group(0)!r})"
-    palavras = re.findall(r"\b[A-ZÀ-Ý][\wÀ-ÿ-]+", texto)
-    proprios = [w for w in palavras[1:] if dobrar(w) not in nomes_conhecidos]
+    # 26/11: maiúscula de COMEÇO DE FRASE não é nome — inclusive depois de "?" no meio do texto ("…na prática?
+    # Alguém já precisou…?"); antes só a 1ª palavra com maiúscula do texto era pulada
+    proprios = [m.group(0) for m in re.finditer(r"\b[A-ZÀ-Ý][\wÀ-ÿ-]+", texto)
+                if not re.search(r"(^|[.!?:…]\s*[\"'“(]?)\s*$", texto[:m.start()])
+                and dobrar(m.group(0)) not in nomes_conhecidos]
     if proprios:
         return f"nome próprio ({proprios[0]})"
     return None

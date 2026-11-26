@@ -109,3 +109,10 @@ def test_pedido_do_fechamento_e_conferencia_usam_o_mesmo_lexico():
     from src import lexico, redacao as rd
     assert rd._ALEGA.pattern == lexico.garantia().pattern
     assert all(f'"{p}"' in rd._PALAVRAS_ALEGA for p in lexico.palavras_de_garantia())
+
+
+def test_comeco_de_frase_no_meio_do_texto_nao_e_nome():
+    from src import redacao as rd
+    assert rd.afirmacao_escondida("Essa burocracia funciona na prática? Alguém precisou sacar o seguro?", set()) is None
+    assert rd.afirmacao_escondida("Comenta SEMENTE se você achava que era gelo.", set()) is None
+    assert rd.afirmacao_escondida("E foi assim que Svalbard virou notícia.", set()) == "nome próprio (Svalbard)"
