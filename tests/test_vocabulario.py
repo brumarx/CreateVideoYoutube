@@ -178,3 +178,29 @@ def test_concordancia_de_escala(texto, certo):
 def test_variantes_do_erro_de_escala(texto, certo):
     """26/11: o dono deu "mais de 100 milhão" como exemplo — a família inteira do erro, não só o caso."""
     assert v.concordar_escalas(texto) == certo
+
+
+@pytest.mark.parametrize("texto,certo", [
+    ("R$ 1,5 bi", "R$ 1,5 bilhão"),
+    ("US$ 1,000,000", "US$ 1.000.000"),
+    ("US$ 3.5 billion", "US$ 3,5 bilhões"),
+    ("$ 5 million", "$ 5 milhões"),
+    ("R$ 3 mil reais", "3 mil reais"),
+    ("R$ 100 milhões de reais", "100 milhões de reais"),
+    ("€ 2 milhão", "€ 2 milhões"),
+    ("1 reais", "1 real"), ("2 real", "2 reais"), ("1 dólares", "1 dólar"), ("1 centavos", "1 centavo"),
+    ("1 anos", "1 ano"), ("1 horas", "1 hora"), ("2 quilômetro", "2 quilômetros"), ("3 vez", "3 vezes"),
+    # o que NÃO pode mudar
+    ("1,50 reais", "1,50 reais"), ("21 anos", "21 anos"), ("1 milhão de anos", "1 milhão de anos"),
+    ("1.500 metros", "1.500 metros"), ("R$ 5 dólares", "R$ 5 dólares"), ("1,000 graus", "1,000 graus"),
+])
+def test_familia_dinheiro_e_contaveis(texto, certo):
+    """26/11: depois do "100 milhão", o dono: "e se temos outras opções" — moeda, formato inglês, abreviação,
+    moeda repetida e concordância do número com o que ele conta."""
+    assert v.normalizar_valores(texto) == certo
+
+
+def test_voz_fala_moeda_da_tabela_unica():
+    from src.tts import _for_speech
+    assert _for_speech(v.normalizar_valores("¥ 100 milhões"))[0] == "100 milhões de ienes"
+    assert _for_speech(v.normalizar_valores("US$ 1,000,000"))[0] == "1 milhão de dólares"

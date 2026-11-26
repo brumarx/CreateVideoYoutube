@@ -1648,9 +1648,9 @@ def run(
         if pronunciations:
             log.info("[%s] pronúncia: %s", job_id, pronunciations)
         # 26/11: concordância de escala em todo canal, antes da voz e da legenda ("100 milhão" → "100 milhões")
-        from src.vocabulario import concordar_escalas
+        from src.vocabulario import normalizar_valores
         for sc in script.get("scenes") or []:
-            sc["narration"] = concordar_escalas(sc.get("narration", ""))
+            sc["narration"] = normalizar_valores(sc.get("narration", ""))
         narrations = []
         with metricas.etapa("narracao"):
             for i, scene in enumerate(script["scenes"]):

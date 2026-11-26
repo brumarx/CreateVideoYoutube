@@ -193,3 +193,68 @@ def _concordar_extenso(m: re.Match) -> str:
 def _escala_por_extenso(m: re.Match) -> str:
     nome = {"mi": "milhão", "bi": "bilhão", "tri": "trilhão"}[m.group(2).lower()]
     return f"{m.group(1)} {nome}"
+
+
+# ------------------------------------------------------------------ moedas e concordância com o número
+# símbolo → (singular, plural). Tabela única: src/tts.py lê daqui
+MOEDAS = {"R$": ("real", "reais"), "US$": ("dólar", "dólares"), "U$": ("dólar", "dólares"), "$": ("dólar", "dólares"),
+          "€": ("euro", "euros"), "£": ("libra", "libras"), "¥": ("iene", "ienes")}
+# substantivos contáveis que vêm logo depois de número (moeda, tempo, medida, gente): singular → plural
+CONTAVEIS = {"real": "reais", "dólar": "dólares", "euro": "euros", "libra": "libras", "iene": "ienes",
+             "centavo": "centavos", "ano": "anos", "mês": "meses", "dia": "dias", "hora": "horas", "minuto": "minutos",
+             "semana": "semanas", "século": "séculos", "década": "décadas", "metro": "metros",
+             "quilômetro": "quilômetros", "centímetro": "centímetros", "milímetro": "milímetros", "quilo": "quilos",
+             "grama": "gramas", "tonelada": "toneladas", "litro": "litros", "grau": "graus", "pessoa": "pessoas",
+             "vez": "vezes", "espécie": "espécies", "amostra": "amostras", "país": "países", "milha": "milhas"}
+_CONT_PLUR_SING = {p: s for s, p in CONTAVEIS.items()}
+_ESCALA_EN = {"million": "milhão", "millions": "milhões", "billion": "bilhão", "billions": "bilhões",
+              "trillion": "trilhão", "trillions": "trilhões"}
+_SIMBOLO = r"R\$|US\$|U\$|\$|€|£|¥"
+_MILHAR_EN = re.compile(rf"(?:(?<=\$)|(?<=€)|(?<=£)|(?<=¥)|(?<=\$ )|(?<=€ )|(?<=£ )|(?<=¥ ))(\d{{1,3}}(?:,\d{{3}})+)(?![\d,])"
+                        r"|(?<![\d.,])(\d{1,3}(?:,\d{3}){2,})(?![\d,])")
+_DECIMAL_EN_ESCALA = re.compile(r"(?<![\d.,])(\d+)\.(\d+)(?=\s+(?:million|billion|trillion)s?\b)", re.I)
+_PALAVRA_ESCALA_EN = re.compile(r"(?<=\d)\s+(million|millions|billion|billions|trillion|trillions)\b", re.I)
+_ABREV_COM_MOEDA = re.compile(rf"({_SIMBOLO})\s?(\d+(?:[.,]\d+)?)\s?(mi|bi|tri)\b", re.I)
+_MOEDA_DUPLA = re.compile(rf"({_SIMBOLO})\s?(\d+(?:[.,]\d+)*(?:\s+(?:mil|milhão|milhões|bilhão|bilhões|trilhão|trilhões))?)"
+                          r"\s+(?:de\s+)?(reais|real|dólares|dólar|euros|euro|libras|libra|ienes|iene)\b", re.I)
+_NUM_CONTAVEL = re.compile(r"(?<![\w.,/])(\d+)(?![\d.,/])\s+(" + "|".join(sorted(set(CONTAVEIS) | set(_CONT_PLUR_SING),
+                           key=len, reverse=True)) + r")\b", re.I)
+
+
+def _moeda_dupla(m: re.Match) -> str:
+    simbolo, palavra = m.group(1), m.group(3).lower()
+    if palavra not in MOEDAS.get(simbolo, ()):
+        return m.group(0)  # moedas diferentes ("R$ 5 dólares"?) — não é repetição, fica para a conferência
+    resto = m.group(2)
+    de = " de " if re.search(r"(mil|milh|bilh|trilh)\w*$", resto) and not re.search(r"\bmil$", resto) else " "
+    return f"{resto}{de}{m.group(3)}"
+
+
+def _concordar_contavel(m: re.Match) -> str:
+    n, palavra = int(m.group(1)), m.group(2)
+    base = palavra.lower()
+    if n == 1:
+        certa = _CONT_PLUR_SING.get(base, base)
+    elif n >= 2:
+        certa = CONTAVEIS.get(base, base)
+    else:
+        return m.group(0)
+    if palavra[:1].isupper():
+        certa = certa[:1].upper() + certa[1:]
+    return f"{m.group(1)} {certa}"
+
+
+def normalizar_valores(texto: str) -> str:
+    """26/11 (o dono: "isso porque estamos falando em dinheiro, e se temos outras opções"): a forma dos valores
+    em todo canal — formato inglês ("US$ 1,000,000", "3.5 billion"), abreviação depois da moeda ("R$ 1,5 bi"),
+    moeda repetida ("R$ 3 mil reais"), concordância com o número ("1 reais", "2 real", "1 anos", "2 quilômetro")
+    e com a escala (concordar_escalas). Só a forma — o valor não muda."""
+    t = texto or ""
+    t = _MILHAR_EN.sub(lambda m: (m.group(1) or m.group(2)).replace(",", "."), t)
+    t = _DECIMAL_EN_ESCALA.sub(r"\1,\2", t)
+    t = _PALAVRA_ESCALA_EN.sub(lambda m: " " + _ESCALA_EN[m.group(1).lower()], t)
+    t = _ABREV_COM_MOEDA.sub(lambda m: f"{m.group(1)} {m.group(2)} " + {"mi": "milhão", "bi": "bilhão",
+                                                                         "tri": "trilhão"}[m.group(3).lower()], t)
+    t = concordar_escalas(t)
+    t = _MOEDA_DUPLA.sub(_moeda_dupla, t)
+    return _NUM_CONTAVEL.sub(_concordar_contavel, t)

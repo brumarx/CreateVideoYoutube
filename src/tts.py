@@ -420,14 +420,13 @@ def _versus(text: str) -> str:
 
 # "€39 milhões" a voz lia "39 euros milhões" (teste com Whisper de 14/10):
 # moeda vai pro fim, como se fala — "39 milhões de euros"
-_MOEDAS = {"R$": ("real", "reais"), "US$": ("dólar", "dólares"), "U$": ("dólar", "dólares"),
-           "$": ("dólar", "dólares"), "€": ("euro", "euros"), "£": ("libra", "libras")}
+from .vocabulario import MOEDAS as _MOEDAS  # 26/11: tabela única de moedas (¥ não era falado)
 _MONEY = re.compile(
-    r"(R\$|US\$|U\$|\$|€|£)\s?(\d+(?:\.\d{3})*(?:,\d+)?)"
+    r"(R\$|US\$|U\$|\$|€|£|¥)\s?(\d+(?:\.\d{3})*(?:,\d+)?)"
     r"(?:\s+(mil|milh(?:ão|ões)|bilh(?:ão|ões)|trilh(?:ão|ões)|mi|bi|tri)\b)?"
 )
 _ABREV = {"mi": ("milhão", "milhões"), "bi": ("bilhão", "bilhões"), "tri": ("trilhão", "trilhões")}
-_SYMBOL_LEFT = re.compile(r"R\$|US\$|U\$|€|£|\$")
+_SYMBOL_LEFT = re.compile(r"R\$|US\$|U\$|€|£|¥|\$")
 
 
 def _decimal(value: float) -> str:

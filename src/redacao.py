@@ -92,7 +92,7 @@ def sincronizar(script: dict) -> dict:
         antigas = list(sc.get("frases") or [])
         novas = []
         # 26/11: concordância de escala corrigida antes de toda auditoria ("100 milhão" → "100 milhões")
-        for texto in [vocabulario.concordar_escalas(t.strip()) for t in _FRASE.split(str(sc.get("narration", "")))
+        for texto in [vocabulario.normalizar_valores(t.strip()) for t in _FRASE.split(str(sc.get("narration", "")))
                       if t.strip()]:
             n = _norm(texto)
             par = next((f for f in antigas if _norm(f.get("texto", "")) == n), None)
@@ -1033,7 +1033,7 @@ def de_json(data: dict, banco: dict) -> dict:
         for f in c.get("frases") or []:
             if not isinstance(f, dict) or not str(f.get("texto", "")).strip():
                 continue
-            texto = vocabulario.concordar_escalas(
+            texto = vocabulario.normalizar_valores(
                 re.sub(r"\s*\[\s*E\d+(\s*[,;]\s*E\d+)*\s*\]", "", str(f["texto"])).strip())
             tipo = str(f.get("tipo", "")).strip().lower()
             frases.append({"texto": texto, "tipo": tipo if tipo in TIPOS else "factual",
