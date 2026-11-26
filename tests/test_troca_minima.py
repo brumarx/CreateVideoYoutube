@@ -155,3 +155,12 @@ def test_fechamento_recusado_fica_o_roteiro(ambiente, frases):
     responde({"frases": frases})
     s = _com_fim()
     assert rd.escrever_fechamento(s, None, "Svalbard", 500) is s
+
+
+def test_decisoes_numeradas_de_um_sao_lidas_pela_posicao():
+    d = {"frases": [{"n": k, "decisao": "sustentada", "justificativa": "a fonte diz isso"} for k in (1, 2, 3)]}
+    assert sorted(rd._decisoes_validas(d, {13, 14, 15})) == [13, 14, 15]
+    # com algum número do bloco, a numeração vale como veio
+    d2 = {"frases": [{"n": 13, "decisao": "sustentada", "justificativa": "a fonte diz isso"},
+                     {"n": 2, "decisao": "sustentada", "justificativa": "a fonte diz isso"}]}
+    assert sorted(rd._decisoes_validas(d2, {13, 14, 15})) == [13]

@@ -1325,8 +1325,10 @@ São 2 ou 3 frases faladas, nesta ordem:
 1. volta à pergunta da abertura e a responde com o que o vídeo JÁ mostrou (sem fato novo);
 2. o ponto de vista, dito como opinião ("para mim", "o que mais me impressiona"), sobre o que o vídeo mostrou;
 3. uma pergunta direta ao espectador OU "Comenta PALAVRA se…" (PALAVRA em maiúsculas, uma palavra do tema).
-Proibido: número, data, nome que o roteiro não citou, "sempre", "garante", "total", "porque", "por isso",
-pedir like ou inscrição.
+Proibido: número, data, nome que o roteiro não citou, "já", "sempre", "garante", "funciona", "prova", "total",
+"porque", "por isso", "graças", pedir like ou inscrição. A opinião fala do que VOCÊ sente diante do que o vídeo
+mostrou ("para mim, o que mais impressiona é a ideia de uma cópia de segurança para o mundo inteiro"), nunca
+explica causa nem avalia resultado.
 Pergunta da abertura: {pergunta}
 Ponto de vista do plano: {ponto}
 ROTEIRO:
@@ -1337,7 +1339,7 @@ Responda SÓ JSON: {{"frases": ["...", "..."]}}"""
 _OPINIAO = re.compile(r"\b(para mim|pra mim|me impressiona|eu acho|na minha opinião|o que mais me)\b", re.I)
 
 
-def escrever_fechamento(script: dict, plano: dict | None, topic: str, max_pal: int, tentativas: int = 2) -> dict:
+def escrever_fechamento(script: dict, plano: dict | None, topic: str, max_pal: int, tentativas: int = 3) -> dict:
     """26/11 (Svalbard 1021–1023: conclusão 4–5 em toda versão; o roteiro terminava num dado de capacidade):
     o fechamento é escrito à parte, só narrativa — retoma a pergunta da abertura, ponto de vista como opinião,
     pergunta ao espectador. Conferido em código (sem número, sem nome novo, sem afirmação); recusado, uma 2ª
@@ -1418,10 +1420,11 @@ Responda SÓ JSON:
   "qualidade": {{"nota": 8, "problemas": ["..."]}}}}"""
 
 _SO_FRASES = """A HISTÓRIA é avaliada à parte (leitura de espectador e editor): julgue só as frases numeradas;
-em "qualidade" responda {{"nota": 0, "problemas": []}}."""
+em "qualidade" responda {"nota": 0, "problemas": []}."""
 
 DECISOES_AUDITOR = {"sustentada": None, "narrativa_ok": None, "parcial": "excede", "excede": "excede",
                     "sem_suporte": "sem_suporte", "contradiz": "contradiz", "afirmacao_oculta": "afirmacao_oculta"}
+META_BLOCO = 4  # 26/11: pedaço do bloco que voltou sem decisão duas vezes
 FRASES_POR_BLOCO = 12   # uma decisão com justificativa por frase: bloco maior arrisca resposta cortada
 CONTEXTO_BLOCO = 2      # frases antes e depois do bloco, só para leitura
 
@@ -1498,13 +1501,24 @@ def _valido_auditor(raw: str) -> bool:
 
 
 def _decisoes_validas(data: dict, esperados: set[int]) -> dict[int, dict]:
-    """{n: decisão} das frases do bloco com decisão conhecida e justificativa de verdade."""
+    """{n: decisão} das frases do bloco com decisão conhecida e justificativa de verdade.
+    26/11 (Svalbard 1025: bloco 13-24 sem decisão 4 vezes): resposta numerada de 1 a len(bloco), sem nenhum
+    número do bloco, é lida pela posição."""
     out = {}
-    for r in data.get("frases") or []:
+    itens = [r for r in data.get("frases") or [] if isinstance(r, dict)]
+    ordem = sorted(esperados)
+    try:
+        ns = [int(r.get("n")) for r in itens]
+    except (TypeError, ValueError):
+        ns = []
+    renumera = bool(ns) and not set(ns) & esperados and set(ns) <= set(range(1, len(ordem) + 1))
+    for r in itens:
         try:
             n = int(r.get("n"))
         except (TypeError, ValueError, AttributeError):
             continue
+        if renumera:
+            n = ordem[n - 1]
         decisao = str(r.get("decisao", "")).strip().lower()
         just = str(r.get("justificativa", "")).strip()
         if n in esperados and decisao in DECISOES_AUDITOR and len(just.split()) >= 3:
@@ -1608,6 +1622,15 @@ def auditar_ia(script: dict, banco: dict, topic: str, previas: dict | None = Non
                 r2 = chamar(pedido_de([n - 1 for n in faltam], False), _valido_auditor)
                 if r2 is not None:
                     decisoes.update(_decisoes_validas(r2, set(faltam)))
+                faltam = sorted(esperados - set(decisoes))
+                if faltam:
+                    log.warning("auditor: resposta sem decisão válida (amostra: %s) — pedaços de até %d frases",
+                                json.dumps((r2 or {}).get("frases", [])[:2], ensure_ascii=False)[:300], META_BLOCO)
+                    for ini in range(0, len(faltam), META_BLOCO):
+                        parte = faltam[ini:ini + META_BLOCO]
+                        r3 = chamar(pedido_de([n - 1 for n in parte], False), _valido_auditor)
+                        if r3 is not None:
+                            decisoes.update(_decisoes_validas(r3, set(parte)))
     sem = [n for n in range(1, len(lista) + 1) if n not in decisoes]
     if sem:
         log.warning("auditor: frase(s) %s sem decisão depois de perguntar de novo — o roteiro não sai assim", sem)
