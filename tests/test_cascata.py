@@ -449,7 +449,9 @@ def test_997_nota_abaixo_do_alvo_faz_edicao_por_cena_e_fica_a_melhor(monkeypatch
 
 
 def test_997_edicao_que_piora_fica_a_versao_anterior(monkeypatch):
-    notas = iter([7.5, 6.0, 6.2])  # 20/11: até 2 edições; nenhuma melhora, fica a original (com a nota DELA)
+    # 20/11: nenhuma edição melhora, fica a original (com a nota DELA); 26/11: a versão limpa a menos de 1 ponto
+    # do mínimo (6,2) ganha uma edição de história a mais
+    notas = iter([7.5, 6.0, 6.2, 6.1])
     monkeypatch.setattr(rd, "auditar_ia", lambda s, b, t, *_: ([], {"nota": next(notas), "problemas": [],
                                                                      "alvos": [{"criterio": "x", "cenas": [1], "descricao": "y"}]}))
     monkeypatch.setattr(rd, "editar_cenas", _editor_falso(_roteiro_simples("Pior.")))

@@ -1337,11 +1337,12 @@ Responda SÓ JSON: {{"frases": ["...", "..."]}}"""
 _OPINIAO = re.compile(r"\b(para mim|pra mim|me impressiona|eu acho|na minha opinião|o que mais me)\b", re.I)
 
 
-def escrever_fechamento(script: dict, plano: dict | None, topic: str, max_pal: int) -> dict:
+def escrever_fechamento(script: dict, plano: dict | None, topic: str, max_pal: int, tentativas: int = 2) -> dict:
     """26/11 (Svalbard 1021–1023: conclusão 4–5 em toda versão; o roteiro terminava num dado de capacidade):
     o fechamento é escrito à parte, só narrativa — retoma a pergunta da abertura, ponto de vista como opinião,
-    pergunta ao espectador. Conferido em código (sem número, sem nome novo, sem afirmação); reprovado ou sem
-    resposta, fica o roteiro como veio. A narrativa final antiga da última cena sai."""
+    pergunta ao espectador. Conferido em código (sem número, sem nome novo, sem afirmação); recusado, uma 2ª
+    tentativa com o motivo; sem fechamento válido, fica o roteiro como veio. A narrativa final antiga da
+    última cena sai."""
     from .providers import ProvedoresIndisponiveis, complete, is_strong_model
     cenas = script.get("scenes") or []
     if not cenas:
@@ -1349,43 +1350,49 @@ def escrever_fechamento(script: dict, plano: dict | None, topic: str, max_pal: i
     angulo = (plano or {}).get("angulo") or {}
     roteiro = "\n".join(f"{i + 1}. {sc.get('narration') or ' '.join(f['texto'] for f in sc.get('frases') or [])}"
                         for i, sc in enumerate(cenas))
-    try:
-        raw = complete([{"role": "user", "content": _PROMPT_FECHAMENTO.format(
-            tema=topic, pergunta=angulo.get("pergunta") or "-", ponto=angulo.get("ponto_de_vista") or "-",
-            roteiro=roteiro)}], max_tokens=800, temperature=0.5,
-            validate=lambda r: isinstance(_obj(r).get("frases"), list), model_filter=is_strong_model)
-    except ProvedoresIndisponiveis:
-        raise
-    except RuntimeError as exc:
-        log.warning("fechamento indisponível (%s) — fica o fim do roteiro", exc)
-        return script
-    frases = [" ".join(str(t).split()) for t in _obj(raw).get("frases") or [] if str(t).strip()][:3]
-    nomes = _nomes_conhecidos(script, topic)
-    motivo = None
-    if len(frases) < 2:
-        motivo = "menos de 2 frases"
-    elif not (frases[-1].endswith("?") or _COMENTA.search(frases[-1])):
-        motivo = "não termina chamando o espectador"
-    for t in frases:
-        achado = afirmacao_escondida(t, nomes)
-        if achado and achado.startswith("afirmação absoluta") and _OPINIAO.search(t):
-            achado = None  # "para mim, o mais bonito…" é opinião dita como opinião
-        achado = achado or (f"afirma ({m.group(0)})" if (m := _ALEGA.search(_COMENTA.sub("", t)))
-                                                   else None) or ("pede like" if _PEDE_LIKE.search(t) else None)
-        motivo = motivo or (f"\"{t[:60]}\": {achado}" if achado else None)
+    pedido = _PROMPT_FECHAMENTO.format(tema=topic, pergunta=angulo.get("pergunta") or "-",
+                                       ponto=angulo.get("ponto_de_vista") or "-", roteiro=roteiro)
     ultima = list(cenas[-1].get("frases") or [])
     while ultima and ultima[-1].get("tipo") == "narrativa":
         ultima.pop()
-    novas = ultima + [{"texto": t, "tipo": "narrativa", "evidencias": [], "fechamento": True} for t in frases]
-    novo = {**script, "scenes": cenas[:-1] + [{**cenas[-1], "frases": novas,
-                                               "narration": " ".join(f["texto"] for f in novas)}]}
-    if not motivo and _palavras(novo) > max_pal * 1.1:
-        motivo = f"passaria do tamanho ({_palavras(novo)} palavras)"
-    if motivo or not ultima:
-        log.warning("fechamento recusado (%s) — fica o fim do roteiro", motivo or "última cena sem fato")
+    if not ultima:
         return script
-    log.info("fechamento escrito à parte: %s", " | ".join(frases))
-    return novo
+    nomes = _nomes_conhecidos(script, topic)
+    correcao = ""
+    for _ in range(tentativas):
+        try:
+            raw = complete([{"role": "user", "content": pedido + correcao}], max_tokens=800, temperature=0.5,
+                           validate=lambda r: isinstance(_obj(r).get("frases"), list), model_filter=is_strong_model)
+        except ProvedoresIndisponiveis:
+            raise
+        except RuntimeError as exc:
+            log.warning("fechamento indisponível (%s) — fica o fim do roteiro", exc)
+            return script
+        frases = [" ".join(str(t).split()) for t in _obj(raw).get("frases") or [] if str(t).strip()][:3]
+        motivo = None
+        if len(frases) < 2:
+            motivo = "menos de 2 frases"
+        elif not (frases[-1].endswith("?") or _COMENTA.search(frases[-1])):
+            motivo = "não termina chamando o espectador"
+        for t in frases:
+            achado = afirmacao_escondida(t, nomes)
+            if achado and achado.startswith("afirmação absoluta") and _OPINIAO.search(t):
+                achado = None  # "para mim, o mais bonito…" é opinião dita como opinião
+            achado = achado or (f"afirma ({m.group(0)})" if (m := _ALEGA.search(_COMENTA.sub("", t)))
+                                else None) or ("pede like" if _PEDE_LIKE.search(t) else None)
+            motivo = motivo or (f"a frase \"{t}\": {achado}" if achado else None)
+        novas = ultima + [{"texto": t, "tipo": "narrativa", "evidencias": [], "fechamento": True} for t in frases]
+        novo = {**script, "scenes": cenas[:-1] + [{**cenas[-1], "frases": novas,
+                                                   "narration": " ".join(f["texto"] for f in novas)}]}
+        if not motivo and _palavras(novo) > max_pal * 1.1:
+            motivo = f"passaria do tamanho ({_palavras(novo)} palavras): encurte"
+        if not motivo:
+            log.info("fechamento escrito à parte: %s", " | ".join(frases))
+            return novo
+        log.warning("fechamento recusado (%s)", motivo)
+        correcao = f"\n\nO fechamento anterior foi recusado — {motivo}. Escreva de novo sem isso."
+    log.warning("fechamento sem versão válida — fica o fim do roteiro")
+    return script
 
 
 # ---------------------------------------------------------------- auditoria por IA
@@ -2831,14 +2838,22 @@ def auditar_e_corrigir(script: dict, banco: dict, topic: str, *, web_facts: list
     relatorio["cortes"] = 0
     relatorio["trocas"] = 0
     relatorio["registro_trocas"] = []
+    teto = EDICOES_MAX
     # 25/11 (Svalbard 1020: dois cortes gastaram as 2 rodadas e a última frase enganosa, que só uma reescrita
     # resolvia — o corte deixaria 273 de 286 palavras —, ficou sem edição): corte e edição têm limites próprios
-    for _ in range(EDICOES_MAX + CORTES_MAX + TROCAS_MAX + 1):
+    for _ in range(EDICOES_MAX + EDICAO_EXTRA + CORTES_MAX + TROCAS_MAX + 1):
         script, problemas, qualidade = _auditar_versao(script, banco, topic, previas)
         atual = registrar(script, problemas, qualidade, origem, mudou, de_versao)
         if atual["aprovado"] and qualidade["nota"] >= NOTA_ALVO:
             break
-        if relatorio["edicoes"] >= EDICOES_MAX and relatorio["cortes"] >= CORTES_MAX \
+        # 26/11 (Svalbard 1024: v4 sem fato errado nem leitura enganosa, história 6,8 — e as 2 edições já gastas):
+        # versão limpa a menos de 1 ponto do mínimo ganha UMA edição a mais, só de história
+        if (not problemas and NOTA_MINIMA - 1 <= qualidade["nota"] < NOTA_MINIMA
+                and relatorio["edicoes"] >= teto == EDICOES_MAX):
+            teto += EDICAO_EXTRA
+            log.info("versão %d limpa com história %.1f: mais %d edição de história", atual["versao"],
+                     qualidade["nota"], EDICAO_EXTRA)
+        if relatorio["edicoes"] >= teto and relatorio["cortes"] >= CORTES_MAX \
                 and relatorio["trocas"] >= TROCAS_MAX:
             break
         # 23/11: a próxima edição parte da versão atual — a não ser que uma anterior tenha estritamente menos
@@ -2863,7 +2878,7 @@ def auditar_e_corrigir(script: dict, banco: dict, topic: str, *, web_facts: list
         # 26/11 (Svalbard 1023: as duas trocas foram gastas na v1, história 5,5; a v4 chegou a 6,9 com 1 leitura
         # enganosa e não sobrou troca): história abaixo do mínimo vai primeiro à edição (que também recebe os
         # problemas); troca e corte consertam a versão de história boa
-        historia_fraca = qualidade["nota"] < NOTA_MINIMA and relatorio["edicoes"] < EDICOES_MAX
+        historia_fraca = qualidade["nota"] < NOTA_MINIMA and relatorio["edicoes"] < teto
         if historia_fraca:
             julgados = []
         if julgados and relatorio["trocas"] < TROCAS_MAX:
@@ -2883,7 +2898,7 @@ def auditar_e_corrigir(script: dict, banco: dict, topic: str, *, web_facts: list
                 origem, mudou, de_versao = "corte", [], base["versao"]
                 script = cortado
                 continue
-        if relatorio["edicoes"] >= EDICOES_MAX:
+        if relatorio["edicoes"] >= teto:
             break
         novas_ids: set[str] = set()
         sem_suporte = [p for p in problemas if p["tipo"] in ("sem_evidencia", "sem_suporte", "numero_sem_evidencia", "excede")]
@@ -2917,7 +2932,7 @@ def auditar_e_corrigir(script: dict, banco: dict, topic: str, *, web_facts: list
             reg["da_versao"] = base["versao"]
             reg["evidencias_novas"] = sorted(novas_ids)
             relatorio["registro_edicoes"].append(reg)
-            if reg.get("cenas_editadas") or reg.get("titulo") or relatorio["edicoes"] >= EDICOES_MAX \
+            if reg.get("cenas_editadas") or reg.get("titulo") or relatorio["edicoes"] >= teto \
                     or not (reg.get("revertidas") or reg.get("factuais_sem_correcao")):
                 break
             # nada mudou porque a conferência em código recusou as cenas ou o editor devolveu a frase reprovada
@@ -3099,6 +3114,7 @@ PROBLEMAS:
 Responda SÓ JSON: {{"trocas": [{{"n": 7, "texto": "frase nova"}}]}}"""
 
 _ETIQUETA = re.compile(r"^(\[[^\]]{1,20}\]\s*)+")
+EDICAO_EXTRA = 1  # 26/11: edição de história a mais para a versão limpa a menos de 1 ponto do mínimo
 TROCAS_MAX = 2  # 25/11: rodadas de troca mínima pela sugestão do leitor (antes do corte e da edição)
 
 
