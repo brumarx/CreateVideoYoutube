@@ -24,6 +24,9 @@ log = logging.getLogger("qc_video")
 # limites (25/11)
 PRETO_MIN_S = 0.4          # tela preta mais longa que isso é defeito (transição normal é < 0,4 s)
 SILENCIO_MIN_S = 1.0       # silêncio no meio mais longo que isso (a música de fundo não deixa zerar)
+# 26/11 (Svalbard 1033/1034): vídeo SEM música (canal com musica_sem_risco e nenhuma faixa segura) zera na pausa
+# entre cenas, ~0,95 s por desenho — 1,002 s reprovou o vídeo. Sem música, só silêncio além da pausa de cena conta
+SILENCIO_SEM_MUSICA_S = 1.6
 SILENCIO_DB = -50          # abaixo disso é silêncio (a música fica em torno de -37 LUFS sob a voz)
 FIM_IGNORADO_S = 1.5       # o fim do vídeo pode ter silêncio (fade da música/corte)
 CONGELADO_MIN_S = 2.5      # imagem parada com a narração rodando (a legenda karaokê muda a cada palavra)
@@ -134,9 +137,10 @@ def _sobreposicao(a: tuple[float, float], intervalos: list[tuple[float, float]])
     return sum(max(0.0, min(a[1], b[1]) - max(a[0], b[0])) for b in intervalos)
 
 
-def problemas(m: Medicoes, max_segundos: float | None = None) -> list[str]:
+def problemas(m: Medicoes, max_segundos: float | None = None, com_musica: bool = True) -> list[str]:
     """Regras sobre as medições (função pura, testável sem ffmpeg)."""
     saida: list[str] = []
+    limite_silencio = SILENCIO_MIN_S if com_musica else SILENCIO_SEM_MUSICA_S
     for ini, fim in m.pretos:
         if fim - ini > PRETO_MIN_S:
             saida.append(f"tela preta de {fim - ini:.1f} s em {ini:.1f} s")
@@ -146,7 +150,7 @@ def problemas(m: Medicoes, max_segundos: float | None = None) -> list[str]:
     for ini, fim in m.silencios:
         # o trecho final (fade/corte da música) não conta: só o silêncio que começa antes dele
         dur = min(fim, limite_fim) - ini
-        if ini < limite_fim and dur > SILENCIO_MIN_S:
+        if ini < limite_fim and dur > limite_silencio:
             saida.append(f"silêncio de {dur:.1f} s em {ini:.1f} s")
     for ini, fim in m.congelados:
         # parado enquanto ninguém fala (pausa longa já é reprovada acima) não é o defeito aqui
@@ -165,7 +169,7 @@ def problemas(m: Medicoes, max_segundos: float | None = None) -> list[str]:
     return saida
 
 
-def revisar_tecnica(video: Path, max_segundos: float | None = None) -> list[str]:
+def revisar_tecnica(video: Path, max_segundos: float | None = None, com_musica: bool = True) -> list[str]:
     """Problemas técnicos do MP4 final (vazio = aprovado). Falha do próprio ffmpeg vira problema: vídeo que
     nem o ffmpeg lê não sobe."""
     try:
@@ -175,4 +179,4 @@ def revisar_tecnica(video: Path, max_segundos: float | None = None) -> list[str]
     log.info("controle técnico de %s: %.0f s, %s LUFS, capa %.1f%% clara, %d preto(s), %d silêncio(s), "
              "%d congelamento(s)", video, m.duracao, m.lufs, (m.capa_clara or 0) * 100, len(m.pretos),
              len(m.silencios), len(m.congelados))
-    return problemas(m, max_segundos)
+    return problemas(m, max_segundos, com_musica)

@@ -2259,7 +2259,8 @@ def run(
         # da checagem de duração abaixo). Mesmo destino da revisão acima: não sobe nem privado.
         from src.qc_video import revisar_tecnica
 
-        tecnicos = revisar_tecnica(final_video, None if user_forced_format else max_minutes * 60 * 1.25)
+        tecnicos = revisar_tecnica(final_video, None if user_forced_format else max_minutes * 60 * 1.25,
+                                   com_musica=bool(music_attribution))
         if tecnicos:
             for p in tecnicos:
                 log.warning("[%s] controle técnico: %s", job_id, p)

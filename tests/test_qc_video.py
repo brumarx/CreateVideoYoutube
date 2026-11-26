@@ -76,3 +76,14 @@ def test_pipeline_reprova_antes_do_upload():
     src = (Path(__file__).resolve().parent.parent / "scripts" / "run_pipeline.py").read_text()
     i = src.index("tecnicos = revisar_tecnica(final_video")
     assert src.index("raise ScriptRejected(\"vídeo reprovado na revisão antes do upload") < i < src.index("upload_video(")
+
+
+def test_pausa_entre_cenas_sem_musica_nao_reprova():
+    """26/11 (Svalbard 1034): sem música (musica_sem_risco, nenhuma faixa segura) a pausa de cena zera ~1 s."""
+    from src.qc_video import Medicoes, problemas
+    m = Medicoes(duracao=140, tem_audio=True, pretos=[], silencios=[(123.65, 124.652)], congelados=[], lufs=-14.8,
+                 capa_clara=0.5)
+    assert problemas(m, com_musica=True)                     # com música, 1 s zerado é defeito
+    assert not problemas(m, com_musica=False)                # sem música, é a pausa entre cenas
+    m.silencios = [(60.0, 62.5)]
+    assert problemas(m, com_musica=False)                    # silêncio de verdade continua reprovando
