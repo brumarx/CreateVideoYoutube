@@ -751,6 +751,15 @@ def _complete_cascata(
             continue
         rotator = _rotator_for(provider_keys)
         order = rotator.order()
+        if not order and name in PROVEDOR_QUE_RECONECTA:
+            # 27/11: todas as chaves do nosso modelo em descanso curto (cota por minuto): espera a primeira voltar
+            volta = min((rotator._resting.get(k, 0.0) for k in provider_keys if k not in rotator._banned),
+                        default=0.0) - time.time()
+            if 0 < volta <= ESPERA_COTA_MINUTO_MAX:
+                log.warning("%s: todas as chaves em descanso (cota por minuto) — esperando %.0f s para não trocar "
+                            "de modelo", name, volta)
+                time.sleep(volta)
+                order = rotator.order()
         # 1ª passada: o modelo forte (_STRONG_MODELS) em TODAS as chaves; só
         # depois os outros modelos, chave por chave. Antes cada chave tentava
         # os modelos na ordem do /models e o qwen3.8-27b (que inventou
@@ -765,6 +774,16 @@ def _complete_cascata(
             for api_key in pass_keys:
                 # 19/11: o prazo do descanso é relógio de parede (time.time); comparado com time.monotonic
                 # dava sempre "em descanso" e a chave que levou um 429 ficava fora pelo resto do processo
+                volta = rotator._resting.get(api_key, 0.0) - time.time()
+                if (name in PROVEDOR_QUE_RECONECTA and api_key not in rotator._banned
+                        and 0 < volta <= ESPERA_COTA_MINUTO_MAX):
+                    # 27/11 (Aprender vIA 1047: as 2 chaves da NVIDIA levaram 429 de cota por MINUTO, descanso de
+                    # 75 s; a cascata pulou para o Groq, que respondeu fora do formato, e o roteiro saiu "sem
+                    # auditoria"): cota por minuto do nosso modelo é espera curta — espera e tenta o MESMO modelo
+                    log.warning("%s: chave %s em descanso por %.0f s (cota por minuto) — esperando para não "
+                                "trocar de modelo", name, _key_id(api_key), volta)
+                    time.sleep(volta)
+                    rotator._resting.pop(api_key, None)
                 if api_key in rotator._banned or rotator._resting.get(api_key, 0.0) > time.time():
                     # 10/11: pulada em silêncio (o juiz do job 815 não deixou rastro no log)
                     log.info("%s: chave %s pulada (%s) no passe %s", name, _key_id(api_key),
@@ -913,6 +932,7 @@ class JuizSemResposta(RuntimeError):
 # problemas, editorial 7,1) virou "não julgada" por duas quedas seguidas; a 1027 caiu no OpenRouter sem cota.
 QUEDA_ESPERAS: tuple[int, ...] = (30, 60, 120, 240, 480)
 PROVEDOR_QUE_RECONECTA = ("nvidia",)
+ESPERA_COTA_MINUTO_MAX = 150  # s: descanso de cota por minuto que a cascata espera no provedor que reconecta
 
 
 def _queda(result, status) -> bool:

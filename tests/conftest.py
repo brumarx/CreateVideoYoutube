@@ -107,6 +107,8 @@ def sem_espera_de_reconexao(request, monkeypatch):
     sem reconexão, salvo marker "reconexao" (com esperas zeradas)."""
     from src import providers
     monkeypatch.setattr(providers, "QUEDA_ESPERAS", (0, 0, 0) if request.node.get_closest_marker("reconexao") else ())
+    if not request.node.get_closest_marker("reconexao"):
+        monkeypatch.setattr(providers, "ESPERA_COTA_MINUTO_MAX", 0)
 
 
 @pytest.fixture(autouse=True)

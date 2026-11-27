@@ -587,3 +587,18 @@ def test_organizacao_desconhecida_descansa_so_a_propria_chave():
     r.rest_model("k1", GROQ_FORTE, 600)
     agora = time.time()
     assert r.ate("k1", GROQ_FORTE) > agora and r.ate("k2", GROQ_FORTE) <= agora
+
+
+@pytest.mark.reconexao
+def test_nvidia_em_descanso_curto_espera_e_nao_cai_no_groq(monkeypatch, cascata_isolada):
+    """27/11 (Aprender vIA 1047): as 2 chaves da NVIDIA em descanso de 75 s (cota por minuto); a cascata foi para
+    o Groq, que respondeu fora do formato, e o roteiro saiu "sem auditoria"."""
+    rel = Relogio(monkeypatch)
+    chamadas = []
+    monkeypatch.setattr(pv, "_call_openai_compat",
+                        lambda ep, key, model, *a, **k: chamadas.append(key) or ("ok-" + key, 200, 0))
+    monkeypatch.setattr(pv.time, "sleep", lambda s: (cascata_isolada.append(s), rel.andar(s)))
+    k = _chaves(nvidia=["n1"], groq=["g1"])
+    pv._rotator_for(k.nvidia)._resting["n1"] = rel.t + 75
+    assert pv.complete([{"role": "user", "content": "x"}], keys=k) == "ok-n1"
+    assert chamadas == ["n1"] and 75 in [round(x) for x in cascata_isolada]
