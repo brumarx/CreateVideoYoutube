@@ -320,3 +320,18 @@ def test_foto_real_ordenada_pelo_que_a_cena_mostra(monkeypatch):
 def test_numero_do_titulo_conta_o_mesmo_que_a_narracao(titulo, certo):
     narr = "Em 2026, o cofre passa de 1,4 milhão de amostras de 134 instituições."
     assert v.contagem_trocada(titulo, narr) == certo
+
+
+def test_dia_da_semana_e_o_de_uma_data_dos_fatos():
+    """27/11 (Botafogo 1049): "o resultado de sexta-feira" para o jogo de 28/11/2026, um sábado."""
+    from datetime import date
+    from src.vocabulario import corrigir_dia_da_semana as c
+    ref = "Botafogo x Bahia 28/11/2026 às 21h00; Santos x Botafogo 02/12/2026; publicado 2026-11-26T16:50"
+    h = date(2026, 11, 27)
+    assert c("O resultado de sexta-feira define a semana.", ref, h)[0] == "O resultado de sábado define a semana."
+    assert c("Nesta segunda-feira tem jogo.", ref, h)[0] == "Neste sábado tem jogo."  # quinta é a data da matéria
+    # o certo vizinho e o que não é dia: nada muda
+    for certo in ("Neste sábado o Botafogo joga.", "Na quarta-feira tem Santos.", "Ele está na sexta posição.",
+                  "Hoje, sexta-feira, o elenco treinou.", "A sexta-feira foi tensa.", "Na quinta-feira o portal publicou."):
+        assert c(certo, ref, h)[0] == certo, certo
+    assert c("Na sexta-feira tem jogo.", "sem data", h)[0] == "Na sexta-feira tem jogo."

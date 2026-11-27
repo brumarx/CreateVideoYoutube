@@ -308,3 +308,101 @@ def contagem_trocada(titulo: str, narracao: str) -> str:
             return m.group(0)
         return m.group(0)[:m.start(3) - m.start(0)] + certo
     return _CONTAGEM.sub(troca, titulo or "")
+
+
+# ---------------------------------------------------------------- dias da semana
+# 27/11 (Botafogo 1049: "o resultado de sexta-feira define…" — o jogo era em 28/11/2026, um sábado; a matéria não
+# dizia o dia, o roteirista deduziu). O dia da semana dito na narração tem de ser o de uma data dos fatos.
+DIAS = ("segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo")  # date.weekday(): 0 = segunda
+# "sexta-feira", "sábado", "domingo" sempre são dia; "segunda/quinta/sexta" sozinhos só com "neste/nesta/desta/
+# próxima…" antes (senão é ordinal: "na sexta posição", "quinta colocação")
+_DIA = re.compile(r"\b(?:(?P<det>(?:neste|nesta|deste|desta|nesse|nessa|próximo|próxima|este|esta|no|na|do|da|de|"
+                  r"o|a)\s+(?:próximo\s+|próxima\s+)?)?(?P<dia>segunda|terça|terca|quarta|quinta|sexta)(?P<feira>-feira)"
+                  r"|(?P<det2>neste|nesta|deste|desta|nesse|nessa|próximo|próxima)\s+(?P<dia2>segunda|terça|terca|quarta|"
+                  r"quinta|sexta)(?!\s+(?:posição|colocação|rodada|vez|parte|fase|edição|temporada|lugar|série)))\b"
+                  r"|\b(?P<dia3>sábado|sabado|domingo)\b", re.I)
+_DATA_NUM = re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{4})\b")
+
+
+def datas_com_dia(texto: str) -> list:
+    """Datas dd/mm/aaaa do texto (fatos, agenda), na ordem, sem repetir."""
+    from datetime import date
+    out = []
+    for d, m, a in _DATA_NUM.findall(texto or ""):
+        try:
+            x = date(int(a), int(m), int(d))
+        except ValueError:
+            continue
+        if x not in out:
+            out.append(x)
+    return out
+
+
+def corrigir_dia_da_semana(texto: str, referencia: str, hoje=None) -> tuple[str, list[str]]:
+    """Dia da semana dito na narração que não é o de NENHUMA data da referência (fatos/agenda) vira o dia da
+    próxima data a partir de hoje (o evento de que o vídeo fala). Sem datas na referência, nada muda.
+    Devolve (texto, trocas feitas)."""
+    from datetime import date
+    datas = datas_com_dia(referencia) + [x for x in _datas_iso(referencia)]
+    if not datas:
+        return texto, []
+    hoje = hoje or date.today()
+    validos = {x.weekday() for x in datas}  # o dia de hoje só vale colado a "hoje" ("hoje, sexta-feira")
+    futuras = sorted(x for x in datas if x >= hoje)
+    alvo = futuras[0] if futuras else None
+    trocas: list[str] = []
+
+    def troca(m: re.Match) -> str:
+        dia = (m.group("dia") or m.group("dia2") or m.group("dia3") or "").lower().replace("terca", "terça") \
+            .replace("sabado", "sábado")
+        idx = DIAS.index(dia)
+        colado_a_hoje = idx == hoje.weekday() and re.search(r"\bhoje\W{0,3}(?:é\s+)?$", (texto or "")[:m.start()][-14:], re.I)
+        if idx in validos or alvo is None or colado_a_hoje:
+            return m.group(0)
+        # dia passado ("na sexta-feira passada", "ontem", "foi") não é o próximo evento: não se troca às cegas
+        ini = max((texto or "").rfind(".", 0, m.start()), (texto or "").rfind("!", 0, m.start()),
+                  (texto or "").rfind("?", 0, m.start())) + 1
+        fim = min([i for i in ((texto or "").find(c, m.end()) for c in ".!?") if i >= 0] or [len(texto or "")])
+        if re.search(r"\b(passad[oa]|ontem|últim[oa]|ultim[oa]|foi|foram|era|estava|aconteceu|teve)\b",
+                     (texto or "")[ini:fim], re.I):
+            trocas.append(f"{m.group(0)}: não é o dia de nenhuma data dos fatos (passado — não trocado)")
+            return m.group(0)
+        novo = DIAS[alvo.weekday()]
+        bruto = m.group(0)
+        pos = bruto.lower().rfind(dia if dia in bruto.lower() else dia.replace("ç", "c").replace("á", "a"))
+        palavra = bruto[pos:pos + len(dia)]
+        if alvo.weekday() >= 5:  # sábado/domingo não levam "-feira"
+            resto = bruto[pos + len(dia):].replace("-feira", "")
+        else:
+            resto = bruto[pos + len(dia):] or ("-feira" if m.group("dia3") else "")
+        antes = bruto[:pos]
+        # artigo concorda: "no sábado", "na sexta-feira"
+        masc = alvo.weekday() >= 5
+        antes = re.sub(r"\b(nesta|neste|desta|deste|nessa|nesse|esta|este|próxima|próximo|na|no|da|do|a|o)\b",
+                       lambda a: _genero(a.group(0), masc), antes, flags=re.I)
+        saida = antes + (novo.capitalize() if palavra[:1].isupper() else novo) + resto
+        trocas.append(f"{bruto} -> {saida} ({alvo.strftime('%d/%m/%Y')})")
+        return saida
+    return _DIA.sub(troca, texto or ""), trocas
+
+
+def _datas_iso(texto: str) -> list:
+    from datetime import date
+    out = []
+    for a, m, d in re.findall(r"\b(\d{4})-(\d{2})-(\d{2})", texto or ""):
+        try:
+            out.append(date(int(a), int(m), int(d)))
+        except ValueError:
+            pass
+    return out
+
+
+_PARES_GENERO = {"nesta": "neste", "desta": "deste", "nessa": "nesse", "esta": "este", "próxima": "próximo",
+                 "na": "no", "da": "do", "a": "o"}
+
+
+def _genero(palavra: str, masculino: bool) -> str:
+    low = palavra.lower()
+    mapa = _PARES_GENERO if masculino else {v: k for k, v in _PARES_GENERO.items()}
+    novo = mapa.get(low, low)
+    return novo.capitalize() if palavra[:1].isupper() else novo

@@ -1673,9 +1673,14 @@ def run(
         if pronunciations:
             log.info("[%s] pronúncia: %s", job_id, pronunciations)
         # 26/11: concordância de escala em todo canal, antes da voz e da legenda ("100 milhão" → "100 milhões")
-        from src.vocabulario import normalizar_valores
+        from src.vocabulario import corrigir_dia_da_semana, normalizar_valores
+        # 27/11 (Botafogo 1049: "o resultado de sexta-feira" para o jogo de sábado, 28/11): o dia da semana dito é o
+        # de uma data dos fatos/agenda; o que não bate vira o dia da próxima data
+        referencia = json.dumps([facts, web_facts], ensure_ascii=False, default=str)
         for sc in script.get("scenes") or []:
-            sc["narration"] = normalizar_valores(sc.get("narration", ""))
+            sc["narration"], trocas = corrigir_dia_da_semana(normalizar_valores(sc.get("narration", "")), referencia)
+            for t in trocas:
+                log.warning("[%s] dia da semana: %s", job_id, t)
         narrations = []
         with metricas.etapa("narracao"):
             for i, scene in enumerate(script["scenes"]):
