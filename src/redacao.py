@@ -126,6 +126,7 @@ class RoteiroReprovado(Exception):
 # vídeo. Roteiro que chega à auditoria abaixo do mínimo é reprovado na hora com este motivo, e a rodada diária
 # troca de tema em vez de refazer o mesmo (mais tentativas com o mesmo material dão o mesmo roteiro curto).
 MATERIAL_CURTO = "material curto para a duração"
+FATOS_LIVRES_PARA_AMPLIAR = 4  # fatos aprovados ainda não usados que bastam para o escritor alcançar o mínimo
 
 
 # ---------------------------------------------------------------- metadados
@@ -3368,8 +3369,15 @@ def auditar_e_corrigir(script: dict, banco: dict, topic: str, *, web_facts: list
     from . import metricas
     curto = roteiro_insuficiente(script, min_palavras)
     if curto:
-        raise RoteiroReprovado(f"{MATERIAL_CURTO}: {curto} — nenhuma correção alcança o mínimo sem encher o "
-                               "roteiro; outro tema")
+        # 27/11 (Aprender vIA 1042: 45 fatos no banco e a rodada trocou de tema dizendo "material curto"): só é
+        # material curto se não sobram fatos aprovados para contar; sobrando, o defeito é do escritor e o mesmo
+        # tema é refeito (o banco fica em cache)
+        usados = {e for _, _, f in frases_de(script) for e in f.get("evidencias") or []}
+        livres = [e for e in usaveis(banco) if e["id"] not in usados]
+        if len(livres) >= FATOS_LIVRES_PARA_AMPLIAR:
+            raise RoteiroReprovado(f"escritor curto: {curto} com {len(livres)} fatos aprovados sem usar — mesmo tema")
+        raise RoteiroReprovado(f"{MATERIAL_CURTO}: {curto} e só {len(livres)} fato(s) aprovado(s) sem usar — "
+                               "nenhuma correção alcança o mínimo sem encher o roteiro; outro tema")
     palavras_inicio = _palavras(script)
     piso = max(min_palavras, palavras_inicio * (1 - MAX_PERDA))
     relatorio: dict = {"rodadas": [], "edicoes": 0, "versoes": [], "registro_edicoes": [], "comparacoes": []}

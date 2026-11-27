@@ -1990,3 +1990,17 @@ def test_tentativa_curta_pede_ampliacao_do_proprio_roteiro_com_fatos_nao_usados(
     pedido = redacao.ampliar_pedido(script, banco, 300, 600)
     assert "NÃO recomece" in pedido and "Frase curta." in pedido and "pelo menos 298 palavras" in pedido
     assert "E2: Fato livre sobre planilhas." in pedido and "E1: Fato usado." not in pedido
+
+
+def test_roteiro_curto_com_fatos_sobrando_culpa_o_escritor_e_mantem_o_tema(monkeypatch):
+    """27/11 (Aprender vIA 1042): 45 fatos no banco e a rodada trocou de tema dizendo 'material curto'."""
+    from src import redacao
+    monkeypatch.setattr(redacao, "_auditar_versao", lambda *a, **k: (_ for _ in ()).throw(AssertionError))
+    ev = lambda i: {"id": i, "afirmacao": f"fato {i}", "status": "oficial", "numeros": [], "conflitos": [],  # noqa: E731
+                    "citacoes": [], "tipo": "qualitativo", "estimado": False}
+    banco = {"evidencias": [ev(f"E{i}") for i in range(1, 8)]}
+    script = {"scenes": [{"narration": "uma frase curta só", "frases": [{"texto": "uma frase curta só",
+                                                                        "tipo": "factual", "evidencias": ["E1"]}]}]}
+    with pytest.raises(redacao.RoteiroReprovado) as exc:
+        redacao.auditar_e_corrigir(script, banco, "tema", min_palavras=286)
+    assert redacao.MATERIAL_CURTO not in str(exc.value) and "mesmo tema" in str(exc.value)
