@@ -1965,3 +1965,15 @@ def test_tentativa_fora_do_tamanho_nao_passa_pela_conferencia(llm, monkeypatch):
     from src.config import ChannelConfig
     rd.escrever(ChannelConfig.load("curiosidades"), TEMA_988, BANCO, min_minutes=0.1, max_minutes=5, cenas_ref=6)
     assert conferidas == [5]   # só a tentativa dentro do tamanho foi conferida
+
+
+def test_roteiro_abaixo_do_minimo_reprovado_antes_da_auditoria(monkeypatch):
+    """27/11 (Baikal 1036-1038): roteiro curto entrava na auditoria e nenhuma correção podia passar no piso."""
+    from src import redacao
+    chamou = []
+    monkeypatch.setattr(redacao, "_auditar_versao", lambda *a, **k: chamou.append(1) or (_ for _ in ()).throw(AssertionError))
+    script = {"scenes": [{"narration": "uma frase curta só", "frases": []}]}
+    with pytest.raises(redacao.RoteiroReprovado) as exc:
+        redacao.auditar_e_corrigir(script, {"evidencias": []}, "tema", min_palavras=286)
+    assert redacao.MATERIAL_CURTO in str(exc.value)
+    assert not chamou

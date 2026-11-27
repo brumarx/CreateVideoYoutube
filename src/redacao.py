@@ -120,6 +120,14 @@ class RoteiroReprovado(Exception):
     """Reprovação justificada da redação (motivo na mensagem)."""
 
 
+# 27/11 (Fractal, Baikal 1036-1038 e peixes 1039): o escritor entregou 246, 203, 249 palavras (mínimo 286) porque o
+# tema tinha pouco material; a auditoria levou ~40 min por tentativa e NENHUMA correção podia passar (o piso das
+# edições é o mínimo de palavras, que o próprio ponto de partida já não alcançava) — 4 tentativas, 3 h, dia sem
+# vídeo. Roteiro que chega à auditoria abaixo do mínimo é reprovado na hora com este motivo, e a rodada diária
+# troca de tema em vez de refazer o mesmo (mais tentativas com o mesmo material dão o mesmo roteiro curto).
+MATERIAL_CURTO = "material curto para a duração"
+
+
 # ---------------------------------------------------------------- metadados
 def frases_de(script: dict) -> list[tuple[int, int, dict]]:
     return [(i, j, f) for i, sc in enumerate(script.get("scenes", [])) for j, f in enumerate(sc.get("frases") or [])]
@@ -3288,6 +3296,10 @@ def auditar_e_corrigir(script: dict, banco: dict, topic: str, *, web_facts: list
     para reformulação localizada; a escolha segue chave_selecao e pode montar uma versão com as cenas seguras
     de cada versão (compor_versao). Devolve (roteiro, relatório) ou levanta RoteiroReprovado."""
     from . import metricas
+    curto = roteiro_insuficiente(script, min_palavras)
+    if curto:
+        raise RoteiroReprovado(f"{MATERIAL_CURTO}: {curto} — nenhuma correção alcança o mínimo sem encher o "
+                               "roteiro; outro tema")
     palavras_inicio = _palavras(script)
     piso = max(min_palavras, palavras_inicio * (1 - MAX_PERDA))
     relatorio: dict = {"rodadas": [], "edicoes": 0, "versoes": [], "registro_edicoes": [], "comparacoes": []}

@@ -41,6 +41,7 @@ sys.path.insert(0, str(ROOT))
 from src.db import connect_db  # noqa: E402
 from src.orchestrator import DB_PATH, update  # noqa: E402
 from src.upload import UPLOAD_META_FILE  # noqa: E402
+from src.redacao import MATERIAL_CURTO  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("daily_run")
@@ -254,6 +255,10 @@ def _run_pipeline(channel_name: str, extra: list[str], label: str, fallback_shor
         # 15/11: a partir da última tentativa normal o tema que falhou não é refeito
         # (sem vídeo que passe no mesmo tema, o dia fica sem vídeo): sorteia outro
         fresh = attempt + 1 >= MAX_ATTEMPTS
+        if MATERIAL_CURTO in (error or ""):
+            # 27/11: o tema não tem material para a duração — refazer dá o mesmo roteiro curto
+            log.warning("[%s] %s: tema com material curto — a próxima tentativa sorteia outro tema", channel_name, label)
+            fresh = True
         base_cmd = [sys.executable, str(ROOT / "scripts" / "run_pipeline.py"), "--channel", channel_name,
                     *([] if fresh else same), *(["--no-upload"] if sem_upload else [])]
 
