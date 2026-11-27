@@ -316,3 +316,32 @@ def test_edicao_que_encolhe_abaixo_do_minimo_volta_ao_editor_para_reescrever(mon
     assert "TIROU PALAVRAS DEMAIS" in " ".join(editor.pedidos[1]["alvos"][1])
     assert textos(editor.pedidos[1]["script"])[1] == EXAGERO  # refeita a partir da versão auditada, não da encolhida
     assert RESTRITA in textos(final)
+
+
+def _leitura(*textos):
+    return {"tipo": "leitura_enganosa", "termo": textos[0], "motivo": "m", "cena": 0, "frase": 0,
+            "sequencia": [{"cena": 0, "frase": i, "texto": t} for i, t in enumerate(textos)]}
+
+
+def test_leitura_enganosa_nova_em_frases_que_a_versao_anterior_leu_sem_engano_nao_bloqueia():
+    """27/11 (Aprender vIA 1044): cortada a frase apontada na v5, a v6 ganhou leituras enganosas em frases que a
+    v5 já tinha, iguais, e que as 3 leituras dela deixaram passar."""
+    v5 = {"versao": 5, "_script": V1, "problemas": [_leitura(FIM)]}
+    instavel = _leitura(ABERTURA)                 # estava igual na v5 e não foi apontada
+    repetida = _leitura(FIM)                      # já apontada na v5: continua valendo
+    nova = _leitura("Frase que a v5 não tinha.")  # texto novo: continua valendo
+    assert rd.leituras_estaveis([instavel, repetida, nova], [v5]) == [repetida, nova]
+
+
+def test_texto_ja_auditado_no_job_nao_e_julgado_de_novo(monkeypatch):
+    """27/11 (1044: v6, v7, v8 com o mesmo hash julgadas 3 vezes, 2/4/2 problemas)."""
+    oraculo = Oraculo({EXAGERO: "excede"}, lambda s: Q())
+    monkeypatch.setattr(rd, "_auditar_versao", oraculo)
+    monkeypatch.setattr(rd, "editar_cenas", EditorFalso((copy.deepcopy(V1), [2]), (copy.deepcopy(V1), [2])))
+    try:
+        rd.auditar_e_corrigir(copy.deepcopy(V1), BANCO, "t")
+    except rd.RoteiroReprovado:
+        pass
+    textos_auditados = [tuple(t) for t in oraculo.auditadas]
+    assert textos(V1) in [list(t) for t in textos_auditados]
+    assert len(textos_auditados) == len(set(textos_auditados))  # nenhum texto julgado duas vezes

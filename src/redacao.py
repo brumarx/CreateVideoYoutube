@@ -2379,6 +2379,37 @@ _NOMES_PROBLEMA = {"sem_evidencia": "afirmação sem evidência", "sem_suporte":
                    "divergencia_como_faixa": "valores divergentes de fontes diferentes ditos como faixa"}
 
 
+def leituras_estaveis(problemas: list[dict], versoes: list[dict]) -> list[dict]:
+    """27/11 (Aprender vIA 1044): a v5 tinha 1 leitura enganosa; cortada a frase, a v6 ganhou 2 em frases que a v5
+    já tinha e que as 3 leituras da v5 deixaram passar ("Para mim, o que mais impressiona…" — opinião; "Se o grau
+    avançado não é exigido…") — o alvo mudava a cada versão e nenhuma convergia. Leitura enganosa cujas frases
+    estavam TODAS, iguais, numa versão anterior que as leu sem apontar nenhuma delas não bloqueia: as leituras
+    discordam entre versões e vale a anterior (o texto não mudou). Fica no log como leitura instável."""
+    if not versoes:
+        return problemas
+    out = []
+    for p in problemas:
+        seq = p.get("sequencia") if p.get("tipo") == "leitura_enganosa" else None
+        if not seq:
+            out.append(p)
+            continue
+        textos = {_norm(x["texto"]) for x in seq}
+        for v in reversed(versoes):
+            if not textos <= {_norm(f["texto"]) for _, _, f in frases_de(v["_script"])}:
+                continue
+            apontadas = {_norm(x["texto"]) for q in v["problemas"] if q.get("tipo") == "leitura_enganosa"
+                         for x in (q.get("sequencia") or [{"texto": q.get("termo", "")}])}
+            if textos & apontadas:
+                out.append(p)
+            else:
+                log.info("leitura instável: as frases de \"%s\" estavam iguais na versão %d, que as leu sem engano — "
+                         "não bloqueia", p.get("termo", "")[:80], v["versao"])
+            break
+        else:
+            out.append(p)
+    return out
+
+
 def motivo_leitura(p: dict) -> str:
     """Leitura enganosa de uma SEQUÊNCIA de frases como o editor a lê: todas as frases (cena, tipo, evidências
     com o que cada uma comprova), o que o público conclui, por que engana e a sugestão do auditor."""
@@ -3420,7 +3451,15 @@ def auditar_e_corrigir(script: dict, banco: dict, topic: str, *, web_facts: list
     # 25/11 (Svalbard 1020: dois cortes gastaram as 2 rodadas e a última frase enganosa, que só uma reescrita
     # resolvia — o corte deixaria 273 de 286 palavras —, ficou sem edição): corte e edição têm limites próprios
     for _ in range(EDICOES_MAX + EDICAO_EXTRA + CORTES_MAX + TROCAS_MAX + 1):
-        script, problemas, qualidade = _auditar_versao(script, banco, topic, previas)
+        # 27/11 (Aprender vIA 1044: v6, v7 e v8 com o MESMO texto, hash ba2c3e7e01b5, julgadas 3 vezes — 2, 4 e 2
+        # problemas): texto já auditado neste job não é julgado de novo; vale o resultado que ele já teve
+        igual = next((v for v in versoes if v["hash"] == _hash_versao(script, banco)), None)
+        if igual is not None:
+            log.info("versão igual à %d (mesmo texto e banco): sem nova auditoria", igual["versao"])
+            script, problemas, qualidade = igual["_script"], igual["problemas"], igual["qualidade"]
+        else:
+            script, problemas, qualidade = _auditar_versao(script, banco, topic, previas)
+            problemas = leituras_estaveis(problemas, versoes)
         atual = registrar(script, problemas, qualidade, origem, mudou, de_versao)
         if atual["aprovado"] and qualidade["nota"] >= NOTA_ALVO:
             break

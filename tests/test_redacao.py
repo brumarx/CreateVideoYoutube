@@ -1,3 +1,4 @@
+import copy
 """Modo redação do Fractal (19/11): banco de evidências (src/evidencias.py), roteirista livre e
 auditoria por categoria (src/redacao.py). Zero API: toda resposta de IA é simulada; as fontes de
 Yakutsk são as 17 páginas reais que a pesquisa trouxe no job 987 (tests/fixtures)."""
@@ -1920,7 +1921,11 @@ def test_corte_que_deixaria_curto_vai_para_a_edicao_mesmo_depois_de_dois_cortes(
 
     def editar(script, alvos, banco, topic, **k):
         chamado.append(sorted(alvos))
-        return script, {"cenas_editadas": [2], "revertidas": [], "titulo": None, "detalhes": []}
+        # 27/11: a edição muda a frase (texto igual ao já auditado não é julgado de novo)
+        novo = copy.deepcopy(script)
+        novo["scenes"][1]["frases"][0]["texto"] = "Yakutsk é uma das duas maiores cidades sobre permafrost contínuo."
+        novo["scenes"][1]["narration"] = novo["scenes"][1]["frases"][0]["texto"]
+        return novo, {"cenas_editadas": [2], "revertidas": [], "titulo": None, "detalhes": []}
     monkeypatch.setattr(rd, "_auditar_versao", auditar)
     monkeypatch.setattr(rd, "editar_cenas", editar)
     monkeypatch.setattr(rd, "registrar_tentativas", lambda *a, **k: None)
