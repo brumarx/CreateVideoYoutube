@@ -60,7 +60,7 @@ def test_troca_aceita_quando_a_conferencia_passa(ambiente, monkeypatch):
 def test_troca_recusada_pela_conferencia_nao_muda_nada(ambiente, monkeypatch):
     responde, _ = ambiente
     responde({"trocas": [{"n": 2, "texto": "O permafrost garante o frio por séculos."}]})
-    monkeypatch.setattr(rd, "conferir_contra_trechos", lambda itens, banco: {0: "termo mais forte"})
+    monkeypatch.setattr(rd, "conferir_contra_trechos", lambda itens, banco, fieis=None: {0: "termo mais forte"})
     novo, reg = rd.trocar_frases_apontadas(_script(), [_problema()], {}, "Svalbard")
     assert novo is None and reg["recusadas"]  # 26/11: "garante" recusado já em código (léxico), antes do juiz
 
@@ -68,7 +68,7 @@ def test_troca_recusada_pela_conferencia_nao_muda_nada(ambiente, monkeypatch):
 def test_troca_so_mexe_nas_frases_apontadas(ambiente, monkeypatch):
     responde, _ = ambiente
     responde({"trocas": [{"n": 1, "texto": "O cofre é o maior do mundo."}]})  # frase 1 não foi apontada
-    monkeypatch.setattr(rd, "conferir_contra_trechos", lambda itens, banco: {k: None for k in range(len(itens))})
+    monkeypatch.setattr(rd, "conferir_contra_trechos", lambda itens, banco, fieis=None: {k: None for k in range(len(itens))})
     novo, _ = rd.trocar_frases_apontadas(_script(), [_problema()], {}, "Svalbard")
     assert novo is None
 
@@ -76,7 +76,7 @@ def test_troca_so_mexe_nas_frases_apontadas(ambiente, monkeypatch):
 def test_texto_vazio_tira_a_frase(ambiente, monkeypatch):
     responde, _ = ambiente
     responde({"trocas": [{"n": 2, "texto": ""}]})
-    monkeypatch.setattr(rd, "conferir_contra_trechos", lambda itens, banco: {})
+    monkeypatch.setattr(rd, "conferir_contra_trechos", lambda itens, banco, fieis=None: {})
     novo, _ = rd.trocar_frases_apontadas(_script(), [_problema()], {}, "Svalbard")
     # a cena que fica só com narrativa sai (mesma regra do corte)
     assert [f["texto"] for sc in novo["scenes"] for f in sc["frases"]] == [
@@ -87,7 +87,7 @@ def test_narrativa_trocada_nao_pode_afirmar(ambiente, monkeypatch):
     responde, _ = ambiente
     p = {**_problema(), "cena": 1, "frase": 1, "sequencia": [{"cena": 1, "frase": 1}]}
     responde({"trocas": [{"n": 3, "texto": "E isso guarda 1,3 milhão de amostras."}]})
-    monkeypatch.setattr(rd, "conferir_contra_trechos", lambda itens, banco: {})
+    monkeypatch.setattr(rd, "conferir_contra_trechos", lambda itens, banco, fieis=None: {})
     novo, reg = rd.trocar_frases_apontadas(_script(), [p], {}, "Svalbard")
     assert novo is None and "narrativa afirma" in reg["recusadas"][0]["motivo"]
 
@@ -119,7 +119,7 @@ def test_limpeza_nunca_esvazia_cena():
 def test_troca_tira_etiqueta_copiada(ambiente, monkeypatch):
     responde, _ = ambiente
     responde({"trocas": [{"n": 2, "texto": "[factual] O permafrost ajuda a manter as sementes congeladas."}]})
-    monkeypatch.setattr(rd, "conferir_contra_trechos", lambda itens, banco: {k: None for k in range(len(itens))})
+    monkeypatch.setattr(rd, "conferir_contra_trechos", lambda itens, banco, fieis=None: {k: None for k in range(len(itens))})
     novo, _ = rd.trocar_frases_apontadas(_script(), [_problema()], {}, "Svalbard")
     assert novo["scenes"][1]["frases"][0]["texto"] == "O permafrost ajuda a manter as sementes congeladas."
 
@@ -343,3 +343,65 @@ def test_conserto_nao_traz_palavra_mais_forte_e_depois_sem_prova_sai():
     assert rd._palavra_mais_forte("O permafrost mantém as sementes frias.", "O frio não bastava.", ev) is None
     assert rd._ORDEM_REMOVIVEL.sub("", "Duplicatas voltaram para Svalbard depois.") == "Duplicatas voltaram para Svalbard."
     assert rd._ORDEM_REMOVIVEL.sub("", "Voltou depois de 2015.") == "Voltou depois de 2015."   # "depois de X" fica
+
+
+# 27/11 (Chernobyl 1040): a conferência tirava a frase que excedia e o roteiro caía abaixo do mínimo; agora ela
+# devolve a frase certa com as palavras do fato, que passa pelas travas e entra no lugar
+_BANCO_CH = {"evidencias": [{"id": "E3", "afirmacao": "O sarcófago foi uma solução temporária para filtrar a radiação "
+                             "dos gases antes de liberá-los.", "status": "oficial", "citacoes": []}]}
+_ERRADA = "Oficialmente, era uma solução temporária só para conter a radiação dos gases."
+_CERTA = "Oficialmente, era uma solução temporária para filtrar a radiação dos gases antes de soltá-los."
+
+
+def _conferencia_falsa(fiel):
+    chamadas = []
+
+    def conf(itens, banco, fieis=None):
+        chamadas.append([it["texto"] for it in itens])
+        if fieis is not None:  # 1ª conferência: reprova e manda a frase certa
+            fieis.update({k: fiel for k, it in enumerate(itens) if it["texto"] == _ERRADA})
+            return {k: ("diz conter; o fato diz filtrar" if it["texto"] == _ERRADA else None) for k, it in enumerate(itens)}
+        return {k: None for k in range(len(itens))}  # 2ª: a frase certa sustentada
+    return conf, chamadas
+
+
+@pytest.mark.conferencia
+def test_conferencia_da_edicao_poe_a_frase_certa_no_lugar_em_vez_de_tirar(monkeypatch):
+    conf, chamadas = _conferencia_falsa(_CERTA)
+    monkeypatch.setattr(rd, "conferir_contra_trechos", conf)
+    monkeypatch.setattr(rd, "revisar_citadas", lambda *a, **k: None)
+    abertura = {"texto": "Em 1986 o reator explodiu.", "tipo": "factual", "evidencias": ["E3"]}
+    original = [{"frases": [abertura], "narration": abertura["texto"]}]
+    nova = {"frases": [abertura, {"texto": _ERRADA, "tipo": "factual", "evidencias": ["E3"]}]}
+    novas = [{**nova, "narration": " ".join(f["texto"] for f in nova["frases"])}]
+    reg = {"cenas_editadas": [1], "revertidas": [], "detalhes": []}
+    rd.conferir_edicao(novas, original, reg, _BANCO_CH)
+    assert [f["texto"] for f in novas[0]["frases"]] == [abertura["texto"], _CERTA]
+    assert _CERTA in novas[0]["narration"] and reg["trocadas_na_conferencia"][0]["antes"] == _ERRADA
+    assert chamadas[1] == [_CERTA]  # a frase certa foi conferida de novo antes de entrar
+
+
+@pytest.mark.conferencia
+def test_frase_certa_com_palavra_mais_forte_nao_entra_e_a_errada_sai(monkeypatch):
+    conf, _ = _conferencia_falsa("Era a única solução que garante filtrar a radiação dos gases.")
+    monkeypatch.setattr(rd, "conferir_contra_trechos", conf)
+    monkeypatch.setattr(rd, "revisar_citadas", lambda *a, **k: None)
+    abertura = {"texto": "Em 1986 o reator explodiu.", "tipo": "factual", "evidencias": ["E3"]}
+    original = [{"frases": [abertura], "narration": abertura["texto"]}]
+    nova = {"frases": [abertura, {"texto": _ERRADA, "tipo": "factual", "evidencias": ["E3"]}]}
+    novas = [{**nova, "narration": ""}]
+    reg = {"cenas_editadas": [1], "revertidas": [], "detalhes": []}
+    rd.conferir_edicao(novas, original, reg, _BANCO_CH)
+    assert [f["texto"] for f in novas[0]["frases"]] == [abertura["texto"]]
+    assert reg["cortadas_na_conferencia"][0]["frase"] == _ERRADA
+
+
+@pytest.mark.conferencia
+def test_conferencia_na_escrita_poe_a_frase_certa_sem_reescrita_nem_corte(monkeypatch):
+    conf, chamadas = _conferencia_falsa(_CERTA)
+    monkeypatch.setattr(rd, "conferir_contra_trechos", conf)
+    monkeypatch.setattr(rd, "revisar_citadas", lambda *a, **k: None)
+    f = {"texto": _ERRADA, "tipo": "factual", "evidencias": ["E3"]}
+    script = {"scenes": [{"frases": [f], "narration": _ERRADA}]}
+    novo, motivos = rd.conferir_na_escrita(script, _BANCO_CH, "Chernobyl")
+    assert motivos == [] and novo["scenes"][0]["narration"] == _CERTA and len(chamadas) == 2

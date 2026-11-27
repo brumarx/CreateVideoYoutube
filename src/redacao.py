@@ -1353,8 +1353,12 @@ fatos citados SEM criar relação entre eles e arredondar no sentido certo valem
   "muitos" → "todos", "ajuda" → "garante", "pode" → "vai");
 - SENTIDO INVERTIDO: o trecho diz que algo NÃO bastava/não era e a frase usa como se bastasse;
 - JUNÇÃO: dois trechos combinados numa relação (causa, comparação) que nenhum deles afirma.
+Para cada "excede", escreva em "frase_fiel" a frase CERTA: o mesmo papel na história, ligada à frase anterior, tom
+falado e tamanho parecido, dizendo SÓ o que os fatos citados dizem, com as palavras deles (ex.: o fato diz
+"filtrar os gases antes de liberar" → a frase diz filtrar, nunca "conter"). Sem dedução, sem termo mais forte, sem
+"hoje" para dado de outra época. Se nada da frase cabe nos fatos, deixe "frase_fiel" vazia.
 {itens}
-Responda SÓ JSON: {{"decisoes": [{{"n": 1, "decisao": "sustentada", "o_que_excede": ""}}]}}"""
+Responda SÓ JSON: {{"decisoes": [{{"n": 1, "decisao": "sustentada", "o_que_excede": "", "frase_fiel": ""}}]}}"""
 
 _PROMPT_REESCREVE = """Estas frases de um roteiro de vídeo (tema: {tema}) dizem mais do que a fonte. Reescreva cada
 uma para dizer SÓ o que o TRECHO diz (pode dizer menos, nunca mais), no mesmo lugar da história: mantenha a
@@ -1452,8 +1456,12 @@ def segunda_opiniao(itens: list[dict], banco: dict) -> dict[int, str]:
     return retiradas
 
 
-def conferir_contra_trechos(itens: list[dict], banco: dict) -> dict[int, str | None]:
+def conferir_contra_trechos(itens: list[dict], banco: dict,
+                            fieis: dict[int, str] | None = None) -> dict[int, str | None]:
     """itens: [{"texto", "evidencias", "anterior"}]. Devolve {índice: None (sustentada) | o que excede}.
+    27/11 (pedido do dono: "quando aponta o erro, a conferência diz: escreva com estas palavras"): `fieis`, se
+    dado, recebe {índice: frase certa} que o juiz escreveu com as palavras dos fatos para cada frase que excede —
+    quem chama a confere de novo (frase_fiel_aceita) e a põe no lugar, em vez de tirar a frase.
     Sem resposta da conferência a frase conta como não conferida (nunca passa por falta de juiz).
     25/11 (Svalbard 1017): quem confere é o JUIZ fixo, com raciocínio — sem ele o Nemotron deixou passar
     "por isso" sem causa no trecho e o fundo dos bancos de genes virando o fundo do cofre. Juiz fora do ar →
@@ -1494,6 +1502,9 @@ def conferir_contra_trechos(itens: list[dict], banco: dict) -> dict[int, str | N
                                         or ("diz mais do que o trecho" if d else "não conferida")))
             if not ok and d:
                 do_juiz.append(ini + n - 1)
+                fiel = str(d.get("frase_fiel") or "").strip()
+                if fieis is not None and len(fiel.split()) >= 3 and _norm(fiel) != _norm(it["texto"]):
+                    fieis[ini + n - 1] = fiel
     # 26/11: a reprovação do juiz passa pela 2ª opinião; retirada, só a trava de causa em código continua valendo
     if do_juiz:
         retiradas = segunda_opiniao([{**itens[k], "motivo": saida[k]} for k in do_juiz], banco)
@@ -1501,7 +1512,29 @@ def conferir_contra_trechos(itens: list[dict], banco: dict) -> dict[int, str | N
             k = do_juiz[pos]
             log.info("conferência: reprovação retirada na 2ª opinião — %s (%s)", itens[k]["texto"][:80], just[:120])
             saida[k] = causa_sem_trecho(itens[k]["texto"], itens[k].get("evidencias") or [], mapa)
+    if fieis is not None:
+        for k in [k for k in fieis if not saida.get(k)]:
+            del fieis[k]  # reprovação retirada: a frase original fica
     return saida
+
+
+def frases_fieis_aceitas(itens: list[dict], fieis: dict[int, str], banco: dict) -> dict[int, str]:
+    """27/11: a frase certa que a conferência escreveu só entra se passar pelas mesmas travas de qualquer frase
+    nova — sem palavra de garantia/escala que a original e os fatos não têm (src/lexico.py) e conferida de novo
+    contra os fatos. Devolve {índice em itens: frase aceita}."""
+    evs = por_id(banco)
+    candidatas = []
+    for k, fiel in fieis.items():
+        it = itens[k]
+        if _palavra_mais_forte(fiel, it["texto"], [evs[x] for x in it.get("evidencias") or [] if x in evs]):
+            continue
+        candidatas.append((k, {**it, "texto": fiel}))
+    if not candidatas:
+        return {}
+    veredito = conferir_contra_trechos([it for _, it in candidatas], banco)
+    aceitas = {k: it["texto"] for n, (k, it) in enumerate(candidatas) if veredito.get(n) is None}
+    log.info("conferência: %d frase(s) certa(s) propostas, %d aceitas", len(fieis), len(aceitas))
+    return aceitas
 
 
 def _itens_factuais(script: dict) -> list[tuple[int, int, dict]]:
@@ -1535,13 +1568,20 @@ def conferir_na_escrita(script: dict, banco: dict, topic: str) -> tuple[dict, li
     if not alvos:
         return script, []
     revisar_citadas({e for _, _, it in alvos for e in it["evidencias"]}, banco, topic)
-    veredito = conferir_contra_trechos([it for _, _, it in alvos], banco)
-    ruins = [(alvos[k], motivo) for k, motivo in veredito.items() if motivo]
-    if not ruins:
-        log.info("conferência na escrita: %d frases factuais, todas sustentadas", len(alvos))
-        return script, []
-    mapa = {m["id"]: m for m in mapa_do_conhecimento(banco)}
+    fieis: dict[int, str] = {}
+    veredito = conferir_contra_trechos([it for _, _, it in alvos], banco, fieis)
+    certas = frases_fieis_aceitas([it for _, _, it in alvos], fieis, banco) if fieis else {}
     cenas = [dict(sc, frases=[dict(f) for f in sc["frases"]]) for sc in script["scenes"]]
+    for k, fiel in certas.items():  # 27/11: a frase certa da conferência entra no lugar (já conferida)
+        i, j, _ = alvos[k]
+        cenas[i]["frases"][j]["texto"] = fiel
+    ruins = [(alvos[k], motivo) for k, motivo in veredito.items() if motivo and k not in certas]
+    if not ruins:
+        log.info("conferência na escrita: %d frases factuais, %d trocadas pela frase certa, nenhuma cortada",
+                 len(alvos), len(certas))
+        return ({**script, "scenes": [{**sc, "narration": " ".join(f["texto"] for f in sc["frases"])} for sc in cenas]}
+                if certas else script), []
+    mapa = {m["id"]: m for m in mapa_do_conhecimento(banco)}
 
     def seguinte(i: int, j: int) -> str:
         if j + 1 < len(cenas[i]["frases"]):
@@ -2726,10 +2766,20 @@ def conferir_edicao(novas: list[dict], cenas: list[dict], registro: dict, banco:
     if not alvos:
         return
     revisar_citadas({e for _, _, it in alvos for e in it["evidencias"]}, banco, "")
-    veredito = conferir_contra_trechos([it for _, _, it in alvos], banco)
+    fieis: dict[int, str] = {}
+    veredito = conferir_contra_trechos([it for _, _, it in alvos], banco, fieis)
+    certas = frases_fieis_aceitas([it for _, _, it in alvos], fieis, banco) if fieis else {}
     fora: dict[int, set[int]] = {}
     for n, motivo in veredito.items():
-        if motivo:
+        if motivo and n in certas:
+            k, j, it = alvos[n]
+            novas[k]["frases"][j] = {**novas[k]["frases"][j], "texto": certas[n]}
+            novas[k] = {**novas[k], "narration": " ".join(f["texto"] for f in novas[k]["frases"])}
+            registro.setdefault("trocadas_na_conferencia", []).append(
+                {"cena": k + 1, "antes": it["texto"][:160], "depois": certas[n][:160], "motivo": motivo[:200]})
+            log.info("edição da cena %d: frase nova excedia (%s) — no lugar, a frase certa da conferência: %s",
+                     k + 1, motivo[:120], certas[n][:120])
+        elif motivo:
             k, j, it = alvos[n]
             fora.setdefault(k, set()).add(j)
             registro.setdefault("cortadas_na_conferencia", []).append(

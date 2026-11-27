@@ -1888,7 +1888,7 @@ def test_conferencia_revisa_so_as_afirmacoes_citadas_e_ve_a_revisada(monkeypatch
                                          for e in banco["evidencias"]]}
     monkeypatch.setattr(ev, "revisar_afirmacoes", revisa)
     vistos = []
-    monkeypatch.setattr(rd, "conferir_contra_trechos", lambda itens, banco: vistos.append(
+    monkeypatch.setattr(rd, "conferir_contra_trechos", lambda itens, banco, fieis=None: vistos.append(
         next(e["afirmacao"] for e in banco["evidencias"] if e["id"] == "E2")) or {k: None for k in range(len(itens))})
     banco = json.loads(json.dumps(BANCO))
     s = _roteiro([[F("Já imaginou?", "narrativa"), F("As estacas descem até 15 metros.", evid=["E2"])]])
