@@ -1653,6 +1653,17 @@ def ritmo_de_referencia(canal: str) -> str:
             "fatos — fato só das evidências acima):\n" + "\n".join(f"- {t}" for t in trechos))
 
 
+def peso_da_tentativa(palavras: int, defeitos: list[str], min_pal: int, max_pal: int) -> int:
+    """Quanto pior, maior: forma (tamanho, cenas, lista, repetição) pesa 3, frase cortada pesa 1; curto soma 100 e a
+    distância até o mínimo; acima do máximo só pesa além da folga que a duração real aceita (+15%)."""
+    peso = sum(1 if x.startswith("a frase") else 3 for x in defeitos)
+    if palavras < min_pal:
+        peso += 100 + (min_pal - palavras)
+    elif palavras > round(max_pal * 1.15):
+        peso += 100
+    return peso
+
+
 def ampliar_pedido(script: dict, banco: dict, min_pal: int, max_pal: int) -> str:
     """27/11 (Aprender vIA 1042: banco com 45 fatos, 16 oficiais; o escritor entregou 367 e 408 palavras para
     mínimo de 486 e a 3ª tentativa, do zero, saiu com 192): tentativa curta não recomeça do zero — o escritor
@@ -1681,6 +1692,7 @@ def escrever(channel, topic: str, banco: dict, *, min_minutes: float, max_minute
     # 19/11: meta em palavras pela voz real (~135/min); a duração do áudio decide depois
     min_pal = round(min_minutes * PALAVRAS_POR_MINUTO * 0.9)
     max_pal = round(max_minutes * PALAVRAS_POR_MINUTO)
+    max_aceito = round(max_pal * 1.15)  # a mesma folga de run_pipeline._duracao_fora
     cenas_min = max(5, min(cenas_ref - 4, round(min_minutes * 3)))
     cenas_max = max(cenas_ref + 4, round(max_minutes * 4))
     linha = str(getattr(channel, "niche", "") or "")
@@ -1727,7 +1739,10 @@ def escrever(channel, topic: str, banco: dict, *, min_minutes: float, max_minute
         script = sem_saudacao(de_json(_obj(raw), banco), getattr(channel, "greetings", None) or [])
         if plano:
             script["_plano"] = plano
-        fora_do_tamanho = (not min_pal <= _palavras(script) <= max_pal
+        # 27/11 (Ângulo Interno 1050: tentativas de 373, 710 e 374 palavras para 486-675; ficou uma de 374 e o roteiro
+        # reprovou curto): acima do máximo até a folga que a duração real aceita (_duracao_fora: +15%) é tamanho bom
+        # — o fechamento e a auditoria só encurtam; abaixo do mínimo é que não tem conserto
+        fora_do_tamanho = (not min_pal <= _palavras(script) <= max_aceito
                            or not cenas_min <= len(script.get("scenes") or []) <= cenas_max)
         if fora_do_tamanho and n + 1 < tentativas:
             # 26/11 (1031: 1ª tentativa com 226 palavras para mínimo de 304 passou pela conferência inteira, ~7 min):
@@ -1740,9 +1755,7 @@ def escrever(channel, topic: str, banco: dict, *, min_minutes: float, max_minute
         log.info("redação, tentativa %d/%d: %d cenas, %d palavras, %d defeito(s)%s", n + 1, tentativas,
                  len(script["scenes"]), _palavras(script), len(lista), (": " + " | ".join(lista[:4])) if lista else "")
         # forma (tamanho, cenas, lista, repetição) pesa 3x; frase cortada pesa 1 (já saiu do roteiro)
-        peso = sum(1 if x.startswith("a frase") else 3 for x in lista)
-        if not min_pal <= _palavras(script) <= max_pal:
-            peso += 100
+        peso = peso_da_tentativa(_palavras(script), lista, min_pal, max_pal)
         if peso < menos:
             melhor, menos = script, peso
         if not lista:

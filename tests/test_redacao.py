@@ -2016,3 +2016,12 @@ def test_minimo_de_fatos_sai_da_duracao_minima_pelo_que_um_fato_rende():
     from src import evidencias as ev
     assert ev.minimo_para(2.5) == 18 and ev.minimo_para(4) == 29
     assert ev.minimo_para(4) * ev.PALAVRAS_POR_FATO >= int(4 * 135 * 0.85)  # a conta fecha com a régua de palavras
+
+
+def test_tentativa_um_pouco_longa_vence_a_curta():
+    """27/11 (Ângulo Interno 1050: 373, 710 e 374 palavras para 486-675 — ficou a de 374 e reprovou curto)."""
+    from src import redacao
+    longa = redacao.peso_da_tentativa(710, ["tem 710 palavras; precisa ficar entre 486 e 675"] + ["a frase x"] * 8, 486, 675)
+    curta = redacao.peso_da_tentativa(374, ["tem 374 palavras; precisa ficar entre 486 e 675"] + ["a frase x"] * 7, 486, 675)
+    assert longa < curta
+    assert redacao.peso_da_tentativa(800, [], 486, 675) >= 100  # além da folga de 15%: fora
