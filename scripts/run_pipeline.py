@@ -785,8 +785,8 @@ def _escrever_redacao(channel, topic: str, web_facts: list[dict], job_id, min_mi
     from src import metricas
     from src.redacao import RoteiroReprovado, escrever, guardar_rascunho, rascunho
     with metricas.etapa("banco_evidencias"):
-        banco = _banco_de_evidencias(topic, web_facts, job_id, max_minutes,
-                                     minutos_reserva=reserva[1] if reserva else None)
+        banco = _banco_de_evidencias(topic, web_facts, job_id, min_minutes,
+                                     minutos_reserva=reserva[0] if reserva else None)
     if banco.get("_so_curto") and reserva:
         min_minutes, max_minutes, scenes = reserva
     # 26/11: o ponto de partida da redação fica guardado com a gravação das chamadas — scripts/repetir_redacao.py
@@ -857,7 +857,7 @@ def evidencias_do_roteiro(completo: dict | None, minimo: int) -> tuple[dict | No
     return {**completo, "evidencias": boas}, "oficiais + referências"
 
 
-def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes: float = 2.5,
+def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, min_minutes: float = 2.5,
                          minutos_reserva: float | None = None) -> dict:
     """Banco de evidências do tema (src/evidencias.py), com uma rodada de busca nas lacunas.
     Pesquisa sem base suficiente reprova com o motivo (nunca vira vídeo sobre premissa sem prova)."""
@@ -865,7 +865,8 @@ def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes:
     from src.web_search import (fontes_dos_sites_oficiais, marcar_oficiais, paginas_dos_sites_oficiais,
                                 referencias_da_wikipedia, search_topic_facts, sem_fontes_fracas, sites_oficiais)
 
-    minimo = minimo_para(max_minutes)
+    # 27/11: o mínimo de fatos vem da duração MÍNIMA do formato (o que o roteiro tem de alcançar), não da máxima
+    minimo = minimo_para(min_minutes)
     web_facts = sem_fontes_fracas(list(web_facts or []))
     # 24/11: o site oficial do assunto (e o de quem o opera/possui/mantém), pela Wikidata, conta como fonte
     # oficial — e as páginas dele entram no banco antes de tudo
@@ -923,7 +924,9 @@ def _banco_de_evidencias(topic: str, web_facts: list[dict], job_id, max_minutes:
         banco = exigir_suficiente(banco, minimo)
     except PesquisaInsuficiente as exc:
         total = len((completo or {}).get("evidencias", []))
-        raise ScriptRejected(f"{exc} — fontes: {origem} ({total} no banco completo)") from exc
+        # 27/11: sem fatos para a duração, refazer o mesmo tema dá o mesmo banco — a rodada troca de tema
+        from src.redacao import MATERIAL_CURTO
+        raise ScriptRejected(f"{MATERIAL_CURTO}: {exc} — fontes: {origem} ({total} no banco completo)") from exc
     log.info("[%s] banco de evidências: %d verificadas (%s) de %d no banco completo", job_id,
              len(usaveis(banco)), origem, len((completo or {}).get("evidencias", [])))
     return banco

@@ -38,6 +38,7 @@ import difflib
 import hashlib
 import json
 import logging
+import math
 import re
 from typing import Callable
 
@@ -2303,9 +2304,19 @@ def _linha_de_ordem(c: dict, e: dict | None = None) -> str:
     return f"\n    ordem ({', '.join(ctx['marcadores'])}): {aviso}{data}"
 
 
-def minimo_para(max_minutes: float) -> int:
-    """Evidências verificadas mínimas para a duração: ~2 por minuto de história (5 min -> 10)."""
-    return max(5, round(max_minutes * 2))
+# 27/11: medido nos roteiros reais — Svalbard aprovado 25 fatos citados / 316 palavras (12,6); Baikal 1036-1038
+# 18 fatos / 203-279 palavras (~14); Aprender vIA 1042 16 fatos / 367-408 (~24). A regra antiga (2 fatos por minuto
+# da duração MÁXIMA: 10 para 5 min) mandava escrever 486 palavras com 16 fatos — a conta não fechava e o roteiro
+# saía curto em toda tentativa, depois de uma hora de auditoria.
+PALAVRAS_POR_FATO = 16
+
+
+def minimo_para(min_minutes: float) -> int:
+    """Evidências verificadas mínimas para a duração MÍNIMA do formato: as palavras que ela pede (135/min, 85%, a
+    mesma régua de run_pipeline._min_palavras_redacao) divididas pelo que um fato rende (PALAVRAS_POR_FATO).
+    2,5 min -> 18 fatos; 4 min -> 29."""
+    from .redacao import PALAVRAS_POR_MINUTO
+    return max(5, math.ceil(min_minutes * PALAVRAS_POR_MINUTO * 0.85 / PALAVRAS_POR_FATO))
 
 
 def exigir_suficiente(banco: dict | None, minimo: int = 5) -> dict:

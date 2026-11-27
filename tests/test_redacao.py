@@ -2004,3 +2004,10 @@ def test_roteiro_curto_com_fatos_sobrando_culpa_o_escritor_e_mantem_o_tema(monke
     with pytest.raises(redacao.RoteiroReprovado) as exc:
         redacao.auditar_e_corrigir(script, banco, "tema", min_palavras=286)
     assert redacao.MATERIAL_CURTO not in str(exc.value) and "mesmo tema" in str(exc.value)
+
+
+def test_minimo_de_fatos_sai_da_duracao_minima_pelo_que_um_fato_rende():
+    """27/11: 2 fatos/minuto da duração máxima (10 para 5 min) mandava escrever 486 palavras com 16 fatos."""
+    from src import evidencias as ev
+    assert ev.minimo_para(2.5) == 18 and ev.minimo_para(4) == 29
+    assert ev.minimo_para(4) * ev.PALAVRAS_POR_FATO >= int(4 * 135 * 0.85)  # a conta fecha com a régua de palavras
