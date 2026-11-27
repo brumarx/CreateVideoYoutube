@@ -264,8 +264,9 @@ afiliado_amazon:
   texto: "📚 Pra saber mais, na Amazon"
   busca: "livro curiosidades do mundo"
   fixo: false
-# apresentador vetorial fixo nas cenas com imagem (09/11, ver src/infographic.py)
-apresentador: true
+# apresentador vetorial (09/11) desligado em 27/11: desenho estático, não fala e só entrava nas cenas de
+# imagem parada — o dono pediu para tirar
+apresentador: false
 
 # loja do politica-br.org (src/loja.py) quando um produto combina com o título
 # ou o tema do vídeo (Constituição, bandeira, mapa do Brasil, livros de
