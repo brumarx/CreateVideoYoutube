@@ -3009,6 +3009,26 @@ def _hash_versao(script: dict, banco: dict) -> str:
     return hashlib.sha1(json.dumps([corpo, _hash_banco(banco)], ensure_ascii=False).encode()).hexdigest()[:12]
 
 
+FRASE_REPETIDA_PARTE = 0.6  # parte das palavras de conteúdo da frase que já estão numa frase anterior
+
+
+def _radicais(texto: str) -> set[str]:
+    return {w[:5] for w in re.findall(r"\w+", dobrar(texto).lower()) if len(w) >= 4 and not w.isdigit()} \
+        | set(re.findall(r"\b\d{3,4}\b", texto))
+
+
+def frase_ja_dita(texto: str, anteriores: list[str]) -> str | None:
+    """A frase anterior que já diz esta (≥ FRASE_REPETIDA_PARTE das palavras de conteúdo, por radical, e ao menos 4
+    delas), ou None."""
+    minhas = _radicais(texto)
+    if len(minhas) < 4:
+        return None
+    for ant in anteriores:
+        if len(minhas & _radicais(ant)) >= FRASE_REPETIDA_PARTE * len(minhas):
+            return ant
+    return None
+
+
 def limpar_em_codigo(script: dict) -> dict:
     """25/11 (Svalbard 1022: editorial travado em sem_repeticao 4 — E26 nas cenas 3 e 8, "caixa-preta" de novo
     na narrativa da cena 9 com "o permafrost garante o frio"): fato_em_duas_cenas e narrativa_que_afirma só
@@ -3017,6 +3037,7 @@ def limpar_em_codigo(script: dict) -> dict:
     narrativa (não pergunta, não abertura, não "Comenta PALAVRA") que afirma. Só sai se a cena continua com
     outra frase factual — nunca some uma cena."""
     vistos: set[str] = set()
+    ditas: list[str] = []
     cenas = []
     tirou = []
     for i, sc in enumerate(script.get("scenes") or []):
@@ -3027,6 +3048,11 @@ def limpar_em_codigo(script: dict) -> dict:
             t = f["texto"].strip()
             evs = set(f.get("evidencias") or [])
             repetida = f.get("tipo") != "narrativa" and evs and evs <= vistos
+            # 27/11 (Ângulo Interno 1051: "Chegou ao Rio em dezembro de 1950… pedreiro em Ipanema" no fim da cena 1
+            # e no começo da 2, com ids diferentes; "morreu pobre" 4 vezes): a mesma frase dita de novo com outras
+            # palavras e outros ids também é fato já contado
+            if not repetida and not f.get("fechamento") and not t.endswith("?"):
+                repetida = bool(frase_ja_dita(t, ditas))
             afirma = (f.get("tipo") == "narrativa" and (i or j) and not f.get("fechamento") and not t.endswith("?")
                       and not _COMENTA.search(t) and _ALEGA.search(t))
             if repetida or afirma:
@@ -3034,6 +3060,7 @@ def limpar_em_codigo(script: dict) -> dict:
                     tirou.append((f, "fato já contado" if repetida else "narrativa que afirma"))
                     continue
             manter.append(f)
+            ditas.append(t)
             da_cena |= evs
         vistos |= da_cena
         cenas.append({**sc, "frases": manter, "narration": " ".join(f["texto"] for f in manter)}

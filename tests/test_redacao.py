@@ -2025,3 +2025,17 @@ def test_tentativa_um_pouco_longa_vence_a_curta():
     curta = redacao.peso_da_tentativa(374, ["tem 374 palavras; precisa ficar entre 486 e 675"] + ["a frase x"] * 7, 486, 675)
     assert longa < curta
     assert redacao.peso_da_tentativa(800, [], 486, 675) >= 100  # além da folga de 15%: fora
+
+
+def test_frase_dita_de_novo_com_outras_palavras_e_outros_ids_sai_na_limpeza():
+    """27/11 (Ângulo Interno 1051): a chegada ao Rio no fim da cena 1 e de novo no começo da 2; "morreu pobre" 4x."""
+    from src import redacao as r
+    c1 = ("No Rio de Janeiro, onde chegou em dezembro de 1950, empregou-se como ajudante de pedreiro em Ipanema.")
+    s = _roteiro([[F("Nasceu em Pedreiras, no Maranhão, em 1934.", evid=["E1"]), F(c1, evid=["E2"])],
+                  [F("Chegou ao Rio de Janeiro em dezembro de 1950 e empregou-se como ajudante de pedreiro em Ipanema.",
+                     evid=["E3"]), F("Depois, Zé Gonzaga gravou Cesário Pinto, sucesso no Nordeste.", evid=["E3"])],
+                  [F("Em 1956, Dolores Duran gravou Na Asa do Vento.", evid=["E2"])]])
+    limpo = r.limpar_em_codigo(s)
+    textos = [f["texto"] for _, _, f in r.frases_de(limpo)]
+    assert not any(t.startswith("Chegou ao Rio") for t in textos)
+    assert "Em 1956, Dolores Duran gravou Na Asa do Vento." in textos and len(textos) == 4
