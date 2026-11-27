@@ -3432,6 +3432,20 @@ def auditar_e_corrigir(script: dict, banco: dict, topic: str, *, web_facts: list
             reg["da_versao"] = base["versao"]
             reg["evidencias_novas"] = sorted(novas_ids)
             relatorio["registro_edicoes"].append(reg)
+            # 27/11 (Chernobyl 1040: 357 -> 284 palavras, mínimo 286, com 1 das 2 edições ainda sobrando — o
+            # roteiro foi reprovado sem a 2ª tentativa): a edição que encolhe o roteiro abaixo do piso volta ao
+            # editor com o tamanho de cada cena, para corrigir reescrevendo em vez de cortar
+            if reg.get("cenas_editadas") and _palavras(editado) < piso and relatorio["edicoes"] < teto:
+                log.warning("edição encolheu o roteiro (%d -> %d palavras, mínimo %d) — refeita sem corte",
+                            _palavras(script), _palavras(editado), int(piso))
+                for c in reg["cenas_editadas"]:
+                    antes = len(str(script["scenes"][c - 1].get("narration", "")).split())
+                    depois = len(str(editado["scenes"][c - 1].get("narration", "")).split())
+                    alvos.setdefault(c - 1, []).append(
+                        f"A EDIÇÃO ANTERIOR DESTA CENA TIROU PALAVRAS DEMAIS ({antes} -> {depois}) e o roteiro ficou "
+                        f"abaixo do mínimo para a duração: corrija o problema REESCREVENDO a frase com o que o fato "
+                        f"sustenta, com tamanho parecido ao original ({antes} palavras na cena) — apagar não resolve")
+                continue
             if reg.get("cenas_editadas") or reg.get("titulo") or relatorio["edicoes"] >= teto \
                     or not (reg.get("revertidas") or reg.get("factuais_sem_correcao")):
                 break

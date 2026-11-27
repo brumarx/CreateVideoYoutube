@@ -300,3 +300,19 @@ def test_maior_colecao_e_maior_backup_so_repetem_se_forem_o_mesmo_objeto():
     outro = roteiro(cena(F("Ali está a maior coleção de sementes do mundo.")),
                     cena(F("O maior risco é a água no túnel.")))
     assert rd._superlativos_repetidos(outro) == set()
+
+
+def test_edicao_que_encolhe_abaixo_do_minimo_volta_ao_editor_para_reescrever(monkeypatch):
+    """27/11 (Chernobyl 1040: 357 -> 284 palavras, mínimo 286): a edição curta demais era descartada e o roteiro
+    reprovado com uma edição ainda sobrando; agora volta ao editor com o tamanho da cena."""
+    monkeypatch.setattr(rd, "_auditar_versao", Oraculo({EXAGERO: "excede"}, lambda s: Q()))
+    encolhida = com(V1, 1, cena(F("Guerra.")))
+    v3 = com(V1, 1, cena(F(RESTRITA)))
+    editor = EditorFalso((encolhida, [2]), (v3, [2]))
+    monkeypatch.setattr(rd, "editar_cenas", editor)
+    minimo = rd._palavras(V1) - 3
+    final, rel = rd.auditar_e_corrigir(copy.deepcopy(V1), BANCO, "t", min_palavras=minimo)
+    assert len(editor.pedidos) == 2
+    assert "TIROU PALAVRAS DEMAIS" in " ".join(editor.pedidos[1]["alvos"][1])
+    assert textos(editor.pedidos[1]["script"])[1] == EXAGERO  # refeita a partir da versão auditada, não da encolhida
+    assert RESTRITA in textos(final)
