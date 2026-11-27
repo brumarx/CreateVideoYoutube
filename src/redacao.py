@@ -1652,6 +1652,24 @@ def ritmo_de_referencia(canal: str) -> str:
             "fatos — fato só das evidências acima):\n" + "\n".join(f"- {t}" for t in trechos))
 
 
+def ampliar_pedido(script: dict, banco: dict, min_pal: int, max_pal: int) -> str:
+    """27/11 (Aprender vIA 1042: banco com 45 fatos, 16 oficiais; o escritor entregou 367 e 408 palavras para
+    mínimo de 486 e a 3ª tentativa, do zero, saiu com 192): tentativa curta não recomeça do zero — o escritor
+    recebe o próprio roteiro e o amplia com os fatos aprovados que ele ainda não usou (fato real, não enchimento)."""
+    usados = {e for _, _, f in frases_de(script) for e in f.get("evidencias") or []}
+    livres = [e for e in usaveis(banco) if e["id"] not in usados]
+    falta = min_pal - _palavras(script)
+    texto = "\n".join(f"CENA {i + 1}: " + " ".join(f"[{f.get('tipo')}; {','.join(f.get('evidencias') or []) or '-'}] "
+                                                  f"{f['texto']}" for f in sc.get("frases") or [])
+                      for i, sc in enumerate(script.get("scenes") or []))
+    fatos = "\n".join(f"- {e['id']}: {e['afirmacao']}" for e in livres[:25])
+    return (f"\n\nSEU ROTEIRO ANTERIOR tem {_palavras(script)} palavras; o vídeo precisa de {min_pal} a {max_pal}. "
+            f"NÃO recomece: devolva ESTE roteiro AMPLIADO — mantenha as frases sem defeito e acrescente pelo menos "
+            f"{falta} palavras contando fatos aprovados que ele ainda não usou (cada frase factual cita o fato), no "
+            f"ponto da história onde cada um se encaixa; uma cena nova é bem-vinda se o fato abre um passo novo.\n"
+            f"{texto}\nFATOS APROVADOS AINDA NÃO USADOS:\n{fatos or '- (nenhum: aprofunde os fatos já citados com o que o trecho deles diz)'}")
+
+
 def escrever(channel, topic: str, banco: dict, *, min_minutes: float, max_minutes: float,
              cenas_ref: int, feedback: str = "", tentativas: int = 3) -> dict:
     """O roteirista conta a história a partir do banco; cada versão passa pela conferência contra os trechos
@@ -1729,6 +1747,8 @@ def escrever(channel, topic: str, banco: dict, *, min_minutes: float, max_minute
         if not lista:
             break
         correcao = "\n\nO roteiro anterior tinha estes defeitos; corrija TODOS:\n" + "\n".join(f"- {x}" for x in lista)
+        if _palavras(script) < min_pal:
+            correcao += ampliar_pedido(script, banco, min_pal, max_pal)
     if melhor is None:
         if infra is not None:
             raise infra

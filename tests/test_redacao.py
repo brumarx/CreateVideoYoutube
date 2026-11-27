@@ -1977,3 +1977,16 @@ def test_roteiro_abaixo_do_minimo_reprovado_antes_da_auditoria(monkeypatch):
         redacao.auditar_e_corrigir(script, {"evidencias": []}, "tema", min_palavras=286)
     assert redacao.MATERIAL_CURTO in str(exc.value)
     assert not chamou
+
+
+def test_tentativa_curta_pede_ampliacao_do_proprio_roteiro_com_fatos_nao_usados():
+    """27/11 (Aprender vIA 1042): o escritor recomeçava do zero e saía curto de novo."""
+    from src import redacao
+    ev = lambda i, t: {"id": i, "afirmacao": t, "status": "oficial", "numeros": [], "conflitos": [], "citacoes": [],  # noqa: E731
+                       "tipo": "qualitativo", "estimado": False}
+    banco = {"evidencias": [ev("E1", "Fato usado."), ev("E2", "Fato livre sobre planilhas.")]}
+    script = {"scenes": [{"narration": "Frase curta.", "frases": [{"texto": "Frase curta.", "tipo": "factual",
+                                                                    "evidencias": ["E1"]}]}]}
+    pedido = redacao.ampliar_pedido(script, banco, 300, 600)
+    assert "NÃO recomece" in pedido and "Frase curta." in pedido and "pelo menos 298 palavras" in pedido
+    assert "E2: Fato livre sobre planilhas." in pedido and "E1: Fato usado." not in pedido
