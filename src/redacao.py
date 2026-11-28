@@ -1234,7 +1234,7 @@ def defeitos(script: dict, banco: dict, topic: str, min_pal: int, max_pal: int, 
         if d:
             lista.append(str(d))
     # 20/11: o que o editor travaria (linha do tempo, fato repetido) já volta ao escritor nas tentativas dele
-    lista += travas_editoriais(script)
+    lista += travas_editoriais(script, topic)
     lista += fato_em_duas_cenas(script) + narrativa_que_afirma(script) + abertura_e_fechamento(script)
     # 25/11 (grupo B): chavões de "texto com cara de IA" e abertura genérica (src/qualidade_texto.py, em código)
     from .qualidade_texto import defeitos_de_texto
@@ -2330,14 +2330,19 @@ def chaves_de_fato(texto: str) -> set[str]:
     return set(re.findall(r"\b(1\d{3}|20\d{2})\b", t)) | {f"{v} {u}" for v, u in _pares(t) if u != "ano"}
 
 
-def _anos_e_medidas_por_cena(script: dict) -> dict[str, set[int]]:
+def _anos_e_medidas_por_cena(script: dict, tema: str = "") -> dict[str, set[int]]:
+    """27/11 (Ronaldo 1054: "o mesmo fato aparece em mais de uma cena (2002)" num vídeo sobre a Copa de 2002 — a
+    história ficou presa no teto de 4,9): o ano/medida do PRÓPRIO TEMA é o assunto — em duas cenas não é fato
+    repetido; em três ou mais, é."""
+    do_tema = set(chaves_de_fato(tema)) if tema else set()
     onde: dict[str, set[int]] = {}
     for i, _, f in frases_de(script):
         if f.get("tipo") == "narrativa":
             continue
         for c in chaves_de_fato(f["texto"]):
             onde.setdefault(c, set()).add(i)
-    return onde
+    # o do tema pode voltar UMA vez (abertura e o momento dele); três cenas ou mais já é repetição
+    return {c: cenas for c, cenas in onde.items() if c not in do_tema or len(cenas) > 2}
 
 
 def _repetidos_em_frases(script: dict) -> set[str]:
@@ -2351,31 +2356,32 @@ def _repetidos_em_frases(script: dict) -> set[str]:
     return {c for c, n in contagem.items() if n > 1}
 
 
-def travas_editoriais(script: dict) -> list[str]:
+def travas_editoriais(script: dict, tema: str = "") -> list[str]:
     """Problemas de história que o código enxerga sozinho, em qualquer tema: o mesmo fato (ano ou medida)
     dito em cenas diferentes, e o desenvolvimento que vira linha do tempo."""
     travas = []
-    repetidos = sorted(c for c, cenas in _anos_e_medidas_por_cena(script).items() if len(cenas) > 1)
+    repetidos = sorted(c for c, cenas in _anos_e_medidas_por_cena(script, tema).items() if len(cenas) > 1)
     if repetidos:
         travas.append("o mesmo fato aparece em mais de uma cena (" + ", ".join(repetidos[:4]) + "): diga uma vez só")
     factuais = [f for _, _, f in frases_de(script) if f.get("tipo") != "narrativa"]
-    com_ano = [f for f in factuais if re.search(r"\b(1\d{3}|20\d{2})\b", f["texto"])]
-    anos = {a for f in com_ano for a in re.findall(r"\b(1\d{3}|20\d{2})\b", f["texto"])}
+    anos_do_tema = set(re.findall(r"\b(1\d{3}|20\d{2})\b", tema or ""))
+    com_ano = [f for f in factuais if set(re.findall(r"\b(1\d{3}|20\d{2})\b", f["texto"])) - anos_do_tema]
+    anos = {a for f in com_ano for a in re.findall(r"\b(1\d{3}|20\d{2})\b", f["texto"])} - anos_do_tema
     if factuais and len(anos) >= 5 and len(com_ano) / len(factuais) >= 0.45:
         travas.append(f"o desenvolvimento virou linha do tempo ({len(anos)} anos em {len(com_ano)} de {len(factuais)} "
                       "frases): conte o processo e fique só com as datas que mudam a história")
     return travas
 
 
-def cenas_das_travas(script: dict) -> list[dict]:
+def cenas_das_travas(script: dict, tema: str = "") -> list[dict]:
     """As travas do código com as cenas onde estão (1, 2, …), para a edição localizada."""
     alvos = []
-    for c, cenas in sorted(_anos_e_medidas_por_cena(script).items()):
+    for c, cenas in sorted(_anos_e_medidas_por_cena(script, tema).items()):
         if len(cenas) > 1:
             alvos.append({"criterio": "sem_repeticao", "cenas": sorted(x + 1 for x in cenas),
                           "descricao": f"\"{c}\" aparece nas cenas {', '.join(str(x + 1) for x in sorted(cenas))}: fica "
                                        "em UMA só (onde é essencial); nas outras, tire e ponha informação nova"})
-    if any("linha do tempo" in t for t in travas_editoriais(script)):
+    if any("linha do tempo" in t for t in travas_editoriais(script, tema)):
         com_ano = sorted({i + 1 for i, _, f in frases_de(script)
                           if f.get("tipo") != "narrativa" and re.search(r"\b(1\d{3}|20\d{2})\b", f["texto"])})
         alvos.append({"criterio": "progressao", "cenas": com_ano,
@@ -2564,7 +2570,7 @@ def avaliar_editorial(script: dict, topic: str) -> dict | None:
     # 26/11 (Svalbard 1024: v4 limpa com 6,8 / 6,4 / 7,1): o mesmo texto varia ±0,5 entre leituras; perto do
     # mínimo, 3 leituras deixam a sorte decidir. Na faixa de dúvida, mais LEITURAS_EXTRA — mediana de 5
     perto = FAIXA_DUVIDA[0] <= round(sum(crit.values()) / len(crit), 1) < FAIXA_DUVIDA[1]
-    if perto and len(leituras) >= LEITURAS and not travas_editoriais(script):
+    if perto and len(leituras) >= LEITURAS and not travas_editoriais(script, topic):
         log.info("editorial perto do mínimo (%.1f): mais %d leituras", sum(crit.values()) / len(crit), LEITURAS_EXTRA)
         ler(LEITURAS_EXTRA)
         notas_leitura, crit = criterios()
@@ -2580,7 +2586,7 @@ def avaliar_editorial(script: dict, topic: str) -> dict | None:
             vistos.add(chave)
             problemas.append(f"{chave[0]} (cenas {', '.join(chave[1])}): {p.get('descricao', '')}")
             alvos.append({"criterio": chave[0], "cenas": cenas_p, "descricao": str(p.get("descricao", ""))[:300]})
-    travas = travas_editoriais(script) + [f"{k} com nota {crit[k]:.0f}" for k in CRITERIOS_TRAVA if crit[k] <= 4]
+    travas = travas_editoriais(script, topic) + [f"{k} com nota {crit[k]:.0f}" for k in CRITERIOS_TRAVA if crit[k] <= 4]
     nota = round(sum(crit.values()) / len(crit), 1)
     if travas:
         nota = min(nota, NOTA_COM_TRAVA)
@@ -2590,7 +2596,7 @@ def avaliar_editorial(script: dict, topic: str) -> dict | None:
              " / ".join(f"{m:.1f}" for m in medias), {k: v for k, v in crit.items()}, nota,
              f" — NÃO JULGADA ({nao_julgada})" if nao_julgada else "")
     return {"nota": nota, "problemas": (travas + problemas)[:10], "criterios": crit, "travas": travas,
-            "alvos": alvos, "alvos_travas": cenas_das_travas(script), "leituras": medias, "nao_julgada": nao_julgada,
+            "alvos": alvos, "alvos_travas": cenas_das_travas(script, topic), "leituras": medias, "nao_julgada": nao_julgada,
             "aprovado": not travas and nota >= NOTA_MINIMA and not nao_julgada}
 
 

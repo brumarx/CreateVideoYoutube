@@ -2039,3 +2039,12 @@ def test_frase_dita_de_novo_com_outras_palavras_e_outros_ids_sai_na_limpeza():
     textos = [f["texto"] for _, _, f in r.frases_de(limpo)]
     assert not any(t.startswith("Chegou ao Rio") for t in textos)
     assert "Em 1956, Dolores Duran gravou Na Asa do Vento." in textos and len(textos) == 4
+
+
+def test_ano_do_proprio_tema_nao_e_fato_repetido():
+    """27/11 (Ronaldo 1054: '(2002)' travava a história num vídeo sobre a Copa de 2002)."""
+    s = _roteiro([[F("Em 2002, Ronaldo chegou à Copa depois de duas cirurgias no joelho.", evid=["E1"])],
+                  [F("Na final de 2002, marcou os dois gols contra a Alemanha.", evid=["E2"])]])
+    tema = "Como Ronaldo superou duas cirurgias no joelho e brilhou na Copa do Mundo de 2002"
+    assert rd.travas_editoriais(s, tema) == []
+    assert any("2002" in t for t in rd.travas_editoriais(s))  # sem o tema, a repetição continua apontada
