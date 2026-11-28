@@ -345,3 +345,14 @@ def test_texto_ja_auditado_no_job_nao_e_julgado_de_novo(monkeypatch):
     textos_auditados = [tuple(t) for t in oraculo.auditadas]
     assert textos(V1) in [list(t) for t in textos_auditados]
     assert len(textos_auditados) == len(set(textos_auditados))  # nenhum texto julgado duas vezes
+
+
+def test_frase_aprovada_numa_versao_anterior_nao_e_reprovada_pela_ia_depois():
+    """27/11 (Ângulo Interno 1052: frase igual aprovada nas v1-v3, reprovada na v4 porque a vizinha mudou)."""
+    v3 = {"versao": 3, "_script": V1, "problemas": []}
+    instavel = rd._p("excede", MEIO, 2, 0, "x")
+    codigo = rd._p("numero_arredondado", MEIO, 2, 0, "x")   # trava em código continua valendo
+    nova = rd._p("excede", "Frase que a v3 não tinha.", 2, 0, "x")
+    assert rd.leituras_estaveis([instavel, codigo, nova], [v3]) == [codigo, nova]
+    v3_apontou = {"versao": 3, "_script": V1, "problemas": [rd._p("excede", MEIO, 2, 0, "x")]}
+    assert rd.leituras_estaveis([instavel], [v3_apontou]) == [instavel]

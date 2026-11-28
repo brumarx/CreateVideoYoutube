@@ -2392,6 +2392,18 @@ _NOMES_PROBLEMA = {"sem_evidencia": "afirmação sem evidência", "sem_suporte":
                    "divergencia_como_faixa": "valores divergentes de fontes diferentes ditos como faixa"}
 
 
+def _versao_que_aprovou(texto_norm: str, versoes: list[dict]) -> int | None:
+    """A versão anterior mais recente que tinha esta frase (mesmo texto) e não a apontou em problema nenhum."""
+    for v in reversed(versoes):
+        frases = {_norm(f["texto"]): f for _, _, f in frases_de(v["_script"])}
+        if texto_norm not in frases:
+            continue
+        apontadas = {_norm(q.get("termo", "")) for q in v["problemas"]} | {
+            _norm(x["texto"]) for q in v["problemas"] for x in q.get("sequencia") or []}
+        return None if texto_norm in apontadas else v["versao"]
+    return None
+
+
 def leituras_estaveis(problemas: list[dict], versoes: list[dict]) -> list[dict]:
     """27/11 (Aprender vIA 1044): a v5 tinha 1 leitura enganosa; cortada a frase, a v6 ganhou 2 em frases que a v5
     já tinha e que as 3 leituras da v5 deixaram passar ("Para mim, o que mais impressiona…" — opinião; "Se o grau
@@ -2403,6 +2415,18 @@ def leituras_estaveis(problemas: list[dict], versoes: list[dict]) -> list[dict]:
     out = []
     for p in problemas:
         seq = p.get("sequencia") if p.get("tipo") == "leitura_enganosa" else None
+        if not seq and p.get("tipo") not in TIPOS_DO_CODIGO and p.get("termo"):
+            # 27/11 (Ângulo Interno 1052: "Chegou ao Rio de Janeiro em 1950 e virou pedreiro em Copacabana" passou
+            # nas v1-v3 e foi reprovada na v4, só porque o corte mudou a vizinha): o juízo da IA sobre a MESMA frase
+            # que uma versão anterior aprovou não bloqueia (as travas em código continuam valendo)
+            alvo = _norm(p["termo"])
+            anterior = _versao_que_aprovou(alvo, versoes)
+            if anterior is not None:
+                log.info("julgamento instável: \"%s\" estava igual na versão %d, que a aprovou — não bloqueia",
+                         p["termo"][:80], anterior)
+                continue
+            out.append(p)
+            continue
         if not seq:
             out.append(p)
             continue
